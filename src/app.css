@@ -21,6 +21,14 @@
 
 html {
 	background: var(--paper);
+	/* The scrollbar reserves no width, so nothing shifts sideways when a page
+	   gets taller than the window. Wheel and keyboard scrolling still work. */
+	scrollbar-width: none;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+	display: none;
 }
 
 body {
