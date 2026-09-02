@@ -13,17 +13,17 @@ uploaded, there is no server at all, just static files.
 npm install
 npm run dev
 npm run build     # static output in build/
-npm run check     # types and markup
 ```
 
 ## How it works
 
-- SvelteKit with `adapter-static`, so the build is a plain folder of files.
+- SvelteKit in plain JavaScript with `adapter-static`, so the build is a plain
+  folder of files.
 - Decoding uses the browser's `decodeAudioData`, which is why the accepted
   formats vary a little between browsers. Chrome is the most permissive.
 - Mixing happens in an `OfflineAudioContext` through a `ChannelMergerNode`: the
   left source feeds channel 0, the right one channel 1.
-- WAV is written by hand in `src/lib/audio/wav.ts`.
+- WAV is written by hand in `src/lib/audio/wav.js`.
 - MP3 goes through `@breezystack/lamejs`, chunked so the page never freezes.
 
 ## Adding a tool

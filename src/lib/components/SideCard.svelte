@@ -1,29 +1,21 @@
-<script lang="ts">
+<script>
 	import { ACCEPT } from '$lib/audio/decode';
 	import { formatBytes, formatDb, formatDuration, formatHz } from '$lib/audio/format';
-	import type { Slot } from '$lib/audio/slot.svelte';
 	import Waveform from './Waveform.svelte';
 
-	interface Props {
-		channel: Slot;
-		label: string;
-		letter: string;
-		tone: string;
-	}
+	let { channel, label, letter, tone } = $props();
 
-	let { channel, label, letter, tone }: Props = $props();
-
-	let input = $state<HTMLInputElement | null>(null);
+	let input = $state(null);
 	let hovering = $state(false);
 
 	const duration = $derived(channel.buffer?.duration ?? 0);
 
-	function pick(files: FileList | null) {
+	function pick(files) {
 		const file = files?.[0];
 		if (file) channel.load(file);
 	}
 
-	function onDrop(event: DragEvent) {
+	function onDrop(event) {
 		event.preventDefault();
 		hovering = false;
 		pick(event.dataTransfer?.files ?? null);
@@ -180,99 +172,99 @@
 
 <style>
 	.side {
-		border: 2px solid var(--ink);
-		background: var(--card);
+		background: var(--surface);
+		border: 1px solid var(--line);
+		border-radius: var(--radius);
+		box-shadow: var(--shadow);
 		display: flex;
 		flex-direction: column;
 		gap: 0.85rem;
-		padding: 0 0.9rem 0.9rem;
+		padding: 0 1rem 1rem;
+		overflow: hidden;
 	}
 
 	header {
 		display: flex;
 		align-items: center;
 		gap: 0.6rem;
-		margin: 0 -0.9rem;
-		padding: 0.5rem 0.9rem;
+		margin: 0 -1rem;
+		padding: 0.65rem 1rem;
 		background: var(--tone);
-		color: #fffdf8;
-		border-bottom: 2px solid var(--ink);
+		color: #fff;
 	}
 
 	.letter {
-		font-family: var(--mono);
-		font-weight: 700;
-		font-size: 1.1rem;
-		width: 1.6rem;
-		height: 1.6rem;
 		display: grid;
 		place-items: center;
-		background: #fffdf8;
-		color: var(--tone);
+		width: 1.5rem;
+		height: 1.5rem;
+		border-radius: 0.4rem;
+		background: rgba(255, 255, 255, 0.22);
+		font-size: 0.85rem;
+		font-weight: 700;
 	}
 
 	header h3 {
-		font-size: 0.9rem;
-		text-transform: uppercase;
-		letter-spacing: 0.12em;
+		font-size: 0.95rem;
+		font-weight: 500;
 	}
 
 	.state {
 		margin-left: auto;
-		font-family: var(--mono);
-		font-size: 0.68rem;
-		text-transform: uppercase;
-		letter-spacing: 0.14em;
-		opacity: 0.85;
+		font-size: 0.78rem;
+		background: rgba(255, 255, 255, 0.18);
+		border-radius: 999px;
+		padding: 0.05rem 0.55rem;
 	}
 
 	.drop {
-		border: 2px dashed rgba(23, 21, 15, 0.4);
-		background: #fffdf8;
-		padding: 0.9rem;
+		border: 1px dashed var(--lineStrong);
+		border-radius: var(--radiusSmall);
+		background: var(--surfaceSunk);
+		padding: 1.1rem 0.9rem;
 		text-align: center;
-		margin-top: 0.9rem;
+		margin-top: 1rem;
+		transition: border-color 0.3s, background 0.3s;
 	}
 
 	.drop.hovering {
 		border-color: var(--tone);
-		border-style: solid;
 		background: #fff;
 	}
 
 	.drop.filled {
 		border-style: solid;
-		border-color: rgba(23, 21, 15, 0.4);
+		border-color: var(--line);
+		background: var(--surfaceSunk);
 		text-align: left;
+		padding: 0.75rem 0.9rem;
 	}
 
 	.prompt {
-		font-family: var(--mono);
-		font-size: 0.8rem;
-		margin: 0 0 0.6rem;
+		font-size: 0.92rem;
+		color: var(--textDim);
+		margin-bottom: 0.7rem;
 		max-width: none;
 	}
 
 	.prompt.bad {
-		color: var(--right);
-		text-transform: none;
-		font-size: 0.78rem;
-		line-height: 1.4;
+		color: var(--red);
+		font-size: 0.85rem;
+		line-height: 1.45;
 	}
 
 	.formats {
-		font-family: var(--mono);
-		font-size: 0.66rem;
-		color: var(--muted);
-		margin: 0.6rem 0 0;
+		font-size: 0.72rem;
+		color: var(--textFaint);
+		margin: 0.7rem 0 0;
 		max-width: none;
 		word-break: break-word;
 	}
 
 	.filename {
-		font-family: var(--mono);
-		font-size: 0.82rem;
-		margin: 0 0 0.5rem;
+		font-size: 0.9rem;
+		font-weight: 500;
+		margin-bottom: 0.5rem;
 		max-width: none;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -280,13 +272,18 @@
 	}
 
 	.controls {
-		border-top: 2px solid var(--ink);
-		padding-top: 0.85rem;
+		border-top: 1px solid var(--line);
+		padding-top: 0.9rem;
 	}
 
 	.row.split {
 		gap: 0.6rem;
 		flex-wrap: nowrap;
+	}
+
+	/* .row aligns on flex-end, so a leftover margin would offset one field */
+	.row.split .field {
+		margin-bottom: 0;
 	}
 
 	@media (max-width: 460px) {
@@ -305,7 +302,7 @@
 	}
 
 	.checks {
-		gap: 1rem;
-		margin-top: 0.2rem;
+		gap: 1.1rem;
+		margin-top: 0.3rem;
 	}
 </style>

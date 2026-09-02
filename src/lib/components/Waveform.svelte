@@ -1,17 +1,10 @@
-<script lang="ts">
-	interface Props {
-		buffer: AudioBuffer | null;
-		colors: string[];
-		height?: number;
-		empty?: string;
-	}
+<script>
+	let { buffer, colors, height = 72, empty = '' } = $props();
 
-	let { buffer, colors, height = 72, empty = '' }: Props = $props();
-
-	let canvas = $state<HTMLCanvasElement | null>(null);
+	let canvas = $state(null);
 	let width = $state(600);
 
-	function measure(node: HTMLElement) {
+	function measure(node) {
 		const observer = new ResizeObserver((entries) => {
 			width = Math.max(80, Math.round(entries[0].contentRect.width));
 		});
@@ -21,13 +14,13 @@
 	}
 
 	/** Canvas does not understand CSS variables, it needs the resolved color. */
-	function resolveColor(node: HTMLElement, color: string): string {
+	function resolveColor(node, color) {
 		const match = /^var\((--[\w-]+)\)$/.exec(color.trim());
 		if (!match) return color;
-		return getComputedStyle(node).getPropertyValue(match[1]).trim() || '#17150f';
+		return getComputedStyle(node).getPropertyValue(match[1]).trim() || '#16181d';
 	}
 
-	function draw(node: HTMLCanvasElement, source: AudioBuffer, w: number, h: number) {
+	function draw(node, source, w, h) {
 		const dpr = window.devicePixelRatio || 1;
 		node.width = Math.round(w * dpr);
 		node.height = Math.round(h * dpr);
@@ -46,7 +39,7 @@
 			const middle = lane * laneHeight + laneHeight / 2;
 			const scale = (laneHeight / 2) * 0.92;
 
-			g.strokeStyle = 'rgba(23, 21, 15, 0.25)';
+			g.strokeStyle = 'rgba(22, 24, 29, 0.16)';
 			g.lineWidth = 1;
 			g.beginPath();
 			g.moveTo(0, Math.round(middle) + 0.5);
@@ -70,7 +63,7 @@
 			}
 
 			if (lane > 0) {
-				g.strokeStyle = 'rgba(23, 21, 15, 0.35)';
+				g.strokeStyle = 'rgba(22, 24, 29, 0.22)';
 				g.beginPath();
 				g.moveTo(0, Math.round(lane * laneHeight) + 0.5);
 				g.lineTo(w, Math.round(lane * laneHeight) + 0.5);
@@ -95,8 +88,9 @@
 <style>
 	.waveform {
 		position: relative;
-		border: 2px solid var(--ink);
-		background: #fffdf8;
+		border: 1px solid var(--line);
+		border-radius: var(--radiusSmall);
+		background: var(--surfaceSunk);
 		overflow: hidden;
 		display: flex;
 		align-items: center;
@@ -108,10 +102,7 @@
 	}
 
 	.empty {
-		font-family: var(--mono);
-		font-size: 0.72rem;
-		text-transform: uppercase;
-		letter-spacing: 0.12em;
-		color: rgba(23, 21, 15, 0.35);
+		font-size: 0.85rem;
+		color: var(--textFaint);
 	}
 </style>
