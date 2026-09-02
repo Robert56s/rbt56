@@ -12,13 +12,35 @@ uploaded, there is no server at all, just static files.
 ```
 npm install
 npm run dev
-npm run build     # static output in build/
+npm run build     # server bundle in build/
+npm run preview   # serves the build locally
+```
+
+## Running it on the VPS
+
+Pull, install, build, restart. Nothing is uploaded by hand, `build/` is generated
+on the server and stays out of git.
+
+```
+git pull
+npm ci
+npm run build
+node build
+```
+
+`npm ci` has to install the dev dependencies too, since the build happens on the
+server. The process listens on port 3000 unless `PORT` says otherwise, and binds
+every interface unless `HOST` says otherwise. Behind nginx or Caddy, set `ORIGIN`
+to the public address so form actions keep working:
+
+```
+PORT=5666 ORIGIN=https://rbt56.example node build
 ```
 
 ## How it works
 
-- SvelteKit in plain JavaScript with `adapter-static`, so the build is a plain
-  folder of files.
+- SvelteKit in plain JavaScript with `adapter-node`, so the build is a small
+  node server.
 - Decoding uses the browser's `decodeAudioData`, which is why the accepted
   formats vary a little between browsers. Chrome is the most permissive.
 - Mixing happens in an `OfflineAudioContext` through a `ChannelMergerNode`: the

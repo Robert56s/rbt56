@@ -10,7 +10,7 @@
 <section class="hero">
 	<h1>rbt56</h1>
 	<p class="lead">
-		Small tools built for school or for a side project. They all run in the browser.
+		Small tools built for school or for a side project.
 	</p>
 </section>
 
