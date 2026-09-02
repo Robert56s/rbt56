@@ -25,17 +25,23 @@ on the server and stays out of git.
 git pull
 npm ci
 npm run build
-node build
+pm2 restart rbt56
 ```
 
 `npm ci` has to install the dev dependencies too, since the build happens on the
-server. The process listens on port 3000 unless `PORT` says otherwise, and binds
-every interface unless `HOST` says otherwise. Behind nginx or Caddy, set `ORIGIN`
-to the public address so form actions keep working:
+server.
+
+First time on a fresh server, after the build:
 
 ```
-PORT=5666 ORIGIN=https://rbt56.example node build
+pm2 start ecosystem.config.cjs
+pm2 save
+pm2 startup
 ```
+
+`pm2 startup` prints a command to paste back with sudo, which is what makes the
+app come up again after a reboot. Port and environment live in
+`ecosystem.config.cjs`.
 
 ## How it works
 
