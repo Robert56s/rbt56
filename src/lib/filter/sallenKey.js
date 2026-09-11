@@ -1,0 +1,84 @@
+import { capacitorCandidates, nearestInSeries, SERIES } from './eseries';
+
+/**
+ * Sallen-Key low-pass, unity-gain simplified form: two equal resistors R, a
+ * capacitor C_bottom from the R-R junction to ground, and a feedback
+ * capacitor C_top from the output back to that junction.
+ *
+ *   wn = 1 / (R * sqrt(C_top * C_bottom))
+ *   Q  = (1/2) * sqrt(C_top / C_bottom)   =>   C_top = 4*Q^2 * C_bottom
+ *
+ * The capacitor ratio is fixed by Q alone, which is the practical reason
+ * this topology is discouraged past a low order: a Q of just 3 already asks
+ * for a 36:1 capacitor ratio, on top of the Q sensitivity to R (S_R^Q = -2)
+ * being four times worse than MFB's.
+ */
+
+const SK_R_MIN = 200;
+const SK_R_MAX = 2_000_000;
+const SK_R_SWEET = 10_000;
+
+export function capRatio(q) {
+	return 4 * q * q;
+}
+
+export function designSallenKeyLowPass(wn, q, { resistorSeries = 'E24' } = {}) {
+	const ratio = capRatio(q);
+	const caps = capacitorCandidates();
+
+	let best = null;
+	for (const Cbottom of caps) {
+		const Ctarget = ratio * Cbottom;
+		const Rtarget = 1 / (wn * Cbottom * 2 * q);
+		const score = Math.log(Rtarget / SK_R_SWEET) ** 2;
+		if (!(Rtarget > SK_R_MIN && Rtarget < SK_R_MAX)) continue;
+		if (best === null || score < best.score) best = { Cbottom, Ctarget, Rtarget, score };
+	}
+	if (!best) return null;
+
+	const series = SERIES[resistorSeries];
+	const R = nearestInSeries(best.Rtarget, series);
+	// C_top isn't freely chosen (it falls out of the ratio), so it gets
+	// rounded against the finer E12 capacitor grid rather than E6. The
+	// decade range has to be specified: nearestInSeries defaults to a
+	// resistor-sized range (milliohm to gigaohm), not a capacitor one.
+	const Ctop = nearestInSeries(best.Ctarget, SERIES.E12, -12, -3);
+	const wnActual = 1 / (R * Math.sqrt(Ctop * best.Cbottom));
+	const qActual = 0.5 * Math.sqrt(Ctop / best.Cbottom);
+
+	return {
+		topology: 'sallenKey',
+		order: 2,
+		theoretical: { R: best.Rtarget, Ctop: best.Ctarget, Cbottom: best.Cbottom, ratio },
+		components: { R1: R, R2: R, Ctop, Cbottom: best.Cbottom },
+		actual: { wn: wnActual, q: qActual, gain: 1 },
+		steps: { ratio, Cbottom: best.Cbottom, Ctarget: best.Ctarget, Rtarget: best.Rtarget, resistorSeries }
+	};
+}
+
+/**
+ * Solves for R from a Ctop/Cbottom pair chosen by hand (e.g. to match what
+ * is actually in stock) instead of deriving Ctop from the 4*Q^2 ratio. The
+ * actual Q this gives depends on whatever ratio the chosen pair happens to
+ * have, which will not generally be exactly the target Q.
+ */
+export function designSallenKeyLowPassFromCaps(wn, q, Ctop, Cbottom, { resistorSeries = 'E24' } = {}) {
+	const Rtarget = 1 / (wn * Math.sqrt(Ctop * Cbottom));
+	const series = SERIES[resistorSeries];
+	const R = nearestInSeries(Rtarget, series);
+	const wnActual = 1 / (R * Math.sqrt(Ctop * Cbottom));
+	const qActual = 0.5 * Math.sqrt(Ctop / Cbottom);
+	const outOfRange = !(R > SK_R_MIN && R < SK_R_MAX);
+
+	return {
+		ok: true,
+		manual: true,
+		topology: 'sallenKey',
+		order: 2,
+		theoretical: { R: Rtarget, Ctop, Cbottom, ratio: Ctop / Cbottom },
+		components: { R1: R, R2: R, Ctop, Cbottom },
+		actual: { wn: wnActual, q: qActual, gain: 1 },
+		steps: { ratio: Ctop / Cbottom, Cbottom, Ctarget: Ctop, Rtarget, resistorSeries },
+		outOfRange
+	};
+}

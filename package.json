@@ -7,6 +7,7 @@
     "dev": "vite dev",
     "build": "vite build",
     "preview": "vite preview",
+    "check:schematics": "node --import ./scripts/resolve-ext.mjs scripts/check-schematics.mjs",
     "prepare": "svelte-kit sync || echo ''"
   },
   "devDependencies": {
@@ -17,6 +18,8 @@
     "vite": "^8.2.2"
   },
   "dependencies": {
-    "@breezystack/lamejs": "^1.2.7"
+    "@breezystack/lamejs": "^1.2.7",
+    "katex": "^0.18.7",
+    "schematic-symbols": "^0.0.244"
   }
 }
