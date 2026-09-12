@@ -132,6 +132,12 @@ if (FILTER_TYPE === 'bandpass') {
 		FILTER_TYPE === 'highpass'
 			? designHighPass({ response: RESPONSE, amaxDb: Amax, aminDb: Amin, fp, fs, order: n })
 			: designLowPass({ response: RESPONSE, amaxDb: Amax, aminDb: Amin, fp, fs, order: n });
+	if (RESPONSE === 'butterworth') {
+		// Where Amax reaches the components: the pole circle (= the -3 dB point)
+		// sits at fp * eps^(-1/n) for a low-pass, fp * eps^(+1/n) for a high-pass,
+		// so that exactly Amax dB is lost at fp. eps = 1 only at Amax = 3.0103 dB.
+		console.log(\`Butterworth: eps = sqrt(10^(Amax/10) - 1) = \${design.eps.toFixed(4)}, pole circle at fp x eps^(\${FILTER_TYPE === 'highpass' ? '+' : '-'}1/n) = \${fp} x \${design.wcScale.toFixed(4)} = \${(design.wc / (2 * Math.PI)).toFixed(1)} Hz (the -3 dB frequency)\`);
+	}
 }
 
 console.log();

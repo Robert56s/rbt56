@@ -1,10 +1,12 @@
 import { capacitorCandidates, nearestInSeries, SERIES } from './eseries';
 
 /**
- * Multiple-feedback (MFB) low-pass, the standard textbook layout: R1 from
- * the input, R2 down to the inverting input, R3 and C2 both in feedback
- * from the output back to the R1/R2 junction, C1 from the inverting input
- * to ground.
+ * Multiple-feedback (MFB) low-pass, the standard (Rauch) layout: R1 from
+ * the input to the summing node S, C1 from S to ground, R2 from S to the
+ * inverting input, R3 from the output back to S, C2 from the inverting
+ * input to the output. (KCL at S and at the virtual-ground inverting input
+ * gives the a, b, c below; see explainMfb in explain.js for the two
+ * equations written out.)
  *
  *   H(s) = c / (s^2 + a*s + b)
  *   a = (1/C1) * (1/R1 + 1/R2 + 1/R3)

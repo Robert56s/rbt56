@@ -5,11 +5,13 @@
 	import MathPanel from '$lib/components/MathPanel.svelte';
 	import { generateScript, NEXT_STEPS } from '$lib/filter/codegen';
 	import {
+		explainApproximation,
 		explainFirstOrder,
 		explainFirstOrderHp,
 		explainHpStage,
 		explainMfb,
 		explainMfbHp,
+		explainOrder,
 		explainSallenKey,
 		explainSallenKeyHp,
 		explainStage,
@@ -294,6 +296,36 @@
 		return -magnitudePhaseAt(realizedStages, fsh).db;
 	});
 
+	// Passband side of the spec: the realized filter may lose at most Amax dB
+	// at the passband edge(s). For Butterworth this is exactly what the
+	// eps^(-1/n) cutoff scaling in stages.js is there to guarantee.
+	const attenuationAtFp = $derived.by(() => {
+		if (!design || realizedStages.length === 0 || isBandType) return null;
+		return -magnitudePhaseAt(realizedStages, fp).db;
+	});
+
+	const attenuationAtFl = $derived.by(() => {
+		if (!design || realizedStages.length === 0 || !isBandType) return null;
+		if (filterType === 'bandstop') return -magnitudePhaseAtParallelSum(bandStopBranches, fl).db;
+		return -magnitudePhaseAt(realizedStages, fl).db;
+	});
+
+	const attenuationAtFh = $derived.by(() => {
+		if (!design || realizedStages.length === 0 || !isBandType) return null;
+		if (filterType === 'bandstop') return -magnitudePhaseAtParallelSum(bandStopBranches, fh).db;
+		return -magnitudePhaseAt(realizedStages, fh).db;
+	});
+
+	// The ideal Butterworth design sits exactly at Amax at fp, so any excess
+	// in the realized filter is E24 rounding: measured across low/high-pass,
+	// MFB and Sallen-Key, it scatters the edge by up to about 0.75 dB either
+	// way, less than the parts' own 5% tolerance moves it on a real board.
+	// Below PASSBAND_SLACK_DB the edge is reported as on spec; up to
+	// PASSBAND_ROUNDING_DB it is reported as rounding; beyond that something
+	// is genuinely off (a capacitor override, say) and it is flagged.
+	const PASSBAND_SLACK_DB = 0.05;
+	const PASSBAND_ROUNDING_DB = 1.0;
+
 	function sensitivityFor(stageDesign) {
 		if (stageDesign.topology === 'mfb') return mfbSensitivity(stageDesign.components);
 		if (stageDesign.topology === 'sallenKey') return { ...SALLEN_KEY_SENSITIVITY };
@@ -533,6 +565,13 @@
 						tex={`n \\geq \\dfrac{\\operatorname{acosh}\\!\\sqrt{\\dfrac{10^{A_{min}/10}-1}{10^{A_{max}/10}-1}}}{\\operatorname{acosh}(1/k)} = ${(filterType === 'bandstop' ? minOrderLp : minOrderHp).toFixed(4)}`}
 					/>
 				{/if}
+				<MathPanel
+					summary="Show where this formula comes from"
+					blocks={filterType === 'bandstop'
+						? explainOrder({ response, amaxDb, aminDb, k: kLp, minOrder: minOrderLp, filterType: 'lowpass' })
+						: explainOrder({ response, amaxDb, aminDb, k: kHp, minOrder: minOrderHp, filterType: 'highpass' })}
+				/>
+
 				{#if filterType === 'bandstop' ? orderLpTooHigh : orderHpTooHigh}
 					<p class="flag bad">
 						That needs order {filterType === 'bandstop' ? minOrderLpCeil : minOrderHpCeil}, past
@@ -589,6 +628,13 @@
 						tex={`n \\geq \\dfrac{\\operatorname{acosh}\\!\\sqrt{\\dfrac{10^{A_{min}/10}-1}{10^{A_{max}/10}-1}}}{\\operatorname{acosh}(1/k)} = ${(filterType === 'bandstop' ? minOrderHp : minOrderLp).toFixed(4)}`}
 					/>
 				{/if}
+				<MathPanel
+					summary="Show where this formula comes from"
+					blocks={filterType === 'bandstop'
+						? explainOrder({ response, amaxDb, aminDb, k: kHp, minOrder: minOrderHp, filterType: 'highpass' })
+						: explainOrder({ response, amaxDb, aminDb, k: kLp, minOrder: minOrderLp, filterType: 'lowpass' })}
+				/>
+
 				{#if filterType === 'bandstop' ? orderHpTooHigh : orderLpTooHigh}
 					<p class="flag bad">
 						That needs order {filterType === 'bandstop' ? minOrderHpCeil : minOrderLpCeil}, past
@@ -669,6 +715,11 @@
 					/>
 				{/if}
 
+				<MathPanel
+					summary="Show where this formula comes from"
+					blocks={explainOrder({ response, amaxDb, aminDb, k, minOrder, filterType })}
+				/>
+
 				{#if orderTooHigh}
 					<p class="flag bad">
 						That needs order {minOrderCeil}, past this tool's limit of {MAX_ORDER}. Loosen Amax,
@@ -709,15 +760,11 @@
 					<h2>Stages</h2>
 					<span class="hint">
 						{#if filterType === 'bandpass'}
-							ωc,hp = 2π·fl = {(design.hp.wc / 1000).toFixed(1)}k, ωc,lp = 2π·fh = {(
-								design.lp.wc / 1000
-							).toFixed(1)}k rad/s
+							ωc,hp = {(design.hp.wc / 1000).toFixed(1)}k, ωc,lp = {(design.lp.wc / 1000).toFixed(1)}k rad/s
 						{:else if filterType === 'bandstop'}
-							ωc,lp = 2π·fl = {(design.lp.wc / 1000).toFixed(1)}k, ωc,hp = 2π·fh = {(
-								design.hp.wc / 1000
-							).toFixed(1)}k rad/s
+							ωc,lp = {(design.lp.wc / 1000).toFixed(1)}k, ωc,hp = {(design.hp.wc / 1000).toFixed(1)}k rad/s
 						{:else}
-							ωc = 2π·fp = {(design.wc / 1000).toFixed(1)}k rad/s
+							ωc = {(design.wc / 1000).toFixed(1)}k rad/s
 						{/if}
 					</span>
 				</div>
@@ -746,17 +793,29 @@
 					/>
 				{:else if filterType === 'highpass'}
 					<p class="note">
-						Denormalized with s → s/ωc (high-pass: ωc = ωmin = fp, the passband edge). Each row is
+						Denormalized with s → s/ωc (high-pass; ωc = 2π·fp·ε^(+1/n) for Butterworth, 2π·fp for Chebyshev, derived below). Each row is
 						one realizable second-order block:
 					</p>
 					<Equation tex={`H(s) = \\dfrac{s^2}{s^2 + \\frac{\\omega_n}{Q}s + \\omega_n^2}`} />
 				{:else}
 					<p class="note">
-						Denormalized with s → s/ωc (low-pass: ωc = ωmax = fp). Each row is one realizable
+						Denormalized with s → s/ωc (low-pass; ωc = 2π·fp·ε^(-1/n) for Butterworth, 2π·fp for Chebyshev, derived below). Each row is one realizable
 						second-order block:
 					</p>
 					<Equation tex={`H(s) = \\dfrac{\\omega_n^2}{s^2 + \\frac{\\omega_n}{Q}s + \\omega_n^2}`} />
 				{/if}
+
+				<MathPanel
+					summary="Show where the response formula and the poles come from"
+					blocks={isBandType
+						? [
+								{ type: 'p', text: filterType === 'bandstop' ? 'Low-pass branch' : 'High-pass side', cls: 'stageHead' },
+								...explainApproximation(filterType === 'bandstop' ? design.lp : design.hp),
+								{ type: 'p', text: filterType === 'bandstop' ? 'High-pass branch' : 'Low-pass side', cls: 'stageHead' },
+								...explainApproximation(filterType === 'bandstop' ? design.hp : design.lp)
+							]
+						: explainApproximation(design)}
+				/>
 
 				<table>
 					<thead>
@@ -1122,6 +1181,49 @@
 						</p>
 					{/if}
 				{/if}
+
+					{#if isBandType}
+						{#if attenuationAtFl !== null && attenuationAtFh !== null}
+							{#if attenuationAtFl <= amaxDb + PASSBAND_SLACK_DB && attenuationAtFh <= amaxDb + PASSBAND_SLACK_DB}
+								<p class="flag ok">
+									Passband edges: {attenuationAtFl.toFixed(2)} dB at fl and {attenuationAtFh.toFixed(2)}
+									dB at fh, at most {amaxDb} dB allowed.
+								</p>
+							{:else if attenuationAtFl <= amaxDb + PASSBAND_ROUNDING_DB && attenuationAtFh <= amaxDb + PASSBAND_ROUNDING_DB}
+								<p class="flag warn">
+									Passband edges with rounded parts: {attenuationAtFl.toFixed(2)} dB at fl and
+									{attenuationAtFh.toFixed(2)} dB at fh, against Amax = {amaxDb} dB. The ideal design
+									sits exactly at Amax; the excess is E24 rounding, smaller than the shift the parts'
+									own 5% tolerance produces on a real board.
+								</p>
+							{:else}
+								<p class="flag bad">
+									Passband edges miss: {attenuationAtFl.toFixed(2)} dB at fl, {attenuationAtFh.toFixed(2)}
+									dB at fh, against Amax = {amaxDb} dB. That is more than rounding explains: check
+									any capacitor override above, or set RESISTOR_SERIES to E96 in the downloaded
+									script.
+								</p>
+							{/if}
+						{/if}
+					{:else if attenuationAtFp !== null}
+						{#if attenuationAtFp <= amaxDb + PASSBAND_SLACK_DB}
+							<p class="flag ok">
+								Passband edge: {attenuationAtFp.toFixed(2)} dB at fp, at most {amaxDb} dB allowed.
+							</p>
+						{:else if attenuationAtFp <= amaxDb + PASSBAND_ROUNDING_DB}
+							<p class="flag warn">
+								Passband edge with rounded parts: {attenuationAtFp.toFixed(2)} dB at fp, against Amax =
+								{amaxDb} dB. The ideal design sits exactly at Amax; the excess is E24 rounding,
+								smaller than the shift the parts' own 5% tolerance produces on a real board.
+							</p>
+						{:else}
+							<p class="flag bad">
+								Passband edge misses: {attenuationAtFp.toFixed(2)} dB at fp, against Amax = {amaxDb}
+								dB. That is more than rounding explains: check any capacitor override above, or set
+								RESISTOR_SERIES to E96 in the downloaded script.
+							</p>
+						{/if}
+					{/if}
 			</section>
 
 			<section class="panel">

@@ -139,12 +139,37 @@ export function explainRectifier(type) {
 }
 
 export function explainEnvelopeFilter(design) {
-	const { fp, fs, n, response, amaxDb, aminDb, minOrder } = design;
-	return [
+	const { fp, fs, n, response, amaxDb, aminDb, minOrder, eps, wcScale, wc } = design;
+	const blocks = [
 		p(
 			'After rectification, the envelope sits in the low frequencies (up to the highest modulating frequency to recover) and the unwanted carrier ripple sits much higher (f_p for a half-wave rectifier, 2*f_p for full-wave). This is exactly the low-pass filter design problem: same order search and cascaded Sallen-Key stages as the active-filter-design tool, reused here rather than re-derived.'
 		),
 		eq(`k = \\frac{f_p}{f_s} = \\frac{${formatHz(fp)}}{${formatHz(fs)}} = ${n4(fp / fs)}`),
 		p(`Minimum ${response} order meeting Amax = ${amaxDb} dB / Amin = ${aminDb} dB: ${n2(minOrder)} -> using n = ${n} (rounded up to an even number, so every stage is a plain 2nd-order Sallen-Key with no leftover 1st-order stage).`)
 	];
+	if (response === 'butterworth') {
+		blocks.push(
+			p('Amax then sets where the poles go. The Butterworth magnitude response is:'),
+			eq('\\left|H(j\\omega)\\right|^2 = \\dfrac{1}{1 + \\varepsilon^2 \\left(\\dfrac{\\omega}{\\omega_p}\\right)^{2n}}'),
+			p('Losing exactly Amax dB at fp fixes epsilon:'),
+			eq(
+				`A(\\omega_p) = 10\\log_{10}\\!\\left(1 + \\varepsilon^2\\right) = A_{max} \\ \\Rightarrow\\ \\varepsilon = \\sqrt{10^{A_{max}/10} - 1} = \\sqrt{10^{${amaxDb}/10} - 1} = ${n4(eps)}`
+			),
+			p(
+				'Epsilon fixes the radius omega_0 of the pole circle, which is also the -3 dB frequency. That factor is 1 only for Amax = 3.0103 dB; for a smaller Amax the poles move out past fp so that only Amax dB is lost there. Every stage below is scaled by this omega_c:'
+			),
+			eq('\\varepsilon^2 \\left(\\dfrac{\\omega_0}{\\omega_p}\\right)^{2n} = 1 \\ \\Rightarrow\\ \\omega_0 = \\omega_p\\, \\varepsilon^{-1/n}'),
+			eq(
+				`\\omega_c = \\omega_0 = 2\\pi f_p\\, \\varepsilon^{-1/n} = 2\\pi \\times ${fp} \\times ${n4(eps)}^{-1/${n}} = ${n2(2 * Math.PI * fp)} \\times ${n4(wcScale)} = ${n2(wc)}\\ \\text{rad/s}\\ \\ (f_{3\\,dB} = ${formatHz(wc / (2 * Math.PI))})`
+			)
+		);
+	} else {
+		blocks.push(
+			p('For a Chebyshev response fp is the ripple edge itself: the response ripples between 0 and Amax dB up to fp, then falls.'),
+			eq('\\left|H(j\\omega)\\right|^2 = \\dfrac{1}{1 + \\varepsilon^2\\, C_n^2\\!\\left(\\dfrac{\\omega}{\\omega_p}\\right)}'),
+			p('Epsilon is already inside the pole ellipse, so the prototype is scaled straight to fp:'),
+			eq(`\\omega_c = 2\\pi f_p = ${n2(wc)}\\ \\text{rad/s}`)
+		);
+	}
+	return blocks;
 }

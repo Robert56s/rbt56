@@ -1,13 +1,43 @@
 import { butterworthOrder, butterworthStages, chebyshevOrder, chebyshevStages, transitionRatio } from './order';
 
 /**
+ * Ripple factor epsilon = sqrt(10^(Amax/10) - 1): the one number the
+ * passband spec Amax turns into. |H(j omega_p)| = 1/sqrt(1 + eps^2) for
+ * both responses, so eps = 1 is exactly Amax = 3.0103 dB.
+ */
+export function rippleFactor(amaxDb) {
+	return Math.sqrt(10 ** (amaxDb / 10) - 1);
+}
+
+/**
+ * Where the Butterworth pole circle sits relative to the passband edge.
+ *
+ * A Butterworth low-pass is |H(j omega)|^2 = 1 / (1 + eps^2 (omega/omega_p)^(2n)),
+ * so its n poles lie on a circle of radius omega_0 = omega_p * eps^(-1/n),
+ * and omega_0 is also its -3 dB frequency. Only when Amax = 3.0103 dB
+ * (eps = 1) does that circle sit exactly at omega_p; for a smaller Amax the
+ * poles have to move OUT past omega_p so that only Amax dB is lost there,
+ * and for a larger Amax they move in. A high-pass is the mirror image
+ * (omega_0 = omega_p * eps^(+1/n): the poles move in for a smaller Amax).
+ *
+ * Chebyshev needs no such scaling: its prototype is normalized to the
+ * ripple edge omega_p directly, with eps already baked into the pole
+ * ellipse through beta (see chebyshevStages).
+ */
+export function cutoffScale(response, amaxDb, n, filterType = 'lowpass') {
+	if (response === 'chebyshev') return 1;
+	const eps = rippleFactor(amaxDb);
+	return filterType === 'highpass' ? eps ** (1 / n) : eps ** (-1 / n);
+}
+
+/**
  * Turns a spec (Amax, Amin, fp, fs) into the order and the realizable
  * stages for a low-pass filter, denormalized to the real cutoff.
  *
- * For a low-pass, omega_c = omega_max = 2*pi*fp. Substituting s ->
- * s/omega_c into each normalized stage s^2 + a*s + b gives
- * s^2 + (a*omega_c)*s + (b*omega_c^2), i.e. a standard second-order
- * low-pass with:
+ * omega_c = 2*pi*fp * cutoffScale (see cutoffScale: 1 for Chebyshev,
+ * eps^(-1/n) for Butterworth). Substituting s -> s/omega_c into each
+ * normalized stage s^2 + a*s + b gives s^2 + (a*omega_c)*s + (b*omega_c^2),
+ * i.e. a standard second-order low-pass with:
  *   omega_n = omega_c * sqrt(b)
  *   Q       = sqrt(b) / a
  * built as its own unity-DC-gain block. Every normalized stage here already
@@ -24,7 +54,9 @@ export function designLowPass({ response, amaxDb, aminDb, fp, fs, order }) {
 	const proto =
 		response === 'chebyshev' ? chebyshevStages(n, amaxDb) : butterworthStages(n);
 
-	const wc = 2 * Math.PI * fp;
+	const eps = rippleFactor(amaxDb);
+	const wcScale = cutoffScale(response, amaxDb, n, 'lowpass');
+	const wc = 2 * Math.PI * fp * wcScale;
 	const stages = proto.stages.map((s) => ({
 		order: 2,
 		filterType: 'lowpass',
@@ -47,7 +79,9 @@ export function designLowPass({ response, amaxDb, aminDb, fp, fs, order }) {
 		aminDb,
 		fp,
 		fs,
-		eps: proto.eps,
+		eps,
+		wcScale,
+		filterType: stages[0].filterType,
 		beta: proto.beta
 	};
 }
@@ -61,7 +95,8 @@ export function designLowPass({ response, amaxDb, aminDb, fp, fs, order }) {
  * to sqrt(b)/a = Q_lp exactly). The order/k formulas are unchanged from
  * low-pass; only the roles of fp and fs swap (fp is now the higher,
  * passband edge, fs the lower, stopband edge), so k = fs/fp instead of
- * fp/fs. omega_c for denormalizing is still 2*pi*fp, the passband edge.
+ * fp/fs. omega_c for denormalizing is 2*pi*fp times cutoffScale, which for
+ * Butterworth is eps^(+1/n) here (the poles move in, not out, for a high-pass).
  */
 export function designHighPass({ response, amaxDb, aminDb, fp, fs, order }) {
 	const k = transitionRatio(fs, fp);
@@ -72,7 +107,9 @@ export function designHighPass({ response, amaxDb, aminDb, fp, fs, order }) {
 	const proto =
 		response === 'chebyshev' ? chebyshevStages(n, amaxDb) : butterworthStages(n);
 
-	const wc = 2 * Math.PI * fp;
+	const eps = rippleFactor(amaxDb);
+	const wcScale = cutoffScale(response, amaxDb, n, 'highpass');
+	const wc = 2 * Math.PI * fp * wcScale;
 	const stages = proto.stages.map((s) => {
 		const aHp = s.a / s.b;
 		const bHp = 1 / s.b;
@@ -105,7 +142,9 @@ export function designHighPass({ response, amaxDb, aminDb, fp, fs, order }) {
 		aminDb,
 		fp,
 		fs,
-		eps: proto.eps,
+		eps,
+		wcScale,
+		filterType: stages[0].filterType,
 		beta: proto.beta
 	};
 }

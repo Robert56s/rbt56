@@ -75,6 +75,27 @@
 			/>
 			<p class="note"><strong>How to use:</strong> same rounding as the Butterworth case above.</p>
 		</div>
+
+		<div class="formula">
+			<h3>Where both order formulas come from</h3>
+			<p class="note">
+				Every design here is built on one magnitude response (section 3 and section 4 say where
+				each comes from). At fp it loses exactly Amax dB by the definition of epsilon; the only
+				condition left is the stopband, at least Amin dB at fs, and that condition contains n.
+				At fs the frequency ratio is 1/k.
+			</p>
+			<Equation
+				tex={`\\text{Butterworth:}\\ 10\\log_{10}\\!\\left(1 + \\varepsilon^2 \\left(\\tfrac{1}{k}\\right)^{2n}\\right) \\ge A_{min} \\ \\Rightarrow\\ 2n\\log\\!\\left(\\tfrac{1}{k}\\right) \\ge \\log\\!\\left[\\dfrac{10^{A_{min}/10}-1}{\\varepsilon^2}\\right]`}
+			/>
+			<Equation
+				tex={`\\text{Chebyshev:}\\ 10\\log_{10}\\!\\left(1 + \\varepsilon^2 \\cosh^2\\!\\left(n\\,\\operatorname{acosh}\\tfrac{1}{k}\\right)\\right) \\ge A_{min} \\ \\Rightarrow\\ \\cosh\\!\\left(n\\,\\operatorname{acosh}\\tfrac{1}{k}\\right) \\ge \\sqrt{\\dfrac{10^{A_{min}/10}-1}{\\varepsilon^2}}`}
+			/>
+			<p class="note">
+				<strong>How to use:</strong> isolate n (divide by 2 log(1/k), or take acosh of both sides
+				and divide by acosh(1/k)) and substitute epsilon squared = 10^(Amax/10) - 1: that is
+				exactly the two formulas above. Rounding n up is what puts the stopband margin in.
+			</p>
+		</div>
 	</section>
 
 	<section class="panel">
@@ -83,6 +104,25 @@
 			<h2>Pole placement, both responses</h2>
 		</div>
 
+		<div class="formula">
+			<h3>Where the poles come from</h3>
+			<p class="note">
+				A magnitude formula is not a circuit; a circuit is built from poles. Replacing omega by
+				s/j turns |H(j omega)| squared into H(s) times H(-s). For Butterworth (normalized so
+				that the pole circle has radius 1) its 2n poles are the 2n-th roots of a single number:
+				all the same size, angles spaced pi/n apart, mirrored about both axes. The stable half
+				(negative real part) belongs to H(s). Measuring the angle from the imaginary axis gives
+				the theta formula below; n = 4, for example, puts poles at 22.5 and 67.5 degrees.
+			</p>
+			<Equation
+				tex={`H(s)H(-s) = \\dfrac{1}{1 + (-1)^n s^{2n}} \\ \\Rightarrow\\ s^{2n} = (-1)^{n+1} \\ \\Rightarrow\\ s_i = -\\sin\\theta_i + j\\cos\\theta_i`}
+			/>
+			<p class="note">
+				For Chebyshev the same substitution into 1 + epsilon squared C_n squared gives cos(n phi)
+				= plus or minus j / epsilon with a complex angle phi = theta + j beta; its real part
+				forces the same theta values, its imaginary part gives beta (section 4).
+			</p>
+		</div>
 		<div class="formula">
 			<h3>Pole angle</h3>
 			<p class="note">
@@ -173,7 +213,16 @@
 			<h3>Epsilon</h3>
 			<p class="note">
 				Controls how deep the passband ripple is allowed to go: a bigger epsilon means more
-				ripple. It comes directly from the Amax spec alone.
+				ripple. It comes directly from the Amax spec alone, exactly as for Butterworth. The
+				Chebyshev magnitude response, with C_n the order-n Chebyshev polynomial (which swings
+				between -1 and 1 below the ripple edge and grows like a hyperbolic cosine above it):
+			</p>
+			<Equation
+				tex={`\\left|H(j\\omega)\\right|^2 = \\dfrac{1}{1 + \\varepsilon^2\\, C_n^2\\!\\left(\\dfrac{\\omega}{\\omega_p}\\right)}, \\qquad C_n(x) = \\begin{cases} \\cos(n \\arccos x) & |x| \\le 1 \\\\ \\cosh(n\\, \\operatorname{acosh} x) & |x| > 1 \\end{cases}`}
+			/>
+			<p class="note">
+				At the ripple edge C_n is 1, so exactly Amax dB is lost there and epsilon follows the same
+				way as for Butterworth:
 			</p>
 			<Equation tex={`\\varepsilon = \\sqrt{10^{A_{max}/10} - 1}`} />
 			<p class="note">
@@ -188,6 +237,18 @@
 				and the order n together into the number the ellipse's half-axes need.
 			</p>
 			<Equation tex={`\\beta = \\dfrac{\\operatorname{asinh}(1/\\varepsilon)}{n}`} />
+			<p class="note">
+				Where it comes from: the poles solve 1 + epsilon squared C_n squared (s/j) = 0. Writing
+				s/j = cos(phi) with a complex angle phi = theta + j beta turns C_n into cos(n phi), and
+				expanding the cosine of a complex angle splits the equation in two:
+			</p>
+			<Equation
+				tex={`\\cos(n\\theta)\\cosh(n\\beta) - j\\sin(n\\theta)\\sinh(n\\beta) = \\pm\\dfrac{j}{\\varepsilon} \\ \\Rightarrow\\ \\cos(n\\theta) = 0,\\quad \\sinh(n\\beta) = \\dfrac{1}{\\varepsilon}`}
+			/>
+			<p class="note">
+				The first part gives the same theta angles as Butterworth (section 2); the second is the
+				beta formula above.
+			</p>
 			<p class="note">
 				<strong>How to use:</strong> compute once per design, right after epsilon. sinh(beta) and
 				cosh(beta) are the sh and ch scale factors used in every stage's pole coordinates
@@ -218,11 +279,32 @@
 		<div class="formula">
 			<h3>Cutoff</h3>
 			<p class="note">
-				Converts the passband edge from Hz to radians per second. For a low-pass, this is the
-				cutoff the entire normalized prototype gets scaled by.
+				Converts the passband edge from Hz to radians per second and places the pole circle. The
+				Butterworth magnitude response (low-pass; a high-pass swaps the fraction to omega_p over
+				omega):
 			</p>
-			<Equation tex={`\\omega_c = 2\\pi f_p`} />
-			<p class="note"><strong>How to use:</strong> compute once per design, then reuse it below.</p>
+			<Equation tex={`\\left|H(j\\omega)\\right|^2 = \\dfrac{1}{1 + \\varepsilon^2 \\left(\\dfrac{\\omega}{\\omega_p}\\right)^{2n}}`} />
+			<p class="note">At the passband edge the fraction is 1, so losing exactly Amax dB there fixes the ripple factor:</p>
+			<Equation
+				tex={`A(\\omega_p) = 10\\log_{10}\\!\\left(1 + \\varepsilon^2\\right) = A_{max} \\ \\Rightarrow\\ \\varepsilon = \\sqrt{10^{A_{max}/10} - 1}`}
+			/>
+			<p class="note">
+				The n poles sit on a circle of radius omega_0, the frequency where the bracket equals one
+				over epsilon squared, which is also where exactly 3 dB is lost. That circle sits at omega_p
+				only when Amax = 3.0103 dB (epsilon = 1); for a smaller Amax the poles move past fp so that
+				only Amax dB is lost there (inward for a high-pass). Every normalized stage is scaled by this
+				omega_c. A Chebyshev prototype is already normalized to its ripple edge, so it needs no
+				factor.
+			</p>
+			<Equation
+				tex={`\\varepsilon^2 \\left(\\dfrac{\\omega_0}{\\omega_p}\\right)^{2n} = 1 \\ \\Rightarrow\\ \\omega_c = \\omega_0 = 2\\pi f_p\\, \\varepsilon^{-1/n}\\ \\text{(Butterworth low-pass)}, \\qquad \\omega_c = 2\\pi f_p\\, \\varepsilon^{+1/n}\\ \\text{(Butterworth high-pass)}`}
+			/>
+			<Equation tex={`\\omega_c = 2\\pi f_p \\ \\text{(Chebyshev, either type)}`} />
+			<p class="note">
+				<strong>How to use:</strong> compute once per design, then reuse it below. With the common
+				Amax = 3 dB the Butterworth factor is within 0.1% of 1, which is why fp is so often called
+				the 3 dB cutoff; at Amax = 1 dB and n = 5 it is already 1.145.
+			</p>
 		</div>
 
 		<div class="formula">
@@ -272,9 +354,12 @@
 			<h3>Transfer function</h3>
 			<p class="note">
 				The multiple-feedback (MFB) topology's transfer function in terms of its five
-				components: R1 from the input, R2 down to the inverting input, R3 and C2 in feedback
-				from the output back to the R1/R2 junction, C1 from the inverting input to ground.
+				components: R1 from the input to the summing node S, C1 from S to ground, R2 from S to the inverting input, R3 from the output back to S, C2 from the inverting input to the output. Two current balances describe it, at S and at the virtual-ground inverting input:
 			</p>
+			<Equation
+				tex={`\\text{at S:}\\ \\dfrac{V_{in} - V_S}{R_1} = sC_1 V_S + \\dfrac{V_S}{R_2} + \\dfrac{V_S - V_{out}}{R_3}, \\qquad \\text{at (-):}\\ \\dfrac{V_S}{R_2} = -sC_2 V_{out}`}
+			/>
+			<p class="note">Eliminating V_S and collecting powers of s gives the transfer function:</p>
 			<Equation
 				tex={`H(s) = \\dfrac{c}{s^2+as+b},\\quad a = \\dfrac{1}{C_1}\\!\\left(\\dfrac{1}{R_1}+\\dfrac{1}{R_2}+\\dfrac{1}{R_3}\\right),\\quad b = \\dfrac{1}{R_2R_3C_1C_2},\\quad c = -\\dfrac{1}{R_1R_2C_1C_2}`}
 			/>

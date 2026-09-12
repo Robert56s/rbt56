@@ -11,71 +11,85 @@ const MARGIN = 24;
 const HANG = { resistor_down: 0.51, capacitor_down: 0.3 };
 
 /**
- * MFB low-pass: R1 input, R2 to the virtual ground, R3 + C2 feedback (both
- * from the summing node to Vout), C1 from the virtual ground to ground,
+ * MFB low-pass, the standard (Rauch) layout that mfb.js's transfer function
+ * describes: R1 from Vin to the summing node S, C1 from S to ground, R2 from
+ * S to the inverting input, R3 from Vout back to S (feedback, over a top
+ * rail), C2 from the inverting input to Vout (feedback, under the triangle),
  * non-inverting input grounded (its lead offset sideways so it never runs
  * down the same line as the inverting-input pin).
+ *
+ * An earlier version drew C1 from the inverting input to ground and C2 from
+ * S to Vout. With an ideal op-amp that circuit is only first order (C1 sits
+ * across a virtual ground and does nothing), so it did not realize the
+ * formula the components were solved from.
  */
 export function buildMfbDiagram(components) {
 	const y0 = 220;
 	const Vin = { x: MARGIN, y: y0 };
 	const R1 = placeSymbol('resistor_right', Vin.x + 90, y0, SCALE);
-	const S = R1.ports['2'];
+	const S = R1.ports['2']; // summing node: R1, C1, R2, R3
 
-	const R2 = placeSymbol('resistor_down', S.x, S.y + HANG.resistor_down * SCALE, SCALE);
-	const VG = R2.ports['2'];
-	const C1 = placeSymbol('capacitor_down', VG.x, VG.y + HANG.capacitor_down * SCALE, SCALE);
+	const C1 = placeSymbol('capacitor_down', S.x, S.y + HANG.capacitor_down * SCALE, SCALE);
 	const gndC1 = placeSymbol('ground_down', C1.ports['2'].x - 0.01 * SCALE, C1.ports['2'].y + 0.29 * SCALE, SCALE);
 
-	const opamp = placeSymbol('opamp_no_power_right', S.x + 240, VG.y - 0.09 * SCALE, SCALE);
+	const R2 = placeSymbol('resistor_right', S.x + 90, y0, SCALE);
+	const X = R2.ports['2']; // inverting-input node: R2, C2, opamp inp2
+
+	// op-amp placed so its inverting input sits at X's height, so R2 feeds it
+	// with a plain horizontal wire
+	const opamp = placeSymbol('opamp_no_power_right', X.x + 90, y0 - 0.09 * SCALE, SCALE);
 	const gndPlusX = opamp.ports.inp1.x - 35;
 	const gndPlus = placeSymbol('ground_down', gndPlusX - 0.01 * SCALE, opamp.ports.inp1.y + 40 + 0.29 * SCALE, SCALE);
 
 	const Vout = { x: opamp.ports.out.x + 90, y: opamp.ports.out.y };
-	const railY = 100;
+	const railY = 110;
 	const R3 = placeSymbol('resistor_right', (S.x + Vout.x) / 2, railY, SCALE);
-	const C2 = placeSymbol('capacitor_right', (S.x + Vout.x) / 2, railY + 40, SCALE);
+	const loopY = gndPlus.ports['1'].y + 60;
+	const C2 = placeSymbol('capacitor_right', (X.x + Vout.x) / 2, loopY, SCALE);
 
 	const net = createNet();
 	net.wire(Vin, R1.ports['1']);
-	net.wire(R2.ports['1'], S);
-	net.wire(C1.ports['1'], VG);
-	net.elbow(VG, opamp.ports.inp2, 'h');
+	net.wire(S, R2.ports['1']);
+	net.wire(X, opamp.ports.inp2);
 	net.elbow(opamp.ports.inp1, gndPlus.ports['1'], 'h');
 	net.wire(C1.ports['2'], gndC1.ports['1']);
+	// R3 feedback: S up to the rail, across, down into Vout
 	net.wire(S, { x: S.x, y: railY });
 	net.wire({ x: S.x, y: railY }, R3.ports['1']);
-	net.wire({ x: S.x, y: railY }, { x: S.x, y: railY + 40 });
-	net.wire({ x: S.x, y: railY + 40 }, C2.ports['1']);
 	net.wire(R3.ports['2'], { x: Vout.x, y: railY });
-	net.wire(C2.ports['2'], { x: Vout.x, y: railY + 40 });
-	net.wire({ x: Vout.x, y: railY }, { x: Vout.x, y: railY + 40 });
-	net.wire({ x: Vout.x, y: railY + 40 }, Vout);
+	net.wire({ x: Vout.x, y: railY }, Vout);
+	// C2 feedback: X down under the triangle, across, up into Vout
+	net.wire(X, { x: X.x, y: loopY });
+	net.wire({ x: X.x, y: loopY }, C2.ports['1']);
+	net.wire(C2.ports['2'], { x: Vout.x, y: loopY });
+	net.wire({ x: Vout.x, y: loopY }, Vout);
 	net.wire(opamp.ports.out, Vout);
 	net.wire(Vout, { x: Vout.x + 40, y: Vout.y });
 
 	const parts = [
 		R1.svg,
-		R2.svg,
 		C1.svg,
 		gndC1.svg,
+		R2.svg,
 		opamp.svg,
 		gndPlus.svg,
 		R3.svg,
 		C2.svg,
 		net.svg(),
-		net.dots(portPoints(R1, R2, C1, gndC1, opamp, gndPlus, R3, C2)),
+		net.dots(portPoints(R1, C1, gndC1, R2, opamp, gndPlus, R3, C2)),
 		label('Vin', Vin.x, Vin.y - 12, { anchor: 'start' }),
 		label('Vout', Vout.x + 48, Vout.y + 5, { anchor: 'start' }),
-		label(`R1 ${formatOhms(components.R1)}`, S.x - 10, R1.ports['1'].y - 22, { anchor: 'end' }),
-		label(`R2 ${formatOhms(components.R2)}`, R2.ports['1'].x + 12, (R2.ports['1'].y + R2.ports['2'].y) / 2, { anchor: 'start' }),
-		label(`R3 ${formatOhms(components.R3)}`, R3.ports['1'].x, R3.ports['1'].y - 12, { anchor: 'start' }),
-		label(`C2 ${formatFarads(components.C2)}`, C2.ports['1'].x, C2.ports['2'].y + 20, { anchor: 'start' }),
-		label(`C1 ${formatFarads(components.C1)}`, C1.ports['1'].x + 12, (C1.ports['1'].y + C1.ports['2'].y) / 2, { anchor: 'start' })
+		label(`R1 ${formatOhms(components.R1)}`, S.x - 10, y0 - 22, { anchor: 'end' }),
+		label(`R2 ${formatOhms(components.R2)}`, R2.ports['1'].x, y0 - 22, { anchor: 'start' }),
+		label(`C1 ${formatFarads(components.C1)}`, C1.ports['1'].x + 12, (C1.ports['1'].y + C1.ports['2'].y) / 2 + 8, { anchor: 'start' }),
+		label(`R3 ${formatOhms(components.R3)}`, R3.ports['1'].x, railY - 12, { anchor: 'start' }),
+		label(`C2 ${formatFarads(components.C2)}`, C2.ports['1'].x, loopY + 26, { anchor: 'start' })
 	];
 
 	const width = Vout.x + 40 + 60;
-	return { svg: parts.join(''), viewBox: `0 40 ${width} 320` };
+	const top = railY - 32;
+	const height = loopY + 44 - top;
+	return { svg: parts.join(''), viewBox: `0 ${top} ${width} ${height}` };
 }
 
 /**

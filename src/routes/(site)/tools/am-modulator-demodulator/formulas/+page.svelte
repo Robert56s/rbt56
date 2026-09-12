@@ -194,6 +194,18 @@
 				edge (just above the highest modulating frequency), fs is the ripple frequency.
 			</p>
 			<Equation tex={`k = \\dfrac{f_p}{f_s}, \\qquad n \\geq \\dfrac{\\log\\!\\left[\\dfrac{10^{A_{min}/10}-1}{10^{A_{max}/10}-1}\\right]}{2\\log(1/k)}\\ \\text{(Butterworth)}`} />
+			<p class="note">Amax then places the poles. The Butterworth magnitude response:</p>
+			<Equation tex={`\\left|H(j\\omega)\\right|^2 = \\dfrac{1}{1 + \\varepsilon^2 \\left(\\dfrac{\\omega}{\\omega_p}\\right)^{2n}}`} />
+			<p class="note">Losing exactly Amax dB at fp fixes the ripple factor:</p>
+			<Equation tex={`A(\\omega_p) = 10\\log_{10}\\!\\left(1 + \\varepsilon^2\\right) = A_{max} \\ \\Rightarrow\\ \\varepsilon = \\sqrt{10^{A_{max}/10} - 1}`} />
+			<p class="note">
+				The pole circle (also the -3 dB frequency) sits at fp only when Amax = 3.0103 dB, i.e.
+				epsilon = 1; for a smaller Amax it moves out past fp. Every stage is scaled by this omega_c.
+				A Chebyshev prototype is already normalized to its ripple edge and needs no factor.
+			</p>
+			<Equation
+				tex={`\\varepsilon^2 \\left(\\dfrac{\\omega_0}{\\omega_p}\\right)^{2n} = 1 \\ \\Rightarrow\\ \\omega_c = \\omega_0 = 2\\pi f_p\\, \\varepsilon^{-1/n}\\ \\text{(Butterworth)}, \\qquad \\omega_c = 2\\pi f_p\\ \\text{(Chebyshev)}`}
+			/>
 			<p class="note">
 				<strong>How to use:</strong> round up to the next even integer (every stage here is a
 				plain 2nd-order Sallen-Key, no leftover 1st-order stage) - see the

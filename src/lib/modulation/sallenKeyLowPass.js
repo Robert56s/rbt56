@@ -35,18 +35,24 @@ export function designSallenKeyLowPass(wn, q, { resistorSeries = 'E24' } = {}) {
 	}
 	if (!best) return null;
 
-	const series = SERIES[resistorSeries];
-	const R = nearestInSeries(best.Rtarget, series);
+	// C_top is a derived value rounded onto the coarse E12 grid (up to 10%
+	// off the ratio); R sits on the fine resistor grid, so it is solved
+	// AFTER that rounding, from the capacitor pair that will actually be
+	// used. Same fix as filter/sallenKey.js: solving R from the ideal C_top
+	// let the capacitor rounding land in f0 (1.40 kHz target -> 1.31 kHz).
 	const Ctop = nearestInSeries(best.Ctarget, SERIES.E12, -12, -3);
+	const Rsolved = 1 / (wn * Math.sqrt(Ctop * best.Cbottom));
+	const series = SERIES[resistorSeries];
+	const R = nearestInSeries(Rsolved, series);
 	const wnActual = 1 / (R * Math.sqrt(Ctop * best.Cbottom));
 	const qActual = 0.5 * Math.sqrt(Ctop / best.Cbottom);
 
 	return {
 		topology: 'sallenKey',
 		order: 2,
-		theoretical: { R: best.Rtarget, Ctop: best.Ctarget, Cbottom: best.Cbottom, ratio },
+		theoretical: { R: Rsolved, Ctop: best.Ctarget, Cbottom: best.Cbottom, ratio },
 		components: { R1: R, R2: R, Ctop, Cbottom: best.Cbottom },
 		actual: { wn: wnActual, q: qActual, gain: 1 },
-		steps: { ratio, Cbottom: best.Cbottom, Ctarget: best.Ctarget, Rtarget: best.Rtarget, resistorSeries }
+		steps: { ratio, Cbottom: best.Cbottom, Ctarget: best.Ctarget, CtopRounded: Ctop, Rtarget: Rsolved, resistorSeries }
 	};
 }
