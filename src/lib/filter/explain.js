@@ -140,7 +140,7 @@ export function explainApproximation(design) {
  * condition left is "at least Amin dB at fs", and that is the one that
  * contains n.
  */
-export function explainOrder({ response, amaxDb, aminDb, k, minOrder, filterType = 'lowpass' }) {
+export function explainOrder({ response, amaxDb, aminDb, k, minOrder, filterType = 'lowpass', nUsed = null, evenOnly = false }) {
 	const eps = rippleFactor(amaxDb);
 	const hp = filterType === 'highpass';
 	const invK = 1 / k;
@@ -167,7 +167,7 @@ export function explainOrder({ response, amaxDb, aminDb, k, minOrder, filterType
 				`\\cosh\\!\\left(n\\,\\operatorname{acosh}\\tfrac{1}{k}\\right) \\ge \\sqrt{\\dfrac{10^{A_{min}/10} - 1}{\\varepsilon^2}} \\ \\Rightarrow\\ n \\ge \\dfrac{\\operatorname{acosh}\\sqrt{\\dfrac{10^{A_{min}/10}-1}{10^{A_{max}/10}-1}}}{\\operatorname{acosh}(1/k)}`
 			),
 			eq(
-				`n \\ge \\dfrac{\\operatorname{acosh}\\sqrt{\\dfrac{${n2(num)}}{${n4(den)}}}}{\\operatorname{acosh}(${n4(invK)})} = \\dfrac{${n4(Math.acosh(Math.sqrt(num / den)))}}{${n4(Math.acosh(invK))}} = ${n4(minOrder)} \\ \\Rightarrow\\ n = ${Math.max(1, Math.ceil(minOrder))}`
+				`n \\ge \\dfrac{\\operatorname{acosh}\\sqrt{\\dfrac{${n2(num)}}{${n4(den)}}}}{\\operatorname{acosh}(${n4(invK)})} = \\dfrac{${n4(Math.acosh(Math.sqrt(num / den)))}}{${n4(Math.acosh(invK))}} = ${n4(minOrder)} \\ \\Rightarrow\\ n = ${nUsed ?? Math.max(1, Math.ceil(minOrder))}`
 			)
 		);
 	} else {
@@ -183,13 +183,17 @@ export function explainOrder({ response, amaxDb, aminDb, k, minOrder, filterType
 			),
 			p('Dividing by 2log(1/k) and writing ε^2 out in terms of Amax gives the order formula, with this design\'s numbers:'),
 			eq(
-				`n \\ge \\dfrac{\\log\\!\\left[\\dfrac{10^{A_{min}/10}-1}{10^{A_{max}/10}-1}\\right]}{2\\log(1/k)} = \\dfrac{\\log\\!\\left[\\dfrac{${n2(num)}}{${n4(den)}}\\right]}{2\\log(${n4(invK)})} = \\dfrac{${n4(Math.log10(num / den))}}{${n4(2 * Math.log10(invK))}} = ${n4(minOrder)} \\ \\Rightarrow\\ n = ${Math.max(1, Math.ceil(minOrder))}`
+				`n \\ge \\dfrac{\\log\\!\\left[\\dfrac{10^{A_{min}/10}-1}{10^{A_{max}/10}-1}\\right]}{2\\log(1/k)} = \\dfrac{\\log\\!\\left[\\dfrac{${n2(num)}}{${n4(den)}}\\right]}{2\\log(${n4(invK)})} = \\dfrac{${n4(Math.log10(num / den))}}{${n4(2 * Math.log10(invK))}} = ${n4(minOrder)} \\ \\Rightarrow\\ n = ${nUsed ?? Math.max(1, Math.ceil(minOrder))}`
 			)
 		);
 	}
 	blocks.push(
 		p(
-			'Rounding up is what buys the margin: with n a whole number the filter usually loses a bit more than Amin at fs, never less. The Bode plot panel checks both edges again with the rounded components.'
+			(evenOnly
+				? 'Here n is then rounded up to the next even number, because every stage of this filter is a second-order Sallen-Key section and there is no place for a leftover first-order pole. '
+				: '') +
+				'Rounding up is what buys the margin: with n a whole number the filter usually loses a bit more than Amin at fs, never less.' +
+				(evenOnly ? '' : ' The Bode plot panel checks both edges again with the rounded components.')
 		)
 	);
 	return blocks;

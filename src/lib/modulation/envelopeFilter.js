@@ -26,7 +26,12 @@ export function designEnvelopeLowPass({ response, amaxDb, aminDb, fp, fs, order,
 	const wcScale = response === 'chebyshev' ? 1 : eps ** (-1 / n);
 	const wc = 2 * Math.PI * fp * wcScale;
 
+	// order/filterType on each stage and beta/filterType on the design let the
+	// filter tool's "show the math" derivations (filter/explain.js) be reused
+	// for this filter as they are.
 	const stages = proto.stages.map((s) => ({
+		order: 2,
+		filterType: 'lowpass',
 		wn: wc * Math.sqrt(s.b),
 		q: Math.sqrt(s.b) / s.a,
 		normalized: s
@@ -34,5 +39,5 @@ export function designEnvelopeLowPass({ response, amaxDb, aminDb, fp, fs, order,
 
 	const realized = stages.map((stage) => designSallenKeyLowPass(stage.wn, stage.q, { resistorSeries }));
 
-	return { k, minOrder, n, wc, wcScale, eps, stages, realized, response, amaxDb, aminDb, fp, fs };
+	return { k, minOrder, n, wc, wcScale, eps, beta: proto.beta, filterType: 'lowpass', stages, realized, response, amaxDb, aminDb, fp, fs };
 }

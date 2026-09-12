@@ -281,7 +281,7 @@
 						<tr><td>Modulation index n</td><td>{jfetDesign.modulationIndex.toFixed(3)} ({modulationQuality(jfetDesign.modulationIndex)})</td></tr>
 					</tbody>
 				</table>
-				<MathPanel blocks={[...explainJfetPhysics(), ...explainJfetGainCell(jfetDesign)]} />
+				<MathPanel blocks={[...explainJfetPhysics(jfetDesign), ...explainJfetGainCell(jfetDesign)]} />
 			</section>
 
 			<section class="panel">
@@ -330,7 +330,7 @@
 					<TimePlot series={[{ t: jfetPreview.t, y: jfetPreview.y, color: 'var(--blue)' }]} unit="ms" />
 				{/if}
 				<p class="note">Power efficiency at this modulation index: eta = {(powerEfficiency(jfetDesign.modulationIndex) * 100).toFixed(2)}%.</p>
-				<MathPanel blocks={explainAmBasics()} />
+				<MathPanel blocks={explainAmBasics(jfetDesign.modulationIndex)} />
 			</section>
 
 			<section class="panel">
@@ -491,7 +491,7 @@
 			{:else}
 				<p class="note">Single diode ({rectifierInfo.diode}) from the modulated signal to the envelope low-pass filter below: y(t) = max(x(t), 0).</p>
 			{/if}
-			<MathPanel blocks={explainRectifier(rectifierType)} />
+			<MathPanel blocks={explainRectifier(rectifierType, fpCarrierDemod)} />
 		</section>
 
 		{#if envelopeDesign}
