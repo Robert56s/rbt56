@@ -19,6 +19,19 @@
 import { symbols } from 'schematic-symbols';
 import * as filter from '../src/lib/filter/circuits.js';
 import * as modulation from '../src/lib/modulation/circuits.js';
+import { buildTwoLevelDiagram } from '../src/lib/karnaugh/circuit.js';
+import { literals } from '../src/lib/karnaugh/expression.js';
+import { minimizeBoth } from '../src/lib/karnaugh/minimize.js';
+
+/** Gate circuit for a minimized function, exactly as the Karnaugh page builds it. */
+function karnaughCase(n, ones, dcs, form) {
+	const names = ['A', 'B', 'C', 'D'].slice(0, n);
+	const { sop, pos } = minimizeBoth(n, ones, dcs);
+	const res = form === 'sop' ? sop : pos;
+	const constant = form === 'sop' ? sop.constant : pos.constant === null ? null : 1 - pos.constant;
+	const terms = constant !== null ? [] : res.cover.map((imp) => literals(imp, n, names, { complement: form === 'pos' }));
+	return buildTwoLevelDiagram({ names, terms, form, constant });
+}
 
 const CHAR_W = 6.6; // 11px monospace
 const LABEL_ASCENT = 11;
@@ -42,8 +55,31 @@ function parsePathPoints(d) {
 function parseDiagram(svg) {
 	const parts = { symbols: [], wires: [], dots: [], labels: [] };
 
+	// Self-describing symbols (the logic gates in src/lib/karnaugh/gates.js):
+	// drawn in page coordinates, with their ports and body box in attributes.
+	const cRe = /<g data-symbol="([^"]+)" data-ports="([^"]*)" data-bbox="([^"]*)">([\s\S]*?)<\/g>/g;
+	let rest = svg.replace(cRe, (_, name, portStr, bboxStr) => {
+		const [x0, y0, x1, y1] = bboxStr.split(',').map(Number);
+		const bbox = { x0, y0, x1, y1 };
+		const ports = portStr
+			.split(';')
+			.filter(Boolean)
+			.map((s, i) => {
+				const [x, y] = s.split(',').map(Number);
+				return { label: `p${i}`, x, y };
+			});
+		const segs = [
+			{ a: { x: x0, y: y0 }, b: { x: x1, y: y0 } },
+			{ a: { x: x1, y: y0 }, b: { x: x1, y: y1 } },
+			{ a: { x: x1, y: y1 }, b: { x: x0, y: y1 } },
+			{ a: { x: x0, y: y1 }, b: { x: x0, y: y0 } }
+		];
+		parts.symbols.push({ name, X: 0, Y: 0, S: 1, segs, ports, bbox });
+		return '';
+	});
+
 	const gRe = /<g transform="translate\(([-\d.e]+) ([-\d.e]+)\) scale\(([-\d.e]+)\)" data-symbol="([^"]+)">([\s\S]*?)<\/g>/g;
-	let rest = svg.replace(gRe, (_, tx, ty, s, name, inner) => {
+	rest = rest.replace(gRe, (_, tx, ty, s, name, inner) => {
 		const X = num(tx);
 		const Y = num(ty);
 		const S = num(s);
@@ -379,7 +415,18 @@ const CASES = [
 	['modulation/buildDividerDiagram', () => modulation.buildDividerDiagram({ top: 51000, bottom: 10000, vcc: 12 })],
 	['modulation/buildDiodeTankDiagram', () => modulation.buildDiodeTankDiagram({ l: 1e-3, c: 1.5e-8, r: 4300 })],
 	['modulation/buildPrecisionRectifierDiagram', () => modulation.buildPrecisionRectifierDiagram({ r1: 10000, r2: 10000, r3: 10000 })],
-	['modulation/buildEnvelopeLowPassDiagram', () => modulation.buildEnvelopeLowPassDiagram({ R1: 11000, R2: 11000, Ctop: 2.2e-8, Cbottom: 1e-8 })]
+	['modulation/buildEnvelopeLowPassDiagram', () => modulation.buildEnvelopeLowPassDiagram({ R1: 11000, R2: 11000, Ctop: 2.2e-8, Cbottom: 1e-8 })],
+	['karnaugh/sop 2 terms (B\'D\' + BD)', () => karnaughCase(4, [0, 2, 5, 7, 8, 10, 13, 15], [], 'sop')],
+	['karnaugh/pos 2 terms', () => karnaughCase(4, [0, 2, 5, 7, 8, 10, 13, 15], [], 'pos')],
+	['karnaugh/sop with don\'t-cares', () => karnaughCase(4, [1, 3, 7, 11, 15], [0, 2, 5], 'sop')],
+	['karnaugh/sop 3 vars 3 terms', () => karnaughCase(3, [0, 1, 2, 5, 6, 7], [], 'sop')],
+	['karnaugh/sop single literals + terms (7-seg a)', () => karnaughCase(4, [0, 2, 3, 5, 6, 7, 8, 9], [10, 11, 12, 13, 14, 15], 'sop')],
+	['karnaugh/pos 7-seg a', () => karnaughCase(4, [0, 2, 3, 5, 6, 7, 8, 9], [10, 11, 12, 13, 14, 15], 'pos')],
+	['karnaugh/sop single minterm (one AND4)', () => karnaughCase(4, [5], [], 'sop')],
+	['karnaugh/sop single literal only', () => karnaughCase(4, [8, 9, 10, 11, 12, 13, 14, 15], [], 'sop')],
+	['karnaugh/sop 2 vars xor', () => karnaughCase(2, [1, 2], [], 'sop')],
+	['karnaugh/sop 8 terms (checkerboard-ish)', () => karnaughCase(4, [0, 3, 5, 6, 9, 10, 12, 15], [], 'sop')],
+	['karnaugh/constant 1', () => karnaughCase(4, Array.from({ length: 16 }, (_, i) => i), [], 'sop')]
 ];
 
 let bugs = 0;

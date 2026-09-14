@@ -5,8 +5,24 @@
 import { writeFileSync } from 'node:fs';
 import * as filter from '../src/lib/filter/circuits.js';
 import * as modulation from '../src/lib/modulation/circuits.js';
+import { buildTwoLevelDiagram } from '../src/lib/karnaugh/circuit.js';
+import { literals } from '../src/lib/karnaugh/expression.js';
+import { minimizeBoth } from '../src/lib/karnaugh/minimize.js';
+
+function karnaugh(n, ones, dcs, form) {
+	const names = ['A', 'B', 'C', 'D'].slice(0, n);
+	const { sop, pos } = minimizeBoth(n, ones, dcs);
+	const res = form === 'sop' ? sop : pos;
+	const constant = form === 'sop' ? sop.constant : pos.constant === null ? null : 1 - pos.constant;
+	const terms = constant !== null ? [] : res.cover.map((imp) => literals(imp, n, names, { complement: form === 'pos' }));
+	return buildTwoLevelDiagram({ names, terms, form, constant });
+}
 
 const CASES = [
+	["Karnaugh: B'D' + BD (SOP)", karnaugh(4, [0, 2, 5, 7, 8, 10, 13, 15], [], 'sop')],
+	['Karnaugh: same function, POS', karnaugh(4, [0, 2, 5, 7, 8, 10, 13, 15], [], 'pos')],
+	['Karnaugh: 7-segment a (SOP)', karnaugh(4, [0, 2, 3, 5, 6, 7, 8, 9], [10, 11, 12, 13, 14, 15], 'sop')],
+	['Karnaugh: 8 terms', karnaugh(4, [0, 3, 5, 6, 9, 10, 12, 15], [], 'sop')],
 	['MFB low-pass', filter.buildMfbDiagram({ R1: 11000, R2: 5600, R3: 11000, C1: 1e-8, C2: 1e-9 })],
 	['Sallen-Key low-pass', filter.buildSallenKeyDiagram({ R1: 11000, R2: 11000, Ctop: 2.2e-8, Cbottom: 1e-8 })],
 	['MFB high-pass', filter.buildMfbHpDiagram({ C1: 1e-9, C2: 1e-9, C3: 1e-9, R1: 75000, R2: 336000 })],

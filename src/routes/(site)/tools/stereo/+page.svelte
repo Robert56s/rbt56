@@ -10,6 +10,7 @@
 	} from '$lib/audio/format';
 	import { MP3_BITRATES, encodeMp3 } from '$lib/audio/mp3';
 	import { renderStereo, sideDuration } from '$lib/audio/render';
+	import { describeSource, sideWarnings } from '$lib/audio/wavegen';
 	import { Slot } from '$lib/audio/slot.svelte';
 	import { encodeWav } from '$lib/audio/wav';
 	import SideCard from '$lib/components/SideCard.svelte';
@@ -58,40 +59,27 @@
 		const rates = [left.buffer?.sampleRate, right.buffer?.sampleRate].filter(
 			(r) => typeof r === 'number'
 		);
-		if (rates.length === 0) return 44100;
+		if (rates.length === 0) return left.source !== 'file' || right.source !== 'file' ? 48000 : 44100;
 		const top = Math.max(...rates);
 		if (RATES.includes(top)) return top;
 		return top > 44100 ? 48000 : 44100;
 	});
 
 	const sampleRate = $derived(rateMode === 'auto' ? autoRate : rateMode);
-	const ready = $derived((left.buffer !== null || right.buffer !== null) && duration > 0);
+	const ready = $derived((left.active || right.active) && duration > 0);
 	const tooLong = $derived(duration > MAX_SECONDS);
 
 	// Fingerprint of the settings: if it moves, the rendered result is out of date.
 	const signature = $derived(
-		JSON.stringify([
-			left.file?.name ?? '',
-			left.downmix,
-			left.gainDb,
-			left.normalize,
-			left.invert,
-			left.trimSec,
-			left.delaySec,
-			right.file?.name ?? '',
-			right.downmix,
-			right.gainDb,
-			right.normalize,
-			right.invert,
-			right.trimSec,
-			right.delaySec,
-			duration,
-			sampleRate,
-			fadeMs
-		])
+		JSON.stringify([left.fingerprint, right.fingerprint, duration, sampleRate, fadeMs])
 	);
 
 	const stale = $derived(result !== null && signature !== renderedFrom);
+
+	const warnings = $derived([
+		...sideWarnings(left.settings, sampleRate, 'Left'),
+		...sideWarnings(right.settings, sampleRate, 'Right')
+	]);
 
 	const peaks = $derived.by(() => {
 		if (!result) return null;
@@ -110,17 +98,24 @@
 	});
 
 	const outputName = $derived.by(() => {
-		const l = left.file ? baseName(left.file.name) : 'silence';
-		const r = right.file ? baseName(right.file.name) : 'silence';
-		return safeFileName(`${l} [L] + ${r} [R]`);
+		const name = (side) => {
+			if (!side.active) return 'silence';
+			if (side.source === 'file') return baseName(side.file.name);
+			return describeSource(side.settings);
+		};
+		return safeFileName(name(left) + ' [L] + ' + name(right) + ' [R]');
 	});
 
 	function snapshot(side) {
 		return {
+			source: side.source,
 			file: side.file,
 			buffer: side.buffer,
 			status: side.status,
 			error: side.error,
+			wave: { ...side.wave },
+			modulation: { ...side.modulation, wave: { ...side.modulation.wave } },
+			seconds: side.seconds,
 			downmix: side.downmix,
 			gainDb: side.gainDb,
 			normalize: side.normalize,
@@ -231,7 +226,7 @@
 		<div class="panel-head">
 			<span class="num">01</span>
 			<h2>Sources</h2>
-			<span class="hint">drag and drop</span>
+			<span class="hint">file, waveform or modulated carrier</span>
 		</div>
 
 		<div class="sides">
@@ -239,13 +234,17 @@
 			<SideCard channel={right} label="Right channel" letter="R" tone="var(--red)" />
 		</div>
 
+		{#each warnings as w (w)}
+			<p class="flag warn">{w}</p>
+		{/each}
+
 		<div class="row actions">
 			<button type="button" class="ghost small" onclick={swap}>Swap sides</button>
 			<button
 				type="button"
 				class="ghost small"
 				onclick={reset}
-				disabled={!left.file && !right.file}
+				disabled={!left.active && !right.active && !left.file && !right.file}
 			>
 				Clear all
 			</button>
@@ -424,6 +423,9 @@
 				contribute its mix, its left channel or its right channel.
 			</li>
 			<li>Video files work too. Only the audio track is read.</li>
+			<li>
+				<strong>Waveform</strong> and <strong>Modulated</strong> sources are generated at the output sample rate, WaveGen style: shape, frequency, amplitude and offset as fractions of full scale, phase, symmetry, then AM or FM by a second waveform or by an audio file. Square and ramp edges are anti-aliased unless ideal edges are asked for; every frequency has to stay under half the sample rate.
+			</li>
 			<li>
 				<strong>Invert phase</strong> flips one side, so the two channels cancel when summed. Useful
 				for spotting a speaker wired backwards.
