@@ -19,6 +19,7 @@
 import { symbols } from 'schematic-symbols';
 import * as filter from '../src/lib/filter/circuits.js';
 import * as modulation from '../src/lib/modulation/circuits.js';
+import { designTowThomasHighPass, designTowThomasLowPass } from '../src/lib/filter/towThomas.js';
 import { buildTwoLevelDiagram } from '../src/lib/karnaugh/circuit.js';
 import { literals } from '../src/lib/karnaugh/expression.js';
 import { minimizeBoth } from '../src/lib/karnaugh/minimize.js';
@@ -407,6 +408,9 @@ const CASES = [
 	['filter/buildFirstOrderHpDiagram', () => filter.buildFirstOrderHpDiagram({ R: 16000, C: 1e-8 }, 1.6e-4)],
 	['filter/buildFirstOrderDiagram', () => filter.buildFirstOrderDiagram({ R: 16000, C: 1e-8 }, 1.6e-4)],
 	['filter/buildSummingAmpDiagram', () => filter.buildSummingAmpDiagram(10000)],
+	['filter/buildDifferenceAmpDiagram', () => filter.buildDifferenceAmpDiagram(10000)],
+	['filter/buildTowThomasDiagram', () => filter.buildTowThomasDiagram(designTowThomasLowPass(2 * Math.PI * 10000, 0.7071).components)],
+	['filter/buildTowThomasHpDiagram', () => filter.buildTowThomasHpDiagram(designTowThomasHighPass(2 * Math.PI * 10000, 1.3066).components)],
 	['modulation/buildJfetGainCellDiagram', () => modulation.buildJfetGainCellDiagram({ rb: 13600 })],
 	['modulation/buildGainStageDiagram', () => modulation.buildGainStageDiagram({ rtop: 8200, rbottom: 10000 })],
 	['modulation/buildHighPassDiagram', () => modulation.buildHighPassDiagram({ r: 100000, c: 2.2e-7 })],

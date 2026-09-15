@@ -948,6 +948,82 @@
 			</p>
 		</div>
 	</section>
+	<section class="panel">
+		<div class="panel-head">
+			<span class="num">10</span>
+			<h2>Tow-Thomas biquad</h2>
+		</div>
+
+		<div class="formula">
+			<h3>Transfer functions</h3>
+			<p class="note">
+				Two integrators in a loop with one damping resistor: A1 is an inverting integrator with Rd
+				across its capacitor, fed by R1 from the input and by Ra from the inverter; A2 is an
+				inverting integrator (Rb, C2); A3 is a unity inverter (r, r) that closes the loop. KCL at
+				the two virtual grounds, with V3 = -V2, gives one denominator for every output.
+			</p>
+			<Equation
+				tex={`\\dfrac{V_{in}}{R_1} + \\dfrac{V_3}{R_a} + V_1\\left(sC_1 + \\dfrac{1}{R_d}\\right) = 0, \\qquad \\dfrac{V_1}{R_b} + sC_2V_2 = 0, \\qquad V_3 = -V_2`}
+			/>
+			<Equation
+				tex={`D(s) = s^2 + \\dfrac{s}{C_1R_d} + \\dfrac{1}{C_1C_2R_aR_b}, \\qquad V_{bp} = V_1 = -\\dfrac{s/(C_1R_1)}{D(s)}V_{in}, \\qquad V_{lp} = V_2 = \\dfrac{1/(C_1C_2R_1R_b)}{D(s)}V_{in}`}
+			/>
+			<Equation tex={`\\omega_n = \\dfrac{1}{\\sqrt{C_1C_2R_aR_b}}, \\qquad Q = R_d\\sqrt{\\dfrac{C_1}{C_2R_aR_b}}, \\qquad \\text{DC gain} = \\dfrac{R_a}{R_1}`} />
+		</div>
+
+		<div class="formula">
+			<h3>Design with equal parts</h3>
+			<p class="note">
+				C1 = C2 = C and Ra = Rb = R make the three knobs independent: R sets the corner, Rd alone
+				sets Q, R1 alone sets the gain (unity for R1 = R). No ratio grows with Q, unlike the
+				8Q&sup2; capacitor ratio of MFB or the 4Q&sup2; ratio of Sallen-Key.
+			</p>
+			<Equation tex={`\\omega_n = \\dfrac{1}{RC}, \\qquad Q = \\dfrac{R_d}{R}, \\qquad R = \\dfrac{1}{\\omega_n C}, \\qquad R_d = Q\\,R, \\qquad R_1 = R`} />
+			<p class="note">
+				<strong>How to use:</strong> pick C from a preferred series so R lands near 10 kilo-ohm, round
+				R, then solve Rd against the rounded R and round it; the realized Q is exactly Rd/R and the
+				gain exactly 1.
+			</p>
+		</div>
+
+		<div class="formula">
+			<h3>High-pass form (feedforward)</h3>
+			<p class="note">
+				Feed the input into A1's node through a capacitor Cin instead of R1: the input term gains a
+				factor s, A1's output becomes the high-pass and A2's the band-pass. Cin = C gives unity
+				magnitude, inverting.
+			</p>
+			<Equation tex={`V_{hp} = V_1 = -\\dfrac{C_{in}}{C_1}\\,\\dfrac{s^2}{D(s)}V_{in}, \\qquad V_{bp} = V_2 = \\dfrac{C_{in}}{C_1C_2R_b}\\,\\dfrac{s}{D(s)}V_{in}`} />
+		</div>
+
+		<div class="formula">
+			<h3>Sensitivities</h3>
+			<p class="note">
+				Q is a product of powers of the parts, so every sensitivity is a fixed exponent, independent
+				of Q and of the values. The input element and the inverter's matched pair do not enter Q.
+			</p>
+			<Equation tex={`S^Q_{R_d} = 1, \\quad S^Q_{C_1} = \\tfrac{1}{2}, \\quad S^Q_{C_2} = -\\tfrac{1}{2}, \\quad S^Q_{R_a} = S^Q_{R_b} = -\\tfrac{1}{2}, \\qquad S^{\\omega_n}_{C_1,C_2,R_a,R_b} = -\\tfrac{1}{2}`} />
+		</div>
+
+		<div class="formula">
+			<h3>Compared with MFB and Sallen-Key</h3>
+			<p class="note">
+				Better: independent tuning of f0, Q and gain; any Q with standard values (Rd = Q R); fixed
+				sensitivities of magnitude 1/2 or 1; low-pass, band-pass and high-pass outputs from one
+				circuit; a non-inverting low-pass. Worse: three op-amps per stage instead of one (parts,
+				supply current, noise, board space), and the loop's extra phase lag raises the realized Q
+				above the design value when the op-amps are slow (Q enhancement), so the gain-bandwidth
+				product has to be well above Q times f0.
+			</p>
+			<Equation tex={`\\dfrac{Q_{real} - Q}{Q} \\approx 2\\,Q\\,\\dfrac{f_0}{f_T} \\qquad \\Rightarrow \\qquad f_T \\gtrsim 200\\,Q\\,f_0 \\ \\text{ for a 1\\% error}`} />
+			<p class="note">
+				<strong>How to use:</strong> reach for the Tow-Thomas when Q is high (past about 5 the
+				one-op-amp ratios stop being buildable), when the filter has to be tuned on the bench, or
+				when the band-pass or notch output is wanted too. For an ordinary low-Q stage, MFB or
+				Sallen-Key does the same job with one op-amp.
+			</p>
+		</div>
+	</section>
 </article>
 
 <style>

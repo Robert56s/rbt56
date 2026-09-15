@@ -601,19 +601,137 @@ export function explainFirstOrderHp(stageDesign) {
 	return blocks;
 }
 
+/** How the Tow-Thomas biquad compares with the one-op-amp stages, shared by its low-pass and high-pass explanations. */
+function towThomasComparison(targetQ) {
+	const q = targetQ;
+	return [
+		p(
+			`How this differs from MFB and Sallen-Key. Those two make a second-order stage with one op-amp by wrapping resistors and capacitors around it, and every component then touches both f0 and Q at once. The Tow-Thomas uses three op-amps to build the response the way a textbook does: two integrators in a loop, one damping resistor. The result is that each knob turns exactly one thing: R (Ra, Rb) sets f0, Rd alone sets Q, the input element alone sets the gain, so a stage can be tuned on the bench one parameter at a time.`
+		),
+		p(
+			`Where it is better. No component ratio grows with Q: for the Q of ${q.toFixed(2)} in this stage MFB needs a capacitor ratio of at least 8Q^2 = ${(8 * q * q).toFixed(1)}:1 and Sallen-Key exactly 4Q^2 = ${(4 * q * q).toFixed(1)}:1, while here Q is just Rd/R = ${q.toFixed(2)} with equal capacitors, so high-Q stages (well past Q = 5, where the one-op-amp ratios become unbuildable) are routine. The sensitivities are fixed constants of magnitude 1/2 (and 1 for Rd) whatever the Q, instead of growing with it. And the same circuit gives several outputs at once: low-pass at A2, band-pass at A1, high-pass by swapping the input resistor for a capacitor, a notch by feeding the input into a third node. The low-pass output is also non-inverting, where MFB inverts.`
+		),
+		p(
+			`Where it is worse. Three op-amps per stage instead of one: more parts, more supply current, more noise, more board space, and the third op-amp's phase lag inside the loop raises the realized Q above the designed one (Q enhancement, roughly by a factor 1 + 2 Q f0/f_T for op-amps of gain-bandwidth f_T), so f_T should be at least a few hundred times Q times f0 (the check below puts a number on it). For a plain low-Q stage where a single op-amp does the job, MFB or Sallen-Key stays the cheaper choice; the Tow-Thomas earns its op-amps when Q is high, when a filter has to be tuned, or when the band-pass or notch output is wanted too.`
+		)
+	];
+}
+
+/** Tow-Thomas low-pass component derivation for one realized stage. */
+export function explainTowThomas(stageDesign, targetWn, targetQ) {
+	const st = stageDesign.steps;
+	const c = stageDesign.components;
+	const f0 = targetWn / (2 * Math.PI);
+	const blocks = [
+		p(
+			'The Tow-Thomas biquad builds a second-order response the way the differential equation itself does: two integrators in a loop, like a mass on a spring, plus one resistor that sets the damping. A1 is an inverting integrator with an extra resistor Rd across its capacitor (the damping), fed by R1 from the input and by Ra from the end of the loop; A2 is a plain inverting integrator (Rb in, C2 across); A3 is a unity-gain inverter (two equal resistors r) that flips the sign so the loop closes with negative feedback. The op-amp inverting inputs are virtual grounds, so each node is one current balance:'
+		),
+		eq(
+			'\\text{at N1:}\\ \\dfrac{V_{in}}{R_1} + \\dfrac{V_3}{R_a} + V_1\\left(sC_1 + \\dfrac{1}{R_d}\\right) = 0, \\qquad \\text{at N2:}\\ \\dfrac{V_1}{R_b} + sC_2 V_2 = 0, \\qquad V_3 = -V_2'
+		),
+		p(
+			'The second equation gives V_2 = -V_1/(s C_2 R_b), the inverter turns it into V_3 = +V_1/(s C_2 R_b), and substituting into the first collects everything on V_1. Both outputs share one denominator D(s), which is where f0 and Q live:'
+		),
+		eq(
+			'D(s) = s^2 + \\dfrac{s}{C_1 R_d} + \\dfrac{1}{C_1 C_2 R_a R_b}, \\qquad V_{bp} = V_1 = -\\dfrac{s / (C_1 R_1)}{D(s)}\\,V_{in}, \\qquad V_{lp} = V_2 = \\dfrac{1 / (C_1 C_2 R_1 R_b)}{D(s)}\\,V_{in}'
+		),
+		p('Matching D(s) to the standard form s^2 + (omega_n/Q) s + omega_n^2, and reading the low-pass numerator at s = 0:'),
+		eq(
+			'\\omega_n = \\dfrac{1}{\\sqrt{C_1 C_2 R_a R_b}}, \\qquad Q = R_d\\sqrt{\\dfrac{C_1}{C_2 R_a R_b}}, \\qquad \\text{DC gain} = \\dfrac{R_a}{R_1}'
+		),
+		p(
+			'Choosing equal capacitors C1 = C2 = C and equal resistors Ra = Rb = R makes the three knobs independent: R sets omega_n, Rd alone sets Q, R1 alone sets the gain. Unity gain, like every other stage in this tool, means R1 = R.'
+		),
+		eq('\\omega_n = \\dfrac{1}{RC}, \\qquad Q = \\dfrac{R_d}{R}, \\qquad \\text{DC gain} = \\dfrac{R}{R_1} = 1'),
+		p(
+			`This stage's target is f0 = ${formatHz(f0)} (omega_n = ${n2(targetWn)} rad/s), Q = ${targetQ.toFixed(4)}. ${stageDesign.manual ? 'C below was entered by hand; both capacitors take that value.' : 'C is picked from a preferred series so that R lands near 10 kilo-ohm, then'} R follows from omega_n, Rd from Q against the ROUNDED R (so the realized Q = Rd/R lands as close as the series allows), and r is any equal pair:`
+		),
+		eq(`C = ${formatFarads(st.C)}\\ \\ \\Rightarrow\\ \\ R = \\dfrac{1}{\\omega_n C} = ${formatOhms(st.Rtarget)} \\rightarrow ${formatOhms(st.Rrounded)}`),
+		eq(`R_d = Q \\times R = ${targetQ.toFixed(4)} \\times ${formatOhms(st.Rrounded)} = ${formatOhms(st.RdTarget)} \\rightarrow ${formatOhms(c.Rd)}, \\qquad R_1 = R_a = R_b = ${formatOhms(c.Ra)}, \\qquad r = ${formatOhms(c.r)}`),
+		p('Recomputing from the rounded values gives what the stage will actually do (the gain is exactly 1, since R1 and R are the same part value):'),
+		eq(
+			`f_0' = \\dfrac{1}{2\\pi R C} = ${formatHz(stageDesign.actual.wn / (2 * Math.PI))},\\quad Q' = \\dfrac{R_d}{R} = \\dfrac{${formatOhms(c.Rd)}}{${formatOhms(c.Ra)}} = ${stageDesign.actual.q.toFixed(4)}`
+		),
+		...towThomasComparison(targetQ),
+		p(
+			`Gain-bandwidth check for this stage: with Q = ${targetQ.toFixed(2)} and f0 = ${formatHz(f0)}, an op-amp with f_T = 3 MHz (a TL08x) shifts Q by roughly ${(100 * 2 * targetQ * f0 / 3e6).toFixed(1)}%; keeping that under 1% needs f_T above ${formatHz(200 * targetQ * f0)}.`
+		)
+	];
+	return blocks;
+}
+
+/** Tow-Thomas high-pass (feedforward input capacitor) derivation for one realized stage. */
+export function explainTowThomasHp(stageDesign, targetWn, targetQ) {
+	const st = stageDesign.steps;
+	const c = stageDesign.components;
+	const f0 = targetWn / (2 * Math.PI);
+	return [
+		p(
+			'The same two-integrator loop as the low-pass Tow-Thomas (A1 damped integrator, A2 integrator, A3 inverter), with one change at the input: the signal enters A1\'s summing node through a capacitor Cin instead of a resistor. A capacitor passes current proportional to s, so the input term picks up a factor s at the node balance:'
+		),
+		eq(
+			'\\text{at N1:}\\ sC_{in}V_{in} + \\dfrac{V_3}{R_a} + V_1\\left(sC_1 + \\dfrac{1}{R_d}\\right) = 0, \\qquad \\text{at N2:}\\ \\dfrac{V_1}{R_b} + sC_2 V_2 = 0, \\qquad V_3 = -V_2'
+		),
+		p('Eliminating V_2 and V_3 exactly as before, the input term now carries s^2 on top after multiplying through by s, so A1\'s output is a high-pass and A2\'s output (one more integration) is a band-pass:'),
+		eq(
+			'D(s) = s^2 + \\dfrac{s}{C_1 R_d} + \\dfrac{1}{C_1 C_2 R_a R_b}, \\qquad V_{hp} = V_1 = -\\dfrac{C_{in}}{C_1}\\,\\dfrac{s^2}{D(s)}\\,V_{in}, \\qquad V_{bp} = V_2 = \\dfrac{C_{in}}{C_1 C_2 R_b}\\,\\dfrac{s}{D(s)}\\,V_{in}'
+		),
+		p('omega_n and Q are the same expressions as the low-pass form; the high-frequency gain is Cin/C1, so Cin = C gives a unity-magnitude, inverting high-pass. With equal capacitors and equal resistors:'),
+		eq('\\omega_n = \\dfrac{1}{RC}, \\qquad Q = \\dfrac{R_d}{R}, \\qquad H(\\infty) = -\\dfrac{C_{in}}{C} = -1'),
+		p(
+			`This stage's target is f0 = ${formatHz(f0)} (omega_n = ${n2(targetWn)} rad/s), Q = ${targetQ.toFixed(4)}. ${stageDesign.manual ? 'C below was entered by hand; all three capacitors take that value.' : 'C is picked from a preferred series so that R lands near 10 kilo-ohm, then'} R follows from omega_n and Rd from Q against the rounded R:`
+		),
+		eq(`C_{in} = C_1 = C_2 = ${formatFarads(st.C)}\\ \\ \\Rightarrow\\ \\ R = \\dfrac{1}{\\omega_n C} = ${formatOhms(st.Rtarget)} \\rightarrow ${formatOhms(st.Rrounded)}`),
+		eq(`R_d = Q \\times R = ${targetQ.toFixed(4)} \\times ${formatOhms(st.Rrounded)} = ${formatOhms(st.RdTarget)} \\rightarrow ${formatOhms(c.Rd)}, \\qquad R_a = R_b = ${formatOhms(c.Ra)}, \\qquad r = ${formatOhms(c.r)}`),
+		eq(
+			`f_0' = \\dfrac{1}{2\\pi R C} = ${formatHz(stageDesign.actual.wn / (2 * Math.PI))},\\quad Q' = \\dfrac{R_d}{R} = ${stageDesign.actual.q.toFixed(4)}, \\quad H(\\infty) = -1`
+		),
+		p(
+			'Against the one-op-amp high-pass stages: MFB high-pass uses three equal capacitors and two resistors with fixed sensitivities, Sallen-Key high-pass needs a 4Q^2 resistor ratio. Here the high-pass is the low-pass circuit with one resistor swapped for a capacitor, so a board laid out for one form does both, and the band-pass comes out of A2 at the same time.'
+		),
+		...towThomasComparison(targetQ),
+		p(
+			`Gain-bandwidth check for this stage: with Q = ${targetQ.toFixed(2)} and f0 = ${formatHz(f0)}, an op-amp with f_T = 3 MHz (a TL08x) shifts Q by roughly ${(100 * 2 * targetQ * f0 / 3e6).toFixed(1)}%; keeping that under 1% needs f_T above ${formatHz(200 * targetQ * f0)}.`
+		)
+	];
+}
+
 /**
  * Explains the summing amplifier that combines a band-stop design's
  * low-pass and high-pass branches into the final notch output.
  */
-export function explainSummingAmp(R) {
+export function explainSummingAmp(R, { mode = 'sum', lpSign = 1, hpSign = 1, lpOrder = 2, hpOrder = 2, centreHz = 0, sumDb = 0, differenceDb = 0 } = {}) {
+	const signWord = (s) => (s > 0 ? '+1' : '-1');
+	const intro = p(
+		`The low-pass branch and the high-pass branch above run in parallel from the same input, each producing its own output, and one op-amp combines them into the notch. Far from the notch only one branch is alive, so the output is that branch alone whatever the combiner does. Inside the notch both branches are down to their tails, and the tails have known phases: a low-pass of order n falls like 1/s^n, which is a phase of -n times 90 degrees, and a high-pass of order m rises like s^m, +m times 90 degrees, each multiplied by the branch's passband sign (every second-order stage has an exactly known gain: MFB and the Tow-Thomas high-pass -1, Sallen-Key and the Tow-Thomas low-pass +1, first-order stages +1, whatever the rounding). Here the low-pass branch has order ${lpOrder} and sign ${signWord(lpSign)}, the high-pass branch order ${hpOrder} and sign ${signWord(hpSign)}.`
+	);
+	const rule = p(
+		`Near the centre of the notch (${formatHz(centreHz)}) the two tails are about the same size, and the notch is deepest when they arrive in antiphase and cancel. Whether adding or subtracting the branches does that depends on the two orders and signs, and on how far the realized poles sit from their asymptotes, so rather than trust a rule of thumb both combiners are evaluated with the rounded components: a plain sum gives ${sumDb.toFixed(1)} dB of attenuation at the centre, a difference ${differenceDb.toFixed(1)} dB, so the ${mode === 'difference' ? 'difference amplifier' : 'summing amplifier'} is used. Far from the centre the choice changes nothing, since only one branch is alive there.`
+	);
+	if (mode === 'difference') {
+		return [
+			intro,
+			rule,
+			p(
+				'A unity-gain difference amplifier subtracts one branch from the other. Its + input divides V_hp by two through the R, R pair, and the - input is held at that same voltage by feedback:'
+			),
+			eq(
+				'V_+ = \\dfrac{V_{hp}}{2}, \\qquad \\dfrac{V_{lp} - V_-}{R} = \\dfrac{V_- - V_{out}}{R},\\ \\ V_- = V_+ \\ \\Rightarrow\\ V_{out} = 2V_+ - V_{lp} = V_{hp} - V_{lp}'
+			),
+			eq(`R = R_g = R_f = ${formatOhms(R)}\\ \\ \\Rightarrow\\ \\ V_{out} = V_{hp} - V_{lp}`),
+			p(
+				'Far below the stopband, the low-pass branch passes at full strength while the high-pass branch is already deep in its own stopband, so the output is essentially the low-pass branch alone (and the mirror image far above the stopband). Inside the stopband, both branches are attenuated at once, so the output drops too: that drop is the notch, and how deep it gets is set by the same Amax/Amin order search used for every other filter type in this tool, not by matching any component pair precisely.'
+			)
+		];
+	}
 	return [
+		intro,
+		rule,
 		p(
-			'The low-pass branch and the high-pass branch above run in parallel from the same input, each producing its own output. A plain inverting summing amplifier adds those two outputs together to get the final notch. With the inverting input a virtual ground, the currents through Ra and Rb simply add up and flow through Rf:'
+			'A plain inverting summing amplifier adds the two outputs together. With the inverting input a virtual ground, the currents through Ra and Rb simply add up and flow through Rf:'
 		),
 		eq('\\dfrac{V_{lp}}{R_a} + \\dfrac{V_{hp}}{R_b} = -\\dfrac{V_{out}}{R_f} \\ \\Rightarrow\\ V_{out} = -\\left(\\dfrac{R_f}{R_a}V_{lp} + \\dfrac{R_f}{R_b}V_{hp}\\right)'),
-		p(
-			'Every stage in this design has an exactly known gain in its own passband: MFB is always exactly -1 (forced by R1 = R3), Sallen-Key is always exactly +1 (a unity-gain follower), regardless of how the resistors get rounded. So making Ra, Rb and Rf all equal gives an exact, rounding-proof unity-magnitude sum:'
-		),
+		p('Making Ra, Rb and Rf all equal gives an exact, rounding-proof unity-magnitude sum:'),
 		eq(`R_a = R_b = R_f = ${formatOhms(R)}\\ \\ \\Rightarrow\\ \\ V_{out} = -(V_{lp} + V_{hp})`),
 		p(
 			'Far below the stopband, the low-pass branch passes at full strength while the high-pass branch is already deep in its own stopband, so the sum is essentially just the low-pass branch (and the mirror image far above the stopband). Inside the stopband, both branches are attenuated at once, so the sum drops too: that drop is the notch, and how deep it gets is set by the same Amax/Amin order search used for every other filter type in this tool, not by matching any component pair precisely.'

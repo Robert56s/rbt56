@@ -15,7 +15,9 @@
 		explainSallenKey,
 		explainSallenKeyHp,
 		explainStage,
-		explainSummingAmp
+		explainSummingAmp,
+		explainTowThomas,
+		explainTowThomasHp
 	} from '$lib/filter/explain';
 	import { designFirstOrderLowPass, designFirstOrderLowPassFromCap } from '$lib/filter/firstOrder';
 	import { designFirstOrderHighPass, designFirstOrderHighPassFromCap } from '$lib/filter/firstOrderHighPass';
@@ -30,15 +32,23 @@
 		resistorRatioHp as capRatioHp
 	} from '$lib/filter/sallenKeyHighPass';
 	import {
+		designTowThomasHighPass,
+		designTowThomasHighPassFromCap,
+		designTowThomasLowPass,
+		designTowThomasLowPassFromCap
+	} from '$lib/filter/towThomas';
+	import {
 		mfbSensitivity,
 		MFB_HP_SENSITIVITY,
 		SALLEN_KEY_SENSITIVITY,
 		SALLEN_KEY_HP_SENSITIVITY,
+		TOW_THOMAS_SENSITIVITY,
+		TOW_THOMAS_HP_SENSITIVITY,
 		worstCaseQError
 	} from '$lib/filter/sensitivity';
 	import { designLowPass, designHighPass, designBandPass, designBandStop } from '$lib/filter/stages';
-	import { magnitudePhaseAt, sweep, magnitudePhaseAtParallelSum, sweepParallelSum } from '$lib/filter/bode';
-	import { buildSummingAmpDiagram } from '$lib/filter/circuits';
+	import { branchOrder, branchSign, combinerChoice, magnitudePhaseAt, sweep, magnitudePhaseAtParallelSum, sweepParallelSum } from '$lib/filter/bode';
+	import { buildDifferenceAmpDiagram, buildSummingAmpDiagram } from '$lib/filter/circuits';
 
 	const SUMMING_R = 10_000; // ohms, the summing amplifier's three equal resistors
 
@@ -213,6 +223,13 @@
 					}
 					return designFirstOrderHighPass(stage.tau);
 				}
+				if (topology === 'towThomas') {
+					if (ov?.C > 0) {
+						const r = designTowThomasHighPassFromCap(stage.wn, stage.q, ov.C * 1e-9);
+						if (r.ok) return r;
+					}
+					return designTowThomasHighPass(stage.wn, stage.q);
+				}
 				if (topology === 'sallenKey') {
 					if (ov?.C > 0) {
 						const r = designSallenKeyHighPassFromCap(stage.wn, stage.q, ov.C * 1e-9);
@@ -235,6 +252,13 @@
 				return designFirstOrderLowPass(stage.tau);
 			}
 
+			if (topology === 'towThomas') {
+				if (ov?.C > 0) {
+					const r = designTowThomasLowPassFromCap(stage.wn, stage.q, ov.C * 1e-9);
+					if (r.ok) return r;
+				}
+				return designTowThomasLowPass(stage.wn, stage.q);
+			}
 			if (topology === 'sallenKey') {
 				const auto = designSallenKeyLowPass(stage.wn, stage.q);
 				if (ov?.Ctop > 0 || ov?.Cbottom > 0) {
@@ -272,10 +296,16 @@
 		return [realizedStages.slice(0, lpCount), realizedStages.slice(lpCount)];
 	});
 
+	// The two branches must reach the combiner with the same sign; when they
+	// do not, the combiner is a difference amplifier (see combinerSigns).
+	const combiner = $derived(bandStopBranches ? combinerChoice(bandStopBranches, fsl, fsh) : null);
+	const combineSigns = $derived(combiner ? combiner.signs : null);
+	const combinerMode = $derived(combiner ? combiner.mode : 'sum');
+
 	const bodePoints = $derived.by(() => {
 		if (!design || realizedStages.length === 0) return [];
 		if (filterType === 'bandpass') return sweep(realizedStages, fsl / 10, fsh * 10, 240);
-		if (filterType === 'bandstop') return sweepParallelSum(bandStopBranches, fl / 10, fh * 10, 240);
+		if (filterType === 'bandstop') return sweepParallelSum(bandStopBranches, fl / 10, fh * 10, 240, combineSigns);
 		return sweep(realizedStages, fp / 50, fs * 10, 240);
 	});
 
@@ -286,13 +316,13 @@
 
 	const attenuationAtFsl = $derived.by(() => {
 		if (!design || realizedStages.length === 0 || !isBandType) return null;
-		if (filterType === 'bandstop') return -magnitudePhaseAtParallelSum(bandStopBranches, fsl).db;
+		if (filterType === 'bandstop') return -magnitudePhaseAtParallelSum(bandStopBranches, fsl, combineSigns).db;
 		return -magnitudePhaseAt(realizedStages, fsl).db;
 	});
 
 	const attenuationAtFsh = $derived.by(() => {
 		if (!design || realizedStages.length === 0 || !isBandType) return null;
-		if (filterType === 'bandstop') return -magnitudePhaseAtParallelSum(bandStopBranches, fsh).db;
+		if (filterType === 'bandstop') return -magnitudePhaseAtParallelSum(bandStopBranches, fsh, combineSigns).db;
 		return -magnitudePhaseAt(realizedStages, fsh).db;
 	});
 
@@ -306,13 +336,13 @@
 
 	const attenuationAtFl = $derived.by(() => {
 		if (!design || realizedStages.length === 0 || !isBandType) return null;
-		if (filterType === 'bandstop') return -magnitudePhaseAtParallelSum(bandStopBranches, fl).db;
+		if (filterType === 'bandstop') return -magnitudePhaseAtParallelSum(bandStopBranches, fl, combineSigns).db;
 		return -magnitudePhaseAt(realizedStages, fl).db;
 	});
 
 	const attenuationAtFh = $derived.by(() => {
 		if (!design || realizedStages.length === 0 || !isBandType) return null;
-		if (filterType === 'bandstop') return -magnitudePhaseAtParallelSum(bandStopBranches, fh).db;
+		if (filterType === 'bandstop') return -magnitudePhaseAtParallelSum(bandStopBranches, fh, combineSigns).db;
 		return -magnitudePhaseAt(realizedStages, fh).db;
 	});
 
@@ -331,6 +361,8 @@
 		if (stageDesign.topology === 'sallenKey') return { ...SALLEN_KEY_SENSITIVITY };
 		if (stageDesign.topology === 'mfbHp') return { ...MFB_HP_SENSITIVITY };
 		if (stageDesign.topology === 'sallenKeyHp') return { ...SALLEN_KEY_HP_SENSITIVITY };
+		if (stageDesign.topology === 'towThomas') return { ...TOW_THOMAS_SENSITIVITY };
+		if (stageDesign.topology === 'towThomasHp') return { ...TOW_THOMAS_HP_SENSITIVITY };
 		return null;
 	}
 
@@ -339,6 +371,8 @@
 		if (stageDesign.topology === 'sallenKey') return explainSallenKey(stageDesign, design.stages[i].q);
 		if (stageDesign.topology === 'mfbHp') return explainMfbHp(stageDesign, design.stages[i].wn, design.stages[i].q);
 		if (stageDesign.topology === 'sallenKeyHp') return explainSallenKeyHp(stageDesign, design.stages[i].q);
+		if (stageDesign.topology === 'towThomas') return explainTowThomas(stageDesign, design.stages[i].wn, design.stages[i].q);
+		if (stageDesign.topology === 'towThomasHp') return explainTowThomasHp(stageDesign, design.stages[i].wn, design.stages[i].q);
 		if (stageDesign.topology === 'firstOrderHp') return explainFirstOrderHp(stageDesign);
 		return explainFirstOrder(stageDesign);
 	}
@@ -500,6 +534,7 @@
 				<select id="topology" bind:value={topology}>
 					<option value="mfb">Multiple feedback (MFB)</option>
 					<option value="sallenKey">Sallen-Key (unity gain)</option>
+					<option value="towThomas">Tow-Thomas biquad (3 op-amps)</option>
 				</select>
 			</div>
 		</div>
@@ -856,7 +891,7 @@
 					<span class="num">04</span>
 					<h2>Components</h2>
 					<span class="hint">
-						{topology === 'mfb' ? 'multiple feedback' : 'Sallen-Key'}{filterType === 'highpass'
+						{topology === 'mfb' ? 'multiple feedback' : topology === 'sallenKey' ? 'Sallen-Key' : 'Tow-Thomas biquad'}{filterType === 'highpass'
 							? ', high-pass'
 							: filterType === 'bandpass'
 								? ', band-pass'
@@ -887,6 +922,15 @@
 							5 this gets impractical. MFB is the safer default for higher orders.
 						{/if}
 					</p>
+				{:else if topology === 'towThomas'}
+					<p class="note">
+						Tow-Thomas: three op-amps per second-order stage (a damped integrator, an integrator and an
+						inverter in a loop). f0, Q and gain are each set by one part, any Q is buildable with equal
+						capacitors (Rd = Q R), and the sensitivities are fixed at 1/2 or 1. The cost is the extra
+						op-amps and their bandwidth: the loop raises the realized Q by roughly 2 Q f0 / f_T, so the
+						op-amp gain-bandwidth should be a few hundred times Q times f0. See each stage's math for
+						the comparison with MFB and Sallen-Key.
+					</p>
 				{/if}
 
 				{#each realizedStages as stageDesign, i (i)}
@@ -906,7 +950,7 @@
 										{#each Object.entries(stageDesign.components) as [name, value] (name)}
 											<tr>
 												<td>{name}</td>
-												<td>{name.startsWith('R') ? formatOhms(value) : formatFarads(value)}</td>
+												<td>{name.startsWith('R') || name.startsWith('r') ? formatOhms(value) : formatFarads(value)}</td>
 											</tr>
 										{/each}
 									</tbody>
@@ -965,7 +1009,7 @@
 							<CircuitDiagram design={stageDesign} />
 							<div class="math-full cap-picker">
 								<p class="note">
-									{#if stageDesign.topology === 'firstOrder' || stageDesign.topology === 'firstOrderHp' || stageDesign.topology === 'mfbHp' || stageDesign.topology === 'sallenKeyHp'}
+									{#if stageDesign.topology === 'firstOrder' || stageDesign.topology === 'firstOrderHp' || stageDesign.topology === 'mfbHp' || stageDesign.topology === 'sallenKeyHp' || stageDesign.topology === 'towThomas' || stageDesign.topology === 'towThomasHp'}
 										Pick a different C value if the one above does not match what is in stock; the
 										resistors above are recalculated to fit.
 									{:else}
@@ -975,7 +1019,7 @@
 									{/if}
 								</p>
 								<div class="row">
-									{#if stageDesign.topology === 'firstOrder' || stageDesign.topology === 'firstOrderHp' || stageDesign.topology === 'mfbHp' || stageDesign.topology === 'sallenKeyHp'}
+									{#if stageDesign.topology === 'firstOrder' || stageDesign.topology === 'firstOrderHp' || stageDesign.topology === 'mfbHp' || stageDesign.topology === 'sallenKeyHp' || stageDesign.topology === 'towThomas' || stageDesign.topology === 'towThomasHp'}
 										<div class="field">
 											<label for={`cap-C-${i}`}>C (nF)</label>
 											<input
@@ -1067,7 +1111,7 @@
 
 				{#if filterType === 'bandstop'}
 					<div class="stage-block">
-						<h3>Summing amplifier</h3>
+						<h3>{combinerMode === 'difference' ? 'Difference amplifier' : 'Summing amplifier'}</h3>
 						<div class="stage-grid">
 							<div>
 								<table>
@@ -1099,17 +1143,26 @@
 								</p>
 							</div>
 							<svg
-								viewBox={buildSummingAmpDiagram(SUMMING_R).viewBox}
+								viewBox={(combinerMode === 'difference' ? buildDifferenceAmpDiagram(SUMMING_R) : buildSummingAmpDiagram(SUMMING_R)).viewBox}
 								role="img"
-								aria-label="summing amplifier schematic"
+								aria-label="{combinerMode} amplifier schematic"
 								class="summing-svg"
 							>
-								{@html buildSummingAmpDiagram(SUMMING_R).svg}
+								{@html (combinerMode === 'difference' ? buildDifferenceAmpDiagram(SUMMING_R) : buildSummingAmpDiagram(SUMMING_R)).svg}
 							</svg>
 							<div class="math-full">
 								<MathPanel
-									summary="Show the math for the summing amplifier"
-									blocks={explainSummingAmp(SUMMING_R)}
+									summary="Show the math for the {combinerMode === 'difference' ? 'difference' : 'summing'} amplifier"
+									blocks={explainSummingAmp(SUMMING_R, {
+									mode: combinerMode,
+									lpSign: bandStopBranches ? branchSign(bandStopBranches[0]) : 1,
+									hpSign: bandStopBranches ? branchSign(bandStopBranches[1]) : 1,
+									lpOrder: bandStopBranches ? branchOrder(bandStopBranches[0]) : 2,
+									hpOrder: bandStopBranches ? branchOrder(bandStopBranches[1]) : 2,
+									centreHz: combiner ? combiner.centreHz : 0,
+									sumDb: combiner ? combiner.sumDb : 0,
+									differenceDb: combiner ? combiner.differenceDb : 0
+								})}
 								/>
 							</div>
 						</div>

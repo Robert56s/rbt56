@@ -10,6 +10,7 @@ import sallenKeySrc from './sallenKey.js?raw';
 import sallenKeyHighPassSrc from './sallenKeyHighPass.js?raw';
 import sensitivitySrc from './sensitivity.js?raw';
 import stagesSrc from './stages.js?raw';
+import towThomasSrc from './towThomas.js?raw';
 
 /**
  * Turns one of this file's own modules into a plain script chunk: strips
@@ -170,13 +171,19 @@ const realized = design.stages.map((stage, i) => {
 
 	let r;
 	if (stage.filterType === 'highpass') {
-		if (TOPOLOGY === 'sallenKey') {
+		if (TOPOLOGY === 'towThomas') {
+			const auto = designTowThomasHighPass(stage.wn, stage.q, { resistorSeries: RESISTOR_SERIES });
+			r = ov && ov.C ? designTowThomasHighPassFromCap(stage.wn, stage.q, ov.C, { resistorSeries: RESISTOR_SERIES }) : auto;
+		} else if (TOPOLOGY === 'sallenKey') {
 			const auto = designSallenKeyHighPass(stage.wn, stage.q, { resistorSeries: RESISTOR_SERIES });
 			r = ov && ov.C ? designSallenKeyHighPassFromCap(stage.wn, stage.q, ov.C, { resistorSeries: RESISTOR_SERIES }) : auto;
 		} else {
 			const auto = designMfbHighPass(stage.wn, stage.q, { resistorSeries: RESISTOR_SERIES });
 			r = ov && ov.C ? designMfbHighPassFromCap(stage.wn, stage.q, ov.C, { resistorSeries: RESISTOR_SERIES }) : auto;
 		}
+	} else if (TOPOLOGY === 'towThomas') {
+		const auto = designTowThomasLowPass(stage.wn, stage.q, { resistorSeries: RESISTOR_SERIES });
+		r = ov && ov.C ? designTowThomasLowPassFromCap(stage.wn, stage.q, ov.C, { resistorSeries: RESISTOR_SERIES }) : auto;
 	} else if (TOPOLOGY === 'sallenKey') {
 		const auto = designSallenKeyLowPass(stage.wn, stage.q, { resistorSeries: RESISTOR_SERIES });
 		if (ov && (ov.Ctop || ov.Cbottom)) {
@@ -204,7 +211,7 @@ const realized = design.stages.map((stage, i) => {
 		}
 	}
 	for (const [name, value] of Object.entries(r.components)) {
-		const isR = name.startsWith('R');
+		const isR = /^[Rr]/.test(name);
 		console.log(\`  \${name} = \${isR ? value.toFixed(0) + ' ohm' : value.toExponential(4) + ' F'}\`);
 	}
 	const f0Actual = r.actual.wn / (2 * Math.PI);
@@ -212,8 +219,10 @@ const realized = design.stages.map((stage, i) => {
 		\`  actual f0 = \${f0Actual.toFixed(1)} Hz (\${(100 * (f0Actual - f0) / f0).toFixed(2)}%), Q = \${r.actual.q.toFixed(4)} (\${(100 * (r.actual.q - stage.q) / stage.q).toFixed(2)}%)\`
 	);
 	if (stage.filterType === 'highpass') {
-		const sens = TOPOLOGY === 'sallenKey' ? SALLEN_KEY_HP_SENSITIVITY : MFB_HP_SENSITIVITY;
+		const sens = TOPOLOGY === 'towThomas' ? TOW_THOMAS_HP_SENSITIVITY : TOPOLOGY === 'sallenKey' ? SALLEN_KEY_HP_SENSITIVITY : MFB_HP_SENSITIVITY;
 		console.log(\`  Q sensitivity to 1% component error: \${worstCaseQError(sens, 1).toFixed(2)}% (root-sum-square, fixed for this topology)\`);
+	} else if (TOPOLOGY === 'towThomas') {
+		console.log(\`  Q sensitivity to 1% component error: \${worstCaseQError(TOW_THOMAS_SENSITIVITY, 1).toFixed(2)}% (root-sum-square, fixed for this topology)\`);
 	} else if (TOPOLOGY === 'mfb') {
 		const sens = mfbSensitivity(r.components);
 		console.log(\`  Q sensitivity to 1% component error: \${worstCaseQError(sens, 1).toFixed(2)}% (root-sum-square)\`);
@@ -226,10 +235,23 @@ const realized = design.stages.map((stage, i) => {
 if (FILTER_TYPE === 'bandstop') {
 	console.log();
 	console.log('='.repeat(72));
-	console.log('SUMMING AMPLIFIER (combines the low-pass and high-pass branches above)');
-	console.log('='.repeat(72));
-	console.log(\`  Ra = Rb = Rf = \${SUMMING_R} ohm (any equal value works exactly)\`);
-	console.log('  Vout = -(V_lp + V_hp)');
+	const lpBranch = realized.slice(0, design.lp.stages.length);
+	const hpBranch = realized.slice(design.lp.stages.length);
+	const choice = combinerChoice([lpBranch, hpBranch], fsl, fsh);
+	const kLp = choice.signs[0];
+	console.log(\`  notch centre \${choice.centreHz.toFixed(0)} Hz: plain sum \${choice.sumDb.toFixed(1)} dB, difference \${choice.differenceDb.toFixed(1)} dB -> \${choice.mode}\`);
+	console.log(\`  branch signs: low-pass \${branchSign(lpBranch) > 0 ? '+1' : '-1'} (order \${branchOrder(lpBranch)}), high-pass \${branchSign(hpBranch) > 0 ? '+1' : '-1'} (order \${branchOrder(hpBranch)})\`);
+	if (kLp > 0) {
+		console.log('SUMMING AMPLIFIER (combines the low-pass and high-pass branches above)');
+		console.log('='.repeat(72));
+		console.log(\`  Ra = Rb = Rf = \${SUMMING_R} ohm (any equal value works exactly)\`);
+		console.log('  Vout = -(V_lp + V_hp)   (the deeper notch of the two combiners)');
+	} else {
+		console.log('DIFFERENCE AMPLIFIER (the deeper notch of the two combiners)');
+		console.log('='.repeat(72));
+		console.log(\`  four equal resistors of \${SUMMING_R} ohm: V_hp into the + input (with R to ground), V_lp into the - input (R as feedback)\`);
+		console.log('  Vout = V_hp - V_lp');
+	}
 }
 
 console.log();
@@ -248,12 +270,13 @@ if (FILTER_TYPE === 'bandpass') {
 	const lpBranch = realized.slice(0, design.lp.stages.length);
 	const hpBranch = realized.slice(design.lp.stages.length);
 	const branches = [lpBranch, hpBranch];
+	const combineSigns = combinerChoice(branches, fsl, fsh).signs;
 	for (const f of [fl / 10, fl, fsl, Math.sqrt(fsl * fsh), fsh, fh, fh * 10]) {
-		const { db } = magnitudePhaseAtParallelSum(branches, f);
+		const { db } = magnitudePhaseAtParallelSum(branches, f, combineSigns);
 		console.log(\`  \${f.toFixed(0).padStart(9)} Hz : \${db.toFixed(2).padStart(8)} dB\`);
 	}
-	const attnAtFsl = -magnitudePhaseAtParallelSum(branches, fsl).db;
-	const attnAtFsh = -magnitudePhaseAtParallelSum(branches, fsh).db;
+	const attnAtFsl = -magnitudePhaseAtParallelSum(branches, fsl, combineSigns).db;
+	const attnAtFsh = -magnitudePhaseAtParallelSum(branches, fsh, combineSigns).db;
 	console.log(\`\\nattenuation at fsl = \${attnAtFsl.toFixed(1)} dB, at fsh = \${attnAtFsh.toFixed(1)} dB (spec asks for >= \${Amin} dB on both): \${attnAtFsl >= Amin && attnAtFsh >= Amin ? 'OK' : 'NOT MET'}\`);
 } else {
 	for (const f of [fp / 10, fp, Math.sqrt(fp * fs), fs, fs * 10]) {
@@ -379,6 +402,7 @@ export function generateScript({
 		inline(mfbHighPassSrc),
 		inline(sallenKeySrc),
 		inline(sallenKeyHighPassSrc),
+		inline(towThomasSrc),
 		inline(firstOrderSrc),
 		inline(firstOrderHighPassSrc),
 		inline(bodeSrc),

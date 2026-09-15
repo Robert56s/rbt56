@@ -48,6 +48,19 @@ export const MFB_HP_SENSITIVITY = { R1: -0.5, R2: 0.5, C1: -1 / 3, C2: 1 / 6, C3
  */
 export const SALLEN_KEY_HP_SENSITIVITY = { C1: 0, C2: 0, Rbottom: 0.5, Rtop: -0.5 };
 
+/**
+ * Tow-Thomas biquad (towThomas.js): Q = Rd * sqrt(C1 / (C2 Ra Rb)), a plain
+ * product of powers, so every sensitivity is a fixed exponent that does
+ * not depend on Q or on the values:
+ *   S_Rd^Q = +1, S_C1^Q = +1/2, S_C2^Q = -1/2, S_Ra^Q = S_Rb^Q = -1/2,
+ * and the input element (R1, or Cin for the high-pass) and the inverter's
+ * matched pair r do not enter Q at all. omega0 = 1/sqrt(C1 C2 Ra Rb) has
+ * -1/2 for each of its four parts. Nothing here grows with Q, which is the
+ * property that lets this topology reach Qs the one-op-amp stages cannot.
+ */
+export const TOW_THOMAS_SENSITIVITY = { R1: 0, Ra: -0.5, Rb: -0.5, Rd: 1, C1: 0.5, C2: -0.5 };
+export const TOW_THOMAS_HP_SENSITIVITY = { Cin: 0, Ra: -0.5, Rb: -0.5, Rd: 1, C1: 0.5, C2: -0.5 };
+
 export function mfbSensitivity({ R1, R2, R3 }) {
 	const sum = R1 * R2 + R1 * R3 + R2 * R3;
 	return {

@@ -5,6 +5,7 @@
 import { writeFileSync } from 'node:fs';
 import * as filter from '../src/lib/filter/circuits.js';
 import * as modulation from '../src/lib/modulation/circuits.js';
+import { designTowThomasHighPass, designTowThomasLowPass } from '../src/lib/filter/towThomas.js';
 import { buildTwoLevelDiagram } from '../src/lib/karnaugh/circuit.js';
 import { literals } from '../src/lib/karnaugh/expression.js';
 import { minimizeBoth } from '../src/lib/karnaugh/minimize.js';
@@ -30,6 +31,9 @@ const CASES = [
 	['First-order high-pass', filter.buildFirstOrderHpDiagram({ R: 16000, C: 1e-8 }, 1.6e-4)],
 	['First-order low-pass', filter.buildFirstOrderDiagram({ R: 16000, C: 1e-8 }, 1.6e-4)],
 	['Summing amplifier (band-stop)', filter.buildSummingAmpDiagram(10000)],
+	['Difference amplifier (band-stop, opposite tails)', filter.buildDifferenceAmpDiagram(10000)],
+	['Tow-Thomas biquad, low-pass', filter.buildTowThomasDiagram(designTowThomasLowPass(2 * Math.PI * 10000, 0.7071).components)],
+	['Tow-Thomas biquad, high-pass (input capacitor)', filter.buildTowThomasHpDiagram(designTowThomasHighPass(2 * Math.PI * 10000, 1.3066).components)],
 	['JFET gain cell', modulation.buildJfetGainCellDiagram({ rb: 13600 })],
 	['Gain stage', modulation.buildGainStageDiagram({ rtop: 8200, rbottom: 10000 })],
 	['High-pass (DC blocker)', modulation.buildHighPassDiagram({ r: 100000, c: 2.2e-7 })],

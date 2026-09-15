@@ -30,15 +30,19 @@ function cascadeAt(stages, s) {
  * independent cascade, added together rather than multiplied in series.
  * branches is an array of stage-arrays, e.g. [lpStages, hpStages].
  */
-export function responseAtParallelSum(branches, freqHz) {
+export function responseAtParallelSum(branches, freqHz, signs = null) {
 	const s = { re: 0, im: 2 * Math.PI * freqHz };
 	let re = 0;
 	let im = 0;
-	for (const branch of branches) {
+	branches.forEach((branch, i) => {
+		// signs: +1 for an input the combiner adds, -1 for one it subtracts
+		// (a difference amplifier is used when the two branches come out with
+		// opposite signs, so that they still reinforce in the stopband)
+		const k = signs ? signs[i] : 1;
 		const h = cascadeAt(branch, s);
-		re += h.re;
-		im += h.im;
-	}
+		re += k * h.re;
+		im += k * h.im;
+	});
 	return { re, im };
 }
 
@@ -94,20 +98,57 @@ export function sweep(stages, fMin, fMax, points = 200) {
 }
 
 /** Magnitude in dB and phase in degrees, for the parallel-sum (band-stop) response. */
-export function magnitudePhaseAtParallelSum(branches, freqHz) {
-	const { re, im } = responseAtParallelSum(branches, freqHz);
+export function magnitudePhaseAtParallelSum(branches, freqHz, signs = null) {
+	const { re, im } = responseAtParallelSum(branches, freqHz, signs);
 	const mag = Math.sqrt(re * re + im * im);
 	return { db: 20 * Math.log10(Math.max(mag, 1e-12)), deg: (Math.atan2(im, re) * 180) / Math.PI };
 }
 
 /** A log-spaced sweep of the parallel-sum (band-stop) response from fMin to fMax. */
-export function sweepParallelSum(branches, fMin, fMax, points = 200) {
+export function sweepParallelSum(branches, fMin, fMax, points = 200, signs = null) {
 	const out = [];
 	const logMin = Math.log10(fMin);
 	const logMax = Math.log10(fMax);
 	for (let i = 0; i < points; i++) {
 		const freq = points === 1 ? fMin : 10 ** (logMin + ((logMax - logMin) * i) / (points - 1));
-		out.push({ freq, ...magnitudePhaseAtParallelSum(branches, freq) });
+		out.push({ freq, ...magnitudePhaseAtParallelSum(branches, freq, signs) });
 	}
 	return out;
+}
+
+/** Net sign of a branch's passband gain: the product of its stages' gains (+1 non-inverting, -1 inverting). */
+export function branchSign(stages) {
+	return stages.reduce((s, stage) => s * Math.sign(stage.actual?.gain ?? 1), 1);
+}
+
+/** Total order of a branch: the sum of its stages' orders. */
+export function branchOrder(stages) {
+	return stages.reduce((n, stage) => n + (stage.order ?? 2), 0);
+}
+
+/**
+ * Which sign the band-stop combiner should give each branch, and why.
+ * Deep in the stopband each branch is down to its tail: the low-pass tail
+ * falls like 1/s^n (phase -n*90 degrees), the high-pass tail rises like
+ * s^m (+m*90 degrees), each carrying its branch's passband sign. At the
+ * centre of the notch the two tails are comparable in size, and the notch
+ * is deepest when they arrive in antiphase and cancel. Whether a plain sum
+ * or a difference does that depends on the two orders and signs, and on
+ * how far the realized poles sit from their asymptotes, so rather than
+ * trust a rule of thumb both options are evaluated with the realized
+ * stages at the centre of the stopband and the deeper notch wins (a tie
+ * goes to the plain sum). Returns { mode, signs, centreHz, sumDb,
+ * differenceDb }, depths as positive dB of attenuation.
+ */
+export function combinerChoice(branches, fsl, fsh) {
+	const centreHz = Math.sqrt(fsl * fsh);
+	const depth = (signs) => -magnitudePhaseAtParallelSum(branches, centreHz, signs).db;
+	const sumDb = depth([1, 1]);
+	const differenceDb = depth([-1, 1]);
+	const mode = differenceDb > sumDb + 1e-9 ? 'difference' : 'sum';
+	return { mode, signs: mode === 'difference' ? [-1, 1] : [1, 1], centreHz, sumDb, differenceDb };
+}
+
+export function combinerSigns(branches, fsl, fsh) {
+	return combinerChoice(branches, fsl, fsh).signs;
 }
