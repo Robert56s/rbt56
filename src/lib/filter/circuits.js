@@ -281,7 +281,32 @@ export function buildSallenKeyHpDiagram(components) {
 	return { svg: parts.join(''), viewBox: `0 40 ${width} 300` };
 }
 
-/** First-order high-pass, H(s) = RCs / (RCs + 1): series C, R to ground. */
+/**
+ * The passive RC node of a first-order stage feeds a unity-gain follower.
+ * Without it the stage's output is the resistor itself (tens of kilo-ohms
+ * of source impedance): anything but a high-impedance input loads it down
+ * and the signal disappears, which is exactly what happens when a
+ * headphone or a speaker is hung on it. The follower costs one op-amp and
+ * changes nothing in the transfer function.
+ */
+function followerAfter(net, node, parts, ports) {
+	// + input lined up with the RC node's height, so the node feeds it with a plain wire
+	const opamp = placeSymbol('opamp_no_power_right', node.x + 110, node.y + 0.18 * SCALE, SCALE);
+	const out = opamp.ports.out;
+	const loopY = out.y + 60;
+	const Vout = { x: out.x + 60, y: out.y };
+	net.wire(node, opamp.ports.inp1);
+	net.wire(out, { x: out.x, y: loopY });
+	net.wire({ x: out.x, y: loopY }, { x: opamp.ports.inp2.x, y: loopY });
+	net.wire({ x: opamp.ports.inp2.x, y: loopY }, opamp.ports.inp2);
+	net.wire(out, Vout);
+	net.wire(Vout, { x: Vout.x + 30, y: Vout.y });
+	parts.push(opamp.svg);
+	ports.push(...portPoints(opamp));
+	return { opamp, Vout, loopY };
+}
+
+/** First-order high-pass, H(s) = RCs / (RCs + 1): series C, R to ground, then a follower. */
 export function buildFirstOrderHpDiagram(components, actualTau) {
 	const y0 = 160;
 	const Vin = { x: MARGIN, y: y0 };
@@ -289,31 +314,30 @@ export function buildFirstOrderHpDiagram(components, actualTau) {
 	const node = C.ports['2'];
 	const R = placeSymbol('resistor_down', node.x, node.y + HANG.resistor_down * SCALE, SCALE);
 	const gnd = placeSymbol('ground_down', R.ports['2'].x - 0.01 * SCALE, R.ports['2'].y + 0.29 * SCALE, SCALE);
-	const Vout = { x: node.x + 90, y: node.y };
 
 	const net = createNet();
+	const parts = [C.svg, R.svg, gnd.svg];
+	const ports = portPoints(C, R, gnd);
 	net.wire(Vin, C.ports['1']);
 	net.wire(R.ports['2'], gnd.ports['1']);
-	net.wire(node, Vout);
+	const { opamp, Vout, loopY } = followerAfter(net, node, parts, ports);
 
-	const parts = [
-		C.svg,
-		R.svg,
-		gnd.svg,
+	parts.push(
 		net.svg(),
-		net.dots(portPoints(C, R, gnd)),
+		net.dots(ports),
 		label('Vin', Vin.x, Vin.y - 12, { anchor: 'start' }),
-		label('Vout', Vout.x + 8, Vout.y - 12, { anchor: 'start' }),
+		label('Vout', Vout.x + 36, Vout.y + 5, { anchor: 'start' }),
 		label(`C ${formatFarads(components.C)}`, C.ports['1'].x, C.ports['1'].y - 24, { anchor: 'start' }),
 		label(`R ${formatOhms(components.R)}`, R.ports['1'].x + 12, (R.ports['1'].y + R.ports['2'].y) / 2, { anchor: 'start' }),
-		label(`τ = RC = ${formatSeconds(actualTau)}`, C.ports['1'].x, R.ports['2'].y + 40, { cls: 'lbl note' })
-	];
+		label(`τ = RC = ${formatSeconds(actualTau)}`, C.ports['1'].x, R.ports['2'].y + 40, { cls: 'lbl note' }),
+		label('unity-gain buffer', opamp.ports.out.x - 24, node.y - 26, { anchor: 'middle', cls: 'lbl note' })
+	);
 
-	const width = Vout.x + 60;
-	return { svg: parts.join(''), viewBox: `0 40 ${width} 220` };
+	const width = Vout.x + 30 + 60;
+	return { svg: parts.join(''), viewBox: `0 40 ${width} ${loopY + 34 - 40}` };
 }
 
-/** First-order low-pass, H(s) = 1 / (RCs + 1): series R, C to ground. */
+/** First-order low-pass, H(s) = 1 / (RCs + 1): series R, C to ground, then a follower. */
 export function buildFirstOrderDiagram(components, actualTau) {
 	const y0 = 160;
 	const Vin = { x: MARGIN, y: y0 };
@@ -321,28 +345,27 @@ export function buildFirstOrderDiagram(components, actualTau) {
 	const node = R.ports['2'];
 	const C = placeSymbol('capacitor_down', node.x, node.y + HANG.capacitor_down * SCALE, SCALE);
 	const gnd = placeSymbol('ground_down', C.ports['2'].x - 0.01 * SCALE, C.ports['2'].y + 0.29 * SCALE, SCALE);
-	const Vout = { x: node.x + 90, y: node.y };
 
 	const net = createNet();
+	const parts = [R.svg, C.svg, gnd.svg];
+	const ports = portPoints(R, C, gnd);
 	net.wire(Vin, R.ports['1']);
 	net.wire(C.ports['2'], gnd.ports['1']);
-	net.wire(node, Vout);
+	const { opamp, Vout, loopY } = followerAfter(net, node, parts, ports);
 
-	const parts = [
-		R.svg,
-		C.svg,
-		gnd.svg,
+	parts.push(
 		net.svg(),
-		net.dots(portPoints(R, C, gnd)),
+		net.dots(ports),
 		label('Vin', Vin.x, Vin.y - 12, { anchor: 'start' }),
-		label('Vout', Vout.x + 8, Vout.y - 12, { anchor: 'start' }),
+		label('Vout', Vout.x + 36, Vout.y + 5, { anchor: 'start' }),
 		label(`R ${formatOhms(components.R)}`, R.ports['1'].x, R.ports['1'].y - 24, { anchor: 'start' }),
 		label(`C ${formatFarads(components.C)}`, C.ports['1'].x + 12, (C.ports['1'].y + C.ports['2'].y) / 2, { anchor: 'start' }),
-		label(`τ = RC = ${formatSeconds(actualTau)}`, R.ports['1'].x, C.ports['2'].y + 40, { cls: 'lbl note' })
-	];
+		label(`τ = RC = ${formatSeconds(actualTau)}`, R.ports['1'].x, C.ports['2'].y + 40, { cls: 'lbl note' }),
+		label('unity-gain buffer', opamp.ports.out.x - 24, node.y - 26, { anchor: 'middle', cls: 'lbl note' })
+	);
 
-	const width = Vout.x + 60;
-	return { svg: parts.join(''), viewBox: `0 40 ${width} 220` };
+	const width = Vout.x + 30 + 60;
+	return { svg: parts.join(''), viewBox: `0 40 ${width} ${loopY + 34 - 40}` };
 }
 
 /**

@@ -1,4 +1,4 @@
-import { capacitorCandidates, nearestInSeries, SERIES } from './eseries';
+import { capacitorCandidates, nearestCapacitor, nearestResistor } from './eseries';
 
 /**
  * Sallen-Key high-pass, unity-gain simplified form: two equal capacitors C
@@ -40,8 +40,8 @@ function scoreSkHpResistors(Rtop, Rbottom) {
 	return Math.log(Rtop / SK_HP_R_SWEET) ** 2 + Math.log(Rbottom / SK_HP_R_SWEET) ** 2;
 }
 
-export function designSallenKeyHighPass(wn, q, { resistorSeries = 'E24' } = {}) {
-	const caps = capacitorCandidates();
+export function designSallenKeyHighPass(wn, q, { resistorSeries = 'E24', capacitors = null } = {}) {
+	const caps = capacitorCandidates(capacitors);
 
 	let best = null;
 	for (const C of caps) {
@@ -51,9 +51,8 @@ export function designSallenKeyHighPass(wn, q, { resistorSeries = 'E24' } = {}) 
 	}
 	if (!best) return null;
 
-	const series = SERIES[resistorSeries];
-	const RtopN = nearestInSeries(best.Rtop, series);
-	const RbottomN = nearestInSeries(best.Rbottom, series);
+	const RtopN = nearestResistor(best.Rtop, resistorSeries);
+	const RbottomN = nearestResistor(best.Rbottom, resistorSeries);
 	const wnActual = 1 / (best.C * Math.sqrt(RtopN * RbottomN));
 	const qActual = 0.5 * Math.sqrt(RbottomN / RtopN);
 
@@ -72,11 +71,10 @@ export function designSallenKeyHighPass(wn, q, { resistorSeries = 'E24' } = {}) 
  * match what is actually in stock) instead of searching a preferred
  * series for it. Always has a real solution.
  */
-export function designSallenKeyHighPassFromCap(wn, q, C, { resistorSeries = 'E24' } = {}) {
+export function designSallenKeyHighPassFromCap(wn, q, C, { resistorSeries = 'E24', capacitors = null } = {}) {
 	const { Rtop, Rbottom } = solveSkHpResistors(wn, q, C);
-	const series = SERIES[resistorSeries];
-	const RtopN = nearestInSeries(Rtop, series);
-	const RbottomN = nearestInSeries(Rbottom, series);
+	const RtopN = nearestResistor(Rtop, resistorSeries);
+	const RbottomN = nearestResistor(Rbottom, resistorSeries);
 	const wnActual = 1 / (C * Math.sqrt(RtopN * RbottomN));
 	const qActual = 0.5 * Math.sqrt(RbottomN / RtopN);
 	const outOfRange = !(RtopN > SK_HP_R_MIN && RtopN < SK_HP_R_MAX && RbottomN > SK_HP_R_MIN && RbottomN < SK_HP_R_MAX);

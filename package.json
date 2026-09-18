@@ -11,6 +11,7 @@
     "check:karnaugh": "node --import ./scripts/resolve-ext.mjs scripts/check-karnaugh.mjs",
     "check:wavegen": "node --import ./scripts/resolve-ext.mjs scripts/check-wavegen.mjs",
     "check:filter": "node --import ./scripts/resolve-ext.mjs scripts/check-filter.mjs",
+    "check:spice": "node --import ./scripts/resolve-ext.mjs scripts/check-spice.mjs",
     "prepare": "svelte-kit sync || echo ''"
   },
   "devDependencies": {

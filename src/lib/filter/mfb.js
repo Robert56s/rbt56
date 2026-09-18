@@ -1,4 +1,4 @@
-import { capacitorCandidates, nearestInSeries, SERIES } from './eseries';
+import { capacitorCandidates, nearestCapacitor, nearestResistor } from './eseries';
 
 /**
  * Multiple-feedback (MFB) low-pass, the standard (Rauch) layout: R1 from
@@ -49,10 +49,10 @@ function scoreResistors(R1, R2) {
  * (C1, C2), then rounds the resulting resistors to a preferred series and
  * reports the actual wn/Q/gain the rounded values give.
  */
-export function designMfbLowPass(wn, q, { resistorSeries = 'E24' } = {}) {
+export function designMfbLowPass(wn, q, { resistorSeries = 'E24', capacitors = null } = {}) {
 	const a = wn / q;
 	const b = wn * wn;
-	const caps = capacitorCandidates();
+	const caps = capacitorCandidates(capacitors);
 
 	let best = null;
 	for (const C1 of caps) {
@@ -69,9 +69,8 @@ export function designMfbLowPass(wn, q, { resistorSeries = 'E24' } = {}) {
 	}
 	if (!best) return null;
 
-	const series = SERIES[resistorSeries];
-	const R1n = nearestInSeries(best.R1, series);
-	const R2n = nearestInSeries(best.R2, series);
+	const R1n = nearestResistor(best.R1, resistorSeries);
+	const R2n = nearestResistor(best.R2, resistorSeries);
 	const aActual = (1 / best.C1) * (2 / R1n + 1 / R2n);
 	const bActual = 1 / (R1n * R2n * best.C1 * best.C2);
 	const discriminant = (a * best.C1) ** 2 - 8 * b * best.C1 * best.C2;
@@ -93,7 +92,7 @@ export function designMfbLowPass(wn, q, { resistorSeries = 'E24' } = {}) {
  * realize this Q at all (C1/C2 < 8*Q^2, the same singularity the automatic
  * search avoids by construction).
  */
-export function designMfbLowPassFromCaps(wn, q, C1, C2, { resistorSeries = 'E24' } = {}) {
+export function designMfbLowPassFromCaps(wn, q, C1, C2, { resistorSeries = 'E24', capacitors = null } = {}) {
 	const a = wn / q;
 	const b = wn * wn;
 	const discriminant = (a * C1) ** 2 - 8 * b * C1 * C2;
@@ -112,9 +111,8 @@ export function designMfbLowPassFromCaps(wn, q, C1, C2, { resistorSeries = 'E24'
 		if (best === null || score < best.score) best = { R1, R2, score };
 	}
 
-	const series = SERIES[resistorSeries];
-	const R1n = nearestInSeries(best.R1, series);
-	const R2n = nearestInSeries(best.R2, series);
+	const R1n = nearestResistor(best.R1, resistorSeries);
+	const R2n = nearestResistor(best.R2, resistorSeries);
 	const aActual = (1 / C1) * (2 / R1n + 1 / R2n);
 	const bActual = 1 / (R1n * R2n * C1 * C2);
 	const outOfRange = !(R1n > MFB_R_MIN && R1n < MFB_R_MAX && R2n > MFB_R_MIN && R2n < MFB_R_MAX);

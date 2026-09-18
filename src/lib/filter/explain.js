@@ -487,6 +487,48 @@ export function explainSallenKey(stageDesign, targetQ) {
 	return blocks;
 }
 
+/**
+ * Why a first-order stage ends in a unity-gain buffer. Unlike every other
+ * stage here the RC itself is passive: its output node has the resistor's
+ * own impedance behind it, so whatever is connected next becomes part of
+ * the filter. H(s) as designed (and as the Bode plot draws it) is the
+ * unloaded response, which is what the buffer makes true.
+ */
+function bufferBlocks(stageDesign, kind) {
+	const R = stageDesign.components.R;
+	const C = stageDesign.components.C;
+	const corner = 1 / (2 * Math.PI * R * C);
+	const loadedCorner = 1 / (2 * Math.PI * ((R * 32) / (R + 32)) * C);
+	const intro = p(
+		`One practical point the transfer function hides: this stage is passive, so it has no output driver of its own. Looking back into its output node the source impedance is the resistor itself, ${formatOhms(R)} here, so whatever is connected next becomes part of the circuit.`
+	);
+	const closing = p(
+		'That is why the schematic ends in a unity-gain buffer, an op-amp with its output tied straight back to its inverting input. It draws no current from the RC node, so H(s) stays exactly what was designed, and it drives the next stage or the outside world from a few ohms. The second-order stages already end at an op-amp output, so they need nothing extra.'
+	);
+	if (kind === 'highpass') {
+		return [
+			intro,
+			p(
+				`A load R_L sits in parallel with R, so the corner moves up to 1/(2 pi (R || R_L) C): headphones (32 ohm) would push it from ${formatHz(corner)} to about ${formatHz(loadedCorner)}, leaving the whole intended passband below the corner, so the signal disappears.`
+			),
+			eq(
+				`\\text{loaded by } R_L:\\quad \\tau \\to (R \\parallel R_L)\\,C \\qquad \\text{buffered: } R_L \\to \\infty,\\ \\tau = RC`
+			),
+			closing
+		];
+	}
+	return [
+		intro,
+		p(
+			`A load R_L forms a plain divider with R, costing 20 log(R_L/(R + R_L)) dB across the whole band, and it also pulls the corner up to 1/(2 pi (R || R_L) C). Headphones (32 ohm) would cost ${(20 * Math.log10(32 / (R + 32))).toFixed(0)} dB, which is silence; even a 10 kilo-ohm line input costs ${(20 * Math.log10(10000 / (R + 10000))).toFixed(1)} dB.`
+		),
+		eq(
+			`\\text{loaded by } R_L:\\quad H(s) \\to \\dfrac{R_L}{R+R_L}\\cdot\\dfrac{1}{(R \\parallel R_L)Cs + 1} \\qquad \\text{buffered: } R_L \\to \\infty,\\ H(s) = \\dfrac{1}{RCs+1}`
+		),
+		closing
+	];
+}
+
 /** First-order RC derivation for one realized stage. */
 export function explainFirstOrder(stageDesign) {
 	const st = stageDesign.steps;
@@ -503,7 +545,8 @@ export function explainFirstOrder(stageDesign) {
 		),
 		eq(`C = ${formatFarads(st.C)}\\ \\ \\Rightarrow\\ \\ R = \\dfrac{\\tau}{C} = ${formatOhms(st.Rtarget)}`),
 		p(`Rounded to R = ${formatOhms(stageDesign.components.R)}.`),
-		eq(`\\tau' = RC = ${formatSeconds(stageDesign.actual.tau)}`)
+		eq(`\\tau' = RC = ${formatSeconds(stageDesign.actual.tau)}`),
+		...bufferBlocks(stageDesign, 'lowpass')
 	];
 	return blocks;
 }
@@ -596,7 +639,8 @@ export function explainFirstOrderHp(stageDesign) {
 		),
 		eq(`C = ${formatFarads(st.C)}\\ \\ \\Rightarrow\\ \\ R = \\dfrac{\\tau}{C} = ${formatOhms(st.Rtarget)}`),
 		p(`Rounded to R = ${formatOhms(stageDesign.components.R)}.`),
-		eq(`\\tau' = RC = ${formatSeconds(stageDesign.actual.tau)}`)
+		eq(`\\tau' = RC = ${formatSeconds(stageDesign.actual.tau)}`),
+		...bufferBlocks(stageDesign, 'highpass')
 	];
 	return blocks;
 }

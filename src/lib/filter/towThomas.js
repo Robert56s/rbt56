@@ -1,4 +1,4 @@
-import { capacitorCandidates, nearestInSeries, SERIES } from './eseries';
+import { capacitorCandidates, nearestCapacitor, nearestResistor } from './eseries';
 
 /**
  * Tow-Thomas biquad: two integrators in a loop, three op-amps.
@@ -41,9 +41,9 @@ function solveTowThomas(wn, q, C) {
 	return { R, Rd: q * R };
 }
 
-function pickCapacitor(wn, q) {
+function pickCapacitor(wn, q, capacitors) {
 	let best = null;
-	for (const C of capacitorCandidates()) {
+	for (const C of capacitorCandidates(capacitors)) {
 		const { R, Rd } = solveTowThomas(wn, q, C);
 		if (!(R > TT_R_MIN && R < TT_R_MAX && Rd > TT_R_MIN && Rd < TT_R_MAX)) continue;
 		// R is what sets the impedance level; Rd = Q R is allowed to wander
@@ -55,13 +55,14 @@ function pickCapacitor(wn, q) {
 }
 
 function realize(wn, q, C, resistorSeries, { highPass, manual }) {
-	const series = SERIES[resistorSeries];
 	const { R: Rtarget, Rd: RdIdeal } = solveTowThomas(wn, q, C);
-	const R = nearestInSeries(Rtarget, series);
+	// the inverter's matched pair has to come from the same stock as the rest
+	const rInv = nearestResistor(TT_INVERTER_R, resistorSeries);
+	const R = nearestResistor(Rtarget, resistorSeries);
 	// the damping resistor is solved against the ROUNDED R, so that the
 	// realized Q = Rd / R lands as close to target as the series allows
 	const RdTarget = q * R;
-	const Rd = nearestInSeries(RdTarget, series);
+	const Rd = nearestResistor(RdTarget, resistorSeries);
 	const wnActual = 1 / (R * C);
 	const qActual = Rd / R;
 	const outOfRange = !(R > TT_R_MIN && R < TT_R_MAX && Rd > TT_R_MIN && Rd < TT_R_MAX);
@@ -74,37 +75,37 @@ function realize(wn, q, C, resistorSeries, { highPass, manual }) {
 	if (highPass) {
 		return {
 			topology: 'towThomasHp',
-			theoretical: { Cin: C, Ra: Rtarget, Rb: Rtarget, Rd: RdIdeal, C1: C, C2: C, r: TT_INVERTER_R },
-			components: { Cin: C, Ra: R, Rb: R, Rd, C1: C, C2: C, r: TT_INVERTER_R },
+			theoretical: { Cin: C, Ra: Rtarget, Rb: Rtarget, Rd: RdIdeal, C1: C, C2: C, r: rInv },
+			components: { Cin: C, Ra: R, Rb: R, Rd, C1: C, C2: C, r: rInv },
 			...shared
 		};
 	}
 	return {
 		topology: 'towThomas',
-		theoretical: { R1: Rtarget, Ra: Rtarget, Rb: Rtarget, Rd: RdIdeal, C1: C, C2: C, r: TT_INVERTER_R },
-		components: { R1: R, Ra: R, Rb: R, Rd, C1: C, C2: C, r: TT_INVERTER_R },
+		theoretical: { R1: Rtarget, Ra: Rtarget, Rb: Rtarget, Rd: RdIdeal, C1: C, C2: C, r: rInv },
+		components: { R1: R, Ra: R, Rb: R, Rd, C1: C, C2: C, r: rInv },
 		...shared
 	};
 }
 
-/** Searches the E6 capacitor values for one that puts R near 10 kohm, then rounds R and Rd to the resistor series. */
-export function designTowThomasLowPass(wn, q, { resistorSeries = 'E24' } = {}) {
-	const best = pickCapacitor(wn, q);
+/** Searches the available capacitor values for one that puts R near 10 kohm, then rounds R and Rd to the stocked resistor values. */
+export function designTowThomasLowPass(wn, q, { resistorSeries = 'E24', capacitors = null } = {}) {
+	const best = pickCapacitor(wn, q, capacitors);
 	if (!best) return null;
 	return realize(wn, q, best.C, resistorSeries, { highPass: false, manual: false });
 }
 
 /** Same stage from a capacitor chosen by hand (both capacitors take this value). Always realizable. */
-export function designTowThomasLowPassFromCap(wn, q, C, { resistorSeries = 'E24' } = {}) {
+export function designTowThomasLowPassFromCap(wn, q, C, { resistorSeries = 'E24', capacitors = null } = {}) {
 	return realize(wn, q, C, resistorSeries, { highPass: false, manual: true });
 }
 
-export function designTowThomasHighPass(wn, q, { resistorSeries = 'E24' } = {}) {
-	const best = pickCapacitor(wn, q);
+export function designTowThomasHighPass(wn, q, { resistorSeries = 'E24', capacitors = null } = {}) {
+	const best = pickCapacitor(wn, q, capacitors);
 	if (!best) return null;
 	return realize(wn, q, best.C, resistorSeries, { highPass: true, manual: false });
 }
 
-export function designTowThomasHighPassFromCap(wn, q, C, { resistorSeries = 'E24' } = {}) {
+export function designTowThomasHighPassFromCap(wn, q, C, { resistorSeries = 'E24', capacitors = null } = {}) {
 	return realize(wn, q, C, resistorSeries, { highPass: true, manual: true });
 }

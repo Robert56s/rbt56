@@ -1,9 +1,11 @@
 <script>
+	import { onMount } from 'svelte';
 	import BodePlot from '$lib/components/BodePlot.svelte';
 	import CircuitDiagram from '$lib/components/CircuitDiagram.svelte';
 	import Equation from '$lib/components/Equation.svelte';
 	import MathPanel from '$lib/components/MathPanel.svelte';
 	import { generateScript, NEXT_STEPS } from '$lib/filter/codegen';
+	import { generateSchematic } from '$lib/filter/spice';
 	import {
 		explainApproximation,
 		explainFirstOrder,
@@ -49,6 +51,7 @@
 	import { designLowPass, designHighPass, designBandPass, designBandStop } from '$lib/filter/stages';
 	import { branchOrder, branchSign, combinerChoice, magnitudePhaseAt, sweep, magnitudePhaseAtParallelSum, sweepParallelSum } from '$lib/filter/bode';
 	import { buildDifferenceAmpDiagram, buildSummingAmpDiagram } from '$lib/filter/circuits';
+	import { LAB_KIT, nearestResistor } from '$lib/filter/eseries';
 
 	const SUMMING_R = 10_000; // ohms, the summing amplifier's three equal resistors
 
@@ -65,6 +68,94 @@
 	let filterType = $state('lowpass');
 	let response = $state('butterworth');
 	let topology = $state('mfb');
+
+	// Which values the component search is allowed to pick from: a preferred
+	// series, the lab drawer, or a list pasted in below. Restricting the
+	// stock does not change the design, only what it can round to, so the
+	// cost shows up in the f0/Q error columns rather than in the maths.
+	const STOCK_KEY = 'rbt56.filter.stock';
+	let stock = $state('E24'); // 'E24' | 'E96' | 'lab' | 'custom'
+	let resistorText = $state(formatStock(LAB_KIT.resistors, 'resistor'));
+	let capacitorText = $state(formatStock(LAB_KIT.capacitors, 'capacitor'));
+	let stockLoaded = $state(false);
+
+	const UNIT = { p: 1e-12, n: 1e-9, u: 1e-6, m: 1e-3, k: 1e3, K: 1e3, M: 1e6, G: 1e9 };
+	function trimNum(x) {
+		return Number(x.toPrecision(4)).toString();
+	}
+
+	/** Reads "1k, 4.7k, 10k" or "10p 20p 1n" into absolute values. */
+	function parseStock(text, kind) {
+		const out = [];
+		for (const raw of String(text).split(/[\s,;]+/)) {
+			if (!raw) continue;
+			let token = raw.replace(/ohms?/gi, '').replace(/[ΩΩ]/g, '');
+			if (kind === 'capacitor') token = token.replace(/[fF]$/, '');
+			const m = /^([0-9]*\.?[0-9]+(?:e[-+]?[0-9]+)?)(meg|[pnumkKMG])?$/.exec(token);
+			if (!m) continue;
+			const mult = !m[2] ? 1 : m[2] === 'meg' ? 1e6 : (UNIT[m[2]] ?? 1);
+			const value = Number(m[1]) * mult;
+			if (Number.isFinite(value) && value > 0) out.push(value);
+		}
+		return [...new Set(out)].sort((a, b) => a - b);
+	}
+
+	/** The inverse, so the boxes can be prefilled and round-tripped. */
+	function formatStock(values, kind) {
+		return values
+			.map((v) => {
+				if (kind === 'capacitor') {
+					if (v >= 1e-6) return trimNum(v * 1e6) + 'u';
+					if (v >= 1e-9) return trimNum(v * 1e9) + 'n';
+					return trimNum(v * 1e12) + 'p';
+				}
+				if (v >= 1e6) return trimNum(v / 1e6) + 'M';
+				if (v >= 1e3) return trimNum(v / 1e3) + 'k';
+				return trimNum(v);
+			})
+			.join(', ');
+	}
+
+	const customResistors = $derived(parseStock(resistorText, 'resistor'));
+	const customCapacitors = $derived(parseStock(capacitorText, 'capacitor'));
+	const restrictedStock = $derived(stock === 'lab' || stock === 'custom');
+	const componentOpts = $derived.by(() => {
+		if (stock === 'lab') return { resistorSeries: LAB_KIT.resistors, capacitors: LAB_KIT.capacitors };
+		if (stock === 'custom')
+			return {
+				resistorSeries: customResistors.length ? customResistors : LAB_KIT.resistors,
+				capacitors: customCapacitors.length ? customCapacitors : LAB_KIT.capacitors
+			};
+		return { resistorSeries: stock, capacitors: null };
+	});
+	const combinerR = $derived(restrictedStock ? nearestResistor(SUMMING_R, componentOpts.resistorSeries) : SUMMING_R);
+
+	// the drawer is worth remembering between visits; blocked storage just
+	// means the defaults come back
+	onMount(() => {
+		try {
+			const saved = JSON.parse(localStorage.getItem(STOCK_KEY) ?? 'null');
+			if (saved && typeof saved === 'object') {
+				if (typeof saved.stock === 'string') stock = saved.stock;
+				if (typeof saved.resistorText === 'string') resistorText = saved.resistorText;
+				if (typeof saved.capacitorText === 'string') capacitorText = saved.capacitorText;
+			}
+		} catch {
+			// nothing saved, or storage unavailable
+		}
+		stockLoaded = true;
+	});
+
+	$effect(() => {
+		const payload = JSON.stringify({ stock, resistorText, capacitorText });
+		if (!stockLoaded) return;
+		try {
+			localStorage.setItem(STOCK_KEY, payload);
+		} catch {
+			// private window or storage blocked: the setting is simply not kept
+		}
+	});
+
 	let orderOverride = $state(null);
 	let orderOverrideHp = $state(null);
 	let orderOverrideLp = $state(null);
@@ -210,80 +301,93 @@
 			: designLowPass({ response, amaxDb, aminDb, fp, fs, order });
 	});
 
-	const realizedStages = $derived.by(() => {
-		if (!design) return [];
-		return design.stages.map((stage, i) => {
-			const ov = capOverrides[i];
+	function buildStage(stage, i, opts) {
+		const ov = capOverrides[i];
 
-			if (stage.filterType === 'highpass') {
-				if (stage.order === 1) {
-					if (ov?.C > 0) {
-						const r = designFirstOrderHighPassFromCap(stage.tau, ov.C * 1e-9);
-						if (r.ok) return r;
-					}
-					return designFirstOrderHighPass(stage.tau);
-				}
-				if (topology === 'towThomas') {
-					if (ov?.C > 0) {
-						const r = designTowThomasHighPassFromCap(stage.wn, stage.q, ov.C * 1e-9);
-						if (r.ok) return r;
-					}
-					return designTowThomasHighPass(stage.wn, stage.q);
-				}
-				if (topology === 'sallenKey') {
-					if (ov?.C > 0) {
-						const r = designSallenKeyHighPassFromCap(stage.wn, stage.q, ov.C * 1e-9);
-						if (r.ok) return r;
-					}
-					return designSallenKeyHighPass(stage.wn, stage.q);
-				}
-				if (ov?.C > 0) {
-					const r = designMfbHighPassFromCap(stage.wn, stage.q, ov.C * 1e-9);
-					if (r.ok) return r;
-				}
-				return designMfbHighPass(stage.wn, stage.q);
-			}
-
+		if (stage.filterType === 'highpass') {
 			if (stage.order === 1) {
 				if (ov?.C > 0) {
-					const r = designFirstOrderLowPassFromCap(stage.tau, ov.C * 1e-9);
+					const r = designFirstOrderHighPassFromCap(stage.tau, ov.C * 1e-9, opts);
 					if (r.ok) return r;
 				}
-				return designFirstOrderLowPass(stage.tau);
+				return designFirstOrderHighPass(stage.tau, opts);
 			}
-
 			if (topology === 'towThomas') {
 				if (ov?.C > 0) {
-					const r = designTowThomasLowPassFromCap(stage.wn, stage.q, ov.C * 1e-9);
+					const r = designTowThomasHighPassFromCap(stage.wn, stage.q, ov.C * 1e-9, opts);
 					if (r.ok) return r;
 				}
-				return designTowThomasLowPass(stage.wn, stage.q);
+				return designTowThomasHighPass(stage.wn, stage.q, opts);
 			}
 			if (topology === 'sallenKey') {
-				const auto = designSallenKeyLowPass(stage.wn, stage.q);
-				if (ov?.Ctop > 0 || ov?.Cbottom > 0) {
-					const Ctop = ov?.Ctop > 0 ? ov.Ctop * 1e-9 : auto.components.Ctop;
-					const Cbottom = ov?.Cbottom > 0 ? ov.Cbottom * 1e-9 : auto.components.Cbottom;
-					const r = designSallenKeyLowPassFromCaps(stage.wn, stage.q, Ctop, Cbottom);
+				if (ov?.C > 0) {
+					const r = designSallenKeyHighPassFromCap(stage.wn, stage.q, ov.C * 1e-9, opts);
 					if (r.ok) return r;
 				}
-				return auto;
+				return designSallenKeyHighPass(stage.wn, stage.q, opts);
 			}
-
-			const auto = designMfbLowPass(stage.wn, stage.q);
-			if (ov?.C1 > 0 || ov?.C2 > 0) {
-				const C1 = ov?.C1 > 0 ? ov.C1 * 1e-9 : auto.components.C1;
-				const C2 = ov?.C2 > 0 ? ov.C2 * 1e-9 : auto.components.C2;
-				const r = designMfbLowPassFromCaps(stage.wn, stage.q, C1, C2);
+			if (ov?.C > 0) {
+				const r = designMfbHighPassFromCap(stage.wn, stage.q, ov.C * 1e-9, opts);
 				if (r.ok) return r;
-				return {
-					...auto,
-					manualError: `C1/C2 = ${(C1 / C2).toFixed(2)}:1 cannot realize Q = ${stage.q.toFixed(4)} for this stage (needs at least 8Q² = ${(8 * stage.q * stage.q).toFixed(1)}:1, i.e. C1 at least that many times C2). Showing the automatic values below instead.`
-				};
+			}
+			return designMfbHighPass(stage.wn, stage.q, opts);
+		}
+
+		if (stage.order === 1) {
+			if (ov?.C > 0) {
+				const r = designFirstOrderLowPassFromCap(stage.tau, ov.C * 1e-9, opts);
+				if (r.ok) return r;
+			}
+			return designFirstOrderLowPass(stage.tau, opts);
+		}
+
+		if (topology === 'towThomas') {
+			if (ov?.C > 0) {
+				const r = designTowThomasLowPassFromCap(stage.wn, stage.q, ov.C * 1e-9, opts);
+				if (r.ok) return r;
+			}
+			return designTowThomasLowPass(stage.wn, stage.q, opts);
+		}
+		if (topology === 'sallenKey') {
+			const auto = designSallenKeyLowPass(stage.wn, stage.q, opts);
+			if (ov?.Ctop > 0 || ov?.Cbottom > 0) {
+				const Ctop = ov?.Ctop > 0 ? ov.Ctop * 1e-9 : auto.components.Ctop;
+				const Cbottom = ov?.Cbottom > 0 ? ov.Cbottom * 1e-9 : auto.components.Cbottom;
+				const r = designSallenKeyLowPassFromCaps(stage.wn, stage.q, Ctop, Cbottom, opts);
+				if (r.ok) return r;
 			}
 			return auto;
-		});
+		}
+
+		const auto = designMfbLowPass(stage.wn, stage.q, opts);
+		if (ov?.C1 > 0 || ov?.C2 > 0) {
+			const C1 = ov?.C1 > 0 ? ov.C1 * 1e-9 : auto.components.C1;
+			const C2 = ov?.C2 > 0 ? ov.C2 * 1e-9 : auto.components.C2;
+			const r = designMfbLowPassFromCaps(stage.wn, stage.q, C1, C2, opts);
+			if (r.ok) return r;
+			return {
+				...auto,
+				manualError: `C1/C2 = ${(C1 / C2).toFixed(2)}:1 cannot realize Q = ${stage.q.toFixed(4)} for this stage (needs at least 8Q² = ${(8 * stage.q * stage.q).toFixed(1)}:1, i.e. C1 at least that many times C2). Showing the automatic values below instead.`
+			};
+		}
+		return auto;
+	}
+
+	const realizedStages = $derived.by(() => {
+		if (!design) return [];
+		return design.stages
+			.map((stage, i) => {
+				const built = buildStage(stage, i, componentOpts);
+				if (built) return built;
+				// the chosen stock cannot realize this stage at all: fall back to
+				// the full E24/E6 grid and flag it, rather than dropping the stage
+				const fallback = buildStage(stage, i, { resistorSeries: 'E24', capacitors: null });
+				return fallback && { ...fallback, stockShortfall: true };
+			})
+			.filter(Boolean);
 	});
+
+	const shortfallStages = $derived(realizedStages.flatMap((r, i) => (r.stockShortfall ? [i + 1] : [])));
 
 	// Band-stop only: the two branches (low-pass, high-pass) that run in
 	// parallel and get summed, split back out of the flat realizedStages
@@ -412,13 +516,41 @@
 			order,
 			orderHp,
 			orderLp,
-			capOverrides: capOverridesFarads
+			capOverrides: capOverridesFarads,
+			resistorStock: componentOpts.resistorSeries,
+			capacitorStock: componentOpts.capacitors
 		});
-		const blob = new Blob([code], { type: 'text/javascript' });
+		saveFile(code, 'filter-design.js', 'text/javascript');
+	}
+
+	function downloadSchematic() {
+		if (!design || realizedStages.length === 0) return;
+		const schematic = generateSchematic({
+			realizedStages,
+			filterType,
+			response,
+			amaxDb,
+			aminDb,
+			fp,
+			fs,
+			fl,
+			fh,
+			fsl,
+			fsh,
+			topology,
+			lpCount: filterType === 'bandstop' ? design.lp.stages.length : 0,
+			combinerMode,
+			combinerR: combinerR
+		});
+		saveFile(schematic, 'filter-design.asc', 'text/plain');
+	}
+
+	function saveFile(text, filename, mime) {
+		const blob = new Blob([text], { type: mime });
 		const url = URL.createObjectURL(blob);
 		const anchor = document.createElement('a');
 		anchor.href = url;
-		anchor.download = 'filter-design.js';
+		anchor.download = filename;
 		document.body.appendChild(anchor);
 		anchor.click();
 		anchor.remove();
@@ -901,6 +1033,55 @@
 					</span>
 				</div>
 
+				<div class="stock">
+					<div class="field">
+						<label for="stock">Values the search may use</label>
+						<select id="stock" bind:value={stock}>
+							<option value="E24">E24 series (standard, 5 %)</option>
+							<option value="E96">E96 series (1 %)</option>
+							<option value="lab">Lab kit ({LAB_KIT.resistors.length} R, {LAB_KIT.capacitors.length} C)</option>
+							<option value="custom">My own list</option>
+						</select>
+					</div>
+					{#if stock === 'custom'}
+						<div class="field grow">
+							<label for="stockR">Resistors on hand</label>
+							<textarea id="stockR" rows="2" bind:value={resistorText}></textarea>
+						</div>
+						<div class="field grow">
+							<label for="stockC">Capacitors on hand</label>
+							<textarea id="stockC" rows="2" bind:value={capacitorText}></textarea>
+						</div>
+					{/if}
+				</div>
+
+				{#if stock === 'custom'}
+					<p class="note">
+						Commas or spaces between values: <code>1k, 4.7k, 10k</code> for resistors,
+						<code>10p, 1n, 47n</code> for capacitors. The suffixes k, M, p, n and u are understood,
+						and the list is kept in this browser for next time. Reading
+						{customResistors.length} resistor{customResistors.length === 1 ? '' : 's'} and
+						{customCapacitors.length} capacitor{customCapacitors.length === 1 ? '' : 's'} right now.
+					</p>
+				{/if}
+
+				{#if restrictedStock}
+					<p class="note">
+						The search now rounds to those values only, so the f0 and Q error columns below grow.
+						Everything downstream is computed from the rounded values, so the Bode plot and the
+						spec check at the end already tell you whether the result still meets the spec.
+					</p>
+				{/if}
+
+				{#if shortfallStages.length > 0}
+					<p class="flag warn">
+						Stage{shortfallStages.length > 1 ? 's' : ''}
+						{shortfallStages.join(', ')}
+						cannot be built from those values at all, so {shortfallStages.length > 1 ? 'they are' : 'it is'}
+						shown with the full E24 and E6 grids instead. Add values, or lower the order or the Q.
+					</p>
+				{/if}
+
 				{#if topology === 'sallenKey'}
 					<p class="flag warn">
 						{#if isBandType}
@@ -1124,15 +1305,15 @@
 									<tbody>
 										<tr>
 											<td>Ra</td>
-											<td>{formatOhms(SUMMING_R)}</td>
+											<td>{formatOhms(combinerR)}</td>
 										</tr>
 										<tr>
 											<td>Rb</td>
-											<td>{formatOhms(SUMMING_R)}</td>
+											<td>{formatOhms(combinerR)}</td>
 										</tr>
 										<tr>
 											<td>Rf</td>
-											<td>{formatOhms(SUMMING_R)}</td>
+											<td>{formatOhms(combinerR)}</td>
 										</tr>
 									</tbody>
 								</table>
@@ -1143,17 +1324,17 @@
 								</p>
 							</div>
 							<svg
-								viewBox={(combinerMode === 'difference' ? buildDifferenceAmpDiagram(SUMMING_R) : buildSummingAmpDiagram(SUMMING_R)).viewBox}
+								viewBox={(combinerMode === 'difference' ? buildDifferenceAmpDiagram(combinerR) : buildSummingAmpDiagram(combinerR)).viewBox}
 								role="img"
 								aria-label="{combinerMode} amplifier schematic"
 								class="summing-svg"
 							>
-								{@html (combinerMode === 'difference' ? buildDifferenceAmpDiagram(SUMMING_R) : buildSummingAmpDiagram(SUMMING_R)).svg}
+								{@html (combinerMode === 'difference' ? buildDifferenceAmpDiagram(combinerR) : buildSummingAmpDiagram(combinerR)).svg}
 							</svg>
 							<div class="math-full">
 								<MathPanel
 									summary="Show the math for the {combinerMode === 'difference' ? 'difference' : 'summing'} amplifier"
-									blocks={explainSummingAmp(SUMMING_R, {
+									blocks={explainSummingAmp(combinerR, {
 									mode: combinerMode,
 									lpSign: bandStopBranches ? branchSign(bandStopBranches[0]) : 1,
 									hpSign: bandStopBranches ? branchSign(bandStopBranches[1]) : 1,
@@ -1249,12 +1430,18 @@
 									sits exactly at Amax; the excess is E24 rounding, smaller than the shift the parts'
 									own 5% tolerance produces on a real board.
 								</p>
+							{:else if restrictedStock}
+								<p class="flag warn">
+									Passband edges: {attenuationAtFl.toFixed(2)} dB at fl, {attenuationAtFh.toFixed(2)}
+									dB at fh, against Amax = {amaxDb} dB. More than rounding explains, and the limited
+									value list is the likely reason: the search had nothing closer to pick. Add values,
+									loosen Amax, or accept the wider passband if the stopband still holds above.
+								</p>
 							{:else}
 								<p class="flag bad">
 									Passband edges miss: {attenuationAtFl.toFixed(2)} dB at fl, {attenuationAtFh.toFixed(2)}
 									dB at fh, against Amax = {amaxDb} dB. That is more than rounding explains: check
-									any capacitor override above, or set RESISTOR_SERIES to E96 in the downloaded
-									script.
+									any capacitor override above, or switch to the E96 series.
 								</p>
 							{/if}
 						{/if}
@@ -1269,11 +1456,18 @@
 								{amaxDb} dB. The ideal design sits exactly at Amax; the excess is E24 rounding,
 								smaller than the shift the parts' own 5% tolerance produces on a real board.
 							</p>
+						{:else if restrictedStock}
+							<p class="flag warn">
+								Passband edge: {attenuationAtFp.toFixed(2)} dB at fp, against Amax = {amaxDb} dB.
+								More than rounding explains, and the limited value list is the likely reason: the
+								search had nothing closer to pick. Add values, loosen Amax, or accept the wider
+								passband if the stopband above still holds.
+							</p>
 						{:else}
 							<p class="flag bad">
 								Passband edge misses: {attenuationAtFp.toFixed(2)} dB at fp, against Amax = {amaxDb}
-								dB. That is more than rounding explains: check any capacitor override above, or set
-								RESISTOR_SERIES to E96 in the downloaded script.
+								dB. That is more than rounding explains: check any capacitor override above, or
+								switch to the E96 series.
 							</p>
 						{/if}
 					{/if}
@@ -1292,7 +1486,20 @@
 					report shown above, plus notes on simulating, building and testing the result.
 				</p>
 
-				<button type="button" onclick={downloadScript}>Download filter-design.js</button>
+				<div class="row downloads">
+					<button type="button" onclick={downloadScript}>Download filter-design.js</button>
+					<button type="button" onclick={downloadSchematic}>Download filter-design.asc (LTspice)</button>
+				</div>
+
+				<p class="note">
+					An LTspice schematic with the same component values as the tables above and the AC
+					analysis already set up: open it, press Run, plot V(vout). Connections are made by net
+					label rather than drawn wires, so the sheet stays readable whatever the topology and
+					parts can be dragged around without breaking anything. Each op-amp is LTspice's ideal
+					single-pole model with its gain-bandwidth as an editable attribute (3Meg for a TL07x,
+					10Meg for an NE5532), so the simulation shows what a real part does to the response,
+					which the ideal maths on this page cannot.
+				</p>
 
 				<p class="note formula-link">
 					Every formula this design used, on its own reference page with what each one is and
@@ -1436,6 +1643,41 @@
 	.err {
 		color: var(--textFaint);
 		font-size: 0.85em;
+	}
+
+	.stock {
+		display: flex;
+		gap: 1rem;
+		align-items: flex-end;
+		flex-wrap: wrap;
+		margin-bottom: 0.9rem;
+	}
+
+	.stock .field {
+		margin-bottom: 0;
+		min-width: 190px;
+	}
+
+	.stock textarea {
+		width: 100%;
+		font-family: var(--mono);
+		font-size: 0.8rem;
+		padding: 0.45rem 0.6rem;
+		border: 1px solid var(--line);
+		border-radius: var(--radiusSmall);
+		background: var(--surface);
+		color: var(--text);
+		resize: vertical;
+	}
+
+	.stock textarea:focus {
+		outline: none;
+		border-color: var(--blue);
+	}
+
+	.downloads {
+		gap: 0.7rem;
+		flex-wrap: wrap;
 	}
 
 	.formula-link {

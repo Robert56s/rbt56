@@ -17,7 +17,7 @@
 // Exits non-zero on any failure.
 
 import katex from 'katex';
-import { combinerChoice, magnitudePhaseAtParallelSum } from '../src/lib/filter/bode.js';
+import { combinerChoice, magnitudePhaseAt, magnitudePhaseAtParallelSum } from '../src/lib/filter/bode.js';
 import { explainSummingAmp, explainTowThomas, explainTowThomasHp } from '../src/lib/filter/explain.js';
 import { designFirstOrderLowPass } from '../src/lib/filter/firstOrder.js';
 import { designFirstOrderHighPass } from '../src/lib/filter/firstOrderHighPass.js';
@@ -25,8 +25,9 @@ import { designMfbLowPass } from '../src/lib/filter/mfb.js';
 import { designMfbHighPass } from '../src/lib/filter/mfbHighPass.js';
 import { designSallenKeyLowPass } from '../src/lib/filter/sallenKey.js';
 import { designSallenKeyHighPass } from '../src/lib/filter/sallenKeyHighPass.js';
+import { LAB_KIT } from '../src/lib/filter/eseries.js';
 import { TOW_THOMAS_SENSITIVITY } from '../src/lib/filter/sensitivity.js';
-import { designBandStop } from '../src/lib/filter/stages.js';
+import { designBandStop, designHighPass, designLowPass } from '../src/lib/filter/stages.js';
 import { designTowThomasHighPass, designTowThomasLowPass, designTowThomasLowPassFromCap } from '../src/lib/filter/towThomas.js';
 
 let fails = 0;
@@ -119,6 +120,50 @@ check('combiner never leaves depth on the table', worstLoss <= 1e-9, `${worstLos
 	render(explainSummingAmp(10000, { mode: 'sum', lpSign: -1, hpSign: -1, lpOrder: 3, hpOrder: 3, centreHz: 5477, sumDb: 47.2, differenceDb: 38.9 }));
 	render(explainSummingAmp(10000, { mode: 'difference', lpSign: 1, hpSign: -1, lpOrder: 4, hpOrder: 4, centreHz: 5477, sumDb: 55, differenceDb: 61.4 }));
 	check(`explanations: ${n} equations render under strict KaTeX`, bad === 0, `${bad} failures`);
+}
+
+/* ------------------------------------------------- 5. restricted stock */
+{
+	const opts = { resistorSeries: LAB_KIT.resistors, capacitors: LAB_KIT.capacitors };
+	const inStock = (name, v) => {
+		const list = /^[Rr]/.test(name) ? LAB_KIT.resistors : LAB_KIT.capacitors;
+		return list.some((x) => Math.abs(x / v - 1) < 1e-9);
+	};
+	const specs = [
+		{ label: 'lowpass ', make: () => designLowPass({ response: 'butterworth', amaxDb: 2, aminDb: 40, fp: 10000, fs: 35000, order: null }) },
+		{ label: 'highpass', make: () => designHighPass({ response: 'butterworth', amaxDb: 2, aminDb: 40, fp: 10000, fs: 3000, order: null }) },
+		{ label: 'chebyshv', make: () => designLowPass({ response: 'chebyshev', amaxDb: 1, aminDb: 40, fp: 10000, fs: 35000, order: null }) }
+	];
+	for (const { label, make } of specs) {
+		for (const t of Object.keys(second)) {
+			const design = make();
+			const realized = design.stages.map((s) =>
+				s.order === 1
+					? s.filterType === 'highpass'
+						? designFirstOrderHighPass(s.tau, opts)
+						: designFirstOrderLowPass(s.tau, opts)
+					: s.filterType === 'highpass'
+						? { mfb: designMfbHighPass, sallenKey: designSallenKeyHighPass, towThomas: designTowThomasHighPass }[t](s.wn, s.q, opts)
+						: { mfb: designMfbLowPass, sallenKey: designSallenKeyLowPass, towThomas: designTowThomasLowPass }[t](s.wn, s.q, opts)
+			);
+			if (realized.some((r) => !r)) {
+				check(`stock ${label} ${t}`, false, 'a stage came back unrealizable');
+				continue;
+			}
+			const strays = realized.flatMap((r) => Object.entries(r.components).filter(([name, v]) => !inStock(name, v)));
+			const worstQ = Math.max(...realized.filter((r) => r.actual.q).map((r, i) => Math.abs(100 * (r.actual.q / design.stages[i].q - 1))));
+			const edge = label.trim() === 'highpass' ? 3000 : 35000;
+			const attn = -magnitudePhaseAt(realized, edge).db;
+			check(
+				`stock ${label} ${t}: every value from the kit`,
+				strays.length === 0,
+				strays.length ? `hors kit: ${JSON.stringify(strays)}` : `Q off by <= ${worstQ.toFixed(1)}%, ${attn.toFixed(1)} dB at the stopband edge`
+			);
+		}
+	}
+	// the Tow-Thomas inverter pair has to come from the kit too
+	const tt = designTowThomasLowPass(2 * Math.PI * 10000, 1.3, { resistorSeries: [820, 8200, 82000], capacitors: LAB_KIT.capacitors });
+	check('stock: Tow-Thomas inverter pair follows the kit', tt !== null && [820, 8200, 82000].includes(tt.components.r), `r = ${tt && tt.components.r}`);
 }
 
 console.log(fails === 0 ? 'filter checks clean' : `${fails} failure(s)`);

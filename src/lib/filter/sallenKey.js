@@ -1,4 +1,4 @@
-import { capacitorCandidates, nearestInSeries, SERIES } from './eseries';
+import { capacitorCandidates, nearestCapacitor, nearestResistor } from './eseries';
 
 /**
  * Sallen-Key low-pass, unity-gain simplified form: two equal resistors R, a
@@ -22,9 +22,9 @@ export function capRatio(q) {
 	return 4 * q * q;
 }
 
-export function designSallenKeyLowPass(wn, q, { resistorSeries = 'E24' } = {}) {
+export function designSallenKeyLowPass(wn, q, { resistorSeries = 'E24', capacitors = null } = {}) {
 	const ratio = capRatio(q);
-	const caps = capacitorCandidates();
+	const caps = capacitorCandidates(capacitors);
 
 	let best = null;
 	for (const Cbottom of caps) {
@@ -37,18 +37,16 @@ export function designSallenKeyLowPass(wn, q, { resistorSeries = 'E24' } = {}) {
 	if (!best) return null;
 
 	// C_top isn't freely chosen (it falls out of the ratio), so it gets
-	// rounded against the finer E12 capacitor grid rather than E6. The
-	// decade range has to be specified: nearestInSeries defaults to a
-	// resistor-sized range (milliohm to gigaohm), not a capacitor one.
-	const Ctop = nearestInSeries(best.Ctarget, SERIES.E12, -12, -3);
+	// rounded onto whatever capacitor values are available: the finer E12
+	// grid by default, or the caller's own kit when one is given.
+	const Ctop = nearestCapacitor(best.Ctarget, capacitors);
 	// R sits on the fine resistor grid, so it is solved AFTER the coarse
 	// capacitor rounding, from the pair that will actually be used. Solving
 	// it from the ideal C_top instead (as this used to) let C_top's E12
 	// rounding, up to 10%, land squarely in f0 on top of R's own rounding:
 	// a 1.40 kHz target came out at 1.31 kHz where 1.43 kHz was available.
 	const Rsolved = 1 / (wn * Math.sqrt(Ctop * best.Cbottom));
-	const series = SERIES[resistorSeries];
-	const R = nearestInSeries(Rsolved, series);
+	const R = nearestResistor(Rsolved, resistorSeries);
 	const wnActual = 1 / (R * Math.sqrt(Ctop * best.Cbottom));
 	const qActual = 0.5 * Math.sqrt(Ctop / best.Cbottom);
 
@@ -68,10 +66,9 @@ export function designSallenKeyLowPass(wn, q, { resistorSeries = 'E24' } = {}) {
  * actual Q this gives depends on whatever ratio the chosen pair happens to
  * have, which will not generally be exactly the target Q.
  */
-export function designSallenKeyLowPassFromCaps(wn, q, Ctop, Cbottom, { resistorSeries = 'E24' } = {}) {
+export function designSallenKeyLowPassFromCaps(wn, q, Ctop, Cbottom, { resistorSeries = 'E24', capacitors = null } = {}) {
 	const Rtarget = 1 / (wn * Math.sqrt(Ctop * Cbottom));
-	const series = SERIES[resistorSeries];
-	const R = nearestInSeries(Rtarget, series);
+	const R = nearestResistor(Rtarget, resistorSeries);
 	const wnActual = 1 / (R * Math.sqrt(Ctop * Cbottom));
 	const qActual = 0.5 * Math.sqrt(Ctop / Cbottom);
 	const outOfRange = !(R > SK_R_MIN && R < SK_R_MAX);

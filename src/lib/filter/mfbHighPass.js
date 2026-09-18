@@ -1,4 +1,4 @@
-import { capacitorCandidates, nearestInSeries, SERIES } from './eseries';
+import { capacitorCandidates, nearestCapacitor, nearestResistor } from './eseries';
 
 /**
  * Multiple-feedback (MFB) high-pass, the standard equal-capacitor layout:
@@ -43,10 +43,10 @@ function scoreMfbHpResistors(R1, R2) {
  * three capacitors), then rounds the resulting resistors to a preferred
  * series and reports the actual wn/Q/gain the rounded values give.
  */
-export function designMfbHighPass(wn, q, { resistorSeries = 'E24' } = {}) {
+export function designMfbHighPass(wn, q, { resistorSeries = 'E24', capacitors = null } = {}) {
 	const a = wn / q;
 	const b = wn * wn;
-	const caps = capacitorCandidates();
+	const caps = capacitorCandidates(capacitors);
 
 	let best = null;
 	for (const C of caps) {
@@ -56,9 +56,8 @@ export function designMfbHighPass(wn, q, { resistorSeries = 'E24' } = {}) {
 	}
 	if (!best) return null;
 
-	const series = SERIES[resistorSeries];
-	const R1n = nearestInSeries(best.R1, series);
-	const R2n = nearestInSeries(best.R2, series);
+	const R1n = nearestResistor(best.R1, resistorSeries);
+	const R2n = nearestResistor(best.R2, resistorSeries);
 	const aActual = 3 / (R2n * best.C);
 	const bActual = 1 / (R1n * R2n * best.C * best.C);
 
@@ -78,14 +77,13 @@ export function designMfbHighPass(wn, q, { resistorSeries = 'E24' } = {}) {
  * Unlike MFB low-pass, this always has a real solution: there is no
  * realizability ceiling on Q for this topology.
  */
-export function designMfbHighPassFromCap(wn, q, C, { resistorSeries = 'E24' } = {}) {
+export function designMfbHighPassFromCap(wn, q, C, { resistorSeries = 'E24', capacitors = null } = {}) {
 	const a = wn / q;
 	const b = wn * wn;
 	const { R1, R2 } = solveMfbHpResistors(a, b, C);
 
-	const series = SERIES[resistorSeries];
-	const R1n = nearestInSeries(R1, series);
-	const R2n = nearestInSeries(R2, series);
+	const R1n = nearestResistor(R1, resistorSeries);
+	const R2n = nearestResistor(R2, resistorSeries);
 	const aActual = 3 / (R2n * C);
 	const bActual = 1 / (R1n * R2n * C * C);
 	const outOfRange = !(R1n > MFB_HP_R_MIN && R1n < MFB_HP_R_MAX && R2n > MFB_HP_R_MIN && R2n < MFB_HP_R_MAX);

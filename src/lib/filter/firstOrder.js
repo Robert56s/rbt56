@@ -1,4 +1,4 @@
-import { capacitorCandidates, nearestInSeries, SERIES } from './eseries';
+import { capacitorCandidates, nearestCapacitor, nearestResistor } from './eseries';
 
 /**
  * First-order low-pass stage: H(s) = 1 / (RCs + 1), used for the leftover
@@ -9,9 +9,8 @@ const FO_R_MIN = 200;
 const FO_R_MAX = 2_000_000;
 const FO_R_SWEET = 10_000;
 
-export function designFirstOrderLowPass(tau, { resistorSeries = 'E24' } = {}) {
-	const series = SERIES[resistorSeries];
-	const caps = capacitorCandidates();
+export function designFirstOrderLowPass(tau, { resistorSeries = 'E24', capacitors = null } = {}) {
+	const caps = capacitorCandidates(capacitors);
 
 	let best = null;
 	for (const C of caps) {
@@ -30,7 +29,7 @@ export function designFirstOrderLowPass(tau, { resistorSeries = 'E24' } = {}) {
 		}
 	}
 
-	const R = nearestInSeries(best.Rtarget, series);
+	const R = nearestResistor(best.Rtarget, resistorSeries);
 	return {
 		topology: 'firstOrder',
 		order: 1,
@@ -45,10 +44,9 @@ export function designFirstOrderLowPass(tau, { resistorSeries = 'E24' } = {}) {
  * Solves for R from a capacitor chosen by hand (e.g. to match what is
  * actually in stock) instead of searching a preferred series for it.
  */
-export function designFirstOrderLowPassFromCap(tau, C, { resistorSeries = 'E24' } = {}) {
-	const series = SERIES[resistorSeries];
+export function designFirstOrderLowPassFromCap(tau, C, { resistorSeries = 'E24', capacitors = null } = {}) {
 	const Rtarget = tau / C;
-	const R = nearestInSeries(Rtarget, series);
+	const R = nearestResistor(Rtarget, resistorSeries);
 	const outOfRange = !(Rtarget > FO_R_MIN && Rtarget < FO_R_MAX);
 
 	return {

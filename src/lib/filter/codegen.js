@@ -51,7 +51,7 @@ function header(filterType) {
 `;
 }
 
-function paramsBlock({ amaxDb, aminDb, fp, fs, fl, fh, fsl, fsh, filterType, response, topology, order, orderHp, orderLp, capOverrides }) {
+function paramsBlock({ amaxDb, aminDb, fp, fs, fl, fh, fsl, fsh, filterType, response, topology, order, orderHp, orderLp, capOverrides, resistorStock, capacitorStock }) {
 	const hasOverrides = capOverrides && Object.keys(capOverrides).length > 0;
 	return `// =====================================================================
 // PARAMETERS - the only block meant to be edited
@@ -62,7 +62,11 @@ const Amin = ${aminDb};              // dB, min attenuation required in the stop
 const FILTER_TYPE = ${JSON.stringify(filterType)}; // 'lowpass', 'highpass', 'bandpass' or 'bandstop'
 const RESPONSE  = ${JSON.stringify(response)};  // 'butterworth' or 'chebyshev'
 const TOPOLOGY  = ${JSON.stringify(topology)};       // 'mfb' or 'sallenKey'
-const RESISTOR_SERIES = 'E24';    // 'E24' or 'E96'
+const RESISTOR_SERIES = ${JSON.stringify(resistorStock ?? 'E24')};
+// 'E24' or 'E96' for a full preferred series, or an explicit array of
+// ohm values to design against only what is actually in the drawer.
+const CAPACITORS = ${JSON.stringify(capacitorStock ?? null)};
+// null for the usual E6/E12 capacitor grids, or an array of farad values.
 const SUMMING_R = 10000;          // ohms, band-stop's summing amplifier (any equal value works)
 
 // Used when FILTER_TYPE is 'lowpass' or 'highpass':
@@ -153,13 +157,13 @@ const realized = design.stages.map((stage, i) => {
 		if (stage.filterType === 'highpass') {
 			r =
 				ov && ov.C
-					? designFirstOrderHighPassFromCap(stage.tau, ov.C, { resistorSeries: RESISTOR_SERIES })
-					: designFirstOrderHighPass(stage.tau, { resistorSeries: RESISTOR_SERIES });
+					? designFirstOrderHighPassFromCap(stage.tau, ov.C, { resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS })
+					: designFirstOrderHighPass(stage.tau, { resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS });
 		} else {
 			r =
 				ov && ov.C
-					? designFirstOrderLowPassFromCap(stage.tau, ov.C, { resistorSeries: RESISTOR_SERIES })
-					: designFirstOrderLowPass(stage.tau, { resistorSeries: RESISTOR_SERIES });
+					? designFirstOrderLowPassFromCap(stage.tau, ov.C, { resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS })
+					: designFirstOrderLowPass(stage.tau, { resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS });
 		}
 		console.log(\`stage \${i + 1} (1st order, \${stage.filterType}): tau = \${stage.tau.toExponential(4)} s\`);
 		console.log(\`  R = \${r.components.R} ohm, C = \${r.components.C.toExponential(4)} F\`);
@@ -172,34 +176,34 @@ const realized = design.stages.map((stage, i) => {
 	let r;
 	if (stage.filterType === 'highpass') {
 		if (TOPOLOGY === 'towThomas') {
-			const auto = designTowThomasHighPass(stage.wn, stage.q, { resistorSeries: RESISTOR_SERIES });
-			r = ov && ov.C ? designTowThomasHighPassFromCap(stage.wn, stage.q, ov.C, { resistorSeries: RESISTOR_SERIES }) : auto;
+			const auto = designTowThomasHighPass(stage.wn, stage.q, { resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS });
+			r = ov && ov.C ? designTowThomasHighPassFromCap(stage.wn, stage.q, ov.C, { resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS }) : auto;
 		} else if (TOPOLOGY === 'sallenKey') {
-			const auto = designSallenKeyHighPass(stage.wn, stage.q, { resistorSeries: RESISTOR_SERIES });
-			r = ov && ov.C ? designSallenKeyHighPassFromCap(stage.wn, stage.q, ov.C, { resistorSeries: RESISTOR_SERIES }) : auto;
+			const auto = designSallenKeyHighPass(stage.wn, stage.q, { resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS });
+			r = ov && ov.C ? designSallenKeyHighPassFromCap(stage.wn, stage.q, ov.C, { resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS }) : auto;
 		} else {
-			const auto = designMfbHighPass(stage.wn, stage.q, { resistorSeries: RESISTOR_SERIES });
-			r = ov && ov.C ? designMfbHighPassFromCap(stage.wn, stage.q, ov.C, { resistorSeries: RESISTOR_SERIES }) : auto;
+			const auto = designMfbHighPass(stage.wn, stage.q, { resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS });
+			r = ov && ov.C ? designMfbHighPassFromCap(stage.wn, stage.q, ov.C, { resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS }) : auto;
 		}
 	} else if (TOPOLOGY === 'towThomas') {
-		const auto = designTowThomasLowPass(stage.wn, stage.q, { resistorSeries: RESISTOR_SERIES });
-		r = ov && ov.C ? designTowThomasLowPassFromCap(stage.wn, stage.q, ov.C, { resistorSeries: RESISTOR_SERIES }) : auto;
+		const auto = designTowThomasLowPass(stage.wn, stage.q, { resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS });
+		r = ov && ov.C ? designTowThomasLowPassFromCap(stage.wn, stage.q, ov.C, { resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS }) : auto;
 	} else if (TOPOLOGY === 'sallenKey') {
-		const auto = designSallenKeyLowPass(stage.wn, stage.q, { resistorSeries: RESISTOR_SERIES });
+		const auto = designSallenKeyLowPass(stage.wn, stage.q, { resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS });
 		if (ov && (ov.Ctop || ov.Cbottom)) {
 			const Ctop = ov.Ctop || auto.components.Ctop;
 			const Cbottom = ov.Cbottom || auto.components.Cbottom;
-			const manual = designSallenKeyLowPassFromCaps(stage.wn, stage.q, Ctop, Cbottom, { resistorSeries: RESISTOR_SERIES });
+			const manual = designSallenKeyLowPassFromCaps(stage.wn, stage.q, Ctop, Cbottom, { resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS });
 			r = manual.ok ? manual : auto;
 		} else {
 			r = auto;
 		}
 	} else {
-		const auto = designMfbLowPass(stage.wn, stage.q, { resistorSeries: RESISTOR_SERIES });
+		const auto = designMfbLowPass(stage.wn, stage.q, { resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS });
 		if (ov && (ov.C1 || ov.C2)) {
 			const C1 = ov.C1 || auto.components.C1;
 			const C2 = ov.C2 || auto.components.C2;
-			const manual = designMfbLowPassFromCaps(stage.wn, stage.q, C1, C2, { resistorSeries: RESISTOR_SERIES });
+			const manual = designMfbLowPassFromCaps(stage.wn, stage.q, C1, C2, { resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS });
 			if (manual.ok) {
 				r = manual;
 			} else {
@@ -372,7 +376,9 @@ export function generateScript({
 	order,
 	orderHp,
 	orderLp,
-	capOverrides
+	capOverrides,
+	resistorStock = null,
+	capacitorStock = null
 }) {
 	const chunks = [
 		header(filterType),
@@ -391,7 +397,9 @@ export function generateScript({
 			order,
 			orderHp,
 			orderLp,
-			capOverrides
+			capOverrides,
+			resistorStock,
+			capacitorStock
 		}),
 		'// ===================================================================== \n// ENGINE - same code the web tool runs\n// =====================================================================\n',
 		inline(eseriesSrc),
