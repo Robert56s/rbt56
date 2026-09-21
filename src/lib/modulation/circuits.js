@@ -444,3 +444,173 @@ export function buildEnvelopeLowPassDiagram(components) {
 	const width = Vout.x + 40 + 60;
 	return { svg: parts.join(''), viewBox: `0 40 ${width} 300` };
 }
+
+/**
+ * The gate-drive summer: one inverting op-amp that amplifies the message,
+ * blocks its DC and adds the gate bias in a single stage. Top row: the
+ * source through C and Rac into the summing node. Bottom row: +Vcc through
+ * Rbias into the same node. Rf on a rail above. Every input ends on the
+ * virtual ground, so nothing loads anything (which is the reason this
+ * replaced a three-stage chain).
+ */
+export function buildBiasSummerDiagram({ c, rac, rbias, rf }) {
+	const yTop = 120;
+	const yBot = 200;
+	const opamp = placeSymbol('opamp_no_power_right', MARGIN + 330, (yTop + yBot) / 2, SCALE);
+	const negNode = opamp.ports.inp2;
+	const sumX = negNode.x - 70;
+
+	const gndPlusX = opamp.ports.inp1.x - 35;
+	const gndPlus = placeSymbol('ground_down', gndPlusX - 0.01 * SCALE, opamp.ports.inp1.y + 40 + 0.29 * SCALE, SCALE);
+
+	const Vin = { x: MARGIN, y: yTop };
+	const C = placeSymbol('capacitor_right', Vin.x + 70, yTop, SCALE);
+	const Rac = placeSymbol('resistor_right', C.ports['2'].x + 70, yTop, SCALE);
+	const supply = { x: MARGIN + 30, y: yBot };
+	const Rbias = placeSymbol('resistor_right', Rac.ports['1'].x, yBot, SCALE);
+
+	const Vout = { x: opamp.ports.out.x + 80, y: opamp.ports.out.y };
+	const railY = yTop - 60;
+	const Rf = placeSymbol('resistor_right', (sumX + Vout.x) / 2, railY, SCALE);
+
+	const net = createNet();
+	net.wire(Vin, C.ports['1']);
+	net.wire(C.ports['2'], Rac.ports['1']);
+	net.wire(Rac.ports['2'], { x: sumX, y: yTop });
+	net.wire(supply, Rbias.ports['1']);
+	net.wire(Rbias.ports['2'], { x: sumX, y: yBot });
+	net.wire({ x: sumX, y: yTop }, { x: sumX, y: yBot });
+	net.elbow({ x: sumX, y: negNode.y }, negNode, 'h');
+	net.elbow(opamp.ports.inp1, gndPlus.ports['1'], 'h');
+	net.wire({ x: sumX, y: yTop }, { x: sumX, y: railY });
+	net.wire({ x: sumX, y: railY }, Rf.ports['1']);
+	net.wire(Rf.ports['2'], { x: Vout.x, y: railY });
+	net.wire({ x: Vout.x, y: railY }, Vout);
+	net.wire(opamp.ports.out, Vout);
+	net.wire(Vout, { x: Vout.x + 30, y: Vout.y });
+
+	const parts = [
+		C.svg,
+		Rac.svg,
+		Rbias.svg,
+		opamp.svg,
+		gndPlus.svg,
+		Rf.svg,
+		net.svg(),
+		net.dots(portPoints(C, Rac, Rbias, opamp, gndPlus, Rf)),
+		label('x_m(t)', Vin.x, Vin.y - 12, { anchor: 'start' }),
+		label('+Vcc', supply.x, supply.y - 12, { anchor: 'middle' }),
+		label(`C ${formatFarads(c)}`, C.ports['1'].x, yTop - 14, { anchor: 'start' }),
+		label(`Rac ${formatOhms(rac)}`, Rac.ports['1'].x, yTop - 14, { anchor: 'start' }),
+		label(`Rbias ${formatOhms(rbias)}`, Rbias.ports['1'].x, yBot + 26, { anchor: 'start' }),
+		label(`Rf ${formatOhms(rf)}`, Rf.ports['1'].x, railY - 12, { anchor: 'start' }),
+		label('to gate', Vout.x + 34, Vout.y + 5, { anchor: 'start' })
+	];
+
+	const width = Vout.x + 30 + 60;
+	return { svg: parts.join(''), viewBox: `0 30 ${width} 260` };
+}
+
+/**
+ * Carrier attenuator: a plain divider from the carrier source down to the
+ * amplitude the JFET can take. It drives the gain cell's + input, which
+ * draws no current, so the ratio is exact and no buffer is needed.
+ */
+export function buildCarrierDividerDiagram({ top, bottom }) {
+	const y0 = 90;
+	const Vin = { x: MARGIN, y: y0 };
+	const Rtop = placeSymbol('resistor_right', Vin.x + 90, y0, SCALE);
+	const node = Rtop.ports['2'];
+	const Rbot = placeSymbol('resistor_down', node.x, node.y + 0.51 * SCALE, SCALE);
+	const gnd = placeSymbol('ground_down', Rbot.ports['2'].x - 0.01 * SCALE, Rbot.ports['2'].y + 0.29 * SCALE, SCALE);
+	const out = { x: node.x + 90, y: node.y };
+
+	const net = createNet();
+	net.wire(Vin, Rtop.ports['1']);
+	net.wire(Rbot.ports['2'], gnd.ports['1']);
+	net.wire(node, out);
+
+	const parts = [
+		Rtop.svg,
+		Rbot.svg,
+		gnd.svg,
+		net.svg(),
+		net.dots(portPoints(Rtop, Rbot, gnd)),
+		label('carrier source', Vin.x, Vin.y + 22, { anchor: 'start' }),
+		label('to + input', out.x + 6, out.y - 8, { anchor: 'start' }),
+		label(`${formatOhms(top)}`, Rtop.ports['1'].x, y0 - 24, { anchor: 'start' }),
+		label(`${formatOhms(bottom)}`, Rbot.ports['1'].x + 12, (Rbot.ports['1'].y + Rbot.ports['2'].y) / 2, { anchor: 'start' })
+	];
+
+	const width = out.x + 90;
+	return { svg: parts.join(''), viewBox: `0 30 ${width} 190` };
+}
+
+/**
+ * JFET modulator, inverting cell: the channel is the input resistor. A
+ * follower copies the (attenuated) carrier onto the drain, the source sits
+ * on the virtual ground of the second op-amp, and R2 feeds its output back
+ * to that node, so Vout = -R2 G(VGS) xp. The follower is part of the cell:
+ * without it the divider's impedance adds to the channel and bends the
+ * envelope, which is why it is drawn rather than assumed.
+ */
+export function buildJfetInvertingCellDiagram({ r2 }) {
+	const y0 = 150;
+	const follower = placeSymbol('opamp_no_power_right', MARGIN + 150, y0, SCALE);
+	const Vin = { x: MARGIN, y: follower.ports.inp1.y };
+	const loopA = follower.ports.out.y + 50;
+	const loopAx = follower.ports.inp2.x - 30;
+
+	const drainY = y0 + 80;
+	const drainX = follower.ports.out.x + 70;
+	const jfet = placeSymbol('njfet_transistor_horz', drainX - 0.28 * SCALE, drainY + 0.55 * SCALE, SCALE);
+	const gateNode = { x: jfet.ports.gate.x - 50, y: jfet.ports.gate.y };
+
+	const cell = placeSymbol('opamp_no_power_right', jfet.ports.source.x + 170, jfet.ports.source.y + 40 - 0.09 * SCALE, SCALE);
+	const N = { x: jfet.ports.source.x, y: cell.ports.inp2.y };
+	const gndPlusX = cell.ports.inp1.x - 35;
+	const gndPlus = placeSymbol('ground_down', gndPlusX - 0.01 * SCALE, cell.ports.inp1.y + 40 + 0.29 * SCALE, SCALE);
+	const Vout = { x: cell.ports.out.x + 90, y: cell.ports.out.y };
+	const loopB = N.y + 70;
+	const R2 = placeSymbol('resistor_right', (N.x + Vout.x) / 2, loopB, SCALE);
+
+	const net = createNet();
+	net.wire(Vin, follower.ports.inp1);
+	net.wire(follower.ports.out, { x: follower.ports.out.x, y: loopA });
+	net.wire({ x: follower.ports.out.x, y: loopA }, { x: loopAx, y: loopA });
+	net.wire({ x: loopAx, y: loopA }, { x: loopAx, y: follower.ports.inp2.y });
+	net.wire({ x: loopAx, y: follower.ports.inp2.y }, follower.ports.inp2);
+	net.wire(follower.ports.out, { x: drainX, y: follower.ports.out.y });
+	net.wire({ x: drainX, y: follower.ports.out.y }, jfet.ports.drain);
+	net.wire(gateNode, jfet.ports.gate);
+	net.wire(jfet.ports.source, N);
+	net.wire(N, cell.ports.inp2);
+	net.elbow(cell.ports.inp1, gndPlus.ports['1'], 'h');
+	net.wire(N, { x: N.x, y: loopB });
+	net.wire({ x: N.x, y: loopB }, R2.ports['1']);
+	net.wire(R2.ports['2'], { x: Vout.x, y: loopB });
+	net.wire({ x: Vout.x, y: loopB }, Vout);
+	net.wire(cell.ports.out, Vout);
+	net.wire(Vout, { x: Vout.x + 40, y: Vout.y });
+
+	const parts = [
+		follower.svg,
+		jfet.svg,
+		cell.svg,
+		gndPlus.svg,
+		R2.svg,
+		net.svg(),
+		net.dots(portPoints(follower, jfet, cell, gndPlus, R2)),
+		label('xp(t)', Vin.x, Vin.y - 12, { anchor: 'start' }),
+		label('follower', follower.ports.out.x - 24, y0 - 32, { anchor: 'middle', cls: 'lbl note' }),
+		label('xm(t)', gateNode.x - 6, gateNode.y - 10, { anchor: 'start' }),
+		label('Vout', Vout.x + 48, Vout.y + 5, { anchor: 'start' }),
+		label(`R2 ${formatOhms(r2)}`, R2.ports['1'].x, loopB - 12, { anchor: 'start' }),
+		label('S', jfet.ports.source.x + 8, jfet.ports.source.y + 4, { anchor: 'start' }),
+		label('D', jfet.ports.drain.x + 8, jfet.ports.drain.y - 4, { anchor: 'start' }),
+		label('G', jfet.ports.gate.x - 8, jfet.ports.gate.y - 6, { anchor: 'end' })
+	];
+
+	const width = Vout.x + 40 + 60;
+	return { svg: parts.join(''), viewBox: `0 40 ${width} ${loopB + 50 - 40}` };
+}

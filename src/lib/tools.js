@@ -29,5 +29,13 @@ export const tools = [
 			'Minimize a Boolean function of 2 to 4 variables on a Karnaugh map: groups, prime implicants, the minimal expression with every step, and the two-level gate circuit.',
 		tags: ['electronics', 'logic', 'digital'],
 		state: 'live'
+	},
+	{
+		name: 'Signal Generator',
+		href: '/tools/signal-generator/',
+		summary:
+			'A live two-channel function generator on the audio output: sine, square, triangle, ramps, noise, AM and FM on left and right, up to what the sound card can hold, with a scope.',
+		tags: ['audio', 'electronics', 'live'],
+		state: 'live'
 	}
 ];

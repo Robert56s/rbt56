@@ -1,4 +1,7 @@
 import { gainToDb, peakOf } from './decode';
+import { bandLimitedShape, clamp, createGenerator, naiveShape } from './oscillator';
+
+export { bandLimitedShape, naiveShape };
 
 /**
  * Waveform generator in the spirit of a bench WaveGen instrument: sine,
@@ -61,68 +64,6 @@ export function defaultModulation() {
 	};
 }
 
-function clamp(v, lo, hi) {
-	return v < lo ? lo : v > hi ? hi : v;
-}
-
-/** Plain shapes at phase t in [0, 1); s is the symmetry (duty for square, rise fraction for triangle). */
-export function naiveShape(type, t, s) {
-	switch (type) {
-		case 'sine':
-			return Math.sin(2 * Math.PI * t);
-		case 'square':
-			return t < s ? 1 : -1;
-		case 'triangle':
-			return t < s ? -1 + (2 * t) / s : 1 - (2 * (t - s)) / (1 - s);
-		case 'rampup':
-			return 2 * t - 1;
-		case 'rampdown':
-			return 1 - 2 * t;
-		case 'dc':
-			return 1;
-		case 'noise':
-			return Math.random() * 2 - 1;
-		default:
-			return 0;
-	}
-}
-
-/**
- * PolyBLEP residual: a two-sample polynomial that, added around a
- * discontinuity, removes the aliasing a hard step would spray across the
- * band. t is the phase, dt the phase advance per sample.
- */
-function polyBlep(t, dt) {
-	if (t < dt) {
-		t /= dt;
-		return t + t - t * t - 1;
-	}
-	if (t > 1 - dt) {
-		t = (t - 1) / dt;
-		return t * t + t + t + 1;
-	}
-	return 0;
-}
-
-/** Shapes with their edges anti-aliased; falls back to the naive shape when the frequency is degenerate. */
-export function bandLimitedShape(type, t, s, dt) {
-	if (!(dt > 0) || dt >= 0.5) return naiveShape(type, t, s);
-	switch (type) {
-		case 'rampup':
-			return naiveShape('rampup', t, s) - polyBlep(t, dt);
-		case 'rampdown':
-			return naiveShape('rampdown', t, s) + polyBlep(t, dt);
-		case 'square': {
-			let v = naiveShape('square', t, s);
-			v += polyBlep(t, dt);
-			v -= polyBlep((t - s + 1) % 1, dt);
-			return v;
-		}
-		default:
-			return naiveShape(type, t, s);
-	}
-}
-
 /**
  * Renders `frames` samples of a wave, optionally modulated.
  *   wave        { type, frequency, amplitude, offset, phase (deg), symmetry (%), ideal }
@@ -134,41 +75,7 @@ export function bandLimitedShape(type, t, s, dt) {
  */
 export function synthesize({ wave, modulation = null, modSamples = null, sampleRate, frames }) {
 	const out = new Float32Array(frames);
-	const amp = Number(wave.amplitude) || 0;
-	const off = Number(wave.offset) || 0;
-	const sym = clamp((Number(wave.symmetry) || 50) / 100, 0.01, 0.99);
-	let phase = (((Number(wave.phase) || 0) / 360) % 1) + 1;
-	phase -= Math.floor(phase);
-
-	const useFile = !!modulation && modulation.source === 'file' && modSamples;
-	const mw = modulation && modulation.source === 'wave' ? modulation.wave : null;
-	const useMod = !!modulation && (useFile || mw);
-	let modPhase = mw ? ((((Number(mw.phase) || 0) / 360) % 1) + 1) % 1 : 0;
-	const modDt = mw ? (Number(mw.frequency) || 0) / sampleRate : 0;
-	const modSym = mw ? clamp((Number(mw.symmetry) || 50) / 100, 0.01, 0.99) : 0.5;
-	const am = useMod && modulation.kind === 'am' ? (Number(modulation.depth) || 0) / 100 : 0;
-	const fm = useMod && modulation.kind === 'fm' ? Number(modulation.deviation) || 0 : 0;
-	const baseF = Number(wave.frequency) || 0;
-
-	for (let i = 0; i < frames; i++) {
-		let m = 0;
-		if (useFile) {
-			m = i < modSamples.length ? modSamples[i] : 0;
-		} else if (mw) {
-			m = naiveShape(mw.type, modPhase, modSym);
-			modPhase += modDt;
-			modPhase -= Math.floor(modPhase);
-		}
-		const dt = (baseF + fm * m) / sampleRate;
-		let v;
-		if (wave.type === 'dc') v = 1;
-		else if (wave.type === 'noise') v = Math.random() * 2 - 1;
-		else v = wave.ideal ? naiveShape(wave.type, phase, sym) : bandLimitedShape(wave.type, phase, sym, Math.abs(dt));
-		if (am) v *= 1 + am * m;
-		out[i] = off + amp * v;
-		phase += dt;
-		phase -= Math.floor(phase);
-	}
+	createGenerator({ wave, modulation, sampleRate }).fill(out, 0, frames, modSamples, 0);
 	return out;
 }
 

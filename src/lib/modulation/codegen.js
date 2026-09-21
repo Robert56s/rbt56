@@ -3,6 +3,7 @@ import diodeMixerModulatorSrc from './diodeMixerModulator.js?raw';
 import envelopeFilterSrc from './envelopeFilter.js?raw';
 import eseriesSrc from './eseries.js?raw';
 import formatSrc from './format.js?raw';
+import jfetModelSrc from './jfetModel.js?raw';
 import jfetModulatorSrc from './jfetModulator.js?raw';
 import orderSrc from './order.js?raw';
 import rectifierSrc from './rectifier.js?raw';
@@ -39,14 +40,33 @@ function jfetParamsBlock(p) {
 // PARAMETERS - JFET voltage-controlled-resistor modulator
 // =====================================================================
 
-const VP = ${p.vp};                     // V, JFET pinch-off voltage (measured or datasheet, negative for N-channel)
-const IDSS = ${p.idss};                  // A, JFET drain current at VGS = 0 (measured or datasheet)
+// Where the JFET's line G(VGS) = beta (VGS - VP) comes from: 'idss' uses
+// VP and IDSS, 'rdson' uses VP and RDS_ON, 'measured' fits a line to the
+// MEASUREMENTS rows ([VGS, rDS] pairs) inside the WINDOW.
+const JFET_MODE = ${JSON.stringify(p.mode ?? 'idss')};
+const VP = ${p.vp};                     // V, JFET pinch-off voltage (negative for N-channel)
+const IDSS = ${p.idss};                  // A, drain current at VGS = 0 (used in 'idss' mode)
+const RDS_ON = ${p.rdsOn ?? 'null'};                // ohm, channel resistance at VGS = 0 (used in 'rdson' mode)
+const MEASUREMENTS = ${p.measurements ? JSON.stringify(p.measurements) : 'null'}; // [[VGS, rDS], ...] (used in 'measured' mode)
+const WINDOW = { low: ${p.windowLow ?? 'null'}, high: ${p.windowHigh ?? 'null'} }; // V, the VGS stretch the fit and the design use
+// 'noninverting': JFET in the feedback divider, one op-amp, n = s x/(1+x).
+// 'inverting': JFET as the input resistor behind a follower, n = s exactly,
+// small x, a post-gain stage brings the output up to TARGET_OUTPUT_AMPLITUDE.
+const TOPOLOGY = ${JSON.stringify(p.topology ?? 'noninverting')};
+const TARGET_OUTPUT_AMPLITUDE = ${p.targetOutputAmplitude ?? 1}; // V, inverting cell only
+const CARRIER_BUFFER = ${p.carrierBuffer === false ? 'false' : 'true'};          // inverting cell only: follower between the divider and the channel
 const SWING_FRACTION = ${p.swingFraction};        // fraction of the |VP|/2 gate swing to use (<=1)
 const TARGET_MODULATION_INDEX = ${p.targetModulationIndex}; // used to solve for Rb (ignored if RB is set below)
 const RB = ${p.rb ?? 'null'};                    // ohms, feedback resistor - set a number to override the solve above
 const SOURCE_AMPLITUDE = ${p.sourceAmplitude};       // V, amplitude of the raw modulating source (e.g. 1 V for an Analog Discovery 2)
 const FM_MIN = ${p.fmMin};                 // Hz, lowest modulating frequency to pass through the DC-blocking HPF
-const VCC = ${p.vcc};                   // V, supply rail used for the DC-bias divider
+const VCC = ${p.vcc};                   // V, supply rail (the gate-drive summer takes its bias from +VCC)
+const FP = ${p.fp};                 // Hz, carrier frequency: what the op-amp has to keep up with
+const CARRIER_SOURCE_AMPLITUDE = ${p.carrierSourceAmplitude}; // V, amplitude of the raw carrier source
+const CARRIER_MARGIN = ${p.carrierMargin};          // fraction of the triode limit the carrier may use
+const OPAMP_SWING = ${p.opampSwing};           // V, output swing the op-amp reaches on this supply (Vcc - 1.5 for a TL08x)
+const GBW = ${p.gbw};                  // Hz, op-amp gain-bandwidth product (3e6 for a TL08x)
+const SLEW_RATE = ${p.slewRate};         // V/s, op-amp slew rate (13e6 for a TL08x)
 const RESISTOR_SERIES = 'E24';
 `;
 }
@@ -56,29 +76,79 @@ function jfetReportBlock() {
 // REPORT
 // =====================================================================
 
+const jfetModel =
+	JFET_MODE === 'rdson'
+		? modelFromRdsOn(VP, RDS_ON)
+		: JFET_MODE === 'measured'
+			? fitModel((MEASUREMENTS || []).map(([vgs, rds]) => ({ vgs, rds, g: 1 / rds })), WINDOW)
+			: modelFromIdss(VP, IDSS);
+if (!jfetModel) {
+	console.log('No usable JFET line: check JFET_MODE and the figures or measurements that go with it.');
+	process.exit(1);
+}
+console.log('='.repeat(72));
+console.log('JFET LINE  G(VGS) = beta (VGS - VP)');
+console.log('='.repeat(72));
+console.log(\`mode ${'$'}{jfetModel.mode}: VP = ${'$'}{jfetModel.vp.toFixed(3)} V, beta = ${'$'}{(jfetModel.beta * 1000).toFixed(4)} mS/V, implied IDSS = ${'$'}{(jfetModel.idss * 1000).toFixed(2)} mA, rDS(on) = ${'$'}{jfetModel.rdsOn.toFixed(1)} ohm\`);
+if (jfetModel.fit) console.log(\`fit over ${'$'}{jfetModel.fit.count} points in [${'$'}{jfetModel.fit.low}, ${'$'}{jfetModel.fit.high}] V: R^2 = ${'$'}{jfetModel.fit.r2.toFixed(4)}, largest deviation ${'$'}{(100 * jfetModel.fit.maxDev).toFixed(1)}% at ${'$'}{jfetModel.fit.maxDevAt} V\`);
+console.log(\`bias point VC = ${'$'}{jfetModel.vc.toFixed(3)} V, half-range ${'$'}{jfetModel.halfRange.toFixed(3)} V\`);
+console.log();
+
 const design = designJfetModulator({
-	vp: VP, idss: IDSS, swingFraction: SWING_FRACTION,
+	model: jfetModel, topology: TOPOLOGY, targetOutputAmplitude: TARGET_OUTPUT_AMPLITUDE, carrierBuffer: CARRIER_BUFFER, swingFraction: SWING_FRACTION,
 	targetModulationIndex: TARGET_MODULATION_INDEX, rb: RB,
-	sourceAmplitude: SOURCE_AMPLITUDE, fmMin: FM_MIN, vcc: VCC, resistorSeries: RESISTOR_SERIES
+	sourceAmplitude: SOURCE_AMPLITUDE, fmMin: FM_MIN, vcc: VCC,
+	fp: FP, carrierSourceAmplitude: CARRIER_SOURCE_AMPLITUDE, carrierMargin: CARRIER_MARGIN,
+	opampSwing: OPAMP_SWING, gbw: GBW, slewRate: SLEW_RATE, resistorSeries: RESISTOR_SERIES
 });
-if (!design) { console.log('Invalid parameters (check VP < 0, IDSS > 0, 0 < SWING_FRACTION <= 1).'); } else {
+if (!design) {
+	const ceiling = conductanceDepth(jfetModel, SWING_FRACTION);
+	console.log(ceiling === null ? 'The swing pinches the channel off: lower SWING_FRACTION or narrow the window.' : 'The target modulation index cannot exceed the conductance depth s = ' + ceiling.toFixed(3) + ' for this swing: lower TARGET_MODULATION_INDEX or widen the swing.');
+} else {
 	console.log('='.repeat(72));
-	console.log('GAIN CELL');
+	console.log('GAIN CELL (' + TOPOLOGY + ')');
 	console.log('='.repeat(72));
-	console.log(\`bias point VC = VP/2 = \${design.vc.toFixed(3)} V, channel resistance at VC = \${design.r1AtCenter.toFixed(1)} ohm\`);
-	console.log(\`Rb = \${design.rb.toFixed(1)} ohm  (x = Rb/r1(VC) = \${design.x.toFixed(3)})\`);
-	console.log(\`modulation index n = \${design.modulationIndex.toFixed(3)}, nominal gain K0 = \${design.nominalGain.toFixed(3)}\`);
+	console.log(\`bias point VC = \${design.vc.toFixed(3)} V, channel resistance at VC = \${design.r1AtCenter.toFixed(1)} ohm, conductance depth s = \${design.gDepth.toFixed(3)}\`);
+	console.log(\`\${TOPOLOGY === 'inverting' ? 'R2' : 'Rb'} = \${design.feedback.toFixed(1)} ohm  (x = \${design.x.toFixed(3)})\`);
+	console.log(\`modulation index n = \${design.modulationIndex.toFixed(3)}, gain at bias K0 = \${design.nominalGain.toFixed(3)}, signal gain \${design.gainMin.toFixed(3)} .. \${design.gainMax.toFixed(3)}\`);
 	console.log(\`gate swing: VGS in [\${design.vgsMin.toFixed(3)}, \${design.vgsMax.toFixed(3)}] V, channel R in [\${design.r1Min.toFixed(1)}, \${design.r1Max.toFixed(1)}] ohm\`);
+	if (design.buffer) {
+		const b = design.buffer;
+		console.log(\`carrier follower \${b.enabled ? 'ON' : 'OFF'}: with it (Zs = \${b.zOut} ohm) n_eff \${b.withBuffer.effectiveModulationIndex.toFixed(3)}, THD \${(100 * b.withBuffer.thd).toFixed(2)}%; without it (divider \${b.dividerImpedance.toFixed(0)} ohm) n_eff \${b.withoutBuffer.effectiveModulationIndex.toFixed(3)}, THD \${(100 * b.withoutBuffer.thd).toFixed(1)}%\`);
+	}
+	if (design.postGain && design.postGain.needed) {
+		const pg = design.postGain;
+		console.log(\`post-gain stage: K = \${pg.kActual.toFixed(2)} (Rtop \${pg.rtop} ohm, Rbottom \${pg.rbottom} ohm), loss at fp \${pg.factor.toFixed(4)} (constant), output \${pg.outputAmplitude.toFixed(3)} V, envelope max \${pg.envelopeMax.toFixed(2)} V \${pg.swingOk ? '' : '(OVER THE SWING) '}slew \${(pg.slewNeeded / 1e6).toFixed(2)} V/us \${pg.slewOk ? '' : '(TOO FAST)'}\`);
+	}
 
 	console.log();
 	console.log('='.repeat(72));
-	console.log('SIGNAL CONDITIONING CHAIN (source -> gain -> HPF -> summer -> gate)');
+	console.log('CARRIER PATH');
 	console.log('='.repeat(72));
-	const c = design.conditioning;
-	console.log(\`gain stage:  Rtop = \${c.gain.rtop} ohm, Rbottom = \${c.gain.rbottom} ohm  (gain = \${c.gain.actual.toFixed(3)}, target \${c.gain.target.toFixed(3)})\`);
-	console.log(\`HPF:         R = \${c.hpf.r} ohm, C = \${c.hpf.c.toExponential(4)} F  (cutoff = \${c.hpf.cutoffActual.toFixed(2)} Hz)\`);
-	console.log(\`summer:      Rf = Rin = \${c.summer.r} ohm each input, unity gain\`);
-	console.log(\`bias divider: Rtop = \${c.divider.top} ohm, Rbottom = \${c.divider.bottom} ohm off \${c.divider.vcc} V  (tap = \${c.divider.actual.toFixed(3)} V, target \${c.divider.target.toFixed(3)} V)\`);
+	const c = design.carrier;
+	console.log(\`triode limit VGS_min - VP = \${c.vdsSat.toFixed(3)} V -> carrier at most \${c.acTriode.toFixed(3)} V (margin \${c.margin}); op-amp limit \${c.acOpamp.toFixed(3)} V; limiting: \${c.limit}\`);
+	console.log(c.divider.top > 0 ? \`carrier divider: \${c.divider.top} ohm / \${c.divider.bottom} ohm -> Ac = \${c.ac.toFixed(4)} V (drives the + input, no buffer)\` : \`no divider needed, Ac = \${c.ac.toFixed(4)} V\`);
+	console.log(\`output carrier K0*Ac = \${c.carrierOut.toFixed(3)} V, envelope \${c.envelopeMin.toFixed(3)} .. \${c.envelopeMax.toFixed(3)} V, peak current \${(c.jfetPeakCurrent * 1000).toFixed(2)} mA\`);
+	console.log(\`VDS^2 term: DC offset and 2fp tone of \${(c.tone2fp * 1000).toFixed(1)} mV (\${c.tone2fpDbc.toFixed(1)} dBc) at \${c.tone2fpHz} Hz, no envelope distortion\`);
+
+	console.log();
+	console.log('='.repeat(72));
+	console.log('OP-AMP LIMITS AT THE CARRIER');
+	console.log('='.repeat(72));
+	const o = design.opamp;
+	console.log(\`K trough/bias/crest = \${o.kTrough.toFixed(2)} / \${o.kNominal.toFixed(2)} / \${o.kCrest.toFixed(2)}, closed-loop BW \${(o.bwTrough / 1000).toFixed(0)} / \${(o.bwNominal / 1000).toFixed(0)} / \${(o.bwCrest / 1000).toFixed(0)} kHz\`);
+	console.log(\`gain factor at fp: \${o.factorTrough.toFixed(4)} / \${o.factorNominal.toFixed(3)} / \${o.factorCrest.toFixed(3)} -> n effective \${o.effectiveModulationIndex.toFixed(3)} (designed \${design.modulationIndex.toFixed(3)}), audio THD \${(100 * o.thd).toFixed(2)}%\`);
+	console.log(\`fp*Kmax/GBW = \${o.gbwRatio.toFixed(2)} \${o.gbwOk ? '<= 0.2, fine' : o.rbLimit ? '> 0.2: set the feedback resistor to ' + o.rbLimit + ' ohm (n = ' + o.nAtLimit.toFixed(3) + '), or a faster op-amp / lower carrier' : '> 0.2 and no feedback resistor fixes it: faster op-amp or lower carrier'}\`);
+	console.log(\`op-amps in the modulator: \${o.opampCount} (summer included)\`);
+	console.log(\`slew: needs \${(o.slewNeeded / 1e6).toFixed(2)} V/us, half of SR is \${(o.slewRate / 2e6).toFixed(1)} V/us -> \${o.slewOk ? 'fine' : 'TOO FAST, lower the carrier'}\`);
+
+	console.log();
+	console.log('='.repeat(72));
+	console.log('GATE DRIVE (one inverting summer: series C + Rac from the source, Rbias from +Vcc, Rf)');
+	console.log('='.repeat(72));
+	const sm = design.conditioning.summer;
+	console.log(\`Rf = \${sm.rf} ohm, Rac = \${sm.rac} ohm (gain \${sm.gainActual.toFixed(3)}, target \${sm.gainTarget.toFixed(3)}), Rbias = \${sm.rbias} ohm (bias \${sm.biasActual.toFixed(3)} V, target -\${sm.biasTarget.toFixed(3)} V)\`);
+	console.log(\`C = \${sm.c.toExponential(2)} F -> high-pass corner \${sm.fcActual.toFixed(1)} Hz (target \${sm.fcTarget.toFixed(1)} Hz); most negative gate voltage \${sm.outMin.toFixed(2)} V vs swing \${sm.opampSwing} V -> \${sm.headroomOk ? 'fits' : 'DOES NOT FIT: raise Vcc or use a smaller |VP|'}\`);
 
 	console.log();
 	console.log(design.modulationIndex >= 0.7 && design.modulationIndex <= 1 ? 'modulation index is in the recommended 0.7-1 range.' : 'modulation index is OUTSIDE the recommended 0.7-1 range - raise Rb or the swing fraction.');
@@ -180,6 +250,7 @@ const ENGINE = [
 	orderSrc,
 	sallenKeyLowPassSrc,
 	envelopeFilterSrc,
+	jfetModelSrc,
 	jfetModulatorSrc,
 	diodeMixerModulatorSrc,
 	rectifierSrc,

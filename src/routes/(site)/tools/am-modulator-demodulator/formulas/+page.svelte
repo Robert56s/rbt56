@@ -89,27 +89,54 @@
 		</div>
 
 		<div class="formula">
-			<h3>Channel conductance (ohmic region, small V_DS)</h3>
+			<h3>Channel conductance (ohmic region)</h3>
 			<p class="note">
 				In the ohmic region the gate controls the width of the channel. The standard drain-current
-				model there is quadratic in V_DS; for a small V_DS the squared term is negligible and what
-				remains is Ohm's law with a conductance that depends on the gate only. V_P is the pinch-off
-				voltage (negative for N-channel), I_DSS the current at V_GS = 0.
+				model there is quadratic in V_DS; the linear part is Ohm's law with a conductance that
+				depends on the gate only. V_P is the pinch-off voltage (negative for N-channel), I_DSS the
+				current at V_GS = 0.
 			</p>
-			<Equation tex={`I_D = \\dfrac{2 I_{DSS}}{V_P^2}\\left[(V_{GS}-V_P)\\,V_{DS} - \\dfrac{V_{DS}^2}{2}\\right] \\ \\approx\\ G(V_{GS})\\,V_{DS}`} />
-			<Equation tex={`G(V_{GS}) = \\dfrac{1}{r_{DS}} = \\dfrac{2 I_{DSS}}{V_P^2}\\,(V_{GS} - V_P)`} />
+			<Equation tex={`I_D = \\beta\\left[(V_{GS}-V_P)\\,V_{DS} - \\dfrac{V_{DS}^2}{2}\\right], \\qquad \\beta = \\dfrac{2 I_{DSS}}{V_P^2}`} />
+			<Equation tex={`G(V_{GS}) = \\dfrac{1}{r_{DS}} = \\beta\\,(V_{GS} - V_P)`} />
 			<p class="note">
-				<strong>How to use:</strong> valid for V_P &le; V_GS &le; 0 and |V_DS| well below 2(V_GS -
-				V_P). G is a straight line: 0 at V_GS = V_P, 2 I_DSS/|V_P| at V_GS = 0. Measure I_DSS and
-				V_P on the actual part; both vary a lot between individual JFETs.
+				<strong>How to use:</strong> G is a straight line: 0 at V_GS = V_P, 2 I_DSS/|V_P| at V_GS = 0.
+				Measure I_DSS and V_P on the actual part; both vary a lot between individual JFETs. Two
+				distinct conditions on V_DS, which in the gain cell is the carrier itself:
+			</p>
+			<Equation tex={`\\text{(a) triode region: } V_{DS} \\le V_{GS} - V_P \\ \\text{ at the most negative gate, } V_{GS,min} - V_P = \\dfrac{(1-s)|V_P|}{2}`} />
+			<Equation tex={`\\text{(b) within it, } V_{DS} = A_c\\cos\\omega_p t \\Rightarrow \\text{the } V_{DS}^2 \\text{ term is } \\dfrac{\\beta A_c^2}{4}(1 + \\cos 2\\omega_p t)\\text{: a DC offset and a } 2f_p \\text{ tone, no envelope distortion}`} />
+			<p class="note">
+				Past (a) the channel saturates and the envelope is clipped at its troughs. Inside (a) the
+				squared term never touches the envelope; at the output it is R_b beta A_c²/4, worth reporting
+				in dBc so the 2 f_p line can be checked against other bands.
+			</p>
+		</div>
+
+		<div class="formula">
+			<h3>Characterizing the part: three ways to the same line</h3>
+			<p class="note">
+				Only the line G = beta (V_GS - V_P) matters. The datasheet pair (V_P, I_DSS) fixes its slope
+				through the square law; the other datasheet pair (V_P, r_DS(on)) fixes it through its value at
+				V_GS = 0; a set of measured points fixes it by least squares over a chosen window, which then
+				also sets the bias (its middle) and the largest swing (its half-width). The J11x presets are
+				datasheet LIMITS (largest r_DS(on), a range for V_P), so a measurement replaces them.
+			</p>
+			<Equation tex={`\\beta = \\dfrac{2 I_{DSS}}{V_P^2} \\quad\\text{or}\\quad \\beta = \\dfrac{1}{r_{DS(on)}\\,|V_P|} \\quad\\text{or}\\quad G = a\\,V_{GS} + b \\Rightarrow \\beta = a,\\ V_P = -\\dfrac{b}{a}`} />
+			<Equation tex={`\\text{divider measurement: } r_{DS} = R_{series}\\,\\dfrac{V_D}{V_{in} - V_D}, \\qquad \\text{implied } I_{DSS} = \\dfrac{\\beta V_P^2}{2}, \\quad r_{DS(on)} = \\dfrac{1}{\\beta |V_P|}`} />
+			<Equation tex={`\\text{conductance depth: } s = \\dfrac{V_{swing}}{V_C - V_P} \\quad (\\text{equals the swing fraction when } V_C = V_P/2)`} />
+			<p class="note">
+				<strong>How to use:</strong> keep V_D small in the divider measurement (the part must stay in
+				the ohmic region) and never measure I_DSS of a J111 with a large V_DS, the TO-92 cannot take
+				V_DS x I_DSS. Read R² and the largest deviation of the fit: if the points bend away from the
+				line, narrow the window to the straight stretch. n can never exceed s.
 			</p>
 		</div>
 
 		<div class="formula">
 			<h3>Bias point</h3>
-			<p class="note">Halfway along the gate range is halfway up the conductance line, leaving equal room to swing both ways.</p>
+			<p class="note">Halfway along the gate range is halfway up the conductance line, leaving equal room to swing both ways (or the middle of the measured window).</p>
 			<Equation tex={`V_C = \\dfrac{V_P}{2}, \\qquad G(V_C) = \\dfrac{I_{DSS}}{|V_P|}, \\qquad r_{DS}(V_C) = \\dfrac{|V_P|}{I_{DSS}}`} />
-			<p class="note"><strong>How to use:</strong> the DC level the conditioning chain must deliver to the gate.</p>
+			<p class="note"><strong>How to use:</strong> the DC level the gate-drive summer must deliver to the gate.</p>
 		</div>
 
 		<div class="formula">
@@ -128,35 +155,97 @@
 			<p class="note">
 				With V_GS = V_C + x_m(t) and the gate swinging by a fraction s of the |V_P|/2 room, the
 				linear conductance becomes G(V_C)[1 + s m(t)]; x is R_b in units of the channel resistance
-				at bias. The output is then exactly the AM form.
+				at bias. The output is then exactly the AM form, and the instantaneous gain K(m) is also the
+				op-amp's noise gain.
 			</p>
 			<Equation tex={`G(V_C + x_m) = G(V_C)\\big[1 + s\\,m(t)\\big], \\qquad x = \\dfrac{R_b}{r_{DS}(V_C)}`} />
 			<Equation tex={`V_{out}(t) = x_p(t)\\,(1+x)\\left[1 + \\dfrac{x\\,s}{1+x}\\,m(t)\\right] \\ \\Rightarrow\\ K_0 = 1 + x, \\qquad n = s\\,\\dfrac{x}{1+x}`} />
+			<Equation tex={`K(m) = 1 + x\\,(1 + s\\,m), \\qquad K_{max} = 1 + x(1+s), \\qquad K_{min} = 1 + x(1-s)`} />
 			<p class="note">
 				<strong>How to use:</strong> n can never reach s (the swing fraction is its ceiling); a
-				bigger R_b gives both more gain and deeper modulation. For a target n, invert:
+				bigger R_b gives both more gain and deeper modulation, but also a larger K_max for the
+				op-amp to follow. For a target n, invert:
 			</p>
 			<Equation tex={`x = \\dfrac{n}{s - n}, \\qquad R_b = r_{DS}(V_C)\\,x`} />
 		</div>
 
 		<div class="formula">
-			<h3>Signal-conditioning chain</h3>
+			<h3>Inverting cell: JFET as the input resistor</h3>
 			<p class="note">
-				Four small stages turn a small bipolar source into V_C + x_m(t) at the gate. Gain stage:
-				same non-inverting amplifier with a fixed bottom resistor. High-pass: a divider between
-				1/(sC) and R, corner a decade below the lowest message frequency (0.04 dB loss there).
-				Divider: series current times R_bottom. Summer: currents into a virtual ground, unity
-				weights with equal resistors; its minus sign turns the positive tap into the negative
-				V_C and merely inverts the message.
+				The channel moves from the feedback divider to the input: a follower puts the carrier on
+				the drain, the source sits on the virtual ground, R_2 feeds back. The "1 +" of the
+				non-inverting gain disappears, so the modulation index equals the conductance depth
+				whatever x is, and x is chosen small for the op-amp's sake. The noise gain the op-amp must
+				follow is still 1 + R_2/r_DS.
 			</p>
-			<Equation tex={`\\dfrac{V_{in}}{R_{bottom}} = \\dfrac{V_{out} - V_{in}}{R_{top}} \\ \\Rightarrow\\ \\text{gain} = 1+\\dfrac{R_{top}}{R_{bottom}} = \\dfrac{V_{swing}}{V_{source}}`} />
-			<Equation tex={`H_{HPF}(s) = \\dfrac{R}{R + 1/(sC)} = \\dfrac{sRC}{1 + sRC}, \\qquad f_c = \\dfrac{1}{2\\pi R C} = \\dfrac{f_{m,min}}{10}`} />
-			<Equation tex={`V_{tap} = V_{cc}\\,\\dfrac{R_{bottom}}{R_{top}+R_{bottom}} = |V_C| \\ \\Rightarrow\\ R_{top} = R_{bottom}\\,\\dfrac{V_{cc} - |V_C|}{|V_C|}`} />
-			<Equation tex={`\\dfrac{V_{ac}}{R} + \\dfrac{V_{tap}}{R} = -\\dfrac{V_{out}}{R} \\ \\Rightarrow\\ V_{out} = -(V_{ac} + V_{tap}) = V_C - V_{ac}`} />
+			<Equation tex={`V_{out} = -R_2\\,G(V_{GS})\\,x_p = -x\\,\\big[1 + s\\,m(t)\\big]\\,x_p \\ \\Rightarrow\\ K_0 = x, \\qquad n = s, \\qquad K_{noise}(m) = 1 + x(1 + s\\,m)`} />
+			<Equation tex={`x \\le \\dfrac{0.2\\,GBW/f_p - 1}{1 + s} \\ (\\text{capped at } 10), \\qquad R_2 = r_{DS}(V_C)\\,x`} />
 			<p class="note">
-				<strong>How to use:</strong> gain from the source amplitude and the wanted swing; C from
-				f_c with R fixed; R_top of the divider from |V_C| with R_bottom fixed; every resistor
-				rounded to E24 and the actual values recomputed.
+				Whatever feeds the channel adds to r_DS: with a source impedance Z_s the gain is
+				R_2/(r_DS + Z_s), which compresses the crest (where r_DS is smallest) more than the trough.
+				The bare carrier divider is several hundred ohms against an r_DS(min) of the same order;
+				a follower makes Z_s a few ohms. A fixed non-inverting stage then brings the small output
+				x A_c up to the wanted level; its loss at f_p is constant, so it cannot bend the envelope.
+			</p>
+			<Equation tex={`\\text{gain}(m) = \\dfrac{x\\,(1 + s m)}{1 + Z_s\\,G(V_C)\\,(1 + s m)}, \\qquad K_{post} = \\dfrac{V_{target}}{x A_c} = 1 + \\dfrac{R_{top}}{R_{bottom}}`} />
+			<p class="note">
+				<strong>How to use:</strong> pick this cell when the non-inverting one cannot reach the
+				wanted n within the gain-bandwidth rule. Cost: follower, cell and post-gain make three
+				op-amps plus the gate-drive summer, against two in all for the non-inverting cell. The
+				triode limit on the carrier is the same in both: V_DS is the carrier either way.
+			</p>
+		</div>
+
+		<div class="formula">
+			<h3>Carrier amplitude</h3>
+			<p class="note">
+				The carrier is V_DS, so it has to respect the triode limit at the most negative gate swing
+				(with a margin k) and, times K_max, fit inside the op-amp's output swing. A resistive
+				divider brings the source down to A_c; it drives the + input, which draws no current, so
+				no buffer is needed.
+			</p>
+			<Equation tex={`A_c = \\min\\left(k\\,(V_{GS,min} - V_P),\\ \\dfrac{V_{out,max}}{K_{max}}\\right), \\qquad R_{top} = R_{bot}\\left(\\dfrac{A_{src}}{A_c} - 1\\right)`} />
+			<Equation tex={`\\text{output carrier } K_0 A_c, \\quad \\text{envelope } K_{min}A_c \\ldots K_{max}A_c, \\quad I_{peak} = \\dfrac{A_c}{r_{DS,min}}, \\quad 2f_p \\text{ tone } = \\dfrac{R_b \\beta A_c^2}{4}`} />
+			<p class="note">
+				<strong>How to use:</strong> k = 0.5 is a comfortable margin. I_peak flows through R_b out
+				of the op-amp; keep it under about 10 mA for a small op-amp.
+			</p>
+		</div>
+
+		<div class="formula">
+			<h3>Op-amp gain-bandwidth and slew rate</h3>
+			<p class="note">
+				A non-inverting stage of gain K rolls off at GBW/K. Here K follows the message, so the
+				loss at the carrier frequency is largest at the crest, which flattens the top of the
+				envelope: a distortion of the message, measured as the harmonics of the compressed
+				envelope over one message cycle (THD).
+			</p>
+			<Equation tex={`|H(f_p, m)| = \\dfrac{1}{\\sqrt{1 + \\left(\\dfrac{f_p K(m)}{GBW}\\right)^2}}, \\qquad n_{eff} = \\dfrac{K_{max}|H|_{crest} - K_{min}|H|_{trough}}{K_{max}|H|_{crest} + K_{min}|H|_{trough}}`} />
+			<Equation tex={`\\text{rule: } \\dfrac{f_p K_{max}}{GBW} \\le 0.2 \\ \\Rightarrow\\ x \\le \\dfrac{0.2\\,GBW/f_p - 1}{1+s} \\ \\Rightarrow\\ R_b \\le r_{DS}(V_C)\\,x, \\qquad 2\\pi f_p K_{max} A_c \\le \\dfrac{SR}{2}`} />
+			<p class="note">
+				<strong>How to use:</strong> with a TL08x (3 MHz) at 55 kHz, K_max may not exceed about 11,
+				so x stays near 5 and n near 0.75 for s = 0.9. When the design overshoots, the tool rounds
+				R_b down to the largest stock value that satisfies the rule and reports the n it leaves.
+			</p>
+		</div>
+
+		<div class="formula">
+			<h3>Gate-drive summer</h3>
+			<p class="note">
+				One inverting summer replaces a gain stage, a high-pass and a bias divider: the source
+				through C and R_ac, the supply through R_bias, R_f as feedback. Every input ends on the
+				virtual ground, so nothing loads anything: the gain, the bias and the high-pass corner are
+				exactly the expressions below (a chained version loaded its divider to half the intended
+				bias and moved the high-pass corner up tenfold). The minus sign turns +V_cc into the
+				negative V_C the gate needs and merely inverts the message.
+			</p>
+			<Equation tex={`\\dfrac{x_m}{R_{ac}} + \\dfrac{V_{cc}}{R_{bias}} = -\\dfrac{V_{out}}{R_f} \\ \\Rightarrow\\ V_{out} = -\\dfrac{R_f}{R_{ac}}\\,x_m - \\dfrac{R_f}{R_{bias}}\\,V_{cc}`} />
+			<Equation tex={`R_{ac} = \\dfrac{R_f\\,V_{source}}{V_{swing}}, \\qquad R_{bias} = \\dfrac{R_f\\,V_{cc}}{|V_C|}, \\qquad f_c = \\dfrac{1}{2\\pi R_{ac} C} = \\dfrac{f_{m,min}}{10}`} />
+			<p class="note">
+				<strong>How to use:</strong> R_f fixed at 10 k; R_ac and R_bias rounded to E24 and the
+				actual gain and bias recomputed; C from f_c and rounded to a stock value. Check that the
+				most negative output, V_bias minus the full swing, fits the op-amp's swing on this supply:
+				with a J111 (|V_P| up to 10 V) that is the check that bites first.
 			</p>
 		</div>
 	</section>
