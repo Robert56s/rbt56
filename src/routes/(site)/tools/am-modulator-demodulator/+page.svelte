@@ -34,6 +34,9 @@
 	import { designEnvelopeLowPass } from '$lib/modulation/envelopeFilter';
 	import { formatFarads, formatHenries, formatHz, formatOhms, formatVolts } from '$lib/modulation/format';
 	import { compareTopologies, conductanceDepth, designJfetModulator } from '$lib/modulation/jfetModulator';
+	import { generateNetlist as generateModNetlist, generateSchematic as generateModSchematic } from '$lib/modulation/spice';
+	import { buildOscillatorDiagram } from '$lib/oscillator/circuits';
+	import { designOscillator } from '$lib/oscillator/topologies';
 	import { fitModel, IDSS_WARNING, JFET_PRESETS, modelFromIdss, modelFromRdsOn, parseMeasurements } from '$lib/modulation/jfetModel';
 	import { designHalfWaveRectifier, designPrecisionRectifier, rectifiedEnvelopeStats } from '$lib/modulation/rectifier';
 	import { amSignal, envelope as envelopeWave, rectify } from '$lib/modulation/waveform';
@@ -66,6 +69,10 @@
 	let topology = $state('noninverting');
 	let targetOutputAmplitude = $state(1);
 	let carrierBuffer = $state(true);
+	// the carrier can come from a generator on the bench, or from an
+	// oscillator built onto the same board; the Wien bridge is the one that
+	// asks least of the op-amp, which is what matters at a fast carrier
+	let carrierFrom = $state('source'); // 'source' | 'wien'
 	let carrierSourceAmplitude = $state(1);
 	let carrierMargin = $state(0.5);
 	let opampSwing = $state(10.5);
@@ -117,6 +124,22 @@
 			: null
 	);
 
+	// when the carrier is generated on board, it is designed at the same
+	// frequency and amplitude the modulator expects to be fed
+	const carrierOscillator = $derived.by(() =>
+		carrierFrom === 'wien' && jfetValid
+			? designOscillator({
+					topology: 'wien',
+					stabilizer: 'diodes',
+					frequency: fp,
+					amplitude: carrierSourceAmplitude,
+					gbw: gbwMhz * 1e6,
+					slewRate: slewRateVus * 1e6,
+					opampSwing
+				})
+			: null
+	);
+
 	// both cells on the same JFET, carrier and op-amp, for the side-by-side table
 	const topologyRows = $derived.by(() =>
 		jfetValid
@@ -147,6 +170,18 @@
 		const amplitude = jfetDesign.postGain ? jfetDesign.postGain.outputAmplitude : jfetDesign.carrier.carrierOut;
 		return amSignal(fp, fmPreview, amplitude, jfetDesign.opamp.effectiveModulationIndex, duration);
 	});
+
+	function saveFile(text, filename) {
+		const blob = new Blob([text], { type: 'text/plain' });
+		const url = URL.createObjectURL(blob);
+		const a = document.createElement('a');
+		a.href = url;
+		a.download = filename;
+		document.body.appendChild(a);
+		a.click();
+		a.remove();
+		setTimeout(() => URL.revokeObjectURL(url), 10000);
+	}
 
 	function downloadJfet() {
 		if (!jfetDesign) return;
@@ -454,6 +489,13 @@
 					<input id="fp" type="number" step="1000" min="1" bind:value={fp} />
 				</div>
 				<div class="field">
+					<label for="cfrom">Carrier comes from</label>
+					<select id="cfrom" bind:value={carrierFrom}>
+						<option value="source">An external generator</option>
+						<option value="wien">A Wien bridge oscillator on the board</option>
+					</select>
+				</div>
+				<div class="field">
 					<label for="csrc">Carrier source amplitude (V)</label>
 					<input id="csrc" type="number" step="0.1" min="0.01" bind:value={carrierSourceAmplitude} />
 				</div>
@@ -658,6 +700,47 @@
 				<MathPanel blocks={explainOpampLimits(jfetDesign)} />
 			</section>
 
+			{#if carrierOscillator}
+				<section class="panel">
+					<div class="panel-head">
+						<span class="num">05b</span>
+						<h2>Carrier oscillator</h2>
+						<span class="hint">Wien bridge at {formatHz(carrierOscillator.f0)}</span>
+					</div>
+					<DiagramView diagram={buildOscillatorDiagram(carrierOscillator)} label="Wien bridge carrier oscillator" />
+					<table>
+						<tbody>
+							<tr><td>Frequency: wanted / realized</td><td>{formatHz(fp)} / {formatHz(carrierOscillator.f0)} ({(100 * carrierOscillator.f0Error).toFixed(2)} %)</td></tr>
+							<tr><td>R and C (two of each)</td><td>{formatOhms(carrierOscillator.r)}, {formatFarads(carrierOscillator.c)}</td></tr>
+							<tr><td>Feedback: Rf1 / Rf2 / Rg</td><td>{formatOhms(carrierOscillator.parts.rf1)} / {formatOhms(carrierOscillator.parts.rf2)} / {formatOhms(carrierOscillator.rg)}</td></tr>
+							<tr><td>Output amplitude</td><td>about {formatVolts(carrierOscillator.limiter.amplitudeActual)} peak, into the divider above</td></tr>
+							<tr><td>Gain needed / set / limited</td><td>3.00 / {carrierOscillator.startGain.toFixed(2)} / {carrierOscillator.limiter.gainLimited.toFixed(2)}</td></tr>
+							<tr><td>Distortion on the carrier</td><td>about {(100 * carrierOscillator.thd).toFixed(1)} %</td></tr>
+							<tr><td>Op-amp: f0 times gain, against GBW</td><td>{carrierOscillator.opamp.gbwRatio.toFixed(3)} (ceiling {formatHz(carrierOscillator.opamp.fMax)})</td></tr>
+						</tbody>
+					</table>
+					{#if carrierOscillator.opamp.gbwOk}
+						<p class="flag ok">
+							The Wien bridge is the right choice here for one reason: it needs a gain of only 3, so at
+							{formatHz(fp)} it stays well inside this op-amp. A phase-shift oscillator would need 29 and
+							would not run at this frequency at all.
+						</p>
+					{:else}
+						<p class="flag warn">
+							At {formatHz(fp)} even a Wien bridge is past what this op-amp holds (ceiling {formatHz(carrierOscillator.opamp.fMax)}).
+							Use a faster part for the oscillator, or feed the carrier from a generator.
+						</p>
+					{/if}
+					<p class="note">
+						Carrier distortion is not the same problem as message distortion: the harmonics of the carrier
+						land at 2 f_p and above, far from the sidebands, and the demodulator's low-pass removes them.
+						A percent or so here is harmless, which is why diode limiting is enough and the oscillator
+						needs nothing more elaborate. The <a href="/tools/oscillator/">Sine Oscillator Design</a> tool
+						has the other topologies and the reasoning behind that choice.
+					</p>
+				</section>
+			{/if}
+
 			<section class="panel">
 				<div class="panel-head">
 					<span class="num">06</span>
@@ -705,7 +788,19 @@
 					<h2>Download</h2>
 				</div>
 				<p class="note">A standalone script with this exact design, parameterized at the top, runnable with <code>node jfet-am-modulator.js</code>.</p>
-				<button type="button" onclick={downloadJfet}>Download jfet-am-modulator.js</button>
+				<div class="row downloads">
+					<button type="button" onclick={downloadJfet}>Download jfet-am-modulator.js</button>
+					<button type="button" onclick={() => saveFile(generateModSchematic({ design: jfetDesign, fmPreview, oscillator: carrierOscillator }), 'jfet-am-modulator.asc')}>Download .asc (LTspice)</button>
+					<button type="button" onclick={() => saveFile(generateModNetlist({ design: jfetDesign, fmPreview, oscillator: carrierOscillator }), 'jfet-am-modulator.cir')}>Download .cir (netlist)</button>
+				</div>
+				<p class="note">
+					The LTspice files carry the whole modulator: the gate-drive summer, the carrier path{carrierOscillator ? ' with its oscillator' : ''},
+					and the gain cell, with a transient run at {formatHz(fmPreview)} already set up. The JFET goes in as a
+					real SPICE device rather than the straight line this page designs against (Vto = V_P, Beta = I_DSS / V_P&sup2;
+					give the same curve), and the op-amps carry the gain-bandwidth entered above. That is the point of
+					simulating it: the crest compression and the distortion predicted in section 05 come from those two
+					departures from the ideal, and the transient shows them directly. Plot V(vout), and V(vgate) for the gate drive.
+				</p>
 				<p class="note formula-link">
 					Every formula this design used: <a href="/tools/am-modulator-demodulator/formulas/">Formula sheet</a>.
 				</p>
@@ -962,6 +1057,12 @@
 	h3 {
 		font-size: 0.95rem;
 		margin: 1.2rem 0 0.5rem;
+	}
+
+	.downloads {
+		gap: 0.7rem;
+		flex-wrap: wrap;
+		margin-bottom: 0.9rem;
 	}
 
 	.presets {

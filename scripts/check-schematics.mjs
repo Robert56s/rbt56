@@ -20,6 +20,8 @@ import { symbols } from 'schematic-symbols';
 import * as filter from '../src/lib/filter/circuits.js';
 import * as modulation from '../src/lib/modulation/circuits.js';
 import { designTowThomasHighPass, designTowThomasLowPass } from '../src/lib/filter/towThomas.js';
+import { buildAgcDiagram, buildLimiterDiagram, buildOscillatorDiagram } from '../src/lib/oscillator/circuits.js';
+import { designOscillator, TOPOLOGIES } from '../src/lib/oscillator/topologies.js';
 import { buildTwoLevelDiagram } from '../src/lib/karnaugh/circuit.js';
 import { literals } from '../src/lib/karnaugh/expression.js';
 import { minimizeBoth } from '../src/lib/karnaugh/minimize.js';
@@ -415,6 +417,15 @@ const CASES = [
 	['modulation/buildGainStageDiagram', () => modulation.buildGainStageDiagram({ rtop: 8200, rbottom: 10000 })],
 	['modulation/buildHighPassDiagram', () => modulation.buildHighPassDiagram({ r: 100000, c: 2.2e-7 })],
 	['modulation/buildSummerDiagram(n=2)', () => modulation.buildSummerDiagram({ inputs: ['x_m(t) (AC)', 'V_bias (DC)'], r: 10000 })],
+	['oscillator/wien', () => buildOscillatorDiagram(designOscillator({ topology: 'wien', frequency: 1000, amplitude: 3 }))],
+	['oscillator/phaseShift', () => buildOscillatorDiagram(designOscillator({ topology: 'phaseShift', frequency: 1000, amplitude: 3 }))],
+	['oscillator/bufferedPhaseShift', () => buildOscillatorDiagram(designOscillator({ topology: 'bufferedPhaseShift', frequency: 1000, amplitude: 3 }))],
+	['oscillator/bubba', () => buildOscillatorDiagram(designOscillator({ topology: 'bubba', frequency: 1000, amplitude: 3 }))],
+	['oscillator/quadrature', () => buildOscillatorDiagram(designOscillator({ topology: 'quadrature', frequency: 1000, amplitude: 3 }))],
+	['oscillator/wien-lamp', () => buildOscillatorDiagram(designOscillator({ topology: 'wien', frequency: 1000, amplitude: 3, stabilizer: 'lamp' }))],
+	['oscillator/wien-jfet', () => buildOscillatorDiagram(designOscillator({ topology: 'wien', frequency: 1000, amplitude: 3, stabilizer: 'jfet' }))],
+	['oscillator/agc', () => buildAgcDiagram(designOscillator({ topology: 'wien', frequency: 1000, amplitude: 3, stabilizer: 'jfet' }))],
+	['oscillator/limiter', () => buildLimiterDiagram(designOscillator({ topology: 'wien', frequency: 1000, amplitude: 3 }))],
 	['modulation/buildJfetInvertingCellDiagram', () => modulation.buildJfetInvertingCellDiagram({ r2: 3900 })],
 	['modulation/buildBiasSummerDiagram', () => modulation.buildBiasSummerDiagram({ c: 2.2e-6, rac: 5600, rbias: 62000, rf: 10000 })],
 	['modulation/buildCarrierDividerDiagram', () => modulation.buildCarrierDividerDiagram({ top: 9100, bottom: 1000 })],

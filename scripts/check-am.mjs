@@ -15,6 +15,9 @@ import { explainCarrierPath, explainConditioningChain, explainInvertingCell, exp
 import { explainJfetModel } from '../src/lib/modulation/explain.js';
 import { fitModel, JFET_PRESETS, modelFromIdss, modelFromRdsOn, parseMeasurements } from '../src/lib/modulation/jfetModel.js';
 import { channelConductance, compareTopologies, conductanceDepth, designJfetModulator } from '../src/lib/modulation/jfetModulator.js';
+import { buildElements as buildModElements, generateNetlist as modNetlist, generateSchematic as modSchematic } from '../src/lib/modulation/spice.js';
+import { designOscillator } from '../src/lib/oscillator/topologies.js';
+import { parseSchematic, spiceValue } from '../src/lib/spice/core.js';
 
 let fails = 0;
 const check = (label, ok, detail) => {
@@ -204,6 +207,45 @@ check('carrier: peak current is Ac times the largest conductance', near(d.carrie
 		}
 	}
 	check('inverting: explanations render', bad === 0);
+}
+
+/* ------------------------------------------------- LTspice export */
+{
+	const osc = designOscillator({ topology: 'wien', stabilizer: 'diodes', frequency: 55000, amplitude: 1 });
+	for (const [label, opts] of [
+		['non-inverting, external carrier', { design: d, fmPreview: 1000, oscillator: null }],
+		['non-inverting, carrier oscillator on board', { design: d, fmPreview: 1000, oscillator: osc }],
+		['inverting, carrier oscillator on board', { design: designJfetModulator({ ...base, topology: 'inverting' }), fmPreview: 1000, oscillator: osc }]
+	]) {
+		const wanted = buildModElements(opts).filter((e) => e.kind !== 'LABEL');
+		const { elements: got, clashes, dangling } = parseSchematic(modSchematic(opts));
+		const problems = [...clashes, ...dangling];
+		if (got.length !== wanted.length) problems.push(`${got.length} symbols for ${wanted.length} elements`);
+		for (const w of wanted) {
+			const name = w.kind === 'J' ? w.name.replace(/^J/, '') : w.name;
+			const g = got.find((e) => e.name === name);
+			if (!g) {
+				problems.push(`${w.name} missing`);
+				continue;
+			}
+			if (g.kind !== w.kind) problems.push(`${w.name} is a ${g.kind}, expected ${w.kind}`);
+			if (g.nodes.join('|') !== w.nodes.join('|')) problems.push(`${w.name} wired ${g.nodes.join(',')} instead of ${w.nodes.join(',')}`);
+			if ((w.kind === 'R' || w.kind === 'C') && g.value !== spiceValue(w.value)) problems.push(`${w.name} reads ${g.value}, expected ${spiceValue(w.value)}`);
+		}
+		check(`spice ${label}: .asc and .cir agree`, problems.length === 0, problems.length ? problems.slice(0, 3).join('; ') : `${got.length} symbols`);
+	}
+	// the JFET's SPICE parameters have to describe the same straight line
+	// the page designed against: Vto = VP and Beta = IDSS / VP^2
+	const cir = modNetlist({ design: d, fmPreview: 1000, oscillator: null });
+	const m = /\.model JMOD NJF\(Vto=(\S+) Beta=(\S+)/.exec(cir);
+	check('spice: the JFET model matches the design line', m !== null && near(Number(m[1]), d.vp, 1e-3) && near(Number(m[2]), d.idss / (d.vp * d.vp), 1e-9), m ? `Vto ${m[1]}, Beta ${m[2]} against beta/2 = ${(d.beta / 2).toExponential(4)}` : 'no model card');
+	check('spice: SPICE Beta is exactly half the tool beta', m !== null && near(Number(m[2]), d.beta / 2, 1e-12));
+	check('spice: the netlist carries a transient run and the gate node', /\.tran /.test(cir) && /vgate/.test(cir));
+	// the embedded oscillator must not collide with the modulator's own nodes
+	const withOsc = buildModElements({ design: d, fmPreview: 1000, oscillator: osc });
+	const oscNodes = new Set(withOsc.filter((e) => e.name && e.name.endsWith('O')).flatMap((e) => e.nodes));
+	check('spice: the embedded oscillator reaches the carrier divider', oscNodes.has('vcar'), [...oscNodes].join(' '));
+	check('spice: its other nodes are all prefixed, so nothing collides', [...oscNodes].every((n) => n === '0' || n === 'vcar' || n.startsWith('osc_')));
 }
 
 /* --------------------------------------------------------------- KaTeX */

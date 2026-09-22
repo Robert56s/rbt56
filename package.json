@@ -13,6 +13,7 @@
     "check:filter": "node --import ./scripts/resolve-ext.mjs scripts/check-filter.mjs",
     "check:spice": "node --import ./scripts/resolve-ext.mjs scripts/check-spice.mjs",
     "check:am": "node --import ./scripts/resolve-ext.mjs scripts/check-am.mjs",
+    "check:oscillator": "node --import ./scripts/resolve-ext.mjs scripts/check-oscillator.mjs",
     "prepare": "svelte-kit sync || echo ''"
   },
   "devDependencies": {

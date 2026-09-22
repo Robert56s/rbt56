@@ -1,5 +1,10 @@
 <script>
-	import { tools } from '$lib/tools';
+	import { CATEGORIES, tools, toolsIn, toolNumber } from '$lib/tools';
+
+	const groups = CATEGORIES.map((c) => ({ ...c, items: toolsIn(c.id) })).filter(
+		(g) => g.items.length > 0
+	);
+	const loose = tools.filter((t) => !CATEGORIES.some((c) => c.id === t.category));
 </script>
 
 <svelte:head>
@@ -14,28 +19,56 @@
 	</p>
 </section>
 
-<section>
-	<p class="eyebrow">Tools</p>
-	<ol class="list">
-		{#each tools as tool, i (tool.href)}
-			<li>
-				<span class="num">{String(i + 1).padStart(2, '0')}</span>
-				<div class="body">
-					<h2>{tool.name}</h2>
-					<p>{tool.summary}</p>
-					<ul class="tags">
-						{#each tool.tags as tag (tag)}
-							<li>{tag}</li>
-						{/each}
-						<li class="state">{tool.state}</li>
-					</ul>
-				</div>
-				<a class="btn" href={tool.href}>Open</a>
-			</li>
-		{/each}
-	</ol>
-	<p class="note">More to come.</p>
-</section>
+{#each groups as group (group.id)}
+	<section class="group">
+		<p class="eyebrow">{group.name}</p>
+		<p class="blurb">{group.blurb}</p>
+		<ol class="list">
+			{#each group.items as tool (tool.href)}
+				<li>
+					<span class="num">{String(toolNumber(tool)).padStart(2, '0')}</span>
+					<div class="body">
+						<h2>{tool.name}</h2>
+						<p>{tool.summary}</p>
+						<ul class="tags">
+							{#each tool.tags as tag (tag)}
+								<li>{tag}</li>
+							{/each}
+							<li class="state">{tool.state}</li>
+						</ul>
+					</div>
+					<a class="btn" href={tool.href}>Open</a>
+				</li>
+			{/each}
+		</ol>
+	</section>
+{/each}
+
+{#if loose.length > 0}
+	<section class="group">
+		<p class="eyebrow">Other</p>
+		<ol class="list">
+			{#each loose as tool (tool.href)}
+				<li>
+					<span class="num">{String(toolNumber(tool)).padStart(2, '0')}</span>
+					<div class="body">
+						<h2>{tool.name}</h2>
+						<p>{tool.summary}</p>
+						<ul class="tags">
+							{#each tool.tags as tag (tag)}
+								<li>{tag}</li>
+							{/each}
+							<li class="state">{tool.state}</li>
+						</ul>
+					</div>
+					<a class="btn" href={tool.href}>Open</a>
+				</li>
+			{/each}
+		</ol>
+	</section>
+{/if}
+
+<p class="note">More to come.</p>
 
 <section class="misc">
 	<p class="eyebrow">Misc</p>
@@ -59,11 +92,21 @@
 		max-width: 46ch;
 	}
 
+	.group {
+		margin-bottom: 2.2rem;
+	}
+
+	.blurb {
+		font-size: 0.95rem;
+		color: var(--textDim);
+		max-width: 62ch;
+		margin: -0.5rem 0 1rem;
+	}
+
 	.list {
 		list-style: none;
 		display: grid;
 		gap: 0.9rem;
-		margin-bottom: 1rem;
 	}
 
 	.list > li {

@@ -17,7 +17,8 @@ import { designMfbLowPass } from '../src/lib/filter/mfb.js';
 import { designMfbHighPass } from '../src/lib/filter/mfbHighPass.js';
 import { designSallenKeyLowPass } from '../src/lib/filter/sallenKey.js';
 import { designSallenKeyHighPass } from '../src/lib/filter/sallenKeyHighPass.js';
-import { buildElements, generateNetlist, generateSchematic, spiceValue } from '../src/lib/filter/spice.js';
+import { buildElements, generateNetlist, generateSchematic } from '../src/lib/filter/spice.js';
+import { parseSchematic, spiceValue } from '../src/lib/spice/core.js';
 import { designBandPass, designBandStop, designHighPass, designLowPass } from '../src/lib/filter/stages.js';
 import { designTowThomasHighPass, designTowThomasLowPass } from '../src/lib/filter/towThomas.js';
 
@@ -164,101 +165,6 @@ function solveAt(elements, freqHz) {
 	}
 	const vout = nodes.get('vout');
 	return vout === undefined ? cx(0) : x[vout];
-}
-
-/* ------------------------------------------------- .asc connectivity */
-
-// Pin offsets of the stock symbols, as read from the shipped .asy files.
-const ASC_PINS = {
-	res: [[16, 16], [16, 96]],
-	cap: [[16, 0], [16, 64]],
-	voltage: [[0, 16], [0, 96]],
-	'Opamps\\opamp': [[-32, 48], [-32, 80], [32, 64]]
-};
-
-/**
- * Rebuilds the circuit a .asc actually describes: nets come from the wires
- * (union-find over shared endpoints), names from the flags sitting on them,
- * and each symbol's nodes from where its pins land. Anything mis-wired, or
- * two different nets accidentally landing on the same point, shows up here.
- */
-function parseSchematic(text) {
-	const wires = [];
-	const flags = [];
-	const symbols = [];
-	let current = null;
-	for (const raw of text.split(/\r?\n/)) {
-		const line = raw.trim();
-		if (line.startsWith('WIRE ')) {
-			const [x1, y1, x2, y2] = line.slice(5).split(/\s+/).map(Number);
-			wires.push([`${x1},${y1}`, `${x2},${y2}`]);
-		} else if (line.startsWith('FLAG ')) {
-			const [x, y, name] = line.slice(5).split(/\s+/);
-			flags.push({ at: `${x},${y}`, name });
-		} else if (line.startsWith('SYMBOL ')) {
-			const p = line.slice(7).split(/\s+/);
-			current = { sym: p[0], x: Number(p[1]), y: Number(p[2]), attrs: {} };
-			symbols.push(current);
-		} else if (line.startsWith('SYMATTR ') && current) {
-			const rest = line.slice(8);
-			const sp = rest.indexOf(' ');
-			current.attrs[rest.slice(0, sp)] = rest.slice(sp + 1);
-		}
-	}
-
-	const parent = new Map();
-	const find = (k) => {
-		if (!parent.has(k)) parent.set(k, k);
-		while (parent.get(k) !== k) {
-			parent.set(k, parent.get(parent.get(k)));
-			k = parent.get(k);
-		}
-		return k;
-	};
-	const union = (a, b) => {
-		const ra = find(a);
-		const rb = find(b);
-		if (ra !== rb) parent.set(ra, rb);
-	};
-	for (const [a, b] of wires) union(a, b);
-
-	const nameOf = new Map();
-	const clashes = [];
-	for (const f of flags) {
-		const root = find(f.at);
-		if (nameOf.has(root) && nameOf.get(root) !== f.name) clashes.push(`${nameOf.get(root)} and ${f.name} share a node`);
-		nameOf.set(root, f.name);
-	}
-
-	const elements = [];
-	const dangling = [];
-	for (const s of symbols) {
-		const pins = ASC_PINS[s.sym];
-		if (!pins) {
-			dangling.push(`unknown symbol ${s.sym}`);
-			continue;
-		}
-		const nodes = pins.map(([dx, dy]) => {
-			const at = `${s.x + dx},${s.y + dy}`;
-			if (!parent.has(at)) {
-				dangling.push(`${s.attrs.InstName} has a pin with nothing attached`);
-				return null;
-			}
-			const name = nameOf.get(find(at));
-			if (!name) dangling.push(`${s.attrs.InstName} sits on an unnamed net`);
-			return name ?? null;
-		});
-		const kind = s.sym === 'voltage' ? 'V' : s.sym.endsWith('opamp') ? 'OP' : s.sym === 'cap' ? 'C' : 'R';
-		elements.push({
-			kind,
-			name: s.attrs.InstName,
-			// the symbol's pins are invin, noninvin, out; canonical order is
-			// non-inverting, inverting, out
-			nodes: kind === 'OP' ? [nodes[1], nodes[0], nodes[2]] : nodes,
-			value: s.attrs.Value
-		});
-	}
-	return { elements, clashes, dangling };
 }
 
 /* ----------------------------------------------------------- the cases */
