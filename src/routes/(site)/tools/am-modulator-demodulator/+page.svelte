@@ -1,6 +1,8 @@
 <script>
+	import BasicsPanel from '$lib/components/BasicsPanel.svelte';
 	import ConductancePlot from '$lib/components/ConductancePlot.svelte';
 	import DiagramView from '$lib/components/DiagramView.svelte';
+	import { modulationBasics } from '$lib/modulation/basics';
 	import Equation from '$lib/components/Equation.svelte';
 	import MathPanel from '$lib/components/MathPanel.svelte';
 	import TimePlot from '$lib/components/TimePlot.svelte';
@@ -115,7 +117,8 @@
 					fmMin,
 					vcc,
 					fp,
-					carrierSourceAmplitude,
+					// an on-board oscillator delivers what its limiter settles at, not the target
+					carrierSourceAmplitude: carrierFrom === 'wien' && carrierOscillator?.limiter.amplitudeActual ? carrierOscillator.limiter.amplitudeActual : carrierSourceAmplitude,
 					carrierMargin,
 					opampSwing,
 					gbw: gbwMhz * 1e6,
@@ -153,7 +156,8 @@
 					fmMin,
 					vcc,
 					fp,
-					carrierSourceAmplitude,
+					// an on-board oscillator delivers what its limiter settles at, not the target
+					carrierSourceAmplitude: carrierFrom === 'wien' && carrierOscillator?.limiter.amplitudeActual ? carrierOscillator.limiter.amplitudeActual : carrierSourceAmplitude,
 					carrierMargin,
 					opampSwing,
 					gbw: gbwMhz * 1e6,
@@ -342,6 +346,8 @@
 		<button type="button" class:active={mode === 'diode'} onclick={() => (mode = 'diode')}>Diode + tank modulator</button>
 		<button type="button" class:active={mode === 'demod'} onclick={() => (mode = 'demod')}>Demodulator</button>
 	</div>
+
+	<BasicsPanel blocks={modulationBasics({ mode, topology, carrierFrom, design: jfetDesign, rectifierType })} />
 
 	{#if mode === 'jfet'}
 		<section class="panel">
@@ -648,7 +654,7 @@
 					<tbody>
 						<tr><td>Closed-loop bandwidth: trough / bias / crest</td><td>{formatHz(jfetDesign.opamp.bwTrough)} / {formatHz(jfetDesign.opamp.bwNominal)} / {formatHz(jfetDesign.opamp.bwCrest)}</td></tr>
 						<tr><td>Gain factor at f_p: trough / bias / crest</td><td>{jfetDesign.opamp.factorTrough.toFixed(4)} / {jfetDesign.opamp.factorNominal.toFixed(3)} / {jfetDesign.opamp.factorCrest.toFixed(3)}</td></tr>
-						<tr><td>Modulation index: designed / effective</td><td>{jfetDesign.modulationIndex.toFixed(3)} / {jfetDesign.opamp.effectiveModulationIndex.toFixed(3)}</td></tr>
+						<tr><td>Modulation index: designed / effective / read from the peaks</td><td>{jfetDesign.modulationIndex.toFixed(3)} / {jfetDesign.opamp.effectiveModulationIndex.toFixed(3)} / {jfetDesign.opamp.peakModulationIndex.toFixed(3)}</td></tr>
 						<tr><td>Audio distortion from the crest loss (THD)</td><td>{(100 * jfetDesign.opamp.thd).toFixed(2)} %</td></tr>
 						<tr><td>Slew needed / available</td><td>{(jfetDesign.opamp.slewNeeded / 1e6).toFixed(2)} V/us / {(jfetDesign.opamp.slewRate / 1e6).toFixed(0)} V/us</td></tr>
 						<tr><td>Op-amps in the modulator</td><td>{jfetDesign.opamp.opampCount} (gate-drive summer included)</td></tr>
@@ -710,24 +716,24 @@
 					<DiagramView diagram={buildOscillatorDiagram(carrierOscillator)} label="Wien bridge carrier oscillator" />
 					<table>
 						<tbody>
-							<tr><td>Frequency: wanted / realized</td><td>{formatHz(fp)} / {formatHz(carrierOscillator.f0)} ({(100 * carrierOscillator.f0Error).toFixed(2)} %)</td></tr>
+							<tr><td>Frequency: wanted / predicted with this op-amp</td><td>{formatHz(fp)} / {formatHz(carrierOscillator.f0)} ({(100 * carrierOscillator.f0Error).toFixed(2)} %)</td></tr>
 							<tr><td>R and C (two of each)</td><td>{formatOhms(carrierOscillator.r)}, {formatFarads(carrierOscillator.c)}</td></tr>
 							<tr><td>Feedback: Rf1 / Rf2 / Rg</td><td>{formatOhms(carrierOscillator.parts.rf1)} / {formatOhms(carrierOscillator.parts.rf2)} / {formatOhms(carrierOscillator.rg)}</td></tr>
 							<tr><td>Output amplitude</td><td>about {formatVolts(carrierOscillator.limiter.amplitudeActual)} peak, into the divider above</td></tr>
-							<tr><td>Gain needed / set / limited</td><td>3.00 / {carrierOscillator.startGain.toFixed(2)} / {carrierOscillator.limiter.gainLimited.toFixed(2)}</td></tr>
+							<tr><td>Gain needed / set / limited</td><td>{carrierOscillator.requiredGain.toFixed(2)} / {carrierOscillator.startGain.toFixed(2)} / {carrierOscillator.limiter.gainLimited.toFixed(2)}</td></tr>
 							<tr><td>Distortion on the carrier</td><td>about {(100 * carrierOscillator.thd).toFixed(1)} %</td></tr>
-							<tr><td>Op-amp: f0 times gain, against GBW</td><td>{carrierOscillator.opamp.gbwRatio.toFixed(3)} (ceiling {formatHz(carrierOscillator.opamp.fMax)})</td></tr>
+							<tr><td>Op-amp lag at the carrier, and what it does</td><td>{carrierOscillator.opamp.lagDeg.toFixed(1)} degrees: the textbook RC would land {(100 * carrierOscillator.uncompensatedError).toFixed(1)} % off, so RC is retuned {(100 * carrierOscillator.retunePercent).toFixed(1)} %</td></tr>
 						</tbody>
 					</table>
-					{#if carrierOscillator.opamp.gbwOk}
+					{#if carrierOscillator.opamp.opampOk}
 						<p class="flag ok">
 							The Wien bridge is the right choice here for one reason: it needs a gain of only 3, so at
-							{formatHz(fp)} it stays well inside this op-amp. A phase-shift oscillator would need 29 and
-							would not run at this frequency at all.
+							{formatHz(fp)} this op-amp lags it by only {carrierOscillator.opamp.lagDeg.toFixed(1)} degrees, which the retuned RC absorbs.
+							A phase-shift oscillator would need a gain of 29 and would not start at this frequency at all.
 						</p>
 					{:else}
 						<p class="flag warn">
-							At {formatHz(fp)} even a Wien bridge is past what this op-amp holds (ceiling {formatHz(carrierOscillator.opamp.fMax)}).
+							At {formatHz(fp)} even a Wien bridge is past what this op-amp holds{Number.isFinite(carrierOscillator.opamp.fMax) ? ` (the textbook values would land 10 % low at ${formatHz(carrierOscillator.opamp.fMax)})` : ''}.
 							Use a faster part for the oscillator, or feed the carrier from a generator.
 						</p>
 					{/if}
@@ -800,6 +806,11 @@
 					give the same curve), and the op-amps carry the gain-bandwidth entered above. That is the point of
 					simulating it: the crest compression and the distortion predicted in section 05 come from those two
 					departures from the ideal, and the transient shows them directly. Plot V(vout), and V(vgate) for the gate drive.
+					The .asc is a drawn schematic; vgate, vac and vcar cross it by net label. The run holds the coupling capacitor at
+					its steady-state charge so the gate bias is right from the first cycle, and, with the oscillator on board, starts
+					the carrier at full amplitude and saves the four message periods after it has settled. The index measured from
+					the carrier peaks in that run should read about {jfetDesign.opamp.peakModulationIndex.toFixed(3)}: the V_DS squared term lifts every
+					peak by the same amount, crest and trough alike, which is why it sits a little under the envelope's own figure.
 				</p>
 				<p class="note formula-link">
 					Every formula this design used: <a href="/tools/am-modulator-demodulator/formulas/">Formula sheet</a>.

@@ -8,20 +8,25 @@
  * list, so a tool cannot ship a schematic and a netlist that disagree.
  *
  * Element shapes, `nodes` in the order given:
- *   { kind: 'R', name, nodes: [a, b], value }
- *   { kind: 'C', name, nodes: [a, b], value }
+ *   { kind: 'R', name, nodes: [a, b], value }     value a number, or a
+ *                                                 string such as 'R={..}'
+ *                                                 used verbatim
+ *   { kind: 'C', name, nodes: [a, b], value, ic } ic: initial voltage, V
  *   { kind: 'L', name, nodes: [a, b], value }
  *   { kind: 'V', name, nodes: [plus, minus], spice }        source spec text
+ *   { kind: 'B', name, nodes: [plus, minus], spice }        behavioral source,
+ *                                                           spice = 'I=..' or 'V=..'
  *   { kind: 'D', name, nodes: [anode, cathode], model }
  *   { kind: 'J', name, nodes: [drain, gate, source], model } N-channel JFET
  *   { kind: 'OP', name, nodes: [nonInverting, inverting, out] }
  *   { kind: 'LABEL', text }                                 a comment only
  *
- * Connections in the .asc are made with net labels rather than drawn
- * wires: every pin gets a short stub and a label, and pins sharing a name
- * are the same node. That keeps the sheet readable whatever the topology,
- * makes mis-routing impossible, and lets parts be dragged around in
- * LTspice without breaking the circuit.
+ * Two ways to draw the .asc. renderSchematic here lays the parts out on
+ * a grid and joins them with net labels: every pin gets a short stub and
+ * a label, and pins sharing a name are the same node. It is what a tool
+ * gets for free. A tool that wants a real drawing builds it with
+ * draw.js, which places the same symbols in LTspice's own orientations
+ * and wires them, and parseSchematic reads either back for checking.
  */
 
 /** Value with an engineering suffix LTspice understands (220p, 4.7n, 1.5k). */
@@ -53,6 +58,8 @@ export const SYMBOLS = {
 	C: { name: 'cap', prefix: 'C', pins: [{ dx: 16, dy: 0, dir: 'up' }, { dx: 16, dy: 64, dir: 'down' }], order: [0, 1] },
 	L: { name: 'ind', prefix: 'L', pins: [{ dx: 16, dy: 16, dir: 'up' }, { dx: 16, dy: 96, dir: 'down' }], order: [0, 1] },
 	V: { name: 'voltage', prefix: 'V', pins: [{ dx: 0, dy: 16, dir: 'up' }, { dx: 0, dy: 96, dir: 'down' }], order: [0, 1] },
+	// behavioral current source: + on top, current leaves at the - pin
+	B: { name: 'bi', prefix: 'B', pins: [{ dx: 0, dy: 0, dir: 'up' }, { dx: 0, dy: 80, dir: 'down' }], order: [0, 1] },
 	// anode first (SpiceOrder 1 is the "+" pin)
 	D: { name: 'diode', prefix: 'D', pins: [{ dx: 16, dy: 0, dir: 'up' }, { dx: 16, dy: 64, dir: 'down' }], order: [0, 1] },
 	// njf: D(48,0), G(0,64), S(48,96); our order is drain, gate, source already
@@ -68,6 +75,58 @@ export const SYMBOLS = {
 		order: [1, 0, 2]
 	}
 };
+
+/**
+ * LTspice's eight orientations, as measured on the installed symbols: a
+ * pin at (x, y) in the symbol's own frame lands here relative to the
+ * placement point. R rotates, M mirrors first.
+ */
+export const ORIENT = {
+	R0: (x, y) => [x, y],
+	R90: (x, y) => [-y, x],
+	R180: (x, y) => [-x, -y],
+	R270: (x, y) => [y, -x],
+	M0: (x, y) => [-x, y],
+	M90: (x, y) => [y, x],
+	M180: (x, y) => [x, -y],
+	M270: (x, y) => [-y, -x]
+};
+
+/**
+ * Text safe inside an LTspice TEXT item: the two characters backslash-n
+ * are LTspice's line break there and any other backslash sequence aborts
+ * the load, so backslashes become slashes.
+ */
+export function textSafe(s) {
+	return String(s).replace(/\\/g, '/');
+}
+
+/** Value text of an element as its netlist line carries it. */
+function valueText(e) {
+	if (e.kind === 'V' || e.kind === 'B') return e.spice;
+	if (e.kind === 'D' || e.kind === 'J') return e.model;
+	const v = typeof e.value === 'string' ? e.value : spiceValue(e.value);
+	return e.kind === 'C' && Number.isFinite(e.ic) ? `${v} IC=${spiceValue(e.ic)}` : v;
+}
+
+/**
+ * The SYMATTR lines an element's symbol instance needs in a .asc. An
+ * op-amp carries its gain-bandwidth; a capacitor with an initial
+ * condition carries it on the SpiceLine, which LTspice appends to the
+ * netlist line exactly as the .cir writes it.
+ */
+export function symbolAttributes(e, { gbw = '3Meg', aol = '1Meg' } = {}) {
+	const lines = [`SYMATTR InstName ${e.name}`];
+	if (e.kind === 'OP') {
+		lines.push('SYMATTR Value opamp', `SYMATTR SpiceLine Aol=${aol}`, `SYMATTR SpiceLine2 GBW=${gbw}`);
+	} else if (e.kind === 'C') {
+		lines.push(`SYMATTR Value ${typeof e.value === 'string' ? e.value : spiceValue(e.value)}`);
+		if (Number.isFinite(e.ic)) lines.push(`SYMATTR SpiceLine IC=${spiceValue(e.ic)}`);
+	} else {
+		lines.push(`SYMATTR Value ${valueText(e)}`);
+	}
+	return lines;
+}
 
 /** The op-amp subcircuit the netlist carries, so it needs no library. */
 export function opampSubckt({ ideal = false } = {}) {
@@ -102,11 +161,10 @@ export function renderNetlist({ elements, title, comments = [], params = [], dir
 			body.push('', `* ${e.text}`);
 			continue;
 		}
+		if (!SYMBOLS[e.kind]) throw new Error(`no netlist form for element kind ${e.kind}`);
 		const n = e.nodes.join(' ');
-		if (e.kind === 'V') body.push(`${e.name} ${n} ${e.spice}`);
-		else if (e.kind === 'OP') body.push(`X${e.name} ${n} OPAMP`);
-		else if (e.kind === 'D' || e.kind === 'J') body.push(`${e.name} ${n} ${e.model}`);
-		else body.push(`${e.name} ${n} ${spiceValue(e.value)}`);
+		if (e.kind === 'OP') body.push(`X${e.name} ${n} OPAMP`);
+		else body.push(`${e.name} ${n} ${valueText(e)}`);
 	}
 	return [
 		`* ${title}`,
@@ -153,19 +211,10 @@ export function renderSchematic({ elements, title, comments = [], directives = [
 
 	parts.forEach((e, i) => {
 		const sym = SYMBOLS[e.kind];
-		if (!sym) return;
+		if (!sym) throw new Error(`no LTspice symbol for element kind ${e.kind}`);
 		const x = originX + (i % COLS) * CELL_W;
 		const y = originY + Math.floor(i / COLS) * CELL_H;
-		lines.push(`SYMBOL ${sym.name} ${x} ${y} R0`);
-		// a JFET's stock prefix already supplies the leading letter
-		lines.push(`SYMATTR InstName ${e.kind === 'J' ? e.name.replace(/^J/, '') : e.name}`);
-		if (e.kind === 'V') lines.push(`SYMATTR Value ${e.spice}`);
-		else if (e.kind === 'OP') {
-			lines.push('SYMATTR Value opamp');
-			lines.push(`SYMATTR SpiceLine Aol=${aol}`);
-			lines.push(`SYMATTR SpiceLine2 GBW=${gbw}`);
-		} else if (e.kind === 'D' || e.kind === 'J') lines.push(`SYMATTR Value ${e.model}`);
-		else lines.push(`SYMATTR Value ${spiceValue(e.value)}`);
+		lines.push(`SYMBOL ${sym.name} ${x} ${y} R0`, ...symbolAttributes(e, { gbw, aol }));
 
 		sym.pins.forEach((pin, k) => {
 			const px = x + pin.dx;
@@ -182,7 +231,7 @@ export function renderSchematic({ elements, title, comments = [], directives = [
 	let textY = originY + rows * CELL_H + 48;
 	const text = [];
 	const push = (prefix, body) => {
-		text.push(`TEXT ${textX} ${textY} Left 2 ${prefix}${body}`);
+		text.push(`TEXT ${textX} ${textY} Left 2 ${prefix}${textSafe(body)}`);
 		textY += 32;
 	};
 	push(';', title);
@@ -212,10 +261,15 @@ export function parseSchematic(text) {
 	const wires = [];
 	const flags = [];
 	const symbols = [];
+	const directives = [];
 	let current = null;
 	for (const raw of text.split(/\r?\n/)) {
 		const line = raw.trim();
-		if (line.startsWith('WIRE ')) {
+		if (line.startsWith('TEXT ')) {
+			// a '!' body is SPICE directives, one per line break
+			const body = line.replace(/^TEXT\s+-?\d+\s+-?\d+\s+\S+\s+\d+\s+/, '');
+			if (body.startsWith('!')) directives.push(...body.slice(1).split('\\n').map((d) => d.trim()).filter(Boolean));
+		} else if (line.startsWith('WIRE ')) {
 			const [x1, y1, x2, y2] = line.slice(5).split(/\s+/).map(Number);
 			wires.push([`${x1},${y1}`, `${x2},${y2}`]);
 		} else if (line.startsWith('FLAG ')) {
@@ -223,7 +277,7 @@ export function parseSchematic(text) {
 			flags.push({ at: `${x},${y}`, name });
 		} else if (line.startsWith('SYMBOL ')) {
 			const p = line.slice(7).split(/\s+/);
-			current = { sym: p[0], x: Number(p[1]), y: Number(p[2]), attrs: {} };
+			current = { sym: p[0], x: Number(p[1]), y: Number(p[2]), orient: p[3] ?? 'R0', attrs: {} };
 			symbols.push(current);
 		} else if (line.startsWith('SYMATTR ') && current) {
 			const rest = line.slice(8);
@@ -246,6 +300,47 @@ export function parseSchematic(text) {
 		const rb = find(b);
 		if (ra !== rb) parent.set(ra, rb);
 	}
+	// pins are net points too: two pins on the same spot touch, as they
+	// do in LTspice, and a pin with neither a wire nor another pin on it
+	// is dangling
+	const pinPoints = new Map();
+	const placed = symbols.map((s) => {
+		const info = ASC_PINS[s.sym];
+		const turn = ORIENT[s.orient] ?? ORIENT.R0;
+		const pins = info
+			? info.pins.map((pin) => {
+					const [dx, dy] = turn(pin.dx, pin.dy);
+					const at = `${s.x + dx},${s.y + dy}`;
+					pinPoints.set(at, (pinPoints.get(at) ?? 0) + 1);
+					return at;
+				})
+			: [];
+		return { s, info, pins };
+	});
+	for (const [at] of pinPoints) find(at);
+	// LTspice also connects a flag or a pin that lands in the middle of a
+	// wire, so a drawing that runs a wire through a label point merges
+	// the two nets; model that, so the checkers see what LTspice sees
+	const parsePt = (k) => k.split(',').map(Number);
+	const onSegment = (p, a, b) => {
+		const [px, py] = p;
+		const [ax, ay] = a;
+		const [bx, by] = b;
+		if (ax === bx) return px === ax && py > Math.min(ay, by) && py < Math.max(ay, by);
+		if (ay === by) return py === ay && px > Math.min(ax, bx) && px < Math.max(ax, bx);
+		return false;
+	};
+	const touchPoints = [...new Set([...flags.map((f) => f.at), ...pinPoints.keys()])];
+	for (const k of touchPoints) {
+		const p = parsePt(k);
+		for (const [a, b] of wires) {
+			if (onSegment(p, parsePt(a), parsePt(b))) {
+				const ra = find(k);
+				const rb = find(a);
+				if (ra !== rb) parent.set(ra, rb);
+			}
+		}
+	}
 
 	const nameOf = new Map();
 	const clashes = [];
@@ -254,27 +349,27 @@ export function parseSchematic(text) {
 		if (nameOf.has(root) && nameOf.get(root) !== f.name) clashes.push(`${nameOf.get(root)} and ${f.name} share a node`);
 		nameOf.set(root, f.name);
 	}
+	// a drawn schematic leaves most nets unnamed: give them stable names
+	let unnamed = 0;
+	const netName = (root) => {
+		if (!nameOf.has(root)) nameOf.set(root, `_n${++unnamed}`);
+		return nameOf.get(root);
+	};
 
 	const elements = [];
 	const dangling = [];
-	for (const s of symbols) {
-		const info = ASC_PINS[s.sym];
+	for (const { s, info, pins } of placed) {
 		if (!info) {
 			dangling.push(`unknown symbol ${s.sym}`);
 			continue;
 		}
 		const nodes = [];
-		info.pins.forEach((pin, k) => {
-			const at = `${s.x + pin.dx},${s.y + pin.dy}`;
-			if (!parent.has(at)) {
-				dangling.push(`${s.attrs.InstName} has a pin with nothing attached`);
-				return;
-			}
-			const name = nameOf.get(find(at));
-			if (!name) dangling.push(`${s.attrs.InstName} sits on an unnamed net`);
-			nodes[info.order[k]] = name ?? null;
+		pins.forEach((at, k) => {
+			const attached = wires.some(([a, b]) => a === at || b === at || onSegment(parsePt(at), parsePt(a), parsePt(b))) || pinPoints.get(at) > 1 || flags.some((f) => f.at === at);
+			if (!attached) dangling.push(`${s.attrs.InstName} has a pin with nothing attached`);
+			nodes[info.order[k]] = netName(find(at));
 		});
-		elements.push({ kind: info.kind, name: s.attrs.InstName, nodes, value: s.attrs.Value });
+		elements.push({ kind: info.kind, name: s.attrs.InstName, nodes, value: s.attrs.Value, spiceLine: s.attrs.SpiceLine ?? null });
 	}
-	return { elements, clashes, dangling };
+	return { elements, clashes, dangling, directives };
 }

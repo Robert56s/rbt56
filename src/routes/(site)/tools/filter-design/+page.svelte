@@ -1,7 +1,9 @@
 <script>
 	import { onMount } from 'svelte';
+	import BasicsPanel from '$lib/components/BasicsPanel.svelte';
 	import BodePlot from '$lib/components/BodePlot.svelte';
 	import CircuitDiagram from '$lib/components/CircuitDiagram.svelte';
+	import { filterBasics } from '$lib/filter/basics';
 	import Equation from '$lib/components/Equation.svelte';
 	import MathPanel from '$lib/components/MathPanel.svelte';
 	import { generateScript, NEXT_STEPS } from '$lib/filter/codegen';
@@ -706,6 +708,8 @@
 			</p>
 		{/if}
 	</section>
+
+	<BasicsPanel blocks={filterBasics({ filterType, response, topology, order: isBandType ? (orderLp ?? 0) + (orderHp ?? 0) : order, stages: realizedStages.length })} />
 
 	{#if valid}
 		{#if isBandType}

@@ -20,7 +20,7 @@ import { symbols } from 'schematic-symbols';
 import * as filter from '../src/lib/filter/circuits.js';
 import * as modulation from '../src/lib/modulation/circuits.js';
 import { designTowThomasHighPass, designTowThomasLowPass } from '../src/lib/filter/towThomas.js';
-import { buildAgcDiagram, buildLimiterDiagram, buildOscillatorDiagram } from '../src/lib/oscillator/circuits.js';
+import { buildAgcDiagram, buildClampDiagram, buildLimiterDiagram, buildOscillatorDiagram } from '../src/lib/oscillator/circuits.js';
 import { designOscillator, TOPOLOGIES } from '../src/lib/oscillator/topologies.js';
 import { buildTwoLevelDiagram } from '../src/lib/karnaugh/circuit.js';
 import { literals } from '../src/lib/karnaugh/expression.js';
@@ -426,6 +426,8 @@ const CASES = [
 	['oscillator/wien-jfet', () => buildOscillatorDiagram(designOscillator({ topology: 'wien', frequency: 1000, amplitude: 3, stabilizer: 'jfet' }))],
 	['oscillator/agc', () => buildAgcDiagram(designOscillator({ topology: 'wien', frequency: 1000, amplitude: 3, stabilizer: 'jfet' }))],
 	['oscillator/limiter', () => buildLimiterDiagram(designOscillator({ topology: 'wien', frequency: 1000, amplitude: 3 }))],
+	['oscillator/clamp', () => buildClampDiagram(designOscillator({ topology: 'quadrature', frequency: 1000, amplitude: 3 }))],
+	['oscillator/limiter-ladder', () => buildLimiterDiagram(designOscillator({ topology: 'bubba', frequency: 1000, amplitude: 3 }))],
 	['modulation/buildJfetInvertingCellDiagram', () => modulation.buildJfetInvertingCellDiagram({ r2: 3900 })],
 	['modulation/buildBiasSummerDiagram', () => modulation.buildBiasSummerDiagram({ c: 2.2e-6, rac: 5600, rbias: 62000, rf: 10000 })],
 	['modulation/buildCarrierDividerDiagram', () => modulation.buildCarrierDividerDiagram({ top: 9100, bottom: 1000 })],

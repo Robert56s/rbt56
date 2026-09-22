@@ -393,6 +393,28 @@ td {
 	font-size: 0.85rem;
 }
 
+/* A table with a header row is a real grid, not a label/value list: its
+   columns size to their content and never wrap a number, and the wrapper
+   scrolls sideways when the screen is too narrow for all of them. */
+table:has(thead) th {
+	width: auto;
+}
+
+table:has(thead) th,
+table:has(thead) td {
+	padding: 0.45rem 0.7rem;
+	white-space: nowrap;
+}
+
+table:has(thead) th:first-child,
+table:has(thead) td:first-child {
+	padding-left: 0.2rem;
+}
+
+.tableScroll {
+	overflow-x: auto;
+}
+
 @media (prefers-reduced-motion: reduce) {
 	* {
 		transition: none !important;

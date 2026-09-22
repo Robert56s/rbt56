@@ -1,24 +1,26 @@
-// Numeric checks of the sine-oscillator tool.
+// Numeric checks of the sine-oscillator engine.
 //
 //   node --import ./scripts/resolve-ext.mjs scripts/check-oscillator.mjs
 //
-// 1. The RC ladder solver reproduces the exact textbook results for the
-//    three ladder topologies, and shows the loading penalty it exists to
-//    avoid guessing at.
-// 2. Every design lands on its frequency within component rounding, and
-//    its amplitude limiter really does straddle the gain the loop needs.
-// 3. The exported netlist OSCILLATES WHERE IT SHOULD: the element list is
-//    run through a small transient simulator and the frequency is read
-//    off its zero crossings, then compared with the design's own f0. This
-//    catches a netlist wired to a different circuit than the page
-//    describes, and confirms the amplitude really does build.
-// 4. The .asc describes the same circuit as the .cir.
-// 5. The explanations render under strict KaTeX.
-// Exits non-zero on any failure.
+// 1. The ladder solver reproduces the textbook constants exactly, and
+//    shows what loading the ladder costs.
+// 2. The loop solver with the single-pole op-amp reproduces LTspice's own
+//    AC analysis of the open loop, to four figures, on every topology.
+// 3. The limiter's describing function lands where LTspice's transient
+//    settled.
+// 4. Every design at four frequencies is consistent: predicted frequency
+//    on target, positive start-up growth, amplitude near the target,
+//    parts realizable, and the ones that cannot work say so.
+// 5. The drawn .asc describes the same circuit as the .cir, carries every
+//    model and directive, and the export refuses a design it cannot size.
+// 6. The explanations and the formula sheet render under strict KaTeX.
+// Exits non-zero on any failure. LTspice itself is run by check-ltspice.mjs.
 
 import { readFileSync } from 'node:fs';
 import katex from 'katex';
 import { explainBarkhausen, explainOpampLimit, explainStabilizer, explainTopology } from '../src/lib/oscillator/explain.js';
+import { DIODES, feedbackLimiterAmplitude } from '../src/lib/oscillator/limiter.js';
+import { openLoop, retune, solveBalance, solvePole, zeroPhase } from '../src/lib/oscillator/loop.js';
 import { buildElements, generateNetlist, generateSchematic } from '../src/lib/oscillator/spice.js';
 import { compareOscillators, designOscillator, solveLadder, TOPOLOGIES } from '../src/lib/oscillator/topologies.js';
 import { parseSchematic, spiceValue } from '../src/lib/spice/core.js';
@@ -29,305 +31,225 @@ const check = (label, ok, detail) => {
 	if (!ok) fails++;
 };
 const near = (a, b, tol) => Math.abs(a - b) <= tol;
+const rel = (a, b, tol) => Math.abs(a / b - 1) <= tol;
+const WT = 2 * Math.PI * 3e6;
 
-/* ------------------------------------------------------------ complex */
-const cAdd = (a, b) => ({ re: a.re + b.re, im: a.im + b.im });
-const cSub = (a, b) => ({ re: a.re - b.re, im: a.im - b.im });
-const cMul = (a, b) => ({ re: a.re * b.re - a.im * b.im, im: a.re * b.im + a.im * b.re });
-const cDiv = (a, b) => {
-	const d = b.re * b.re + b.im * b.im;
-	return { re: (a.re * b.re + a.im * b.im) / d, im: (a.im * b.re - a.re * b.im) / d };
-};
-const cAbs = (a) => Math.hypot(a.re, a.im);
-
-/**
- * A small transient simulator, so the exported netlist can be run rather
- * than argued about. Resistors and capacitors are stamped into a modified
- * nodal analysis, capacitors by the trapezoidal companion model (the same
- * one SPICE uses by default, and the one that neither adds nor removes
- * damping, which matters when the whole question is whether something
- * oscillates). Op-amps are ideal nullors. Diodes are left out: that is
- * their state at start-up, when the amplitude is still growing, which is
- * exactly the regime whose frequency the design predicts.
- *
- * One capacitor starts with a small charge on it, standing in for the
- * circuit noise that starts a real oscillator, and the frequency is read
- * back off the zero crossings once the waveform is established.
- */
-function transient(elements, { f0, periods = 60, perPeriod = 300, probe }) {
-	const h = 1 / (f0 * perPeriod);
-	const steps = Math.round(periods * perPeriod);
-	const parts = elements.filter((e) => e.kind !== 'LABEL' && e.kind !== 'D');
-	const nodes = new Map();
-	const idx = (n) => {
-		if (n === '0') return -1;
-		if (!nodes.has(n)) nodes.set(n, nodes.size);
-		return nodes.get(n);
-	};
-	for (const e of parts) for (const n of e.nodes) idx(n);
-	const amps = parts.filter((e) => e.kind === 'OP');
-	const caps = parts.filter((e) => e.kind === 'C').map((e) => ({ e, geq: (2 * e.value) / h, v: 0, i: 0 }));
-	if (caps.length === 0) return null;
-	caps[0].v = 0.1; // the nudge
-	const n = nodes.size;
-	const size = n + amps.length;
-
-	const A = Array.from({ length: size }, () => new Float64Array(size));
-	const stamp = (i, j, g) => {
-		if (i >= 0) A[i][i] += g;
-		if (j >= 0) A[j][j] += g;
-		if (i >= 0 && j >= 0) {
-			A[i][j] -= g;
-			A[j][i] -= g;
-		}
-	};
-	for (const e of parts) {
-		if (e.kind === 'R') stamp(idx(e.nodes[0]), idx(e.nodes[1]), 1 / e.value);
-	}
-	for (const c of caps) stamp(idx(c.e.nodes[0]), idx(c.e.nodes[1]), c.geq);
-	amps.forEach((e, k) => {
-		const row = n + k;
-		const out = idx(e.nodes[2]);
-		const pp = idx(e.nodes[0]);
-		const mm = idx(e.nodes[1]);
-		if (out >= 0) A[out][row] += 1;
-		if (pp >= 0) A[row][pp] += 1;
-		if (mm >= 0) A[row][mm] -= 1;
-	});
-
-	// the matrix is constant, so factor it once
-	const perm = Array.from({ length: size }, (_, i) => i);
-	for (let col = 0; col < size; col++) {
-		let piv = col;
-		for (let r = col + 1; r < size; r++) if (Math.abs(A[r][col]) > Math.abs(A[piv][col])) piv = r;
-		if (Math.abs(A[piv][col]) < 1e-14) return null;
-		if (piv !== col) {
-			[A[col], A[piv]] = [A[piv], A[col]];
-			[perm[col], perm[piv]] = [perm[piv], perm[col]];
-		}
-		for (let r = col + 1; r < size; r++) {
-			const f = A[r][col] / A[col][col];
-			A[r][col] = f;
-			for (let c = col + 1; c < size; c++) A[r][c] -= f * A[col][c];
-		}
-	}
-	const solve = (b) => {
-		const y = new Float64Array(size);
-		for (let i = 0; i < size; i++) {
-			let s2 = b[perm[i]];
-			for (let j = 0; j < i; j++) s2 -= A[i][j] * y[j];
-			y[i] = s2;
-		}
-		const x = new Float64Array(size);
-		for (let i = size - 1; i >= 0; i--) {
-			let s2 = y[i];
-			for (let j = i + 1; j < size; j++) s2 -= A[i][j] * x[j];
-			x[i] = s2 / A[i][i];
-		}
-		return x;
-	};
-
-	const probeIdx = idx(probe);
-	const trace = new Float64Array(steps);
-	const b = new Float64Array(size);
-	for (let k = 0; k < steps; k++) {
-		b.fill(0);
-		for (const c of caps) {
-			const ieq = c.geq * c.v + c.i;
-			const a = idx(c.e.nodes[0]);
-			const bb = idx(c.e.nodes[1]);
-			if (a >= 0) b[a] += ieq;
-			if (bb >= 0) b[bb] -= ieq;
-		}
-		const x = solve(b);
-		for (const c of caps) {
-			const a = idx(c.e.nodes[0]);
-			const bb = idx(c.e.nodes[1]);
-			const vNew = (a >= 0 ? x[a] : 0) - (bb >= 0 ? x[bb] : 0);
-			c.i = c.geq * vNew - (c.geq * c.v + c.i);
-			c.v = vNew;
-		}
-		trace[k] = probeIdx >= 0 ? x[probeIdx] : 0;
-	}
-
-	// frequency from the zero crossings of the last third, interpolated
-	const from = Math.floor(steps * 0.6);
-	const times = [];
-	for (let k = from + 1; k < steps; k++) {
-		if (trace[k - 1] < 0 && trace[k] >= 0) {
-			const frac = -trace[k - 1] / (trace[k] - trace[k - 1]);
-			times.push((k - 1 + frac) * h);
-		}
-	}
-	if (times.length < 3) return null;
-	const span = times[times.length - 1] - times[0];
-	const grew = Math.abs(trace[steps - 1]) > Math.abs(trace[Math.floor(steps * 0.2)]);
-	return { f: (times.length - 1) / span, cycles: times.length - 1, grew };
+/* ------------------------------------------------------ 1. the ladder */
+{
+	const u3 = solveLadder(3, { buffered: false });
+	const b3 = solveLadder(3, { buffered: true });
+	const b4 = solveLadder(4, { buffered: true });
+	check('ladder: 3 unbuffered sections balance at x0 = 1/sqrt(6) with gain 29', near(u3.x0, 1 / Math.sqrt(6), 1e-9) && near(u3.gain, 29, 1e-6), `${u3.x0.toFixed(6)}, ${u3.gain.toFixed(6)}`);
+	// high-pass sections: 60 degrees each means omega R C = tan(30 degrees) = 1/sqrt(3)
+	check('ladder: 3 buffered sections at 1/sqrt(3) with gain 8', near(b3.x0, 1 / Math.sqrt(3), 1e-9) && near(b3.gain, 8, 1e-6), `${b3.x0.toFixed(6)}, ${b3.gain.toFixed(6)}`);
+	check('ladder: 4 buffered sections (Bubba) at 1 with gain 4', near(b4.x0, 1, 1e-9) && near(b4.gain, 4, 1e-6), `${b4.x0.toFixed(6)}, ${b4.gain.toFixed(6)}`);
+	const loaded = solveLadder(3, { buffered: false, loadRatio: 1 });
+	check('ladder: a separate Rg equal to R on the end raises the gain needed to nearly 40', loaded.gain > 38 && loaded.gain < 41, loaded.gain.toFixed(2));
+	const topo = Object.fromEntries(TOPOLOGIES.map((t) => [t.id, t]));
+	check('topologies carry the solved constants', near(topo.phaseShift.gain, 29, 1e-6) && near(topo.bufferedPhaseShift.gain, 8, 1e-6) && near(topo.bubba.gain, 4, 1e-6) && topo.bufferedPhaseShift.opamps === 3 && topo.bubba.opamps === 4);
 }
 
-/** Where the exported netlist actually oscillates. */
-function netlistFrequency(design) {
-	const probe = design.topology === 'quadrature' ? 'vsin' : 'vout';
-	return transient(buildElements(design), { f0: design.f0, probe });
-}
-
-/**
- * The same design with the feedback resistor at its exact value instead of
- * the nearest stock one. The design's f0 is the frequency at the balance
- * point, where the loop gain is exactly 1; rounding the feedback resistor
- * leaves a few percent of residual gain, which moves the frequency while
- * the amplitude is still building. Trimming it away separates "is the
- * netlist the circuit we meant" from "what does E24 cost", which are two
- * different questions.
- */
-function atBalance(d) {
-	const exact = d.requiredGain * d.rg;
-	const copy = { ...d, parts: { ...d.parts }, limiter: { ...d.limiter } };
-	if (d.topology === 'wien') copy.parts.rf1 = 2 * d.rg - d.parts.rf2;
-	else copy.limiter.rf = exact;
-	return copy;
-}
-
-/* ------------------------------------------------ 1. the ladder solver */
+/* ---------------------------------- 2. the loop solver against LTspice */
+// LTspice 26 .ac of the open loop (scratchpad/spice/exp/ac*.cir): the
+// zero-phase frequency and the magnitude the loop returns there
 {
 	const cases = [
-		['3 sections, unbuffered', 3, false, 1 / Math.sqrt(6), 29],
-		['3 sections, buffered', 3, true, 1 / Math.sqrt(3), 8],
-		['4 sections, buffered (Bubba)', 4, true, 1, 4]
+		['phase shift, 1 kHz, gain 30.45', 'ladder', { rc: 6450 * 10e-9, wt: WT, n: 3, gain: 30.45 }, 0.408248 / (6450 * 10e-9), 1005.26, 1.0482],
+		['phase shift, 55 kHz, gain 30.45', 'ladder', { rc: 118.1 * 10e-9, wt: WT, n: 3, gain: 30.45 }, 0.408248 / (118.1 * 10e-9), 49533, 0.9525],
+		['Bubba, 55 kHz, gain 4.3', 'ladder', { rc: 2894e-9, wt: WT, n: 4, buffered: true, gain: 4.3 }, 1 / 2894e-9, 52131, 0.99857],
+		['Wien, 55 kHz, gain 3.15', 'wien', { rc: 2894e-9, wt: WT, gain: 3.15 }, 1 / 2894e-9, 50772.7, 1.047]
 	];
-	for (const [label, n, buffered, x0, gain] of cases) {
-		const r = solveLadder(n, { buffered, loadRatio: Infinity });
-		check(`ladder ${label}: exact x0 and gain`, near(r.x0, x0, 1e-6) && near(r.gain, gain, 1e-6), `x0 ${r.x0.toFixed(5)}, gain ${r.gain.toFixed(4)}`);
+	for (const [label, kind, params, omega0, fRef, magRef] of cases) {
+		const z = zeroPhase(kind, params, { omega0 });
+		check(`loop vs LTspice .ac: ${label}`, z.converged && rel(z.omega / (2 * Math.PI), fRef, 2e-4) && near(z.magnitude, magRef, 2e-3), `${(z.omega / (2 * Math.PI)).toFixed(1)} Hz, |L| ${z.magnitude.toFixed(4)}`);
 	}
-	const loaded = solveLadder(3, { buffered: false, loadRatio: 1 });
-	check('ladder: an extra load on the end really does cost gain', loaded.gain > 35, `gain ${loaded.gain.toFixed(1)} instead of 29, which is why the tool solves rather than quotes`);
+	// ideal op-amp: the textbook comes back
+	const ideal = zeroPhase('wien', { rc: 1.6e-4, wt: 2 * Math.PI * 1e12, gain: 3.3 }, { omega0: 1 / 1.6e-4 });
+	check('loop: with an infinitely fast op-amp the Wien returns g/3 at 1/(2 pi RC)', near(ideal.magnitude, 1.1, 1e-6) && rel(ideal.omega * 1.6e-4, 1, 1e-8));
+	const idealPs = zeroPhase('ladder', { rc: 1.6e-4, wt: 2 * Math.PI * 1e12, n: 3, gain: 29 }, { omega0: 0.408248 / 1.6e-4 });
+	check('loop: the ideal phase shift balances at x0 = 1/sqrt(6) with |L| = 1', near(idealPs.magnitude, 1, 1e-6) && near(idealPs.omega * 1.6e-4, 0.408248, 1e-5));
+	// the balance gain: |L| = 1 exactly
+	const bal = solveBalance('ladder', { rc: 6450 * 10e-9, wt: WT, n: 3 }, { omega0: 0.408248 / (6450 * 10e-9), gain0: 29 });
+	const at = openLoop('ladder', { re: 0, im: bal.omega }, { rc: 6450 * 10e-9, wt: WT, n: 3, gain: bal.gain });
+	check('loop: solveBalance returns in phase with |L| = 1', bal.converged && near(Math.hypot(at.re, at.im), 1, 1e-8) && Math.abs(at.im) < 1e-8, `gain ${bal.gain.toFixed(4)} at ${(bal.omega / 2 / Math.PI).toFixed(2)} Hz`);
+	// the pole: growth sign follows the gain, and the quadrature grows only through the lag
+	const grow = solvePole('wien', { rc: 1.6e-4, wt: WT, gain: 3.12 }, { omega0: 1 / 1.6e-4 });
+	const decay = solvePole('wien', { rc: 1.6e-4, wt: WT, gain: 2.9 }, { omega0: 1 / 1.6e-4 });
+	check('pole: a Wien bridge above 3 grows and below 3 decays', grow.sigma > 0 && decay.sigma < 0, `${(100 * grow.growthPerCycle).toFixed(1)} % and ${(100 * decay.growthPerCycle).toFixed(1)} % per cycle`);
+	check('pole: 4 % excess on a Wien bridge grows about 46 % per cycle (Q of a third)', near(grow.growthPerCycle, Math.exp(2 * Math.PI * 0.06) - 1, 0.02), `${(100 * grow.growthPerCycle).toFixed(1)} %`);
+	const q = solvePole('quadrature', { rc: 1.6e-4, wt: WT, rho: 0 }, { omega0: 1 / 1.6e-4 });
+	const qIdeal = solvePole('quadrature', { rc: 1.6e-4, wt: 2 * Math.PI * 1e12, rho: 0 }, { omega0: 1 / 1.6e-4 });
+	check('pole: the quadrature loop grows only through the op-amp lag (+0.4 %/cycle at 1 kHz, LTspice +0.4 %)', q.growthPerCycle > 0.003 && q.growthPerCycle < 0.006 && Math.abs(qIdeal.growthPerCycle) < 1e-6, `${(100 * q.growthPerCycle).toFixed(2)} %, ideal ${qIdeal.growthPerCycle.toExponential(1)}`);
+	const qrho = solvePole('quadrature', { rc: 1.6e-4, wt: 2 * Math.PI * 1e12, rho: Math.log(1.1) / Math.PI }, { omega0: 1 / 1.6e-4 });
+	check('pole: Rn = R pi / ln(1.1) gives 10 % growth per cycle', near(qrho.growthPerCycle, 0.1, 1e-3), `${(100 * qrho.growthPerCycle).toFixed(2)} %`);
+	// retune lands the zero-phase frequency on target
+	const rt = retune('wien', { wt: WT, gain: 3.15 }, { fTarget: 55000, k: 1 });
+	const zr = zeroPhase('wien', { rc: rt.rc, wt: WT, gain: 3.15 }, { omega0: 1 / rt.rc });
+	check('retune: the Wien at 55 kHz lands on target after an 8 % smaller RC', rt.converged && rel(zr.omega / (2 * Math.PI), 55000, 1e-6) && rt.rc * 2 * Math.PI * 55000 < 0.93 && rt.rc * 2 * Math.PI * 55000 > 0.9, `RC ratio ${(rt.rc * 2 * Math.PI * 55000).toFixed(4)}`);
 }
 
-/* --------------------------------------- 2. designs and their limiters */
-const BASE = { frequency: 1000, amplitude: 3, gbw: 3e6, slewRate: 13e6, opampSwing: 10.5 };
-for (const t of TOPOLOGIES) {
-	const d = designOscillator({ ...BASE, topology: t.id });
-	check(`${t.id}: designs, frequency within rounding`, d !== null && Math.abs(d.f0Error) < 0.03, d ? `${d.f0.toFixed(1)} Hz (${(100 * d.f0Error).toFixed(2)} %)` : 'null');
-	check(`  limiter straddles the gain the loop needs`, d.limiter.regulates === true, `${d.limiter.gainStart.toFixed(2)} and ${d.limiter.gainLimited.toFixed(2)} around ${d.requiredGain.toFixed(2)}`);
-	check(`  amplitude lands near the target`, near(d.limiter.amplitudeActual, 3, 0.9), `${d.limiter.amplitudeActual.toFixed(2)} V for 3 V`);
-}
-for (const s of ['diodes', 'lamp', 'jfet']) {
-	const d = designOscillator({ ...BASE, topology: 'wien', stabilizer: s });
-	check(`wien + ${s}: designs with a gain of 3`, d !== null && near(d.requiredGain, 3, 1e-9), `parts ${Object.keys(d.parts).join(', ')}`);
+/* ------------------------------------ 3. the limiter against LTspice */
+{
+	const d = DIODES['1N4148'];
+	const a1 = feedbackLimiterAmplitude({ rf1: 15e3, rf2: 6.2e3, rt: 20e3, fraction: 2 / 3, diode: d });
+	const a2 = feedbackLimiterAmplitude({ rf1: 10e3, rf2: 18e3, rt: 20.08e3, fraction: 2.008 / 3.008, diode: d });
+	check('limiter: Wien 15k/6.2k settles near LTspice 2.63 V (the 0.6 V switch model said 3.08)', near(a1, 2.63, 0.1), `${a1.toFixed(3)} V`);
+	check('limiter: Wien 10k/18k settles near LTspice 1.34 V', near(a2, 1.34, 0.08), `${a2.toFixed(3)} V`);
+	check('limiter: a pair that cannot bring the gain down reports null', feedbackLimiterAmplitude({ rf1: 20e3, rf2: 2.4e3, rt: 20e3, fraction: 2 / 3, diode: d }) === null);
 }
 
-/* ------------------- 3. the exported netlist oscillates where it should */
-// Two separate properties, because they are two separate frequencies. The
-// design's f0 is the balance point, where the loop gain is exactly 1; with
-// the excess gain a real circuit needs to start, the poles sit slightly
-// off the axis and the STARTING oscillation runs at a different frequency
-// until the limiter pulls the gain back. So the frequency is checked at
-// balance, and the growth is checked with the excess the design ships.
-for (const t of TOPOLOGIES) {
-	for (const f of [200, 1000, 20000]) {
-		const bal = atBalance(designOscillator({ ...BASE, frequency: f, topology: t.id, gbw: 1e9, excessGain: 0 }));
-		const got = netlistFrequency(bal);
-		check(
-			`${t.id} at ${f} Hz: the netlist oscillates at the designed frequency`,
-			got !== null && near(got.f / bal.f0, 1, 0.003),
-			got ? `${got.f.toFixed(1)} Hz against ${bal.f0.toFixed(1)} Hz over ${got.cycles} cycles` : 'no oscillation'
-		);
-	}
-	const d = designOscillator({ ...BASE, topology: t.id });
-	const run = netlistFrequency(d);
-	check(`${t.id}: with the excess gain it ships, the amplitude builds`, run !== null && run.grew, run ? `start-up at ${run.f.toFixed(1)} Hz, ${((run.f / d.f0 - 1) * 100).toFixed(1)} % off the settled frequency` : 'no oscillation');
-}
-for (const s of ['lamp', 'jfet']) {
-	const d = atBalance(designOscillator({ ...BASE, topology: 'wien', stabilizer: s, excessGain: 0 }));
-	const got = netlistFrequency(d);
-	check(`wien + ${s}: the netlist oscillates at f0`, got !== null && near(got.f / d.f0, 1, 0.02), got ? `${got.f.toFixed(1)} Hz against ${d.f0.toFixed(1)} Hz` : 'no oscillation');
-}
-
-/* ------------------------------ 4. the .asc is the same circuit as the .cir */
-for (const t of TOPOLOGIES) {
-	const d = designOscillator({ ...BASE, topology: t.id });
-	const wanted = buildElements(d).filter((e) => e.kind !== 'LABEL');
-	const { elements: got, clashes, dangling } = parseSchematic(generateSchematic(d));
-	const problems = [...clashes, ...dangling];
-	if (got.length !== wanted.length) problems.push(`${got.length} symbols for ${wanted.length} elements`);
-	for (const w of wanted) {
-		const name = w.kind === 'J' ? w.name.replace(/^J/, '') : w.name;
-		const g = got.find((e) => e.name === name);
-		if (!g) {
-			problems.push(`${w.name} missing`);
-			continue;
+/* ------------------------------------------------ 4. every design */
+{
+	for (const f of [200, 1000, 20000, 55000]) {
+		for (const t of TOPOLOGIES) {
+			const stabs = t.id === 'wien' ? ['diodes', 'lamp', 'jfet'] : ['diodes'];
+			for (const s of stabs) {
+				const amplitude = f >= 20000 ? 1 : 3;
+				const d = designOscillator({ topology: t.id, stabilizer: s, frequency: f, amplitude });
+				const label = `${t.id}/${s} at ${f} Hz`;
+				if (!d) {
+					check(`design ${label} exists`, false);
+					continue;
+				}
+				const jfetTooSmall = s === 'jfet' && amplitude < 2;
+				const psTooFast = t.id === 'phaseShift' && f >= 55000;
+				// a loop that cannot start has no oscillation frequency to predict
+				if (!psTooFast) check(`design ${label}: predicted frequency within 2 % of the target`, rel(d.f0, f, 0.02), `${d.f0.toFixed(1)} Hz`);
+				check(`design ${label}: RC retuned against the op-amp's lag`, d.retunePercent <= 0 && d.retunePercent > -0.2, `${(100 * d.retunePercent).toFixed(2)} %`);
+				if (jfetTooSmall) {
+					check(`design ${label}: says the JFET cannot be controlled at this amplitude`, d.limiter.regulates === false && d.limiter.minAmplitude > amplitude);
+				} else if (psTooFast) {
+					// the loop may start, but at 38 degrees of amplifier lag the single-pole model is past what it can promise
+					check(`design ${label}: says this op-amp cannot be trusted here (lag ${d.opamp.lagDeg.toFixed(0)} degrees)`, d.opamp.opampOk === false && d.opamp.lagDeg > 25);
+				} else {
+					check(`design ${label}: starts and regulates`, d.starts === true && d.limiter.regulates === true && d.opamp.opampOk === true, `growth ${Number.isFinite(d.growthPerCycle) ? (100 * d.growthPerCycle).toFixed(1) + ' %' : 'n/a'}`);
+					check(`design ${label}: settles within 15 % of the amplitude asked for`, d.limiter.amplitudeActual !== null && rel(d.limiter.amplitudeActual, amplitude, 0.15), `${d.limiter.amplitudeActual?.toFixed(2)} V for ${amplitude}`);
+					if (d.limiter.kind === 'diodes') check(`design ${label}: excess gain between 1 and 12 %`, d.loopExcess > 0.01 && d.loopExcess < 0.12, `${(100 * d.loopExcess).toFixed(1)} %`);
+				}
+				check(`design ${label}: parts in stock ranges`, d.r >= 1000 && d.r <= 1e6 && d.c >= 100e-12 && d.c <= 1e-6);
+			}
 		}
-		if (g.kind !== w.kind) problems.push(`${w.name} is a ${g.kind}, expected ${w.kind}`);
-		if (g.nodes.join('|') !== w.nodes.join('|')) problems.push(`${w.name} wired ${g.nodes.join(',')} instead of ${w.nodes.join(',')}`);
-		if (w.kind === 'R' || w.kind === 'C') {
-			if (g.value !== spiceValue(w.value)) problems.push(`${w.name} reads ${g.value}, expected ${spiceValue(w.value)}`);
-		}
 	}
-	check(`${t.id}: .asc and .cir describe the same circuit`, problems.length === 0, problems.length ? problems.slice(0, 3).join('; ') : `${got.length} symbols`);
-	const cir = generateNetlist(d);
-	check(`  .cir carries the analysis and a start-up nudge`, /\.tran /.test(cir) && /\.ic V\(/.test(cir) && /\.four /.test(cir));
+	const w55 = designOscillator({ topology: 'wien', frequency: 55000, amplitude: 1 });
+	check('design: at 55 kHz the textbook Wien would run about 8 % low, which the retune removes', w55.uncompensatedError < -0.06 && w55.uncompensatedError > -0.1 && Math.abs(w55.f0Error) < 0.02, `${(100 * w55.uncompensatedError).toFixed(1)} % before, ${(100 * w55.f0Error).toFixed(2)} % after`);
+	const j111 = designOscillator({ topology: 'wien', stabilizer: 'jfet', jfet: 'J111', frequency: 1000, amplitude: 3 });
+	check('design: a J111 needs far more than 3 V to be controlled, and says so', j111.limiter.regulates === false && j111.limiter.minAmplitude > 8);
+	const j111big = designOscillator({ topology: 'wien', stabilizer: 'jfet', jfet: 'J111', frequency: 1000, amplitude: 9.5 });
+	check('design: the same J111 works at 9.5 V', j111big.limiter.regulates === true, `settles at ${j111big.limiter.amplitudeActual?.toFixed(2)} V`);
 }
 
-/* --------------------------------------------------------------- 5. KaTeX */
+/* ------------------------------------------ 5. the LTspice export */
+{
+	for (const f of [1000, 55000]) {
+		for (const t of TOPOLOGIES) {
+			const stabs = t.id === 'wien' ? ['diodes', 'lamp', 'jfet'] : ['diodes'];
+			for (const s of stabs) {
+				const d = designOscillator({ topology: t.id, stabilizer: s, frequency: f, amplitude: f >= 20000 ? 1 : 3 });
+				const label = `${t.id}/${s} at ${f} Hz`;
+				if (s === 'jfet' && f >= 20000) {
+					let threw = false;
+					try {
+						generateNetlist(d);
+					} catch {
+						threw = true;
+					}
+					check(`export ${label}: refused, since the AGC could not be sized`, threw);
+					continue;
+				}
+				const cir = generateNetlist(d);
+				const asc = generateSchematic(d);
+				const wanted = buildElements(d).filter((e) => e.kind !== 'LABEL');
+				const { elements: got, clashes, dangling, directives } = parseSchematic(asc);
+				const problems = [...clashes, ...dangling];
+				if (got.length !== wanted.length) problems.push(`${got.length} symbols for ${wanted.length} elements`);
+				const netOf = new Map();
+				const nodeOf = new Map();
+				for (const w of wanted) {
+					const g = got.find((e) => e.name === w.name);
+					if (!g) {
+						problems.push(`${w.name} missing`);
+						continue;
+					}
+					if (g.kind !== w.kind) problems.push(`${w.name} is a ${g.kind}`);
+					g.nodes.forEach((net, i) => {
+						const node = w.nodes[i];
+						if (netOf.has(net) && netOf.get(net) !== node) problems.push(`${w.name}: drawn net joins ${netOf.get(net)} and ${node}`);
+						if (nodeOf.has(node) && nodeOf.get(node) !== net) problems.push(`${w.name}: node ${node} split`);
+						netOf.set(net, node);
+						nodeOf.set(node, net);
+						if (!net.startsWith('_n') && net !== node) problems.push(`${w.name}: labelled ${net}, expected ${node}`);
+					});
+					if ((w.kind === 'R' || w.kind === 'C') && typeof w.value === 'number' && g.value !== spiceValue(w.value)) problems.push(`${w.name} reads ${g.value}`);
+					if (w.kind === 'C' && Number.isFinite(w.ic) && g.spiceLine !== `IC=${spiceValue(w.ic)}`) problems.push(`${w.name} initial condition missing`);
+				}
+				for (const m of new Set(wanted.filter((e) => e.model).map((e) => e.model))) if (!directives.some((l) => l.startsWith(`.model ${m} `))) problems.push(`no .model ${m}`);
+				if (!directives.includes('.lib opamp.sub')) problems.push('no .lib opamp.sub');
+				for (const line of cir.split('\n').filter((l) => /^\.(tran|four|meas|options|model|param R)/.test(l))) if (!directives.includes(line.trim())) problems.push(`.asc lacks ${line.trim().slice(0, 30)}`);
+				check(`export ${label}: the drawn .asc is the .cir, models and directives included`, problems.length === 0, problems.length ? problems.slice(0, 3).join('; ') : `${got.length} parts`);
+				check(`export ${label}: the run starts from an initial condition and reports fosc and vpk`, /\.tran .* uic/.test(cir) && /IC=/.test(cir) && /\.meas TRAN fosc/.test(cir) && /\.meas TRAN vpk/.test(cir));
+			}
+		}
+	}
+	const lamp = generateNetlist(designOscillator({ topology: 'wien', stabilizer: 'lamp', frequency: 1000, amplitude: 3 }));
+	check('export: the lamp is a resistor that heats up, started hot', /RLAMP nm 0 R=\{Rcold\*\(1\+alpha\*V\(theta\)\)\}/.test(lamp) && /BTH 0 theta I=/.test(lamp) && /CTH theta 0 .* IC=/.test(lamp) && /\.param Rcold=/.test(lamp));
+	const agc = generateNetlist(designOscillator({ topology: 'wien', stabilizer: 'jfet', frequency: 1000, amplitude: 3 }));
+	check('export: the AGC has its JFET model, the series leg and the averaging resistors', /\.model JX NJF/.test(agc) && /RSER nm jd/.test(agc) && /RX1 jg jd/.test(agc) && /D1 pk vout DX/.test(agc));
+	const quad = generateNetlist(designOscillator({ topology: 'quadrature', frequency: 1000, amplitude: 3 }));
+	check('export: the quadrature loop has Rn and the divider clamp into integrator 2', /RN vinv n2/.test(quad) && /RD1 vcos zt/.test(quad) && /D1 zt n2 DX/.test(quad) && /\.four .* V\(vcos\)/.test(quad));
+}
+
+/* -------------------------------------------- 6. explanations render */
 {
 	let n = 0;
 	let bad = 0;
-	for (const t of TOPOLOGIES) {
-		for (const s of t.id === 'wien' ? ['diodes', 'lamp', 'jfet'] : [null]) {
-			const d = designOscillator({ ...BASE, topology: t.id, ...(s ? { stabilizer: s } : {}) });
-			const slow = designOscillator({ ...BASE, topology: t.id, frequency: 200000, ...(s ? { stabilizer: s } : {}) });
-			for (const dd of [d, slow].filter(Boolean)) {
-				for (const b of [...explainBarkhausen(dd), ...explainTopology(dd), ...explainStabilizer(dd), ...explainOpampLimit(dd)]) {
+	for (const f of [1000, 55000]) {
+		for (const t of TOPOLOGIES) {
+			for (const s of t.id === 'wien' ? ['diodes', 'lamp', 'jfet'] : ['diodes']) {
+				const d = designOscillator({ topology: t.id, stabilizer: s, frequency: f, amplitude: f >= 20000 ? 1 : 3 });
+				for (const b of [...explainBarkhausen(d), ...explainTopology(d), ...explainStabilizer(d), ...explainOpampLimit(d)]) {
 					if (b.type === 'eq') {
 						n++;
 						try {
 							katex.renderToString(b.tex, { throwOnError: true, strict: 'error' });
 						} catch (e) {
 							bad++;
-							console.log('KATEX FAIL', t.id, b.tex.slice(0, 90), e.message);
+							console.log('KATEX FAIL', t.id, s, f, b.tex.slice(0, 90), e.message);
 						}
-					} else if (/undefined|NaN/.test(b.text)) {
+					} else if (/undefined|NaN|\bnull\b/.test(b.text)) {
 						bad++;
-						console.log('TEXT BAD', t.id, b.text.slice(0, 110));
+						console.log('TEXT BAD', t.id, s, f, b.text.slice(0, 110));
 					}
 				}
 			}
 		}
 	}
-	check(`explanations: ${n} equations render under strict KaTeX`, bad === 0, `${bad} failures`);
-}
-
-/* --------------------------------------------- the comparison and verdict */
-{
-	const rows = compareOscillators({ ...BASE, frequency: 55000 });
-	const wien = rows.find((r) => r.id === 'wien');
-	const ps = rows.find((r) => r.id === 'phaseShift');
-	check('comparison: the Wien bridge asks the least of the op-amp', wien.gain < ps.gain && wien.fMax > ps.fMax, `gain ${wien.gain} vs ${ps.gain}, ceiling ${(wien.fMax / 1000).toFixed(0)} kHz vs ${(ps.fMax / 1000).toFixed(0)} kHz`);
-	check('comparison: at 55 kHz a TL08x rules the phase-shift versions out', !ps.gbwOk && wien.gbwOk, `phase shift ratio ${ps.gbwRatio.toFixed(2)}, wien ${wien.gbwRatio.toFixed(2)}`);
-	const quad = rows.find((r) => r.id === 'quadrature');
-	check('comparison: quadrature reaches highest and gives two outputs', quad.fMax >= wien.fMax && quad.outputs === 'quadrature', `ceiling ${(quad.fMax / 1000).toFixed(0)} kHz`);
-}
-
-/* ------------------------------------------------- the formula sheet page */
-{
+	check(`explanations: ${n} equations render under strict KaTeX, no placeholders`, bad === 0, `${bad} failures`);
 	const src = readFileSync(new URL('../src/routes/(site)/tools/oscillator/formulas/+page.svelte', import.meta.url), 'utf8');
-	// the sheet's tex are template literals, so a pair of backslashes in the
-	// source is one backslash in the string KaTeX actually receives
 	const found = [...src.matchAll(/tex=\{`([\s\S]*?)`\}/g)].map((m) => m[1].replace(/\\\\/g, '\\'));
-	let bad = 0;
+	let sheetBad = 0;
 	for (const tex of found) {
 		try {
 			katex.renderToString(tex, { throwOnError: true, strict: 'error' });
 		} catch (e) {
-			bad++;
+			sheetBad++;
 			console.log('KATEX FAIL (sheet)', tex.slice(0, 90), e.message);
 		}
 	}
-	check(`formula sheet: ${found.length} equations render under strict KaTeX`, found.length > 30 && bad === 0, `${bad} failures`);
-	// every topology's constant and required gain has to be stated there
-	for (const needle of ['sqrt{6}', 'A = 29', 'A = 3', 'A = 1', 'Barkhausen', 'SLOA060']) {
+	check(`formula sheet: ${found.length} equations render under strict KaTeX`, found.length > 30 && sheetBad === 0, `${sheetBad} failures`);
+	for (const needle of ['sqrt{6}', 'A = 29', 'Barkhausen', 'SLOA060', 'describing function', 'R_n', 'wt', 'retune']) {
 		check(`formula sheet mentions ${needle}`, src.includes(needle));
 	}
+}
+
+/* --------------------------------------------- the comparison and verdict */
+{
+	const rows = compareOscillators({ frequency: 55000, amplitude: 1 });
+	const wien = rows.find((r) => r.id === 'wien');
+	const ps = rows.find((r) => r.id === 'phaseShift');
+	const quad = rows.find((r) => r.id === 'quadrature');
+	check('comparison: the Wien bridge asks the least of the op-amp', wien.gain < ps.gain && Math.abs(wien.uncompensatedError) < Math.abs(ps.uncompensatedError), `untuned ${(100 * wien.uncompensatedError).toFixed(1)} % vs ${(100 * ps.uncompensatedError).toFixed(1)} %`);
+	check('comparison: at 55 kHz a TL08x rules the single phase shift out, not the Wien', !ps.opampOk && wien.starts && wien.opampOk, `phase shift lag ${ps.lagDeg.toFixed(0)} degrees, Wien ${wien.lagDeg.toFixed(1)}`);
+	check('comparison: quadrature gives two outputs and starts', quad.outputs === 'quadrature' && quad.starts);
 }
 
 console.log(fails === 0 ? 'oscillator checks clean' : `${fails} failure(s)`);

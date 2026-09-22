@@ -113,7 +113,7 @@ export function buildWienDiagram(design) {
 	const legSymbols = [Rg, gndRg];
 	const legLabels = [
 		label(
-			stabilizer === 'lamp' ? `lamp, hot ${formatOhms(limiter.lampHot)}` : stabilizer === 'jfet' ? `Rg1 ${formatOhms(parts.rg1)} (with the AGC leg)` : `Rg ${formatOhms(design.rg)}`,
+			stabilizer === 'lamp' ? `lamp, hot ${formatOhms(limiter.lampHot)}` : stabilizer === 'jfet' ? (limiter.regulates ? `Rser ${formatOhms(parts.rSeries)} + channel` : 'Rser + channel') : `Rg ${formatOhms(design.rg)}`,
 			Rg.ports['1'].x + 14,
 			(Rg.ports['1'].y + Rg.ports['2'].y) / 2,
 			{ anchor: 'start' }
@@ -253,7 +253,9 @@ export function buildLadderDiagram(design) {
  * Quadrature: two integrators and an inverter in a loop. Each integrator
  * turns the signal by 90 degrees, so the two integrator outputs are a
  * sine and a cosine of the same amplitude, and the inverter supplies the
- * remaining 180 degrees to close the loop.
+ * remaining 180 degrees to close the loop. Rn, from the inverter output
+ * into the second integrator's input, is what makes the loop start; the
+ * clamp that stops it is drawn on its own by buildClampDiagram.
  */
 export function buildQuadratureDiagram(design) {
 	const y0 = 200;
@@ -265,11 +267,13 @@ export function buildQuadratureDiagram(design) {
 	let src = { x: startX, y: y0 };
 	let rail = y0;
 	const outs = [];
+	const nodes = [];
 
 	for (let k = 1; k <= 2; k++) {
 		const R = placeSymbol('resistor_right', src.x + 70, rail, SCALE);
 		if (k === 1) rail = R.ports['1'].y;
 		const node = R.ports['2'];
+		nodes.push(node);
 		net.wire({ x: src.x, y: rail }, R.ports['1']);
 		const amp = placeSymbol('opamp_no_power_right', node.x + 120, rail - 0.09 * SCALE, SCALE);
 		const gnd = placeSymbol('ground_down', amp.ports.inp1.x - 45 - 0.01 * SCALE, amp.ports.inp1.y + 46 + 0.29 * SCALE, SCALE);
@@ -295,6 +299,20 @@ export function buildQuadratureDiagram(design) {
 		src = out;
 		rail = out.y;
 	}
+
+	// Rn: from the loop's return (the inverter output) up a column above
+	// the second integrator's input node, then down into it
+	const n2 = nodes[1];
+	const cRail2 = symbols[7].ports['1'].y;
+	const Rn = placeSymbol('resistor_down', n2.x, cRail2 - 150 + HANG.resistor_down * SCALE, SCALE);
+	const topRail = Rn.ports['1'].y - 40;
+	net.wire(Rn.ports['2'], { x: n2.x, y: cRail2 });
+	net.wire(Rn.ports['1'], { x: n2.x, y: topRail });
+	net.wire({ x: n2.x, y: topRail }, { x: startX, y: topRail });
+	net.wire({ x: startX, y: topRail }, { x: startX, y: y0 });
+	svgs.push(Rn.svg);
+	symbols.push(Rn);
+	labels.push(label(`Rn ${formatOhms(design.parts.rn)}`, Rn.ports['1'].x + 14, (Rn.ports['1'].y + Rn.ports['2'].y) / 2, { anchor: 'start' }), label('starts the loop', Rn.ports['1'].x + 14, (Rn.ports['1'].y + Rn.ports['2'].y) / 2 + 16, { anchor: 'start', cls: 'lbl note' }));
 
 	// the inverter, on its own row below, closing the loop back to the start
 	const invRowY = y0 + 250;
@@ -323,14 +341,106 @@ export function buildQuadratureDiagram(design) {
 	svgs.push(Ra.svg, inv.svg, gndI.svg, Rb.svg);
 	symbols.push(Ra, inv, gndI, Rb);
 	labels.push(
-		label(`Ra ${formatOhms(design.rg)}`, Ra.ports['1'].x, invRail - 16, { anchor: 'start' }),
-		label(`Rb ${formatOhms(design.limiter.rf)}`, Rb.ports['1'].x, rbRail + 26, { anchor: 'start' }),
-		label('inverter, closing the loop', inv.ports.out.x - 10, invRail - 70, { anchor: 'start', cls: 'lbl note' })
+		label(`Ra ${formatOhms(design.parts.ra)}`, Ra.ports['1'].x, invRail - 16, { anchor: 'start' }),
+		label(`Rb ${formatOhms(design.parts.rb)}`, Rb.ports['1'].x, rbRail + 26, { anchor: 'start' }),
+		label('inverter, gain exactly 1, closing the loop', inv.ports.out.x - 10, invRail - 70, { anchor: 'start', cls: 'lbl note' })
 	);
 
 	const all = [...svgs, net.svg(), net.dots(portPoints(...symbols)), ...labels];
-	const top = y0 - 180;
+	const top = topRail - 40;
 	return { svg: all.join(''), viewBox: `0 ${top} ${outs[1].x + 120} ${backY + 60 - top}` };
+}
+
+/**
+ * The clamp that holds the quadrature loop's amplitude, around its second
+ * integrator: Rn brings in the negative damping that starts the loop, and
+ * a divider from the integrator output with anti-parallel diodes into the
+ * same input adds positive damping once the tap reaches a diode drop. The
+ * amplitude parks where the two cancel, and since the diode current is
+ * integrated before it reaches either output, what little distortion it
+ * makes is filtered on the way.
+ */
+export function buildClampDiagram(design) {
+	const { parts } = design;
+	const y0 = 160;
+	const net = createNet();
+	const R2 = placeSymbol('resistor_right', MARGIN + 110, y0, SCALE);
+	const rail = R2.ports['1'].y;
+	const vsin = { x: MARGIN + 30, y: rail };
+	const n2 = R2.ports['2'];
+	net.wire(vsin, R2.ports['1']);
+	const amp = placeSymbol('opamp_no_power_right', n2.x + 150, rail - 0.09 * SCALE, SCALE);
+	const gnd = placeSymbol('ground_down', amp.ports.inp1.x - 45 - 0.01 * SCALE, amp.ports.inp1.y + 46 + 0.29 * SCALE, SCALE);
+	const vcos = { x: amp.ports.out.x + 70, y: amp.ports.out.y };
+	// the input wire is split where the diode column joins it
+	const tee = { x: n2.x + 45, y: rail };
+	net.wire(n2, tee);
+	net.wire(tee, amp.ports.inp2);
+	elbowH(net, amp.ports.inp1, gnd.ports['1']);
+	net.wire(amp.ports.out, vcos);
+	const C = placeSymbol('capacitor_right', (n2.x + vcos.x) / 2, y0 - 110, SCALE);
+	const cRail = C.ports['1'].y;
+	net.wire(n2, { x: n2.x, y: cRail });
+	net.wire({ x: n2.x, y: cRail }, C.ports['1']);
+	net.wire(C.ports['2'], { x: vcos.x, y: cRail });
+	net.wire({ x: vcos.x, y: cRail }, vcos);
+
+	// the divider hangs from the cosine output; the tap feeds the diodes
+	const Rd1 = placeSymbol('resistor_down', vcos.x, vcos.y + 60 + HANG.resistor_down * SCALE, SCALE);
+	net.wire(vcos, Rd1.ports['1']);
+	const tap = Rd1.ports['2'];
+	const Rd2 = placeSymbol('resistor_down', tap.x, tap.y + 50 + HANG.resistor_down * SCALE, SCALE);
+	const gndD = placeSymbol('ground_down', Rd2.ports['2'].x - 0.01 * SCALE, Rd2.ports['2'].y + 0.29 * SCALE, SCALE);
+	net.wire(tap, Rd2.ports['1']);
+	net.wire(Rd2.ports['2'], gndD.ports['1']);
+	// two diode rails between the column under the input tee and a column
+	// next to the divider tap; the bridge sits below the op-amp's ground
+	const leftX = tee.x;
+	const rightX = tap.x - 45;
+	const upY = tap.y - 10;
+	const dnY = tap.y + 50;
+	net.wire(tap, { x: rightX, y: tap.y });
+	net.wire({ x: rightX, y: tap.y }, { x: rightX, y: upY });
+	net.wire({ x: rightX, y: tap.y }, { x: rightX, y: dnY });
+	const D1 = placeSymbol('diode_left', (leftX + rightX) / 2, upY, SCALE); // tap -> input node
+	const D2 = placeSymbol('diode_right', (leftX + rightX) / 2, dnY, SCALE); // input node -> tap
+	net.wire({ x: rightX, y: upY }, D1.ports['1']);
+	net.wire(D1.ports['2'], { x: leftX, y: upY });
+	net.wire({ x: rightX, y: dnY }, D2.ports['2']);
+	net.wire(D2.ports['1'], { x: leftX, y: dnY });
+	net.wire({ x: leftX, y: upY }, tee);
+	net.wire({ x: leftX, y: upY }, { x: leftX, y: dnY });
+	// Rn continues down the same column to the inverter output
+	const Rn = placeSymbol('resistor_down', leftX, dnY + 40 + HANG.resistor_down * SCALE, SCALE);
+	net.wire({ x: leftX, y: dnY }, Rn.ports['1']);
+	const rnBottom = { x: leftX, y: Rn.ports['2'].y + 40 };
+	net.wire(Rn.ports['2'], rnBottom);
+
+	const all = [
+		R2.svg,
+		amp.svg,
+		gnd.svg,
+		C.svg,
+		Rn.svg,
+		Rd1.svg,
+		Rd2.svg,
+		gndD.svg,
+		D1.svg,
+		D2.svg,
+		net.svg(),
+		net.dots(portPoints(R2, amp, gnd, C, Rn, Rd1, Rd2, gndD, D1, D2)),
+		label('sine in', vsin.x, rail - 14, { anchor: 'start' }),
+		label(`R ${formatOhms(design.r)}`, R2.ports['1'].x - 10, rail + 26, { anchor: 'start' }),
+		label(`C ${formatFarads(design.c)}`, C.ports['1'].x, cRail - 14, { anchor: 'start' }),
+		label('cosine out', vcos.x + 8, vcos.y - 14, { anchor: 'start' }),
+		label(`Rn ${formatOhms(parts.rn)}`, Rn.ports['1'].x + 14, (Rn.ports['1'].y + Rn.ports['2'].y) / 2, { anchor: 'start' }),
+		label('from the inverter output', rnBottom.x + 10, rnBottom.y + 6, { anchor: 'start' }),
+		label(`Rd1 ${formatOhms(parts.rd1)}`, Rd1.ports['1'].x + 14, (Rd1.ports['1'].y + Rd1.ports['2'].y) / 2, { anchor: 'start' }),
+		label(`Rd2 ${formatOhms(parts.rd2)}`, Rd2.ports['1'].x + 14, (Rd2.ports['1'].y + Rd2.ports['2'].y) / 2, { anchor: 'start' }),
+		label(`parks at about ${(design.limiter.amplitudeActual ?? 0).toFixed(2)} V peak`, leftX + 14, rnBottom.y - 30, { anchor: 'start', cls: 'lbl note' })
+	];
+	const top = cRail - 40;
+	return { svg: all.join(''), viewBox: `0 ${top} ${vcos.x + 140} ${rnBottom.y + 60 - top}` };
 }
 
 /**
@@ -342,7 +452,7 @@ export function buildQuadratureDiagram(design) {
  */
 export function buildLimiterDiagram(design) {
 	const { limiter } = design;
-	const rf1 = limiter.kind === 'diodes' && design.topology === 'wien' ? design.parts.rf1 : limiter.rf - limiter.rf2;
+	const rf1 = limiter.rf1;
 	const rf2 = limiter.rf2;
 	const y0 = 150;
 	const net = createNet();
@@ -385,7 +495,7 @@ export function buildLimiterDiagram(design) {
 		label(design.topology === 'wien' ? 'to the - input' : 'to Vout', right.x + 8, rail + 4, { anchor: 'start' }),
 		label(`Rf1 ${formatOhms(rf1)}`, R1.ports['1'].x, rail + 26, { anchor: 'start' }),
 		label(`Rf2 ${formatOhms(rf2)}`, R2.ports['1'].x, rail + 26, { anchor: 'start' }),
-		label(`clamps at about ${limiter.amplitudeActual.toFixed(2)} V peak`, D2.ports['2'].x - 30, dnY + 34, { anchor: 'start', cls: 'lbl note' })
+		label(limiter.amplitudeActual === null ? 'cannot regulate with these parts' : `settles at about ${limiter.amplitudeActual.toFixed(2)} V peak`, D2.ports['2'].x - 30, dnY + 34, { anchor: 'start', cls: 'lbl note' })
 	];
 	return { svg: all.join(''), viewBox: `0 ${upY - 60} ${right.x + 60} ${dnY + 80 - (upY - 60)}` };
 }
@@ -403,72 +513,95 @@ export function hasLimiterDiagram(design) {
 }
 
 /**
- * The JFET automatic gain control, on its own. The channel sits in the
- * lower feedback leg in series with Rg2, in parallel with Rg1, so opening
- * or closing it moves the amplifier's gain. What opens and closes it is
- * the peak detector on the left: the output's negative swings pull the
- * gate down through D1 and charge Cdet, so a larger output means a more
- * negative gate, a narrower channel and less gain. Nothing in the signal
- * path ever clips, which is why this measures cleaner than diode limiting.
+ * The JFET automatic gain control, on its own. The channel sits in
+ * series with Rser as the amplifier's lower feedback leg, so closing it
+ * raises the gain and opening it lowers the gain all the way to 1. What
+ * sets it is the peak detector on the left: D1 charges Cdet to the
+ * output's negative peak, the divider Ra Rb scales that, and the two
+ * equal resistors Rx average it with the drain voltage into the gate,
+ * which cancels the channel's curvature so it behaves as a plain
+ * resistor. Nothing in the signal path ever clips.
  */
 export function buildAgcDiagram(design) {
 	const { parts } = design;
-	const y0 = 200;
+	const y0 = 220;
 	const net = createNet();
+	const svgs = [];
+	const symbols = [];
+	const labels = [];
 
-	// peak detector: Rdet and D1 from the output to the gate, Cdet and the
-	// bleed resistor holding it
-	const Rdet = placeSymbol('resistor_right', MARGIN + 120, y0, SCALE);
-	const rail = Rdet.ports['1'].y;
-	const src = { x: MARGIN + 30, y: rail };
-	const gateNode = { x: Rdet.ports['2'].x + 90, y: rail };
-	net.wire(src, Rdet.ports['1']);
-	net.wire(Rdet.ports['2'], gateNode);
-	// D1 bridges the same pair on a rail above, its body clear of both drops
-	const dY = rail - 90;
-	const D1 = placeSymbol('diode_left', (src.x + gateNode.x) / 2, dY, SCALE);
-	net.wire(src, { x: src.x, y: dY });
-	net.wire({ x: src.x, y: dY }, D1.ports['2']);
-	net.wire(D1.ports['1'], { x: gateNode.x, y: dY });
-	net.wire({ x: gateNode.x, y: dY }, gateNode);
-	const Cdet = placeSymbol('capacitor_down', gateNode.x, gateNode.y + HANG.capacitor_down * SCALE, SCALE);
+	// detector rail: vout on the left, D1 pointing at it (current leaves the
+	// peak node on negative swings), the peak node, Ra to the divider tap
+	const src = { x: MARGIN + 30, y: y0 };
+	const D1 = placeSymbol('diode_left', src.x + 90, y0, SCALE);
+	const rail = D1.ports['1'].y;
+	net.wire({ x: src.x, y: rail }, D1.ports['2']);
+	const pk = { x: D1.ports['1'].x + 50, y: rail };
+	net.wire(D1.ports['1'], pk);
+	const Cdet = placeSymbol('capacitor_down', pk.x, pk.y + HANG.capacitor_down * SCALE, SCALE);
 	const gC = placeSymbol('ground_down', Cdet.ports['2'].x - 0.01 * SCALE, Cdet.ports['2'].y + 0.29 * SCALE, SCALE);
-	net.wire(gateNode, Cdet.ports['1']);
+	net.wire(pk, Cdet.ports['1']);
 	net.wire(Cdet.ports['2'], gC.ports['1']);
+	svgs.push(D1.svg, Cdet.svg, gC.svg);
+	symbols.push(D1, Cdet, gC);
+	labels.push(label('from Vout', src.x, rail - 16, { anchor: 'start' }), label('D1', D1.ports['2'].x + 6, rail - 16, { anchor: 'start' }), label(`Cdet ${formatFarads(parts.cDet)}`, Cdet.ports['1'].x + 14, rail + 46, { anchor: 'start' }));
 
-	// the controlled leg: Rg2 down into the channel, source to ground
-	const legX = gateNode.x + 230;
-	const legTop = { x: legX, y: rail - 70 };
-	const Rg2 = placeSymbol('resistor_down', legX, legTop.y + HANG.resistor_down * SCALE, SCALE);
-	net.wire(legTop, Rg2.ports['1']);
-	const jfet = placeSymbol('njfet_transistor_horz', Rg2.ports['2'].x - 0.28 * SCALE, Rg2.ports['2'].y + 70 + 0.55 * SCALE, SCALE);
-	net.wire(Rg2.ports['2'], jfet.ports.drain);
+	let tapNode = pk;
+	if (parts.ra > 0) {
+		const Ra = placeSymbol('resistor_right', pk.x + 80, y0, SCALE);
+		net.wire(pk, Ra.ports['1']);
+		tapNode = { x: Ra.ports['2'].x + 50, y: rail };
+		net.wire(Ra.ports['2'], tapNode);
+		svgs.push(Ra.svg);
+		symbols.push(Ra);
+		labels.push(label(`Ra ${formatOhms(parts.ra)}`, Ra.ports['1'].x, rail - 16, { anchor: 'start' }));
+	} else {
+		tapNode = { x: pk.x + 130, y: rail };
+		net.wire(pk, tapNode);
+	}
+	const Rb = placeSymbol('resistor_down', tapNode.x, tapNode.y + HANG.resistor_down * SCALE, SCALE);
+	const gB = placeSymbol('ground_down', Rb.ports['2'].x - 0.01 * SCALE, Rb.ports['2'].y + 0.29 * SCALE, SCALE);
+	net.wire(tapNode, Rb.ports['1']);
+	net.wire(Rb.ports['2'], gB.ports['1']);
+	svgs.push(Rb.svg, gB.svg);
+	symbols.push(Rb, gB);
+	labels.push(label(`Rb ${formatOhms(parts.rb)}`, Rb.ports['1'].x + 14, (Rb.ports['1'].y + Rb.ports['2'].y) / 2 + 8, { anchor: 'start' }));
+
+	// Rx2 on to the gate node; the JFET to its right with its gate on the rail
+	const Rx2 = placeSymbol('resistor_right', tapNode.x + 100, y0, SCALE);
+	net.wire(tapNode, Rx2.ports['1']);
+	const gateNode = { x: Rx2.ports['2'].x + 50, y: rail };
+	net.wire(Rx2.ports['2'], gateNode);
+	const probe = placeSymbol('njfet_transistor_horz', 0, 0, SCALE);
+	const jfet = placeSymbol('njfet_transistor_horz', gateNode.x + 45 - probe.ports.gate.x, rail - probe.ports.gate.y, SCALE);
+	net.wire(gateNode, jfet.ports.gate);
 	const gS = placeSymbol('ground_down', jfet.ports.source.x - 0.01 * SCALE, jfet.ports.source.y + 0.29 * SCALE, SCALE);
 	net.wire(jfet.ports.source, gS.ports['1']);
-	// gate across from the detector
-	const gateX = gateNode.x + 70;
-	net.wire(gateNode, { x: gateX, y: rail });
-	net.wire({ x: gateX, y: rail }, { x: gateX, y: jfet.ports.gate.y });
-	net.wire({ x: gateX, y: jfet.ports.gate.y }, jfet.ports.gate);
+	// the drain node sits well above the JFET: Rser goes on up to the
+	// amplifier's - input, and Rx1 comes across from the gate column
+	const drain = jfet.ports.drain;
+	const drainTop = { x: drain.x, y: rail - 130 };
+	net.wire(drain, drainTop);
+	const Rser = placeSymbol('resistor_down', drain.x, drainTop.y - 110 + HANG.resistor_down * SCALE, SCALE);
+	net.wire(Rser.ports['2'], drainTop);
+	const legTop = { x: drain.x, y: Rser.ports['1'].y - 30 };
+	net.wire(Rser.ports['1'], legTop);
+	const Rx1 = placeSymbol('resistor_down', gateNode.x, rail - 110 + HANG.resistor_down * SCALE, SCALE);
+	net.wire(Rx1.ports['2'], gateNode);
+	net.wire(Rx1.ports['1'], { x: gateNode.x, y: drainTop.y });
+	net.wire({ x: gateNode.x, y: drainTop.y }, drainTop);
+	svgs.push(Rx2.svg, jfet.svg, gS.svg, Rser.svg, Rx1.svg);
+	symbols.push(Rx2, jfet, gS, Rser, Rx1);
+	labels.push(
+		label(`Rx ${formatOhms(parts.rx)}`, Rx2.ports['1'].x, rail - 16, { anchor: 'start' }),
+		label(`Rx ${formatOhms(parts.rx)}`, Rx1.ports['1'].x - 14, (Rx1.ports['1'].y + Rx1.ports['2'].y) / 2, { anchor: 'end' }),
+		label(`Rser ${formatOhms(parts.rSeries)}`, Rser.ports['1'].x + 14, (Rser.ports['1'].y + Rser.ports['2'].y) / 2, { anchor: 'start' }),
+		label('to the - input', legTop.x + 10, legTop.y - 6, { anchor: 'start' }),
+		label('channel resistance follows the gate', drain.x + 40, rail + 6, { anchor: 'start', cls: 'lbl note' })
+	);
 
-	const all = [
-		Rdet.svg,
-		D1.svg,
-		Cdet.svg,
-		gC.svg,
-		Rg2.svg,
-		jfet.svg,
-		gS.svg,
-		net.svg(),
-		net.dots(portPoints(Rdet, D1, Cdet, gC, Rg2, jfet, gS)),
-		label('from Vout', src.x, rail + 26, { anchor: 'start' }),
-		label(`Rdet ${formatOhms(parts.rDet)}`, Rdet.ports['1'].x, rail - 16, { anchor: 'start' }),
-		label('D1', D1.ports['1'].x + 10, dY - 14, { anchor: 'start' }),
-		label(`Cdet ${formatFarads(parts.cDet)}`, Cdet.ports['1'].x - 14, (Cdet.ports['1'].y + Cdet.ports['2'].y) / 2, { anchor: 'end' }),
-		label('to the - input', legTop.x - 10, legTop.y - 14, { anchor: 'start' }),
-		label(`Rg2 ${formatOhms(parts.rg2)}`, Rg2.ports['1'].x + 14, (Rg2.ports['1'].y + Rg2.ports['2'].y) / 2, { anchor: 'start' }),
-		label('channel resistance follows the gate', jfet.ports.drain.x + 20, jfet.ports.drain.y + 20, { anchor: 'start', cls: 'lbl note' })
-	];
-	const top = dY - 60;
-	return { svg: all.join(''), viewBox: `0 ${top} ${legX + 320} ${gS.ports['1'].y + 70 - top}` };
+	const all = [...svgs, net.svg(), net.dots(portPoints(...symbols)), ...labels];
+	const top = legTop.y - 40;
+	const bottom = Math.max(gS.ports['1'].y, gB.ports['1'].y, gC.ports['1'].y) + 70;
+	return { svg: all.join(''), viewBox: `0 ${top} ${drain.x + 320} ${bottom - top}` };
 }

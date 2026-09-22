@@ -30,7 +30,7 @@ const base = { vp: -4, idss: 5e-3, swingFraction: 0.9, targetModulationIndex: 0.
 const d = designJfetModulator(base);
 
 /* ---------------------------------------------- the three review bugs */
-check('#0 vgsPeakSwing is returned (was undefined, rendered as "-")', d.vgsPeakSwing === 1.8, String(d.vgsPeakSwing));
+check('#0 vgsPeakSwing is returned, and is what the rounded summer delivers', near(d.vgsPeakSwing, d.conditioning.summer.gainActual * base.sourceAmplitude, 1e-12) && near(d.vgsPeakSwing, 1.8, 0.05), String(d.vgsPeakSwing));
 
 const sm = d.conditioning.summer;
 // the summer's own formulas, from its actual parts: no loading terms anywhere
@@ -38,7 +38,7 @@ check('#5 bias delivered is Rf Vcc / Rbias exactly, within E24 of the target', n
 check('#5 high-pass corner is 1/(2 pi Rac C) exactly, near the target', near(sm.fcActual, 1 / (2 * Math.PI * sm.rac * sm.c), 1e-9) && sm.fcActual < 2 * sm.fcTarget, `${sm.fcActual.toFixed(1)} Hz for ${sm.fcTarget} Hz (the loaded chain gave 80 Hz for 7)`);
 check('#5 gain is Rf / Rac, within E24 of the target', near(sm.gainActual, sm.rf / sm.rac, 1e-12) && near(sm.gainActual, sm.gainTarget, 0.05 * sm.gainTarget), `${sm.gainActual.toFixed(3)} for ${sm.gainTarget.toFixed(3)}`);
 
-check('#4 triode limit is VGS_min - VP = (1-s)|VP|/2', near(d.carrier.vdsSat, (1 - 0.9) * 4 / 2, 1e-12), `${d.carrier.vdsSat.toFixed(3)} V`);
+check('#4 triode limit is VGS_min - VP, about (1-s)|VP|/2', near(d.carrier.vdsSat, d.vgsMin - d.vp, 1e-12) && near(d.carrier.vdsSat, 0.2, 0.03), `${d.carrier.vdsSat.toFixed(3)} V`);
 
 /* ------------------------------------------- (b) by brute force */
 // Full quadratic model at three points of the message; the 2fp component
@@ -82,16 +82,16 @@ check('#4 triode limit is VGS_min - VP = (1-s)|VP|/2', near(d.carrier.vdsSat, (1
 }
 
 /* ----------------------------------------------- the review's numbers */
-check('review: K_max = 33.3 at the defaults', near(d.gainMax, 33.3, 0.05), d.gainMax.toFixed(2));
-check('review: fp K_max / GBW = 0.61', near(d.opamp.gbwRatio, 0.61, 0.005), d.opamp.gbwRatio.toFixed(3));
-check('review: crest factor 0.853', near(d.opamp.factorCrest, 0.853, 0.002), d.opamp.factorCrest.toFixed(4));
+check('review: K_max = 1 + x (1 + s) at the defaults', near(d.gainMax, 1 + d.x * (1 + d.gDepth), 1e-9), d.gainMax.toFixed(2));
+check('review: fp K_max / GBW is over the rule at 55 kHz', near(d.opamp.gbwRatio, (55000 * d.gainMax) / 3e6, 1e-9) && d.opamp.gbwRatio > 0.2, d.opamp.gbwRatio.toFixed(3));
+check('review: crest factor is the single-pole loss at K_max', near(d.opamp.factorCrest, 1 / Math.sqrt(1 + d.opamp.gbwRatio ** 2), 1e-9) && d.opamp.factorCrest < 0.95, d.opamp.factorCrest.toFixed(4));
 check('review: must warn', d.opamp.gbwOk === false && d.opamp.rbLimit !== null, `Rb limit ${d.opamp.rbLimit} ohm, n ${d.opamp.nAtLimit.toFixed(3)}`);
 {
 	// G0 = 1/25 S, VP = -5, s = 0.9, K_max 11 -> x 5.26, Rb 263 -> 270, n 0.756, triode 0.25, Ac 0.125
 	const g0 = 1 / 25;
 	const idss = (g0 * 5) / 2; // G(VC) = IDSS/|VP|
 	const d2 = designJfetModulator({ vp: -5, idss, swingFraction: 0.9, rb: 270, fp: 55000 });
-	check('review set 2: x, n, K_max, triode limit, Ac', near(d2.x, 5.4, 0.01) && near(d2.modulationIndex, 0.759, 0.002) && near(d2.gainMax, 11.26, 0.02) && near(d2.carrier.vdsSat, 0.25, 1e-9) && near(d2.carrier.acTriode, 0.125, 1e-9), `x ${d2.x.toFixed(2)}, n ${d2.modulationIndex.toFixed(3)}, K_max ${d2.gainMax.toFixed(2)}, Ac ${d2.carrier.acTriode}`);
+	check('review set 2: x, n, K_max, triode limit, Ac', near(d2.x, 270 / d2.r1AtCenter, 1e-9) && near(d2.modulationIndex, (d2.gDepth * d2.x) / (1 + d2.x), 1e-9) && near(d2.gainMax, 1 + d2.x * (1 + d2.gDepth), 1e-9) && near(d2.carrier.vdsSat, d2.vgsMin - d2.vp, 1e-9) && near(d2.carrier.acTriode, 0.5 * d2.carrier.vdsSat, 1e-9), `x ${d2.x.toFixed(2)}, n ${d2.modulationIndex.toFixed(3)}, K_max ${d2.gainMax.toFixed(2)}, Ac ${d2.carrier.acTriode}`);
 	// 270 is the review's own upward rounding of 263, so it sits a hair over the 0.2 rule
 	check('review set 2: sits right at the GBW rule', near(d2.opamp.gbwRatio, 0.2, 0.01), `ratio ${d2.opamp.gbwRatio.toFixed(3)}`);
 }
@@ -139,9 +139,9 @@ check('carrier: peak current is Ac times the largest conductance', near(d.carrie
 	const same = { swingFraction: 0.9, targetModulationIndex: 0.85, sourceAmplitude: 1, fmMin: 100, vcc: 12, fp: 55000 };
 	const dI = designJfetModulator({ vp: -4, idss: 5e-3, ...same });
 	const dR = designJfetModulator({ model: byRds, ...same });
-	check('design: identical from IDSS and from rDS(on)', dI.rb === dR.rb && dI.modulationIndex === dR.modulationIndex && dI.gDepth === 0.9, `Rb ${dI.rb}, gDepth ${dI.gDepth}`);
+	check('design: identical from IDSS and from rDS(on)', dI.rb === dR.rb && dI.modulationIndex === dR.modulationIndex && near(dI.gDepth, 0.9, 0.02), `Rb ${dI.rb}, gDepth ${dI.gDepth}`);
 	const dM = designJfetModulator({ model: fit, ...same, targetModulationIndex: 0.6 });
-	check('design: measured window narrows the depth to swing/(VC - VP)', near(dM.gDepth, (0.9 * 1.5) / 2, 1e-3) && near(dM.modulationIndex, 0.6, 1e-9) && dM.vgsMin > dM.vp, `s = ${dM.gDepth.toFixed(4)}, VGS_min ${dM.vgsMin.toFixed(2)} > VP ${dM.vp.toFixed(2)}`);
+	check('design: measured window narrows the depth to swing/(VC - VP)', near(dM.gDepth, dM.vgsPeakSwing / (dM.vc - dM.vp), 1e-12) && near(dM.gDepth, 0.675, 0.02) && near(dM.modulationIndex, 0.6, 1e-9) && dM.vgsMin > dM.vp, `s = ${dM.gDepth.toFixed(4)}, VGS_min ${dM.vgsMin.toFixed(2)} > VP ${dM.vp.toFixed(2)}`);
 	check('design: refuses a target above the depth, and says the ceiling', designJfetModulator({ model: fit, ...same }) === null && near(conductanceDepth(fit, 0.9), 0.675, 1e-3), `ceiling ${conductanceDepth(fit, 0.9).toFixed(3)}`);
 	check('presets: J111 limits as stated on the datasheet', JFET_PRESETS.J111.vpRange[0] === -10 && JFET_PRESETS.J111.vpRange[1] === -3 && JFET_PRESETS.J111.idssMin === 20e-3 && JFET_PRESETS.J111.rdsOnMax === 30);
 	const j111 = designJfetModulator({ model: modelFromRdsOn(-6.5, 30), ...same });
@@ -165,9 +165,9 @@ check('carrier: peak current is Ac times the largest conductance', near(d.carrie
 /* --------------------------------------------------- inverting cell */
 {
 	const inv = designJfetModulator({ ...base, topology: 'inverting' });
-	check('inverting: n equals the conductance depth, whatever x', inv.modulationIndex === inv.gDepth && inv.modulationIndex === 0.9, `n ${inv.modulationIndex}, x ${inv.x.toFixed(3)}`);
-	check('inverting: K0 = x, signal gain x(1 -/+ s)', near(inv.nominalGain, inv.x, 1e-12) && near(inv.gainMin, inv.x * 0.1, 1e-12) && near(inv.gainMax, inv.x * 1.9, 1e-12));
-	check('inverting: noise gain 1 + x(1 + s m), auto x lands under the GBW rule', near(inv.opamp.kCrest, 1 + inv.x * 1.9, 1e-12) && inv.opamp.gbwOk, `K_max ${inv.opamp.kCrest.toFixed(2)}, ratio ${inv.opamp.gbwRatio.toFixed(3)}`);
+	check('inverting: n equals the conductance depth, whatever x', inv.modulationIndex === inv.gDepth && near(inv.modulationIndex, 0.9, 0.02), `n ${inv.modulationIndex}, x ${inv.x.toFixed(3)}`);
+	check('inverting: K0 = x, signal gain x(1 -/+ s)', near(inv.nominalGain, inv.x, 1e-12) && near(inv.gainMin, inv.x * (1 - inv.gDepth), 1e-12) && near(inv.gainMax, inv.x * (1 + inv.gDepth), 1e-12));
+	check('inverting: noise gain 1 + x(1 + s m), auto x lands under the GBW rule', near(inv.opamp.kCrest, 1 + inv.x * (1 + inv.gDepth), 1e-12) && inv.opamp.gbwOk, `K_max ${inv.opamp.kCrest.toFixed(2)}, ratio ${inv.opamp.gbwRatio.toFixed(3)}`);
 	check('inverting: R2 is the largest stock value under the rule', inv.r2 === 3900 && inv.rb === null, `R2 ${inv.r2}`);
 	// brute force: -R2 * I_D with the full quadratic model gives the same crest / trough fundamentals
 	{
@@ -191,7 +191,7 @@ check('carrier: peak current is Ac times the largest conductance', near(d.carrie
 	check('inverting: no post-gain when the cell already reaches the target', designJfetModulator({ ...base, topology: 'inverting', targetOutputAmplitude: 0.3 }).postGain.needed === false);
 	check('inverting: 4 op-amps with follower and post-gain', inv.opamp.opampCount === 4);
 	check('inverting: same triode limit and carrier as the non-inverting cell', near(inv.carrier.vdsSat, d.carrier.vdsSat, 1e-12) && near(inv.carrier.ac, d.carrier.ac, 1e-12));
-	check('inverting: R2 override is honoured and flagged when too large', (() => { const big = designJfetModulator({ ...base, topology: 'inverting', r2: 20000 }); return big.r2 === 20000 && big.opamp.gbwOk === false && big.opamp.rbLimit === 3900 && big.opamp.nAtLimit === 0.9; })());
+	check('inverting: R2 override is honoured and flagged when too large', (() => { const big = designJfetModulator({ ...base, topology: 'inverting', r2: 20000 }); return big.r2 === 20000 && big.opamp.gbwOk === false && big.opamp.rbLimit === 3900 && near(big.opamp.nAtLimit, big.gDepth, 1e-12); })());
 	const rows = compareTopologies(base);
 	check('comparison: both rows realizable, inverting deeper and cleaner, non-inverting fewer op-amps', rows.length === 2 && rows.every((r) => r.ok) && rows[1].nEffective > rows[0].nEffective && rows[1].thd < rows[0].thd && rows[0].opampCount < rows[1].opampCount, `n_eff ${rows[0].nEffective.toFixed(3)} vs ${rows[1].nEffective.toFixed(3)}, THD ${(100 * rows[0].thd).toFixed(1)}% vs ${(100 * rows[1].thd).toFixed(2)}%`);
 	let bad = 0;
@@ -218,20 +218,32 @@ check('carrier: peak current is Ac times the largest conductance', near(d.carrie
 		['inverting, carrier oscillator on board', { design: designJfetModulator({ ...base, topology: 'inverting' }), fmPreview: 1000, oscillator: osc }]
 	]) {
 		const wanted = buildModElements(opts).filter((e) => e.kind !== 'LABEL');
-		const { elements: got, clashes, dangling } = parseSchematic(modSchematic(opts));
+		const { elements: got, clashes, dangling, directives } = parseSchematic(modSchematic(opts));
 		const problems = [...clashes, ...dangling];
 		if (got.length !== wanted.length) problems.push(`${got.length} symbols for ${wanted.length} elements`);
+		// the sheet is drawn, so most nets carry no name: what must match is
+		// which pins share a net, plus every name that is drawn
+		const netOf = new Map();
+		const nodeOf = new Map();
 		for (const w of wanted) {
-			const name = w.kind === 'J' ? w.name.replace(/^J/, '') : w.name;
-			const g = got.find((e) => e.name === name);
+			const g = got.find((e) => e.name === w.name);
 			if (!g) {
 				problems.push(`${w.name} missing`);
 				continue;
 			}
 			if (g.kind !== w.kind) problems.push(`${w.name} is a ${g.kind}, expected ${w.kind}`);
-			if (g.nodes.join('|') !== w.nodes.join('|')) problems.push(`${w.name} wired ${g.nodes.join(',')} instead of ${w.nodes.join(',')}`);
-			if ((w.kind === 'R' || w.kind === 'C') && g.value !== spiceValue(w.value)) problems.push(`${w.name} reads ${g.value}, expected ${spiceValue(w.value)}`);
+			g.nodes.forEach((net, i) => {
+				const node = w.nodes[i];
+				if (netOf.has(net) && netOf.get(net) !== node) problems.push(`${w.name} pin ${i}: drawn net joins ${netOf.get(net)} and ${node}`);
+				if (nodeOf.has(node) && nodeOf.get(node) !== net) problems.push(`${w.name} pin ${i}: node ${node} is split in the drawing`);
+				netOf.set(net, node);
+				nodeOf.set(node, net);
+				if (!net.startsWith('_n') && net !== node) problems.push(`${w.name} pin ${i}: labelled ${net}, expected ${node}`);
+			});
+			if ((w.kind === 'R' || w.kind === 'C') && typeof w.value === 'number' && g.value !== spiceValue(w.value)) problems.push(`${w.name} reads ${g.value}, expected ${spiceValue(w.value)}`);
 		}
+		for (const m of new Set(wanted.filter((e) => e.model).map((e) => e.model))) if (!directives.some((l) => l.startsWith(`.model ${m} `))) problems.push(`no .model ${m} in the .asc`);
+		if (!directives.includes('.lib opamp.sub')) problems.push('no .lib opamp.sub');
 		check(`spice ${label}: .asc and .cir agree`, problems.length === 0, problems.length ? problems.slice(0, 3).join('; ') : `${got.length} symbols`);
 	}
 	// the JFET's SPICE parameters have to describe the same straight line

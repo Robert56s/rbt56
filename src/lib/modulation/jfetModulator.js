@@ -109,6 +109,8 @@ function envelopeStats(envelopeOf) {
 	const trough = envelopeOf(-1);
 	return {
 		effectiveModulationIndex: (crest - trough) / (crest + trough),
+		crest,
+		trough,
 		thd: fundamental > 0 ? Math.sqrt(harmonicsSq) / fundamental : 0
 	};
 }
@@ -144,10 +146,54 @@ export function designJfetModulator({
 	const beta = m.beta;
 	const G = (v) => beta * (v - vp);
 
-	// bias point and swing: halfway along the ohmic range by default, or
-	// the middle of the measured window when the line was fitted
-	const vc = m.vc;
-	const vgsPeakSwing = swingFraction * m.halfRange;
+	// bias point and swing wanted: halfway along the ohmic range by
+	// default, or the middle of the measured window when the line was fitted
+	const vcTarget = m.vc;
+	const swingTarget = swingFraction * m.halfRange;
+
+	// --- gate drive: one inverting summer does gain, DC blocking and bias ---
+	// Vout = -(Rf/Rac) xm - (Rf/Rbias) Vcc. The - input is a virtual ground,
+	// so the source sees Rac, the bias weight is Rf/Rbias exactly, and the
+	// coupling capacitor's corner is 1/(2 pi Rac C) with nothing in
+	// parallel to move it. It is designed first because its rounded parts
+	// deliver a bias and a swing a few percent off the targets, and every
+	// number below (conductance depth, modulation index, triode margin) is
+	// worth stating for the gate drive the circuit actually gets.
+	const series = SERIES[resistorSeries];
+	const gainTarget = swingTarget / sourceAmplitude;
+	const biasTarget = Math.abs(vcTarget);
+	// Rf is free, so it is chosen from the series (4.7 k to 47 k) as the
+	// value that lets Rac and Rbias both round closest to their targets:
+	// with Rf = 10 k a 2 V bias from 12 V wants 60 k, and the nearest E24
+	// value 62 k costs 3 % of bias, where 20 k wants 120 k, which exists
+	const pickRf = () => {
+		let best = null;
+		for (const cand of seriesValues(series, 3, 4)) {
+			if (cand < 4700 || cand > 47_000) continue;
+			const racC = nearestInSeries(cand / gainTarget, series);
+			const rbiasC = nearestInSeries((cand * vcc) / biasTarget, series);
+			const err = Math.abs(Math.log(cand / racC / gainTarget)) + Math.abs(Math.log((cand * vcc) / rbiasC / biasTarget));
+			if (!best || err < best.err - 1e-12) best = { rf: cand, err };
+		}
+		return best.rf;
+	};
+	const rf = pickRf();
+	const racTarget = rf / gainTarget;
+	const rac = nearestInSeries(racTarget, series);
+	const gainActual = rf / rac;
+	const rbiasTarget = (rf * vcc) / biasTarget;
+	const rbias = nearestInSeries(rbiasTarget, series);
+	const biasActual = -(rf * vcc) / rbias;
+	const fcTarget = fmMin / 10;
+	const cTarget = 1 / (2 * Math.PI * rac * fcTarget);
+	const c = nearestCap(cTarget);
+	const fcActual = 1 / (2 * Math.PI * rac * c);
+	const outMin = biasActual - gainActual * sourceAmplitude; // most negative gate voltage delivered
+	const headroomOk = Math.abs(outMin) <= opampSwing;
+
+	// what the gate really gets
+	const vc = biasActual;
+	const vgsPeakSwing = gainActual * sourceAmplitude;
 	const vgsMin = vc - vgsPeakSwing; // closest to VP (largest R1)
 	const vgsMax = vc + vgsPeakSwing; // closest to 0 (smallest R1)
 	if (!(vgsMin > vp)) return null; // the swing would pinch the channel off
@@ -163,7 +209,6 @@ export function designJfetModulator({
 	const gDepth = vgsPeakSwing / (vc - vp);
 	const inverting = topology === 'inverting';
 
-	const series = SERIES[resistorSeries];
 	const bandwidthFactor = (k) => {
 		const r = (fp * k) / gbw;
 		return 1 / Math.sqrt(1 + r * r);
@@ -211,27 +256,6 @@ export function designJfetModulator({
 		gainMax = 1 + rbActual / r1Min;
 		noiseGain = (mm) => 1 + x * (1 + gDepth * mm);
 	}
-
-	// --- gate drive: one inverting summer does gain, DC blocking and bias ---
-	// Vout = -(Rf/Rac) xm - (Rf/Rbias) Vcc. The - input is a virtual ground,
-	// so the source sees Rac, the bias weight is Rf/Rbias exactly, and the
-	// coupling capacitor's corner is 1/(2 pi Rac C) with nothing in
-	// parallel to move it.
-	const rf = 10_000;
-	const gainTarget = vgsPeakSwing / sourceAmplitude;
-	const racTarget = rf / gainTarget;
-	const rac = nearestInSeries(racTarget, series);
-	const gainActual = rf / rac;
-	const biasTarget = Math.abs(vc);
-	const rbiasTarget = (rf * vcc) / biasTarget;
-	const rbias = nearestInSeries(rbiasTarget, series);
-	const biasActual = -(rf * vcc) / rbias;
-	const fcTarget = fmMin / 10;
-	const cTarget = 1 / (2 * Math.PI * rac * fcTarget);
-	const c = nearestCap(cTarget);
-	const fcActual = 1 / (2 * Math.PI * rac * c);
-	const outMin = biasActual - gainActual * sourceAmplitude; // most negative gate voltage delivered
-	const headroomOk = Math.abs(outMin) <= opampSwing;
 
 	// --- carrier path: how large the carrier may be ---
 	// (a) triode: VDS <= VGS - VP at the most negative gate swing. In both
@@ -324,6 +348,10 @@ export function designJfetModulator({
 	const factorCrest = bandwidthFactor(kCrest);
 	const signalGain = inverting ? (mm) => (x * (1 + gDepth * mm)) / (1 + sourceImpedance * G(vc) * (1 + gDepth * mm)) : (mm) => 1 + x * (1 + gDepth * mm);
 	const stats = envelopeStats((mm) => signalGain(mm) * bandwidthFactor(noiseGain(mm)));
+	// what a scope or a peak detector reads: the V_DS^2 term adds the same
+	// DC and 2 f_p component to every carrier peak, crest and trough alike,
+	// so the index measured from the peaks is a little below the envelope's
+	const peakModulationIndex = (stats.crest - stats.trough) / (stats.crest + stats.trough + (4 * tone2fp) / ac);
 	const gbwRatio = (fp * kCrest) / gbw; // fp * K_max / GBW, keep under 0.2
 	const gbwOk = gbwRatio <= 0.2;
 	// non-inverting: the largest Rb that lands on the rule, and the n it leaves.
@@ -346,7 +374,9 @@ export function designJfetModulator({
 		swingFraction,
 		gDepth,
 		vc,
+		vcTarget,
 		vgsPeakSwing,
+		swingTarget,
 		vgsMin,
 		vgsMax,
 		r1AtCenter,
@@ -401,6 +431,7 @@ export function designJfetModulator({
 			factorNominal,
 			factorCrest,
 			effectiveModulationIndex: stats.effectiveModulationIndex,
+			peakModulationIndex,
 			thd: stats.thd,
 			gbwRatio,
 			gbwOk,
