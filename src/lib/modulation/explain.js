@@ -420,8 +420,9 @@ export function explainOpampLimits(design) {
 /* ------------------------------------------------------------------------ */
 
 export function explainDiodeModulator(design) {
-	const { fp, fmMax, sidebandMargin, bandwidth, q, inductance, capacitance, resistance, f0Actual, qActual, bwActual, requiredBias, diodeVf } = design;
+	const { fp, fmMax, sidebandMargin, bandwidth, q, inductance, capacitance, capacitors, cTarget, resistance, rTarget, bandwidthNeeded, f0Actual, qActual, bwActual, bandLow, bandHigh, sidebandsInBand, requiredBias, diodeVf } = design;
 	const w0 = 2 * Math.PI * fp;
+	const capPair = Array.isArray(capacitors) && capacitors.length === 2 ? `${formatFarads(capacitors[0])} \\parallel ${formatFarads(capacitors[1])}` : formatFarads(capacitance);
 	return [
 		p(
 			'This modulator has no amplifier with a variable gain. It relies on a fact about any curved (nonlinear) component: push two frequencies through it together and new frequencies come out. A diode is strongly curved, and its curve is smooth, so around the bias point it can be approximated by a polynomial (a Taylor expansion):'
@@ -452,16 +453,24 @@ export function explainDiodeModulator(design) {
 		),
 		eq('\\Delta\\omega = \\dfrac{1}{RC} \\ \\Rightarrow\\ BW = \\dfrac{f_0}{Q}, \\qquad Q = \\omega_0 R C = R\\sqrt{\\dfrac{C}{L}}'),
 		p(
-			`Design: the tank must let both sidebands through, so its bandwidth must cover ±f_m,max around f_p, with some margin (${n2(sidebandMargin)} here) so the sideband edges are not already attenuated. That fixes Q. A practical inductor is chosen, C follows from the resonance, R from Q, each rounded to a preferred value:`
+			`Design: the tank must let both sidebands through, so its bandwidth must cover ±f_m,max around f_p, with some margin (${n2(sidebandMargin)} here) so the sideband edges are not already attenuated. That fixes Q. A practical inductor is chosen and C follows from the resonance. One standard capacitor rarely lands close enough: a few percent off moves the whole band by more than the margin and drops a sideband. So C is built as two standard capacitors in parallel, which lands within a fraction of a percent:`
 		),
 		eq(`BW = 2 \\times ${n2(sidebandMargin)} \\times ${formatHz(fmMax)} = ${formatHz(bandwidth)}, \\qquad Q = \\dfrac{f_p}{BW} = \\dfrac{${formatHz(fp)}}{${formatHz(bandwidth)}} = ${n2(q)}`),
 		eq(
-			`C = \\dfrac{1}{\\omega_0^2 L} = \\dfrac{1}{(2\\pi \\times ${fp})^2 \\times ${formatHenries(inductance)}} = ${formatFarads(1 / (w0 * w0 * inductance))} \\rightarrow ${formatFarads(capacitance)}`
+			`C = \\dfrac{1}{\\omega_0^2 L} = \\dfrac{1}{(2\\pi \\times ${fp})^2 \\times ${formatHenries(inductance)}} = ${formatFarads(cTarget ?? 1 / (w0 * w0 * inductance))} \\rightarrow ${capPair} = ${formatFarads(capacitance)}`
+		),
+		p(
+			'R sets the bandwidth, which for a parallel tank is 1/(2πRC) whatever L is. The band is widened by what detuning the capacitors left, so both sidebands keep their margin, and R is rounded down in its series, since a smaller R only widens the band:'
 		),
 		eq(
-			`R = \\dfrac{Q}{\\omega_0 C} = \\dfrac{${n2(q)}}{2\\pi \\times ${fp} \\times ${formatFarads(capacitance)}} = ${formatOhms(q / (w0 * capacitance))} \\rightarrow ${formatOhms(resistance)}`
+			`BW' = BW + 2\\,|f_0 - f_p| = ${formatHz(bandwidthNeeded ?? bandwidth)}, \\qquad R = \\dfrac{1}{2\\pi\\,BW'\\,C} = \\dfrac{1}{2\\pi \\times ${formatHz(bandwidthNeeded ?? bandwidth)} \\times ${formatFarads(capacitance)}} = ${formatOhms(rTarget ?? 1 / (2 * Math.PI * bandwidth * capacitance))} \\rightarrow ${formatOhms(resistance)}`
 		),
-		eq(`f_0\\text{ actual} = ${formatHz(f0Actual)}, \\qquad Q\\text{ actual} = \\omega_0 R C = ${n2(qActual)}, \\qquad BW\\text{ actual} = ${formatHz(bwActual)}`),
+		eq(`f_0\\text{ actual} = ${formatHz(f0Actual)}, \\qquad Q\\text{ actual} = R\\sqrt{\\dfrac{C}{L}} = ${n2(qActual)}, \\qquad BW\\text{ actual} = \\dfrac{1}{2\\pi R C} = ${formatHz(bwActual)}`),
+		p(
+			sidebandsInBand === false
+				? `The band runs from ${formatHz(bandLow)} to ${formatHz(bandHigh)}, which does not hold both sidebands at ${formatHz(fp - fmMax)} and ${formatHz(fp + fmMax)}: a larger sideband margin fixes it.`
+				: `The band runs from ${formatHz(bandLow)} to ${formatHz(bandHigh)}, holding both sidebands at ${formatHz(fp - fmMax)} and ${formatHz(fp + fmMax)} with room to spare.`
+		),
 		p(
 			'The DC bias is what keeps the diode on its curve: if the summed voltage ever dropped below the forward threshold, the diode would switch off and the polynomial would no longer describe it. The worst instant is when the carrier and the message peak together:'
 		),

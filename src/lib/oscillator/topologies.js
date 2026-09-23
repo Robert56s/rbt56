@@ -265,7 +265,7 @@ function sizeStabilizer({ topology, stabilizer, requiredGain, excessGain, r, c, 
 				parts = { ...parts, rf };
 				limiter = { kind: 'jfet', rf, gainStart: NaN, gainLimited: 1, amplitudeActual: null, regulates: false, minAmplitude: agc.minAmplitude, rdsOn: agc.rdsOn, jfet: jfet.id };
 			} else {
-				const settle = agcAmplitude({ rf, rSeries: agc.rSeries, ra: agc.ra, rb: agc.rb, gBalance: requiredGain, jfet, diode });
+				const settle = agcAmplitude({ rf, rSeries: agc.rSeries, ra: agc.ra, rb: agc.rb, rx: agc.rx, gBalance: requiredGain, jfet, diode });
 				// the detector's time constant must be long next to one cycle
 				const tauTarget = 50 / frequency;
 				const cDet = pickCapacitor(tauTarget / (agc.ra + agc.rb), capacitors);
@@ -504,7 +504,12 @@ export function designOscillator({
 	const tapAmplitude = amplitude * sectionLoss;
 
 	/* ---- what the op-amp is asked for, and what it does to the loop */
-	const gainForLag = Number.isFinite(startGain) ? startGain : requiredGain;
+	// the gain the stage runs at once the wave has settled: a lamp or a JFET
+	// starts far above it (a cold lamp at 7) and the lag that sets the
+	// frequency is the one at the running gain; the diode string's start
+	// gain is within a few percent of it and is kept as the worst case
+	const running = limiter?.kind === 'lamp' || limiter?.kind === 'jfet';
+	const gainForLag = !running && Number.isFinite(startGain) ? startGain : requiredGain;
 	const noiseGain = kind === 'wien' ? gainForLag : kind === 'ladder' ? 1 + gainForLag : 2;
 	const closedLoopBw = gbw / noiseGain;
 	const gbwRatio = (f0 * noiseGain) / gbw;
@@ -596,6 +601,9 @@ export function compareOscillators(params) {
 					idealGain: d.idealGain,
 					growthPerCycle: d.growthPerCycle,
 					starts: d.starts,
+					// a JFET control that cannot be sized at this amplitude stops the
+					// loop, not the op-amp: the row says so instead of "does not start"
+					jfetMinAmplitude: d.limiter.kind === 'jfet' && !d.limiter.regulates ? d.limiter.minAmplitude : null,
 					opamps: d.opamps,
 					outputs: d.outputs,
 					thd: d.thd,

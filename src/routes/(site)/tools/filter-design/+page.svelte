@@ -1,6 +1,10 @@
 <script>
 	import { onMount } from 'svelte';
 	import BasicsPanel from '$lib/components/BasicsPanel.svelte';
+	import OrderOnSpecDemo from '$lib/components/basics/OrderOnSpecDemo.svelte';
+	import RcOnSpecDemo from '$lib/components/basics/RcOnSpecDemo.svelte';
+	import StagesMultiplyDemo from '$lib/components/basics/StagesMultiplyDemo.svelte';
+	import TwoTonesDemo from '$lib/components/basics/TwoTonesDemo.svelte';
 	import BodePlot from '$lib/components/BodePlot.svelte';
 	import CircuitDiagram from '$lib/components/CircuitDiagram.svelte';
 	import { filterBasics } from '$lib/filter/basics';
@@ -415,21 +419,50 @@
 		return sweep(realizedStages, fp / 50, fs * 10, 240);
 	});
 
+	// Amax and Amin are measured from the top of the passband. For a
+	// Butterworth that top is the DC gain, 0 dB. A Chebyshev is built from
+	// stages of unity DC gain, so an even-order one ripples between 0 dB and
+	// +Amax (and a band type can stack the ripple of its two sides): measured
+	// from 0 dB its stopband would look Amax short when it meets the spec.
+	// So for a Chebyshev the reference is the highest gain in the passband.
+	const passbandPeakDb = $derived.by(() => {
+		if (!design || realizedStages.length === 0 || response !== 'chebyshev') return 0;
+		const gainDb = (f) =>
+			filterType === 'bandstop' ? magnitudePhaseAtParallelSum(bandStopBranches, f, combineSigns).db : magnitudePhaseAt(realizedStages, f).db;
+		const ranges =
+			filterType === 'lowpass'
+				? [[fp / 100, fp]]
+				: filterType === 'highpass'
+					? [[fp, fp * 100]]
+					: filterType === 'bandpass'
+						? [[fl, fh]]
+						: [
+								[fl / 100, fl],
+								[fh, fh * 100]
+							];
+		let peak = 0;
+		for (const [a, b] of ranges) {
+			if (!(a > 0 && b > a)) continue;
+			for (let i = 0; i <= 400; i++) peak = Math.max(peak, gainDb(a * (b / a) ** (i / 400)));
+		}
+		return peak;
+	});
+
 	const attenuationAtFs = $derived.by(() => {
 		if (!design || realizedStages.length === 0 || isBandType) return null;
-		return -magnitudePhaseAt(realizedStages, fs).db;
+		return passbandPeakDb - magnitudePhaseAt(realizedStages, fs).db;
 	});
 
 	const attenuationAtFsl = $derived.by(() => {
 		if (!design || realizedStages.length === 0 || !isBandType) return null;
-		if (filterType === 'bandstop') return -magnitudePhaseAtParallelSum(bandStopBranches, fsl, combineSigns).db;
-		return -magnitudePhaseAt(realizedStages, fsl).db;
+		if (filterType === 'bandstop') return passbandPeakDb - magnitudePhaseAtParallelSum(bandStopBranches, fsl, combineSigns).db;
+		return passbandPeakDb - magnitudePhaseAt(realizedStages, fsl).db;
 	});
 
 	const attenuationAtFsh = $derived.by(() => {
 		if (!design || realizedStages.length === 0 || !isBandType) return null;
-		if (filterType === 'bandstop') return -magnitudePhaseAtParallelSum(bandStopBranches, fsh, combineSigns).db;
-		return -magnitudePhaseAt(realizedStages, fsh).db;
+		if (filterType === 'bandstop') return passbandPeakDb - magnitudePhaseAtParallelSum(bandStopBranches, fsh, combineSigns).db;
+		return passbandPeakDb - magnitudePhaseAt(realizedStages, fsh).db;
 	});
 
 	// Passband side of the spec: the realized filter may lose at most Amax dB
@@ -437,19 +470,19 @@
 	// eps^(-1/n) cutoff scaling in stages.js is there to guarantee.
 	const attenuationAtFp = $derived.by(() => {
 		if (!design || realizedStages.length === 0 || isBandType) return null;
-		return -magnitudePhaseAt(realizedStages, fp).db;
+		return passbandPeakDb - magnitudePhaseAt(realizedStages, fp).db;
 	});
 
 	const attenuationAtFl = $derived.by(() => {
 		if (!design || realizedStages.length === 0 || !isBandType) return null;
-		if (filterType === 'bandstop') return -magnitudePhaseAtParallelSum(bandStopBranches, fl, combineSigns).db;
-		return -magnitudePhaseAt(realizedStages, fl).db;
+		if (filterType === 'bandstop') return passbandPeakDb - magnitudePhaseAtParallelSum(bandStopBranches, fl, combineSigns).db;
+		return passbandPeakDb - magnitudePhaseAt(realizedStages, fl).db;
 	});
 
 	const attenuationAtFh = $derived.by(() => {
 		if (!design || realizedStages.length === 0 || !isBandType) return null;
-		if (filterType === 'bandstop') return -magnitudePhaseAtParallelSum(bandStopBranches, fh, combineSigns).db;
-		return -magnitudePhaseAt(realizedStages, fh).db;
+		if (filterType === 'bandstop') return passbandPeakDb - magnitudePhaseAtParallelSum(bandStopBranches, fh, combineSigns).db;
+		return passbandPeakDb - magnitudePhaseAt(realizedStages, fh).db;
 	});
 
 	// The ideal Butterworth design sits exactly at Amax at fp, so any excess
@@ -709,7 +742,41 @@
 		{/if}
 	</section>
 
-	<BasicsPanel blocks={filterBasics({ filterType, response, topology, order: isBandType ? (orderLp ?? 0) + (orderHp ?? 0) : order, stages: realizedStages.length })} />
+	<BasicsPanel
+		title="Start here"
+		summary="New to filters: what this page is about, with a little maths and four figures to move"
+		minutes={5}
+		blocks={filterBasics({
+			filterType,
+			response,
+			topology,
+			order: isBandType ? (orderLp ?? 0) + (orderHp ?? 0) : order,
+			stages: realizedStages.length,
+			fp,
+			fs,
+			amaxDb,
+			aminDb,
+			fl,
+			fh,
+			fsl,
+			fsh,
+			lpFp,
+			lpFs,
+			k,
+			design,
+			realizedStages,
+			bandStopBranches,
+			combineSigns,
+			attenuationAtFs,
+			attenuationAtFp,
+			attenuationAtFsl,
+			attenuationAtFsh,
+			attenuationAtFl,
+			attenuationAtFh,
+			stock
+		})}
+		widgets={{ 'two-tones': TwoTonesDemo, 'rc-on-spec': RcOnSpecDemo, 'order-on-spec': OrderOnSpecDemo, 'stages-multiply': StagesMultiplyDemo }}
+	/>
 
 	{#if valid}
 		{#if isBandType}
@@ -1073,7 +1140,7 @@
 					<p class="note">
 						The search now rounds to those values only, so the f0 and Q error columns below grow.
 						Everything downstream is computed from the rounded values, so the Bode plot and the
-						spec check at the end already tell you whether the result still meets the spec.
+						spec check at the end already show whether the result still meets the spec.
 					</p>
 				{/if}
 
@@ -1375,9 +1442,17 @@
 					points={bodePoints}
 					passbandFreqs={isBandType ? [fl, fh] : [fp]}
 					stopbandFreqs={isBandType ? [fsl, fsh] : [fs]}
-					{amaxDb}
-					{aminDb}
+					amaxDb={amaxDb - passbandPeakDb}
+					aminDb={aminDb - passbandPeakDb}
 				/>
+				{#if passbandPeakDb > 0.05}
+					<p class="note">
+						The passband rises to +{passbandPeakDb.toFixed(2)} dB: a Chebyshev built from stages of unity gain ripples above 0 dB
+						{isBandType ? 'where the ripples of its two sides meet' : 'when its order is even'}. The spec's limits are measured from
+						that top, so the amber Amax and Amin lines and the figures below sit {passbandPeakDb.toFixed(2)} dB higher than they would
+						from 0 dB.
+					</p>
+				{/if}
 				<div class="legend">
 					<span><i class="line blue"></i>simulated response (rounded components)</span>
 					<span

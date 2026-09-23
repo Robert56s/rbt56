@@ -104,7 +104,8 @@ const WT = 2 * Math.PI * 3e6;
 		for (const t of TOPOLOGIES) {
 			const stabs = t.id === 'wien' ? ['diodes', 'lamp', 'jfet'] : ['diodes'];
 			for (const s of stabs) {
-				const amplitude = f >= 20000 ? 1 : 3;
+				// the generic JFET holds about 3.1 V at least, so it is tried at 4 V
+				const amplitude = f >= 20000 ? 1 : s === 'jfet' ? 4 : 3;
 				const d = designOscillator({ topology: t.id, stabilizer: s, frequency: f, amplitude });
 				const label = `${t.id}/${s} at ${f} Hz`;
 				if (!d) {
@@ -134,8 +135,42 @@ const WT = 2 * Math.PI * 3e6;
 	check('design: at 55 kHz the textbook Wien would run about 8 % low, which the retune removes', w55.uncompensatedError < -0.06 && w55.uncompensatedError > -0.1 && Math.abs(w55.f0Error) < 0.02, `${(100 * w55.uncompensatedError).toFixed(1)} % before, ${(100 * w55.f0Error).toFixed(2)} % after`);
 	const j111 = designOscillator({ topology: 'wien', stabilizer: 'jfet', jfet: 'J111', frequency: 1000, amplitude: 3 });
 	check('design: a J111 needs far more than 3 V to be controlled, and says so', j111.limiter.regulates === false && j111.limiter.minAmplitude > 8);
-	const j111big = designOscillator({ topology: 'wien', stabilizer: 'jfet', jfet: 'J111', frequency: 1000, amplitude: 9.5 });
-	check('design: the same J111 works at 9.5 V', j111big.limiter.regulates === true, `settles at ${j111big.limiter.amplitudeActual?.toFixed(2)} V`);
+	// The minimum counts the start-up margin: the channel at balance must
+	// leave the leg 3 % short of balance with the channel open. Below it the
+	// old sizing still "regulated", but at 12.9 V whatever was asked.
+	const j111min = j111.limiter.minAmplitude;
+	const j111big = designOscillator({ topology: 'wien', stabilizer: 'jfet', jfet: 'J111', frequency: 1000, amplitude: Math.ceil(j111min + 0.5), opampSwing: 15 });
+	check(
+		`design: the same J111 holds ${Math.ceil(j111min + 0.5)} V, just above its ${j111min.toFixed(1)} V minimum, within 3 %`,
+		j111big.limiter.regulates === true && Math.abs(j111big.limiter.amplitudeActual / Math.ceil(j111min + 0.5) - 1) < 0.03,
+		`settles at ${j111big.limiter.amplitudeActual?.toFixed(2)} V`
+	);
+	// The detector's drop is the diode's at its pulse current, about 30
+	// times the average (LTspice: 0.48 V at 3.26 V out). With it, and the
+	// averaging resistors loading the divider, the generic JFET cannot hold
+	// 3 V with a start-up margin: it asks for about 3.1 V, and at 3.5, 4,
+	// 5 and 8 V LTspice settles within 0.6 % of the prediction.
+	{
+		const g3 = designOscillator({ topology: 'wien', stabilizer: 'jfet', frequency: 1000, amplitude: 3 });
+		check('design: the generic JFET at 3 V says it needs about 3.1 V', g3.limiter.regulates === false && g3.limiter.minAmplitude > 3 && g3.limiter.minAmplitude < 3.3, `needs ${g3.limiter.minAmplitude?.toFixed(2)} V`);
+	}
+	// every amplitude the generic JFET accepts lands where it is asked
+	{
+		let worst = 0;
+		let where = '';
+		for (const f of [200, 1000, 20000]) {
+			for (const a of [2.5, 3, 4, 5, 6, 8, 10]) {
+				const d = designOscillator({ topology: 'wien', stabilizer: 'jfet', frequency: f, amplitude: a });
+				if (!d.limiter.regulates) continue;
+				const err = Math.abs(d.limiter.amplitudeActual / a - 1);
+				if (err > worst) {
+					worst = err;
+					where = `${a} V at ${f} Hz -> ${d.limiter.amplitudeActual.toFixed(2)} V`;
+				}
+			}
+		}
+		check('design: the JFET control settles within 6 % of the amplitude asked', worst < 0.06, `worst ${(100 * worst).toFixed(1)} %, ${where}`);
+	}
 }
 
 /* ------------------------------------------ 5. the LTspice export */
@@ -144,7 +179,7 @@ const WT = 2 * Math.PI * 3e6;
 		for (const t of TOPOLOGIES) {
 			const stabs = t.id === 'wien' ? ['diodes', 'lamp', 'jfet'] : ['diodes'];
 			for (const s of stabs) {
-				const d = designOscillator({ topology: t.id, stabilizer: s, frequency: f, amplitude: f >= 20000 ? 1 : 3 });
+				const d = designOscillator({ topology: t.id, stabilizer: s, frequency: f, amplitude: f >= 20000 ? 1 : s === 'jfet' ? 4 : 3 });
 				const label = `${t.id}/${s} at ${f} Hz`;
 				if (s === 'jfet' && f >= 20000) {
 					let threw = false;
@@ -192,7 +227,7 @@ const WT = 2 * Math.PI * 3e6;
 	}
 	const lamp = generateNetlist(designOscillator({ topology: 'wien', stabilizer: 'lamp', frequency: 1000, amplitude: 3 }));
 	check('export: the lamp is a resistor that heats up, started hot', /RLAMP nm 0 R=\{Rcold\*\(1\+alpha\*V\(theta\)\)\}/.test(lamp) && /BTH 0 theta I=/.test(lamp) && /CTH theta 0 .* IC=/.test(lamp) && /\.param Rcold=/.test(lamp));
-	const agc = generateNetlist(designOscillator({ topology: 'wien', stabilizer: 'jfet', frequency: 1000, amplitude: 3 }));
+	const agc = generateNetlist(designOscillator({ topology: 'wien', stabilizer: 'jfet', frequency: 1000, amplitude: 4 }));
 	check('export: the AGC has its JFET model, the series leg and the averaging resistors', /\.model JX NJF/.test(agc) && /RSER nm jd/.test(agc) && /RX1 jg jd/.test(agc) && /D1 pk vout DX/.test(agc));
 	const quad = generateNetlist(designOscillator({ topology: 'quadrature', frequency: 1000, amplitude: 3 }));
 	check('export: the quadrature loop has Rn and the divider clamp into integrator 2', /RN vinv n2/.test(quad) && /RD1 vcos zt/.test(quad) && /D1 zt n2 DX/.test(quad) && /\.four .* V\(vcos\)/.test(quad));
@@ -205,7 +240,7 @@ const WT = 2 * Math.PI * 3e6;
 	for (const f of [1000, 55000]) {
 		for (const t of TOPOLOGIES) {
 			for (const s of t.id === 'wien' ? ['diodes', 'lamp', 'jfet'] : ['diodes']) {
-				const d = designOscillator({ topology: t.id, stabilizer: s, frequency: f, amplitude: f >= 20000 ? 1 : 3 });
+				const d = designOscillator({ topology: t.id, stabilizer: s, frequency: f, amplitude: f >= 20000 ? 1 : s === 'jfet' ? 4 : 3 });
 				for (const b of [...explainBarkhausen(d), ...explainTopology(d), ...explainStabilizer(d), ...explainOpampLimit(d)]) {
 					if (b.type === 'eq') {
 						n++;

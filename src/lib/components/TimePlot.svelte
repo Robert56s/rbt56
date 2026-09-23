@@ -1,8 +1,10 @@
 <script>
 	// Linear time-domain plot: one or more (t, y) traces on shared axes.
 	// series: [{ t: Float64Array, y: Float64Array, color: 'var(--blue)', width: 2 }]
+	// yRange: optional [low, high] that fixes the vertical scale, so a trace
+	// that shrinks is seen to shrink instead of being stretched back up
 
-	let { series = [], height = 200, unit = 's' } = $props();
+	let { series = [], height = 200, unit = 's', yRange = null } = $props();
 
 	let canvas = $state(null);
 	let width = $state(600);
@@ -17,9 +19,9 @@
 	}
 
 	function resolveColor(node, color) {
-		const match = /^var\((--[\w-]+)\)$/.exec(color.trim());
+		const match = /^var\(\s*(--[\w-]+)\s*(?:,\s*(.+?))?\s*\)$/.exec(color.trim());
 		if (!match) return color;
-		return getComputedStyle(node).getPropertyValue(match[1]).trim() || '#16181d';
+		return getComputedStyle(node).getPropertyValue(match[1]).trim() || match[2] || '#16181d';
 	}
 
 	function draw(node, allSeries, w, h) {
@@ -55,6 +57,10 @@
 		const yPad = (yMax - yMin) * 0.08;
 		yMin -= yPad;
 		yMax += yPad;
+		if (Array.isArray(yRange) && yRange[1] > yRange[0]) {
+			yMin = yRange[0];
+			yMax = yRange[1];
+		}
 
 		const x = (t) => pad.left + ((t - tMin) / (tMax - tMin || 1)) * plotW;
 		const y = (v) => pad.top + (1 - (v - yMin) / (yMax - yMin)) * plotH;

@@ -12,10 +12,14 @@ const SI = [
 function siFormat(value, unit) {
 	if (!Number.isFinite(value)) return '-';
 	if (value === 0) return `0 ${unit}`;
-	const abs = Math.abs(value);
+	// round to the three significant figures that get printed first, then
+	// pick the prefix: 9998.5 is 10.0 k, not 10.00 k, and 999.7 is 1.00 k
+	const rounded = Number(value.toPrecision(3));
+	const abs = Math.abs(rounded);
 	const entry = SI.find((e) => abs >= 10 ** e.exp * 0.999) ?? SI[SI.length - 1];
-	const scaled = value / 10 ** entry.exp;
-	const digits = scaled >= 100 ? 0 : scaled >= 10 ? 1 : 2;
+	const scaled = rounded / 10 ** entry.exp;
+	const size = Math.abs(scaled);
+	const digits = size >= 99.95 ? 0 : size >= 9.995 ? 1 : 2;
 	return `${scaled.toFixed(digits)} ${entry.suffix}${unit}`;
 }
 

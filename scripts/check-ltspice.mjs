@@ -168,7 +168,7 @@ function measureAm(t, v, fp, fm) {
 for (const f of [1000, 55000]) {
 	for (const topo of TOPOLOGIES) {
 		for (const s of topo.id === 'wien' ? ['diodes', 'lamp', 'jfet'] : ['diodes']) {
-			const amplitude = f >= 20000 ? 1 : 3;
+			const amplitude = f >= 20000 ? 1 : s === 'jfet' ? 4 : 3;
 			const d = designOscillator({ topology: topo.id, stabilizer: s, frequency: f, amplitude });
 			const stem = `osc-${topo.id}-${s}-${f}`;
 			if (!d || (d.limiter.kind === 'jfet' && !d.limiter.regulates)) {
@@ -205,7 +205,7 @@ for (const f of [1000, 55000]) {
 			check(`${stem}: runs at the predicted frequency (${d.f0.toFixed(0)} Hz)`, rel(m.f, d.f0, 0.015), `${m.f.toFixed(1)} Hz, ${(100 * (m.f / d.f0 - 1)).toFixed(2)} %`);
 			check(`${stem}: settled (growth under 3 % over the last cycles)`, Math.abs(m.growth) < 0.03, `${(100 * m.growth).toFixed(2)} %`);
 			// the describing function is exact for the diode, not for the loop around it: at large lag the ladder limiters land further off
-			const ampTol = s === 'jfet' ? 0.15 : topo.ladder && f >= 20000 ? 0.2 : 0.12;
+			const ampTol = s === 'jfet' ? 0.03 : topo.ladder && f >= 20000 ? 0.2 : 0.12;
 			check(`${stem}: amplitude near the predicted ${predicted.toFixed(2)} V`, rel(m.last, predicted, ampTol), `${m.last.toFixed(3)} V`);
 			const thdBound = d.limiter.kind === 'diodes' ? Math.max(0.01, 2 * d.thd) : d.limiter.kind === 'clamp' ? 0.012 : 0.005;
 			check(`${stem}: distortion within the page's figure (${(100 * d.thd).toFixed(2)} %)`, m.thd <= thdBound, `${(100 * m.thd).toFixed(2)} %`);

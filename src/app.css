@@ -415,6 +415,32 @@ table:has(thead) td:first-child {
 	overflow-x: auto;
 }
 
+/* status lines under a panel: green holds, amber is stretched, red must change */
+.flag {
+	font-size: 0.85rem;
+	border-radius: var(--radiusSmall);
+	padding: 0.5rem 0.8rem;
+	max-width: none;
+	margin-top: 0.8rem;
+}
+
+.flag.warn {
+	color: var(--amber);
+	background: var(--amberSoft);
+	border: 1px solid #f0dfae;
+}
+
+.flag.bad {
+	color: #fff;
+	background: var(--red);
+}
+
+.flag.ok {
+	color: var(--green);
+	background: #e6f4ec;
+	border: 1px solid #c6e5d4;
+}
+
 @media (prefers-reduced-motion: reduce) {
 	* {
 		transition: none !important;

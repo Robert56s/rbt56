@@ -1,5 +1,9 @@
 <script>
 	import BasicsPanel from '$lib/components/BasicsPanel.svelte';
+	import LoopDemo from '$lib/components/basics/LoopDemo.svelte';
+	import NetworkDemo from '$lib/components/basics/NetworkDemo.svelte';
+	import OpampLagDemo from '$lib/components/basics/OpampLagDemo.svelte';
+	import RcPairDemo from '$lib/components/basics/RcPairDemo.svelte';
 	import DiagramView from '$lib/components/DiagramView.svelte';
 	import MathPanel from '$lib/components/MathPanel.svelte';
 	import { formatFarads, formatHz, formatOhms, formatVolts } from '$lib/modulation/format';
@@ -174,7 +178,12 @@
 	</section>
 
 	{#if design}
-		<BasicsPanel blocks={oscillatorBasics(design)} />
+		<BasicsPanel
+			blocks={oscillatorBasics(design)}
+			widgets={{ loop: LoopDemo, 'rc-pair': RcPairDemo, network: NetworkDemo, 'opamp-lag': OpampLagDemo }}
+			summary="New to oscillators: where the sine wave comes from, with a little maths and four figures to move"
+			minutes={9}
+		/>
 
 		<section class="panel">
 			<div class="panel-head">
@@ -270,15 +279,24 @@
 							<tr><td>Gain at switch-on</td><td>{design.limiter.gainStart.toFixed(2)}, against {design.requiredGain.toFixed(2)} needed</td></tr>
 						</tbody>
 					</table>
-					<p class="flag ok">
-						The channel closes as the output grows, so the amplitude settles at about {formatVolts(design.limiter.amplitudeActual)} peak
-						with this {JFETS[design.jfet].label.split(' (')[0]}; nothing in the signal path clips.
-					</p>
+					{#if Math.abs(design.limiter.amplitudeActual / amplitude - 1) > 0.03}
+						<p class="flag warn">
+							The amplitude settles at about {formatVolts(design.limiter.amplitudeActual)} peak rather than the {formatVolts(amplitude)} asked:
+							just above this JFET's minimum, no standard series resistor leaves the channel where the detector can hold it. A slightly
+							larger amplitude lands where it is asked.
+						</p>
+					{:else}
+						<p class="flag ok">
+							The channel closes as the output grows, so the amplitude settles at about {formatVolts(design.limiter.amplitudeActual)} peak
+							with this {JFETS[design.jfet].label.split(' (')[0]}; nothing in the signal path clips.
+						</p>
+					{/if}
 				{:else}
 					<p class="flag bad">
-						This JFET cannot be controlled at {formatVolts(amplitude)} peak: its gate needs about {(-2 * (JFETS[design.jfet].vto - 1 / (2 * JFETS[design.jfet].beta * 3 * design.limiter.rdsOn))).toFixed(1)} V of detector
-						voltage, and the detector only delivers the output's negative peak. Ask for at least {formatVolts(design.limiter.minAmplitude)} peak,
-						or a JFET with a smaller pinch-off voltage.
+						This JFET cannot be controlled at {formatVolts(amplitude)} peak. The detector only delivers the output's negative peak, and
+						squeezing the channel far enough to hold the gain, while leaving the loop enough gain to start, takes at least
+						{formatVolts(design.limiter.minAmplitude)} peak at the output with this part. Ask for that much, or pick a JFET with a smaller
+						pinch-off voltage.
 					</p>
 				{/if}
 			{:else}
@@ -322,6 +340,12 @@
 			{#if design.opamp.opampOk}
 				<p class="flag ok">
 					This op-amp holds the loop: the retune absorbs its lag and the amplifier still has {design.kind === 'quadrature' ? `${pct(design.growthPerCycle)} per cycle of designed growth` : `${pct(design.loopExcess)} of excess gain`} to start with.
+				</p>
+			{:else if design.limiter.kind === 'jfet' && !design.limiter.regulates}
+				<p class="note">
+					The op-amp is not what stops this design: the JFET cannot be controlled at {formatVolts(amplitude)} peak (see the amplitude
+					control above), so there is no start-up gain for the op-amp to hold yet. The lag and slew figures above are what this op-amp
+					would see once the amplitude is at least {formatVolts(design.limiter.minAmplitude)}.
 				</p>
 			{:else if !design.starts}
 				<p class="flag bad">
@@ -377,7 +401,7 @@
 							<td>{r.ok ? `${(100 * r.thd).toFixed(2)} %` : '-'}</td>
 							<td>{r.ok && Number.isFinite(r.uncompensatedError) ? pct(r.uncompensatedError) : '-'}</td>
 							<td>{r.ok ? pct(r.f0Error, 2) : '-'}</td>
-							<td class:bad={r.ok && !r.starts}>{r.ok ? (r.starts ? (Number.isFinite(r.growthPerCycle) ? pct(r.growthPerCycle) + '/cycle' : 'yes') : 'no') : 'not realizable'}</td>
+							<td class:bad={r.ok && !r.starts}>{r.ok ? (r.starts ? (Number.isFinite(r.growthPerCycle) ? pct(r.growthPerCycle) + '/cycle' : 'yes') : r.jfetMinAmplitude ? `JFET needs ${formatVolts(r.jfetMinAmplitude)}` : 'no') : 'not realizable'}</td>
 							<td>{r.ok && Number.isFinite(r.fMax) ? formatHz(r.fMax) : '-'}</td>
 						</tr>
 					{/each}
@@ -410,7 +434,12 @@
 				the others. The buffered version drops the gain to 8 for two more op-amps, at which point a Bubba costs
 				one more and gives better stability and quadrature outputs.
 			</p>
-			{#if currentRow && !currentRow.starts}
+			{#if currentRow && currentRow.jfetMinAmplitude}
+				<p class="flag warn">
+					With JFET control the Wien bridge needs at least {formatVolts(currentRow.jfetMinAmplitude)} peak; at this amplitude diode limiting or
+					the lamp holds it.
+				</p>
+			{:else if currentRow && !currentRow.starts}
 				<p class="flag warn">
 					The topology selected above does not start with this op-amp at this frequency. The table shows which ones do.
 				</p>
@@ -427,7 +456,11 @@
 				<button type="button" disabled={!!exportError} onclick={() => save(generateNetlist(design), `${stem}.cir`)}>Download {stem}.cir (netlist)</button>
 			</div>
 			{#if exportError}
-				<p class="flag bad">Nothing to export: {exportError}.</p>
+				<p class="flag bad">
+					Nothing to export: {design.limiter.kind === 'jfet' && !design.limiter.regulates
+						? `the JFET control cannot be sized at ${formatVolts(amplitude)} peak, so its parts do not exist yet. From ${formatVolts(design.limiter.minAmplitude)} the download is available.`
+						: `the amplitude control could not be sized for this design (${exportError.replace(/^no export: /, '')}).`}
+				</p>
 			{/if}
 			<p class="note">
 				The .asc is a drawn schematic with these values, in the same arrangement as the drawing above, with the

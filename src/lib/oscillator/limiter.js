@@ -334,30 +334,113 @@ export function lampModel({ rHot, vLampPeak, f0, cycles = 40, alpha = 0.005 }) {
  * (the channel then sees a small voltage, which is what keeps it clean)
  * while staying reachable with the detector voltage this amplitude gives.
  */
+/**
+ * The series resistor of the AGC leg for a given output amplitude, or null
+ * when no standard value works there. The channel left over at balance
+ * must allow the start (at least rChannelMin) and stay reachable by the
+ * detector (under 0.95 rMax); among the values that allow both, the one
+ * closest to the target, from the series asked for and then from E96,
+ * whose steps are finer.
+ */
+/**
+ * The detector: D1 charges Cdet to the output's negative peak less the
+ * diode's drop, and Ra + Rb bleed it. With the detector's time constant at
+ * 50 cycles the capacitor droops about 2 % between peaks, so the diode
+ * conducts for only a fifteenth of each cycle and its current then is some
+ * 30 times the average. The drop is the diode's at that current: LTspice
+ * shows 0.48 V at 3.26 V out, where the average current alone would give
+ * 0.29 V and put the amplitude 9 % above the prediction.
+ */
+const DETECTOR_PULSE = 30;
+function detectorPeak(amplitude, rLoad, diode) {
+	return amplitude - diodeDrop((DETECTOR_PULSE * amplitude) / rLoad, diode);
+}
+/**
+ * The gate: the divider's output, loaded by the two averaging resistors
+ * (its Thevenin resistance against 2 Rx), then averaged with the drain,
+ * whose mean is about 0 V.
+ */
+function gateFromPeak(vPeak, ra, rb, rx) {
+	const ratio = rb / (ra + rb);
+	const rth = (ra * rb) / (ra + rb);
+	return (-vPeak * ratio) / (1 + rth / (2 * rx)) / 2;
+}
+const AGC_RB = 1e6;
+const AGC_RX = 1e6;
+
+function agcSeries({ amplitude, legBalance, rdsOn, rChannelMin, vto, beta, diode, resistorSeries }) {
+	// with Ra = 0 the detector gives its most: the whole peak, less the drop
+	const vPeak = detectorPeak(amplitude, AGC_RB, diode);
+	const drop = amplitude - vPeak;
+	// the most negative gate the detector can give is -vPeak/2; the channel
+	// needed then must be reachable: |Vgs| = |Vto| - 1/(2 beta r) <= vPeak/2
+	const rMax = -vto - vPeak / 2 > 0 ? 1 / (2 * beta * (-vto - vPeak / 2)) : Infinity;
+	if (!(rMax > rChannelMin)) return { rSeries: null, vPeak, drop, rMax };
+	const rBalanceTarget = Math.max(rChannelMin, Math.min(0.1 * legBalance, 0.9 * rMax));
+	const rSeriesTarget = legBalance - rBalanceTarget;
+	const fits = (v) => legBalance - v >= rChannelMin && legBalance - v <= 0.95 * rMax;
+	for (const series of [resistorSeries, 'E96']) {
+		const around = [0.8, 0.85, 0.9, 0.93, 0.95, 0.97, 1, 1.03, 1.05, 1.1].map((f) => nearestResistor(rSeriesTarget * f, series));
+		const usable = [...new Set(around)].filter(fits).sort((a, b) => Math.abs(a - rSeriesTarget) - Math.abs(b - rSeriesTarget));
+		if (usable.length) return { rSeries: usable[0], rSeriesTarget, rBalanceTarget, vPeak, drop, rMax };
+	}
+	return { rSeries: null, vPeak, drop, rMax };
+}
+
 export function sizeAgc({ rf, gBalance, amplitude, jfet, diode, resistorSeries = 'E24' }) {
 	const { vto, beta } = jfet;
 	const rdsOn = 1 / (2 * beta * -vto);
 	const legBalance = rf / (gBalance - 1);
-	const vPeak = amplitude - diodeDrop(amplitude / 2e6, diode); // detector holds about the negative peak less a drop at its tiny current
-	// the most negative gate the detector can give is -vPeak; the channel
-	// needed then must be reachable: |Vgs| = |Vto| - 1/(2 beta r) <= vPeak/2
-	const rMax = -vto - vPeak / 2 > 0 ? 1 / (2 * beta * (-vto - vPeak / 2)) : Infinity;
-	const minAmplitude = 2 * (-vto - 1 / (2 * beta * 3 * rdsOn)) + diodeDrop(amplitude / 2e6, diode);
-	if (!(rMax > 1.5 * rdsOn)) return { ok: false, minAmplitude, rdsOn };
-	const rBalance = Math.min(0.1 * legBalance, 0.9 * rMax);
-	const rSeriesTarget = legBalance - rBalance;
-	// rounded downwards: with the channel wide open the leg must still be
-	// short of the balance value by a few percent, or the loop cannot start
-	let rSeries = nearestResistor(rSeriesTarget, resistorSeries);
-	for (let guard = 0; guard < 6 && rSeries + rdsOn > 0.97 * legBalance; guard++) rSeries = nearestResistor(rSeries * 0.93, resistorSeries);
+	// Start-up: with the channel wide open the leg must be at least 3 % short
+	// of the balance value, so the channel at balance is at least rdsOn plus
+	// 3 % of the leg. The smallest output whose detector can squeeze the
+	// channel that far is the least amplitude this JFET can hold.
+	const rChannelMin = rdsOn + 0.03 * legBalance;
+	const common = { legBalance, rdsOn, rChannelMin, vto, beta, diode, resistorSeries };
+	const pick = agcSeries({ amplitude, ...common });
+	if (pick.rSeries === null) {
+		// just above the bare minimum no standard resistor may fit yet: the
+		// least amplitude this JFET can really hold is the first one where
+		// one does, searched upwards in 1 % steps
+		let minAmplitude = 2 * Math.max(0, -vto - 1 / (2 * beta * rChannelMin)) + pick.drop;
+		for (let a = Math.max(minAmplitude, 0.1); a < 4 * Math.max(minAmplitude, amplitude); a *= 1.01) {
+			if (agcSeries({ amplitude: a, ...common }).rSeries !== null) {
+				minAmplitude = a;
+				break;
+			}
+		}
+		return { ok: false, minAmplitude: Math.max(minAmplitude, amplitude * 1.01), rdsOn, rChannelMin };
+	}
+	const { rSeries, rSeriesTarget, rBalanceTarget, vPeak } = pick;
+	const minAmplitude = 2 * Math.max(0, -vto - 1 / (2 * beta * rChannelMin)) + pick.drop;
+	// the channel the loop actually settles at, with the rounded series
+	// resistor: the divider is sized for this one, not for the target
+	const rBalance = legBalance - rSeries;
 	const vgsNeeded = vto + 1 / (2 * beta * rBalance);
-	const vDivNeeded = 2 * vgsNeeded; // the gate averages it with the drain
-	const ratio = Math.min(1, -vDivNeeded / vPeak); // Rb / (Ra + Rb)
-	const rb = 1e6;
-	const raTarget = rb * (1 / ratio - 1);
-	const ra = raTarget < 1e3 ? 0 : nearestResistor(raTarget, resistorSeries);
-	const rx = 1e6;
-	return { ok: true, rdsOn, legBalance, rBalance, rSeries, rSeriesTarget, ra, rb, rx, ratio: rb / (ra + rb), vgsNeeded, vPeak, minAmplitude };
+	const rb = AGC_RB;
+	const rx = AGC_RX;
+	// Ra from the detector model: the gate this amplitude produces through
+	// Ra, Rb and the averaging resistors must be the gate needed. The gate
+	// shrinks as Ra grows, so a bisection finds it.
+	const gateAt = (ra) => gateFromPeak(detectorPeak(amplitude, ra + rb, diode), ra, rb, rx);
+	let raTarget = 0;
+	if (gateAt(0) < vgsNeeded) {
+		let lo = 0;
+		let hi = 50e6;
+		for (let k = 0; k < 80; k++) {
+			const mid = 0.5 * (lo + hi);
+			if (gateAt(mid) < vgsNeeded) lo = mid;
+			else hi = mid;
+		}
+		raTarget = 0.5 * (lo + hi);
+	}
+	// the divider sets the amplitude almost in proportion, so an E24 step
+	// can move it by a few percent: take E96 when that costs more than 1 %
+	// of the gate's distance from pinch-off
+	const miss = (ra) => Math.abs((gateAt(ra) - vto) / (vgsNeeded - vto) - 1);
+	let ra = raTarget < 1e3 ? 0 : nearestResistor(raTarget, resistorSeries);
+	if (ra > 0 && miss(ra) > 0.01) ra = nearestResistor(raTarget, 'E96');
+	return { ok: true, rdsOn, rChannelMin, legBalance, rBalance, rBalanceTarget, rSeries, rSeriesTarget, ra, rb, rx, ratio: rb / (ra + rb), vgsNeeded, vPeak: detectorPeak(amplitude, ra + rb, diode), minAmplitude };
 }
 
 /**
@@ -365,12 +448,11 @@ export function sizeAgc({ rf, gBalance, amplitude, jfet, diode, resistorSeries =
  * voltage the detector produces at amplitude A sets the channel, hence
  * the gain; the loop sits where that gain is the balance gain.
  */
-export function agcAmplitude({ rf, rSeries, ra, rb, gBalance, jfet, diode }) {
+export function agcAmplitude({ rf, rSeries, ra, rb, rx = AGC_RX, gBalance, jfet, diode }) {
 	const { vto, beta } = jfet;
-	const ratio = rb / (ra + rb);
 	const gainAt = (A) => {
-		const vPeak = A - diodeDrop(A / 2e6, diode);
-		const vgs = Math.min(0, (-vPeak * ratio) / 2);
+		const vPeak = Math.max(0, detectorPeak(A, ra + rb, diode));
+		const vgs = Math.min(0, gateFromPeak(vPeak, ra, rb, rx));
 		if (vgs <= vto) return 1; // pinched off: the leg is open
 		const r = 1 / (2 * beta * (vgs - vto));
 		return 1 + rf / (rSeries + r);

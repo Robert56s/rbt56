@@ -19,9 +19,9 @@
 	}
 
 	function resolveColor(node, color) {
-		const match = /^var\((--[\w-]+)\)$/.exec(color.trim());
+		const match = /^var\(\s*(--[\w-]+)\s*(?:,\s*(.+?))?\s*\)$/.exec(color.trim());
 		if (!match) return color;
-		return getComputedStyle(node).getPropertyValue(match[1]).trim() || '#16181d';
+		return getComputedStyle(node).getPropertyValue(match[1]).trim() || match[2] || '#16181d';
 	}
 
 	function draw(node, pts, w, h) {

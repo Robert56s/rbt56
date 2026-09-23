@@ -1,5 +1,9 @@
 <script>
 	import BasicsPanel from '$lib/components/BasicsPanel.svelte';
+	import AmWaveDemo from '$lib/components/basics/AmWaveDemo.svelte';
+	import DiodeBendDemo from '$lib/components/basics/DiodeBendDemo.svelte';
+	import EnvelopeDetectorDemo from '$lib/components/basics/EnvelopeDetectorDemo.svelte';
+	import JfetKnobDemo from '$lib/components/basics/JfetKnobDemo.svelte';
 	import ConductancePlot from '$lib/components/ConductancePlot.svelte';
 	import DiagramView from '$lib/components/DiagramView.svelte';
 	import { modulationBasics } from '$lib/modulation/basics';
@@ -347,7 +351,30 @@
 		<button type="button" class:active={mode === 'demod'} onclick={() => (mode = 'demod')}>Demodulator</button>
 	</div>
 
-	<BasicsPanel blocks={modulationBasics({ mode, topology, carrierFrom, design: jfetDesign, rectifierType })} />
+	<BasicsPanel
+		blocks={modulationBasics({
+			mode,
+			topology,
+			carrierFrom,
+			rectifierType,
+			design: jfetDesign,
+			jfetModel,
+			swingFraction,
+			targetN,
+			fp: mode === 'jfet' ? fp : mode === 'diode' ? fpDiode : fpCarrierDemod,
+			fm: mode === 'jfet' ? fmPreview : mode === 'diode' ? fmMaxDiode : fmMaxDemod,
+			diodeDesign,
+			carrierAmp,
+			modAmp,
+			envelopeDesign,
+			demoModIndex,
+			rippleHz,
+			amaxDb,
+			aminDb
+		})}
+		widgets={{ 'am-wave': AmWaveDemo, 'jfet-knob': JfetKnobDemo, 'diode-bend': DiodeBendDemo, envelope: EnvelopeDetectorDemo }}
+		minutes={7}
+	/>
 
 	{#if mode === 'jfet'}
 		<section class="panel">
@@ -873,17 +900,23 @@
 				<DiagramView diagram={buildDiodeTankDiagram({ l: diodeDesign.inductance, c: diodeDesign.capacitance, r: diodeDesign.resistance })} label="diode and resonant tank" />
 				<table>
 					<tbody>
-						<tr><td>Resonant frequency f0 (actual)</td><td>{formatHz(diodeDesign.f0Actual)}</td></tr>
-						<tr><td>Tank bandwidth (target)</td><td>{formatHz(diodeDesign.bandwidth)}</td></tr>
+						<tr><td>Resonant frequency f0 (actual)</td><td>{formatHz(diodeDesign.f0Actual)} ({diodeDesign.detuning >= 0 ? '+' : ''}{((100 * diodeDesign.detuning) / diodeDesign.fp).toFixed(2)} % from the carrier)</td></tr>
+						<tr><td>Tank bandwidth (target / actual)</td><td>{formatHz(diodeDesign.bandwidth)} / {formatHz(diodeDesign.bwActual)}</td></tr>
+						<tr><td>Band actually passed</td><td>{formatHz(diodeDesign.bandLow)} to {formatHz(diodeDesign.bandHigh)}</td></tr>
 						<tr><td>Q (target / actual)</td><td>{diodeDesign.q.toFixed(2)} / {diodeDesign.qActual.toFixed(2)}</td></tr>
 						<tr><td>L</td><td>{formatHenries(diodeDesign.inductance)}</td></tr>
-						<tr><td>C</td><td>{formatFarads(diodeDesign.capacitance)}</td></tr>
-						<tr><td>R (sets Q)</td><td>{formatOhms(diodeDesign.resistance)}</td></tr>
+						<tr><td>C</td><td>{diodeDesign.capacitors.length === 2 ? `${formatFarads(diodeDesign.capacitors[0])} in parallel with ${formatFarads(diodeDesign.capacitors[1])} = ${formatFarads(diodeDesign.capacitance)}` : formatFarads(diodeDesign.capacitance)}</td></tr>
+						<tr><td>R (sets the bandwidth)</td><td>{formatOhms(diodeDesign.resistance)}</td></tr>
 						{#if diodeDesign.requiredBias}
 							<tr><td>Required DC bias</td><td>{formatVolts(diodeDesign.requiredBias)}</td></tr>
 						{/if}
 					</tbody>
 				</table>
+				{#if diodeDesign.sidebandsInBand}
+					<p class="flag ok">Both sidebands, {formatHz(diodeDesign.fp - diodeDesign.fmMax)} and {formatHz(diodeDesign.fp + diodeDesign.fmMax)}, sit inside the band the tank passes.</p>
+				{:else}
+					<p class="flag bad">The band the tank passes does not hold both sidebands at {formatHz(diodeDesign.fp - diodeDesign.fmMax)} and {formatHz(diodeDesign.fp + diodeDesign.fmMax)}. A larger sideband margin widens it.</p>
+				{/if}
 				<MathPanel blocks={explainDiodeModulator(diodeDesign)} />
 			</section>
 
@@ -1116,13 +1149,6 @@
 		}
 	}
 
-	.diagramGrid {
-		display: grid;
-		grid-template-columns: repeat(2, 1fr);
-		gap: 1rem;
-		margin-bottom: 1rem;
-	}
-
 	table {
 		width: 100%;
 		border-collapse: collapse;
@@ -1142,17 +1168,6 @@
 	table td:last-child {
 		font-family: var(--mono);
 		text-align: right;
-	}
-
-	.flag {
-		padding: 0.6rem 0.9rem;
-		border-radius: var(--radiusSmall);
-		font-size: 0.9rem;
-	}
-
-	.flag.bad {
-		background: #fbe9e9;
-		color: #9a2f2f;
 	}
 
 	.formula-link {

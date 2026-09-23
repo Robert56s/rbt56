@@ -166,5 +166,40 @@ check('combiner never leaves depth on the table', worstLoss <= 1e-9, `${worstLos
 	check('stock: Tow-Thomas inverter pair follows the kit', tt !== null && [820, 8200, 82000].includes(tt.components.r), `r = ${tt && tt.components.r}`);
 }
 
+/* ------------------------------ 6. Chebyshev limits from the passband top */
+// Chebyshev stages have unity DC gain, so an even order ripples between
+// 0 dB and +Amax. The page measures Amax and Amin from the top of the
+// passband; measured from 0 dB, 10 of 71 even-order designs looked Amin
+// short. With ideal stages, measured from the top, every design must meet
+// Amin at fs and lose at most Amax at fp, and the top must be +Amax.
+{
+	let n = 0;
+	let bad = 0;
+	let worstTop = 0;
+	for (const amax of [0.1, 0.5, 1, 2, 3]) {
+		for (const amin of [20, 30, 40, 50, 60]) {
+			for (const ratio of [1.3, 1.5, 2, 2.5, 3.5, 5]) {
+				const fp = 10000;
+				const fs = fp * ratio;
+				const d = designLowPass({ response: 'chebyshev', amaxDb: amax, aminDb: amin, fp, fs, order: null });
+				if (d.n > 8 || d.n % 2 !== 0) continue;
+				n++;
+				const stages = d.stages.map((s) => (s.order === 2 ? { order: 2, actual: { wn: s.wn, q: s.q } } : { order: 1, actual: { tau: s.tau } }));
+				let top = 0;
+				for (let i = 0; i <= 400; i++) top = Math.max(top, magnitudePhaseAt(stages, (fp / 100) * 100 ** (i / 400)).db);
+				const atFs = top - magnitudePhaseAt(stages, fs).db;
+				const atFp = top - magnitudePhaseAt(stages, fp).db;
+				worstTop = Math.max(worstTop, Math.abs(top - amax));
+				if (atFs < amin - 1e-6 || atFp > amax + 1e-3) {
+					bad++;
+					console.log('   CHEBYSHEV', amax, amin, ratio, `n=${d.n}`, atFs.toFixed(2), atFp.toFixed(2));
+				}
+			}
+		}
+	}
+	check(`chebyshev: ${n} even-order designs meet Amin and Amax measured from the passband top`, n > 50 && bad === 0, `${bad} misses`);
+	check('chebyshev: an even order rises to +Amax exactly', worstTop < 0.02, `worst ${worstTop.toFixed(3)} dB off`);
+}
+
 console.log(fails === 0 ? 'filter checks clean' : `${fails} failure(s)`);
 process.exit(fails === 0 ? 0 : 1);
