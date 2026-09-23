@@ -833,7 +833,7 @@
 					give the same curve), and the op-amps carry the gain-bandwidth entered above. That is the point of
 					simulating it: the crest compression and the distortion predicted in section 05 come from those two
 					departures from the ideal, and the transient shows them directly. Plot V(vout), and V(vgate) for the gate drive.
-					The .asc is a drawn schematic; vgate, vac and vcar cross it by net label. The run holds the coupling capacitor at
+					The .asc is drawn wire by wire{carrierOscillator ? ', the oscillator as its own block underneath, joined to the divider by the label vcar' : ''}. The run holds the coupling capacitor at
 					its steady-state charge so the gate bias is right from the first cycle, and, with the oscillator on board, starts
 					the carrier at full amplitude and saves the four message periods after it has settled. The index measured from
 					the carrier peaks in that run should read about {jfetDesign.opamp.peakModulationIndex.toFixed(3)}: the V_DS squared term lifts every

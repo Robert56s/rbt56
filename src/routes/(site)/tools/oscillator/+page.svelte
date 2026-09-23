@@ -463,8 +463,7 @@
 				</p>
 			{/if}
 			<p class="note">
-				The .asc is a drawn schematic with these values, in the same arrangement as the drawing above, with the
-				amplitude control as real devices: the diodes are the model the design was sized against, the AGC's
+				The .asc is a drawn schematic with these values and the amplitude control as real devices: the diodes are the model the design was sized against, the AGC's
 				JFET is a SPICE JFET, and the lamp is a resistor that heats up. The run starts from an initial condition
 				at the design amplitude, so the limiter only has to hold it, and the log (Ctrl+L after Run) reports
 				fosc, the realized frequency, and vpk, the amplitude, next to the .four distortion. The op-amp is the

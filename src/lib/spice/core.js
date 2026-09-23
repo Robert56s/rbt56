@@ -21,12 +21,10 @@
  *   { kind: 'OP', name, nodes: [nonInverting, inverting, out] }
  *   { kind: 'LABEL', text }                                 a comment only
  *
- * Two ways to draw the .asc. renderSchematic here lays the parts out on
- * a grid and joins them with net labels: every pin gets a short stub and
- * a label, and pins sharing a name are the same node. It is what a tool
- * gets for free. A tool that wants a real drawing builds it with
- * draw.js, which places the same symbols in LTspice's own orientations
- * and wires them, and parseSchematic reads either back for checking.
+ * The .asc is drawn per tool with draw.js, which places these symbols in
+ * LTspice's own orientations and wires them; geometry.js models what the
+ * drawing looks like on screen, and parseSchematic here reads it back so
+ * the checkers can compare it with the netlist.
  */
 
 /** Value with an engineering suffix LTspice understands (220p, 4.7n, 1.5k). */
@@ -54,16 +52,16 @@ function trim(x) {
  * symbol's SpiceOrder is not always the order we keep them in.
  */
 export const SYMBOLS = {
-	R: { name: 'res', prefix: 'R', pins: [{ dx: 16, dy: 16, dir: 'up' }, { dx: 16, dy: 96, dir: 'down' }], order: [0, 1] },
-	C: { name: 'cap', prefix: 'C', pins: [{ dx: 16, dy: 0, dir: 'up' }, { dx: 16, dy: 64, dir: 'down' }], order: [0, 1] },
-	L: { name: 'ind', prefix: 'L', pins: [{ dx: 16, dy: 16, dir: 'up' }, { dx: 16, dy: 96, dir: 'down' }], order: [0, 1] },
-	V: { name: 'voltage', prefix: 'V', pins: [{ dx: 0, dy: 16, dir: 'up' }, { dx: 0, dy: 96, dir: 'down' }], order: [0, 1] },
+	R: { name: 'res', prefix: 'R', pins: [{ dx: 16, dy: 16 }, { dx: 16, dy: 96 }], order: [0, 1] },
+	C: { name: 'cap', prefix: 'C', pins: [{ dx: 16, dy: 0 }, { dx: 16, dy: 64 }], order: [0, 1] },
+	L: { name: 'ind', prefix: 'L', pins: [{ dx: 16, dy: 16 }, { dx: 16, dy: 96 }], order: [0, 1] },
+	V: { name: 'voltage', prefix: 'V', pins: [{ dx: 0, dy: 16 }, { dx: 0, dy: 96 }], order: [0, 1] },
 	// behavioral current source: + on top, current leaves at the - pin
-	B: { name: 'bi', prefix: 'B', pins: [{ dx: 0, dy: 0, dir: 'up' }, { dx: 0, dy: 80, dir: 'down' }], order: [0, 1] },
+	B: { name: 'bi', prefix: 'B', pins: [{ dx: 0, dy: 0 }, { dx: 0, dy: 80 }], order: [0, 1] },
 	// anode first (SpiceOrder 1 is the "+" pin)
-	D: { name: 'diode', prefix: 'D', pins: [{ dx: 16, dy: 0, dir: 'up' }, { dx: 16, dy: 64, dir: 'down' }], order: [0, 1] },
+	D: { name: 'diode', prefix: 'D', pins: [{ dx: 16, dy: 0 }, { dx: 16, dy: 64 }], order: [0, 1] },
 	// njf: D(48,0), G(0,64), S(48,96); our order is drain, gate, source already
-	J: { name: 'njf', prefix: '', pins: [{ dx: 48, dy: 0, dir: 'up' }, { dx: 0, dy: 64, dir: 'left' }, { dx: 48, dy: 96, dir: 'down' }], order: [0, 1, 2] },
+	J: { name: 'njf', prefix: '', pins: [{ dx: 48, dy: 0 }, { dx: 0, dy: 64 }, { dx: 48, dy: 96 }], order: [0, 1, 2] },
 	// Opamps\opamp is the ideal single-pole op-amp: three pins, with Aol and
 	// GBW as editable attributes, which is the model the netlist's own
 	// subcircuit imitates. Its SpiceOrder is invin, noninvin, out, while we
@@ -71,7 +69,7 @@ export const SYMBOLS = {
 	OP: {
 		name: 'Opamps\\opamp',
 		prefix: 'X',
-		pins: [{ dx: -32, dy: 48, dir: 'left' }, { dx: -32, dy: 80, dir: 'left' }, { dx: 32, dy: 64, dir: 'right' }],
+		pins: [{ dx: -32, dy: 48 }, { dx: -32, dy: 80 }, { dx: 32, dy: 64 }],
 		order: [1, 0, 2]
 	}
 };
@@ -181,69 +179,6 @@ export function renderNetlist({ elements, title, comments = [], params = [], dir
 		'.end',
 		''
 	].join('\n');
-}
-
-const STUB = 32;
-const CELL_W = 224;
-const CELL_H = 224;
-const COLS = 6;
-
-/** Where a stub ends, given a pin and the direction it leaves the body. */
-function stubEnd(x, y, dir) {
-	if (dir === 'up') return { x, y: y - STUB };
-	if (dir === 'down') return { x, y: y + STUB };
-	if (dir === 'left') return { x: x - 2 * STUB, y };
-	return { x: x + 2 * STUB, y };
-}
-
-/**
- * A .asc schematic of the same circuit. `directives` are emitted as SPICE
- * directive text (a leading '!'), `comments` as plain text notes.
- */
-export function renderSchematic({ elements, title, comments = [], directives = [], gbw = '3Meg', aol = '1Meg' }) {
-	const lines = [];
-	const parts = elements.filter((e) => e.kind !== 'LABEL');
-	const rows = Math.ceil(parts.length / COLS);
-	const originX = 128;
-	const originY = 96;
-	let maxX = 0;
-	let maxY = 0;
-
-	parts.forEach((e, i) => {
-		const sym = SYMBOLS[e.kind];
-		if (!sym) throw new Error(`no LTspice symbol for element kind ${e.kind}`);
-		const x = originX + (i % COLS) * CELL_W;
-		const y = originY + Math.floor(i / COLS) * CELL_H;
-		lines.push(`SYMBOL ${sym.name} ${x} ${y} R0`, ...symbolAttributes(e, { gbw, aol }));
-
-		sym.pins.forEach((pin, k) => {
-			const px = x + pin.dx;
-			const py = y + pin.dy;
-			const end = stubEnd(px, py, pin.dir);
-			lines.push(`WIRE ${px} ${py} ${end.x} ${end.y}`);
-			lines.push(`FLAG ${end.x} ${end.y} ${e.nodes[sym.order[k]]}`);
-			maxX = Math.max(maxX, end.x + 64);
-			maxY = Math.max(maxY, end.y + 64);
-		});
-	});
-
-	const textX = originX - 64;
-	let textY = originY + rows * CELL_H + 48;
-	const text = [];
-	const push = (prefix, body) => {
-		text.push(`TEXT ${textX} ${textY} Left 2 ${prefix}${textSafe(body)}`);
-		textY += 32;
-	};
-	push(';', title);
-	for (const l of comments) push(';', l);
-	push(';', 'Connections are made by net label, not by drawn wires: pins sharing a');
-	push(';', 'name are the same node. Press Run to simulate.');
-	for (const d of directives) push('!', d);
-
-	maxY = Math.max(maxY, textY + 32);
-	// LTspice writes its schematics with CRLF; keep that so the file looks
-	// native on the machines this tool is used from
-	return ['Version 4', `SHEET 1 ${Math.max(880, maxX)} ${Math.max(680, maxY)}`, ...lines, ...text].join('\r\n') + '\r\n';
 }
 
 /* ------------------------------------------------------- verification */

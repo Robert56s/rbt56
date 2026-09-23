@@ -18,6 +18,7 @@ import { channelConductance, compareTopologies, conductanceDepth, designJfetModu
 import { buildElements as buildModElements, generateNetlist as modNetlist, generateSchematic as modSchematic } from '../src/lib/modulation/spice.js';
 import { designOscillator } from '../src/lib/oscillator/topologies.js';
 import { parseSchematic, spiceValue } from '../src/lib/spice/core.js';
+import { audit } from '../src/lib/spice/geometry.js';
 
 let fails = 0;
 const check = (label, ok, detail) => {
@@ -215,10 +216,14 @@ check('carrier: peak current is Ac times the largest conductance', near(d.carrie
 	for (const [label, opts] of [
 		['non-inverting, external carrier', { design: d, fmPreview: 1000, oscillator: null }],
 		['non-inverting, carrier oscillator on board', { design: d, fmPreview: 1000, oscillator: osc }],
-		['inverting, carrier oscillator on board', { design: designJfetModulator({ ...base, topology: 'inverting' }), fmPreview: 1000, oscillator: osc }]
+		['inverting, carrier oscillator on board', { design: designJfetModulator({ ...base, topology: 'inverting' }), fmPreview: 1000, oscillator: osc }],
+		['inverting, external carrier', { design: designJfetModulator({ ...base, topology: 'inverting' }), fmPreview: 1000, oscillator: null }],
+		['inverting, no carrier buffer', { design: designJfetModulator({ ...base, topology: 'inverting', carrierBuffer: false }), fmPreview: 1000, oscillator: null }],
+		['inverting, no post-gain stage', { design: designJfetModulator({ ...base, topology: 'inverting', targetOutputAmplitude: 0.3 }), fmPreview: 1000, oscillator: null }]
 	]) {
 		const wanted = buildModElements(opts).filter((e) => e.kind !== 'LABEL');
-		const { elements: got, clashes, dangling, directives } = parseSchematic(modSchematic(opts));
+		const asc = modSchematic(opts);
+		const { elements: got, clashes, dangling, directives } = parseSchematic(asc);
 		const problems = [...clashes, ...dangling];
 		if (got.length !== wanted.length) problems.push(`${got.length} symbols for ${wanted.length} elements`);
 		// the sheet is drawn, so most nets carry no name: what must match is
@@ -245,6 +250,36 @@ check('carrier: peak current is Ac times the largest conductance', near(d.carrie
 		for (const m of new Set(wanted.filter((e) => e.model).map((e) => e.model))) if (!directives.some((l) => l.startsWith(`.model ${m} `))) problems.push(`no .model ${m} in the .asc`);
 		if (!directives.includes('.lib opamp.sub')) problems.push('no .lib opamp.sub');
 		check(`spice ${label}: .asc and .cir agree`, problems.length === 0, problems.length ? problems.slice(0, 3).join('; ') : `${got.length} symbols`);
+		const issues = audit(asc);
+		check(`spice ${label}: .asc drawn clean`, issues.length === 0, issues.length ? issues.slice(0, 3).map((i) => `${i.kind}: ${i.detail}`).join('; ') : 'no overlap, no crossing');
+	}
+	// values change length with the design: the drawing has to stay clean
+	// across carriers, JFETs and options, not just at the points above
+	{
+		let drawn = 0;
+		const messy = [];
+		for (const topology of ['noninverting', 'inverting']) {
+			for (const fp of [10000, 455000]) {
+				for (const [vp, idss] of [[-1, 1e-3], [-8, 20e-3]]) {
+					for (const extra of [{}, { carrierBuffer: false }, { targetOutputAmplitude: 0.3 }, { vcc: 5 }]) {
+						for (const withOsc of [false, true]) {
+							let asc;
+							try {
+								const design = designJfetModulator({ ...base, topology, fp, vp, idss, ...extra });
+								const oscillator = withOsc ? designOscillator({ topology: 'wien', stabilizer: 'diodes', frequency: fp, amplitude: 1 }) : null;
+								asc = modSchematic({ design, fmPreview: 1000, oscillator });
+							} catch {
+								continue;
+							}
+							drawn++;
+							const issues = audit(asc);
+							if (issues.length) messy.push(`${topology} ${fp} Hz VP ${vp} ${JSON.stringify(extra)}${withOsc ? ' + oscillator' : ''}: ${issues[0].kind}: ${issues[0].detail}`);
+						}
+					}
+				}
+			}
+		}
+		check('spice: every drawing across the range is clean', messy.length === 0 && drawn > 30, messy.length ? messy.slice(0, 3).join('; ') : `${drawn} drawings`);
 	}
 	// the JFET's SPICE parameters have to describe the same straight line
 	// the page designed against: Vto = VP and Beta = IDSS / VP^2

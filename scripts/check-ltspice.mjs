@@ -8,7 +8,9 @@
 // simulated and the waveform measured: the frequency from zero
 // crossings, the amplitude, whether it is still growing, the distortion
 // at the measured frequency, and for the modulator the index read from
-// the carrier peaks. Each is held against what the page predicts. Skips
+// the carrier peaks. Each is held against what the page predicts. The
+// filter exports are netlisted the same way, and their .cir run through an
+// AC sweep whose .meas points must match the page's response. Skips
 // (exit 0) when no LTspice executable is found; set LTSPICE to its path
 // to point at another install.
 
@@ -16,6 +18,16 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { combinerChoice, magnitudePhaseAt, magnitudePhaseAtParallelSum } from '../src/lib/filter/bode.js';
+import { designFirstOrderLowPass } from '../src/lib/filter/firstOrder.js';
+import { designFirstOrderHighPass } from '../src/lib/filter/firstOrderHighPass.js';
+import { designMfbLowPass } from '../src/lib/filter/mfb.js';
+import { designMfbHighPass } from '../src/lib/filter/mfbHighPass.js';
+import { designSallenKeyLowPass } from '../src/lib/filter/sallenKey.js';
+import { designSallenKeyHighPass } from '../src/lib/filter/sallenKeyHighPass.js';
+import { generateNetlist as filterNetlist, generateSchematic as filterSchematic } from '../src/lib/filter/spice.js';
+import { designBandPass, designBandStop, designHighPass, designLowPass } from '../src/lib/filter/stages.js';
+import { designTowThomasHighPass, designTowThomasLowPass } from '../src/lib/filter/towThomas.js';
 import { designJfetModulator } from '../src/lib/modulation/jfetModulator.js';
 import { generateNetlist as modNetlist, generateSchematic as modSchematic } from '../src/lib/modulation/spice.js';
 import { generateNetlist as oscNetlist, generateSchematic as oscSchematic, probeNode } from '../src/lib/oscillator/spice.js';
@@ -243,6 +255,61 @@ for (const [stem, opts] of amCases) {
 	const d = opts.design;
 	check(`${stem}: index read from the peaks near the page's ${d.opamp.peakModulationIndex.toFixed(3)}`, Math.abs(m.index - d.opamp.peakModulationIndex) < 0.025, `${m.index.toFixed(3)}`);
 	check(`${stem}: carrier at ${opts.oscillator ? 'the oscillator\'s' : 'the source\'s'} frequency`, rel(m.carrier, opts.oscillator ? opts.oscillator.f0 : 55000, opts.oscillator ? 0.02 : 0.002), `${m.carrier.toFixed(0)} Hz`);
+}
+
+/* ------------------------------------------------------------- filters */
+// The drawn filter must netlist into the .cir, and the .cir, run with an
+// op-amp too fast to matter, must give the response the page plots at
+// every .meas point, so what is checked is the wiring and the values.
+const secondOrder = {
+	mfb: (s) => (s.filterType === 'highpass' ? designMfbHighPass(s.wn, s.q) : designMfbLowPass(s.wn, s.q)),
+	sallenKey: (s) => (s.filterType === 'highpass' ? designSallenKeyHighPass(s.wn, s.q) : designSallenKeyLowPass(s.wn, s.q)),
+	towThomas: (s) => (s.filterType === 'highpass' ? designTowThomasHighPass(s.wn, s.q) : designTowThomasLowPass(s.wn, s.q))
+};
+const realize = (t) => (s) => (s.order === 1 ? (s.filterType === 'highpass' ? designFirstOrderHighPass(s.tau) : designFirstOrderLowPass(s.tau)) : secondOrder[t](s));
+const filterSpecs = [
+	{ filterType: 'lowpass', response: 'chebyshev', amaxDb: 3, aminDb: 40, fp: 10000, fs: 35000 },
+	{ filterType: 'highpass', response: 'butterworth', amaxDb: 3, aminDb: 40, fp: 10000, fs: 3000 },
+	{ filterType: 'bandpass', response: 'chebyshev', amaxDb: 3, aminDb: 40, fl: 1000, fh: 10000, fsl: 300, fsh: 30000 },
+	{ filterType: 'bandstop', response: 'butterworth', amaxDb: 3, aminDb: 40, fl: 1000, fh: 30000, fsl: 3000, fsh: 10000 },
+	{ filterType: 'bandstop', response: 'chebyshev', amaxDb: 3, aminDb: 40, fl: 1000, fh: 30000, fsl: 3000, fsh: 10000 }
+];
+for (const spec of filterSpecs) {
+	for (const topology of Object.keys(secondOrder)) {
+		let design;
+		if (spec.filterType === 'bandpass') design = designBandPass({ ...spec, orderLow: null, orderHigh: null });
+		else if (spec.filterType === 'bandstop') design = designBandStop({ ...spec, orderLow: null, orderHigh: null });
+		else if (spec.filterType === 'highpass') design = designHighPass({ ...spec, order: null });
+		else design = designLowPass({ ...spec, order: null });
+		const realized = design.stages.map(realize(topology));
+		const lpCount = spec.filterType === 'bandstop' ? design.lp.stages.length : 0;
+		let combinerMode = 'sum';
+		let predicted = (f) => magnitudePhaseAt(realized, f).db;
+		if (spec.filterType === 'bandstop') {
+			const branches = [realized.slice(0, lpCount), realized.slice(lpCount)];
+			const choice = combinerChoice(branches, spec.fsl, spec.fsh);
+			combinerMode = choice.mode;
+			predicted = (f) => magnitudePhaseAtParallelSum(branches, f, choice.signs).db;
+		}
+		const opts = { realizedStages: realized, topology, lpCount, combinerMode, combinerR: 10000, ...spec };
+		const stem = `flt-${spec.filterType}-${spec.response}-${topology}`;
+		const asc = join(dir, `${stem}.asc`);
+		const cir = join(dir, `${stem}.cir`);
+		writeFileSync(asc, filterSchematic(opts));
+		writeFileSync(cir, filterNetlist(opts));
+		run(['-netlist', asc], 60000);
+		const netFile = join(dir, `${stem}.net`);
+		const problems = existsSync(netFile) ? sameCircuit(readFileSync(cir, 'utf8'), readFileSync(netFile, 'latin1')) : ['LTspice wrote no netlist'];
+		check(`${stem}: LTspice netlists the drawn .asc into our .cir`, problems.length === 0, problems.slice(0, 3).join('; '));
+		const fast = `${stem}-fast`;
+		writeFileSync(join(dir, `${fast}.cir`), filterNetlist({ ...opts, gbw: '100g' }));
+		run(['-b', join(dir, `${fast}.cir`)]);
+		const logFile = join(dir, `${fast}.log`);
+		const log = existsSync(logFile) ? readFileSync(logFile, 'latin1') : '';
+		const meas = [...log.matchAll(/^v_(\w+): V\(vout\)\s*=\(([-+0-9.e]+)dB,[^)]*\) at ([-+0-9.e]+)/gim)].map((m) => ({ name: m[1], db: Number(m[2]), f: Number(m[3]) }));
+		const worst = meas.reduce((w, m) => Math.max(w, Math.abs(m.db - predicted(m.f))), 0);
+		check(`${stem}: LTspice gives the page's response at the band edges`, meas.length >= 2 && worst < 0.05, meas.length ? `${meas.map((m) => `${m.name} ${m.db.toFixed(2)} dB`).join(', ')}; worst ${worst.toFixed(3)} dB off` : 'no .meas in the log');
+	}
 }
 
 console.log(fails === 0 ? 'LTspice agrees with every export' : `${fails} failure(s)`);

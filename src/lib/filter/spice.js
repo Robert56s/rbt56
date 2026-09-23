@@ -1,4 +1,5 @@
-import { renderNetlist, renderSchematic, spiceValue } from '../spice/core';
+import { renderNetlist, spiceValue } from '../spice/core';
+import { drawFilter } from './sheet';
 
 export { spiceValue };
 
@@ -29,7 +30,7 @@ export { spiceValue };
  * are always listed [non-inverting, inverting, output]; each renderer maps
  * that onto its own convention.
  */
-function stageElements(stage, i, nIn, nOut) {
+export function stageElements(stage, i, nIn, nOut) {
 	const c = stage.components;
 	const n = (suffix) => `s${i}${suffix}`;
 	const R = (tag, a, b, value) => ({ kind: 'R', name: `R${tag}${i}`, nodes: [a, b], value });
@@ -236,18 +237,24 @@ export function generateNetlist(opts) {
 	});
 }
 
+const TOPOLOGY_LABEL = { mfb: 'multiple feedback', sallenKey: 'Sallen-Key', towThomas: 'Tow-Thomas' };
+
+/** The note on the drawn schematic, in two lines (the .cir carries the longer explanation). */
+function schematicNotes(opts) {
+	const { filterType, response, topology, realizedStages = [] } = opts;
+	const order = realizedStages.reduce((n, s) => n + (s.order ?? (/^firstOrder/.test(s.topology) ? 1 : 2)), 0);
+	const kind = `${TYPE_LABEL[filterType] ?? filterType}, ${response}, order ${order}, ${TOPOLOGY_LABEL[topology] ?? topology}`;
+	return [`Active ${kind} filter (rbt56.com/tools/filter-design)`, 'Run, then plot V(vout); the .meas lines give its gain at the band edges.'];
+}
+
 /**
- * The same circuit as a .asc schematic: real symbols, connections by net
- * label, the AC analysis already set up.
+ * The same circuit as a .asc schematic: real symbols, drawn and wired
+ * stage by stage (sheet.js), the AC analysis already set up.
  */
 export function generateSchematic(opts) {
 	const { gbw = '3Meg' } = opts;
-	const { title, comments } = headerLines(opts);
-	return renderSchematic({
-		elements: buildElements(opts),
-		title,
-		comments: [...comments, 'Plot V(vout) after Run.'],
-		directives: ['.lib opamp.sub', ...analysis(opts)],
-		gbw
-	});
+	return drawFilter(
+		{ ...opts, elements: buildElements(opts) },
+		{ comments: schematicNotes(opts), directives: ['.lib opamp.sub', ...analysis(opts)], gbw }
+	);
 }

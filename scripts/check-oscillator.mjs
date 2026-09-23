@@ -24,6 +24,7 @@ import { openLoop, retune, solveBalance, solvePole, zeroPhase } from '../src/lib
 import { buildElements, generateNetlist, generateSchematic } from '../src/lib/oscillator/spice.js';
 import { compareOscillators, designOscillator, solveLadder, TOPOLOGIES } from '../src/lib/oscillator/topologies.js';
 import { parseSchematic, spiceValue } from '../src/lib/spice/core.js';
+import { audit } from '../src/lib/spice/geometry.js';
 
 let fails = 0;
 const check = (label, ok, detail) => {
@@ -221,9 +222,35 @@ const WT = 2 * Math.PI * 3e6;
 				if (!directives.includes('.lib opamp.sub')) problems.push('no .lib opamp.sub');
 				for (const line of cir.split('\n').filter((l) => /^\.(tran|four|meas|options|model|param R)/.test(l))) if (!directives.includes(line.trim())) problems.push(`.asc lacks ${line.trim().slice(0, 30)}`);
 				check(`export ${label}: the drawn .asc is the .cir, models and directives included`, problems.length === 0, problems.length ? problems.slice(0, 3).join('; ') : `${got.length} parts`);
+				const issues = audit(asc);
+				check(`export ${label}: the .asc is drawn clean`, issues.length === 0, issues.length ? issues.slice(0, 3).map((i) => `${i.kind}: ${i.detail}`).join('; ') : 'no overlap, no crossing');
 				check(`export ${label}: the run starts from an initial condition and reports fosc and vpk`, /\.tran .* uic/.test(cir) && /IC=/.test(cir) && /\.meas TRAN fosc/.test(cir) && /\.meas TRAN vpk/.test(cir));
 			}
 		}
+	}
+	// values change length with the design (8.012meg, 90.77p): the drawing
+	// has to stay clean across the whole range, not just at the points above
+	{
+		let drawn = 0;
+		const messy = [];
+		for (const t of TOPOLOGIES) {
+			for (const s of t.id === 'wien' ? ['diodes', 'lamp', 'jfet'] : ['diodes']) {
+				for (const f of [10, 1000, 55000, 200000]) {
+					for (const a of [0.5, 3, 10]) {
+						let asc;
+						try {
+							asc = generateSchematic(designOscillator({ topology: t.id, stabilizer: s, frequency: f, amplitude: a }));
+						} catch {
+							continue;
+						}
+						drawn++;
+						const issues = audit(asc);
+						if (issues.length) messy.push(`${t.id}/${s} ${f} Hz ${a} V: ${issues[0].kind}: ${issues[0].detail}`);
+					}
+				}
+			}
+		}
+		check('export: every drawing across the range is clean', messy.length === 0 && drawn > 50, messy.length ? messy.slice(0, 3).join('; ') : `${drawn} drawings`);
 	}
 	const lamp = generateNetlist(designOscillator({ topology: 'wien', stabilizer: 'lamp', frequency: 1000, amplitude: 3 }));
 	check('export: the lamp is a resistor that heats up, started hot', /RLAMP nm 0 R=\{Rcold\*\(1\+alpha\*V\(theta\)\)\}/.test(lamp) && /BTH 0 theta I=/.test(lamp) && /CTH theta 0 .* IC=/.test(lamp) && /\.param Rcold=/.test(lamp));

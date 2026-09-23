@@ -176,11 +176,23 @@ export function generateNetlist({ design, fmPreview = 1000, oscillator = null, i
 	});
 }
 
+/**
+ * The note on the drawn schematic, in two lines: what it is and what to
+ * plot (the .cir carries the longer explanation).
+ */
+function schematicNotes(design, oscillator) {
+	const { carrier, modulationIndex, topology } = design;
+	const cell = topology === 'inverting' ? 'inverting cell' : 'non-inverting cell';
+	const source = oscillator ? `carrier from the ${oscillator.topo.label} oscillator drawn below` : 'carrier from a generator';
+	return [
+		`JFET AM modulator, ${cell} (rbt56.com/tools/am-modulator-demodulator): ${(carrier.fp / 1000).toFixed(1)} kHz carrier, n = ${modulationIndex.toFixed(2)}, ${source}`,
+		'Run, then plot V(vout) for the modulated carrier and V(vgate) for the gate drive.'
+	];
+}
+
 export function generateSchematic({ design, fmPreview = 1000, oscillator = null }) {
-	const { title, comments } = meta(design, oscillator);
 	return drawModulator({ design, fmPreview, oscillator }, {
-		title,
-		comments: [...comments, 'Plot V(vout) after Run; V(vgate) is the gate drive.'],
+		comments: schematicNotes(design, oscillator),
 		directives: ['.lib opamp.sub', ...params(design, oscillator).filter((l) => !l.startsWith('.param AOL')), ...analysis(design, fmPreview, oscillator)],
 		gbw: `${(design.opamp.gbw / 1e6).toPrecision(3)}Meg`
 	});

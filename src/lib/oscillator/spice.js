@@ -224,11 +224,24 @@ export function generateNetlist(design, { ideal = false } = {}) {
 	});
 }
 
+/**
+ * The note on the drawn schematic: what it is and how to read the run,
+ * in two lines (the .cir carries the longer explanation).
+ */
+function schematicNotes(design) {
+	const { topo, f0, amplitude, limiter } = design;
+	const stab = limiter.kind === 'diodes' ? 'diode limiting' : limiter.kind === 'lamp' ? 'lamp' : limiter.kind === 'jfet' ? 'JFET gain control' : 'diode clamp';
+	const amp = limiter.amplitudeActual ?? amplitude;
+	const probe = probeNode(design);
+	const hz = f0 >= 1000 ? `${(f0 / 1000).toPrecision(4)} kHz` : `${f0.toPrecision(4)} Hz`;
+	const lines = [`${topo.label} oscillator, ${stab} (rbt56.com/tools/oscillator): ${hz}, ${amp.toFixed(2)} V peak`, `Run, then Ctrl+L: fosc is the frequency and vpk the amplitude of V(${probe}).`];
+	if (limiter.regulates === false) lines.push('With these parts the amplitude control cannot hold the loop: the output grows.');
+	return lines;
+}
+
 export function generateSchematic(design) {
-	const { title, comments } = meta(design);
 	return drawOscillator(design, {
-		title,
-		comments,
+		comments: schematicNotes(design),
 		directives: ['.lib opamp.sub', ...paramLines(design).filter((l) => !l.startsWith('.param AOL')), ...analysisLines(design)],
 		gbw: `${(design.opamp.gbw / 1e6).toPrecision(3)}Meg`
 	});

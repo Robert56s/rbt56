@@ -19,6 +19,7 @@ import { designSallenKeyLowPass } from '../src/lib/filter/sallenKey.js';
 import { designSallenKeyHighPass } from '../src/lib/filter/sallenKeyHighPass.js';
 import { buildElements, generateNetlist, generateSchematic } from '../src/lib/filter/spice.js';
 import { parseSchematic, spiceValue } from '../src/lib/spice/core.js';
+import { audit } from '../src/lib/spice/geometry.js';
 import { designBandPass, designBandStop, designHighPass, designLowPass } from '../src/lib/filter/stages.js';
 import { designTowThomasHighPass, designTowThomasLowPass } from '../src/lib/filter/towThomas.js';
 
@@ -234,19 +235,18 @@ for (const spec of SPECS) {
 			const label = `${spec.filterType.padEnd(8)} ${topology.padEnd(10)} ${response.padEnd(12)} n=${design.n ?? `${design.lp.n}+${design.hp.n}`}${spec.filterType === 'bandstop' ? ` ${combinerMode}` : ''}`;
 			check(label, worst < 0.02, `ecart max ${worst.toFixed(4)} dB a ${worstAt.toFixed(0)} Hz, ${elements.length} elements`);
 
-			// the .asc has to describe exactly the same circuit
-			const asc = generateSchematic({
-				realizedStages: realized,
-				topology,
-				lpCount,
-				combinerMode,
-				combinerR: 10000,
-				...args
-			});
+			// the .asc has to describe exactly the same circuit. It is drawn, so
+			// most of its nets carry no name: what must match is which pins
+			// share a net, every name that is drawn, the values and the
+			// directives
+			const opts = { realizedStages: realized, topology, lpCount, combinerMode, combinerR: 10000, ...args };
+			const asc = generateSchematic(opts);
 			const wanted = buildElements({ realizedStages: realized, filterType: spec.filterType, lpCount, combinerMode, combinerR: 10000 }).filter((e) => e.kind !== 'LABEL');
-			const { elements: got, clashes, dangling } = parseSchematic(asc);
+			const { elements: got, clashes, dangling, directives } = parseSchematic(asc);
 			const problems = [...clashes, ...dangling];
 			if (got.length !== wanted.length) problems.push(`${got.length} symbols for ${wanted.length} elements`);
+			const netOf = new Map();
+			const nodeOf = new Map();
 			for (const w of wanted) {
 				const g = got.find((e) => e.name === w.name);
 				if (!g) {
@@ -254,12 +254,52 @@ for (const spec of SPECS) {
 					continue;
 				}
 				if (g.kind !== w.kind) problems.push(`${w.name} is a ${g.kind}, expected ${w.kind}`);
-				if (g.nodes.join('|') !== w.nodes.join('|')) problems.push(`${w.name} wired ${g.nodes.join(',')} instead of ${w.nodes.join(',')}`);
+				g.nodes.forEach((net, i) => {
+					const node = w.nodes[i];
+					if (netOf.has(net) && netOf.get(net) !== node) problems.push(`${w.name} pin ${i}: drawn net joins ${netOf.get(net)} and ${node}`);
+					if (nodeOf.has(node) && nodeOf.get(node) !== net) problems.push(`${w.name} pin ${i}: node ${node} is split in the drawing`);
+					netOf.set(net, node);
+					nodeOf.set(node, net);
+					if (!net.startsWith('_n') && net !== node) problems.push(`${w.name} pin ${i}: labelled ${net}, expected ${node}`);
+				});
 				if (w.kind !== 'V' && w.kind !== 'OP' && g.value !== spiceValue(w.value)) problems.push(`${w.name} reads ${g.value}, expected ${spiceValue(w.value)}`);
 			}
-			check(`  .asc same circuit`, problems.length === 0, problems.length ? problems.slice(0, 3).join('; ') : `${got.length} symbols, ${asc.split('FLAG ').length - 1} net labels`);
+			if (!directives.includes('.lib opamp.sub')) problems.push('no .lib opamp.sub');
+			for (const line of generateNetlist(opts).split('\n').filter((l) => /^\.(ac|meas)/.test(l))) if (!directives.includes(line.trim())) problems.push(`.asc lacks ${line.trim()}`);
+			check(`  .asc same circuit`, problems.length === 0, problems.length ? problems.slice(0, 3).join('; ') : `${got.length} symbols`);
+			const issues = audit(asc);
+			check(`  .asc drawn clean`, issues.length === 0, issues.length ? issues.slice(0, 3).map((i) => `${i.kind}: ${i.detail}`).join('; ') : 'no overlap, no crossing');
 		}
 	}
+}
+
+// values change length with the frequency (470p, 1.5u, 180k): the drawing
+// has to stay clean from a few hertz to a few hundred kilohertz
+{
+	let drawn = 0;
+	const messy = [];
+	for (const k of [0.001, 0.1, 30]) {
+		for (const spec of SPECS) {
+			const scaled = Object.fromEntries(Object.entries(spec).map(([key, v]) => [key, /^f(p|s|l|h|sl|sh)$/.test(key) ? v * k : v]));
+			for (const topology of Object.keys(second)) {
+				for (const response of ['butterworth', 'chebyshev']) {
+					const args = { response, ...scaled };
+					let design;
+					if (scaled.filterType === 'bandpass') design = designBandPass({ ...args, orderLow: null, orderHigh: null });
+					else if (scaled.filterType === 'bandstop') design = designBandStop({ ...args, orderLow: null, orderHigh: null });
+					else if (scaled.filterType === 'highpass') design = designHighPass({ ...args, order: null });
+					else design = designLowPass({ ...args, order: null });
+					const realized = design.stages.map(realize(topology));
+					const lpCount = scaled.filterType === 'bandstop' ? design.lp.stages.length : 0;
+					const combinerMode = scaled.filterType === 'bandstop' ? combinerChoice([realized.slice(0, lpCount), realized.slice(lpCount)], scaled.fsl, scaled.fsh).mode : 'sum';
+					const issues = audit(generateSchematic({ realizedStages: realized, topology, lpCount, combinerMode, combinerR: 10000, ...args }));
+					drawn++;
+					if (issues.length) messy.push(`${scaled.filterType} ${topology} ${response} x${k}: ${issues[0].kind}: ${issues[0].detail}`);
+				}
+			}
+		}
+	}
+	check('every drawing from a few hertz to a few hundred kilohertz is clean', messy.length === 0, messy.length ? messy.slice(0, 3).join('; ') : `${drawn} drawings`);
 }
 
 console.log(fails === 0 ? 'netlists LTspice conformes au modele de l outil' : `${fails} failure(s)`);

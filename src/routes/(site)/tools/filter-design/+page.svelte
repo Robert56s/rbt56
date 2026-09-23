@@ -1572,9 +1572,8 @@
 
 				<p class="note">
 					An LTspice schematic with the same component values as the tables above and the AC
-					analysis already set up: open it, press Run, plot V(vout). Connections are made by net
-					label rather than drawn wires, so the sheet stays readable whatever the topology and
-					parts can be dragged around without breaking anything. Each op-amp is LTspice's ideal
+					analysis already set up: open it, press Run, plot V(vout). Each stage is drawn wire by
+					wire, the way a textbook draws it. Each op-amp is LTspice's ideal
 					single-pole model with its gain-bandwidth as an editable attribute (3Meg for a TL07x,
 					10Meg for an NE5532), so the simulation shows what a real part does to the response,
 					which the ideal maths on this page cannot.
