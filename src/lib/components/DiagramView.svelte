@@ -32,4 +32,12 @@
 	svg :global(.lbl.note) {
 		fill: var(--textDim);
 	}
+
+	/* a letter drawn inside a symbol, the V of a voltmeter */
+	svg :global(.glyph) {
+		font-family: var(--mono);
+		font-size: 13px;
+		font-weight: 600;
+		fill: currentColor;
+	}
 </style>

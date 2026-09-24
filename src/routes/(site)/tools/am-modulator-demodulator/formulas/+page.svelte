@@ -133,6 +133,22 @@
 		</div>
 
 		<div class="formula">
+			<h3>Datasheet figures and the SPICE model</h3>
+			<p class="note">
+				A datasheet prints V_P as the gate-source cutoff voltage V_GS(off), a range read at a tiny
+				drain current; I_DSS as a minimum; r_DS(on) as a maximum on switching JFETs; and on amplifier
+				JFETs the forward transfer admittance |y_fs| at V_GS = 0 instead of r_DS(on). In the square-law
+				model the channel conductance at V_GS = 0 equals that transconductance.
+			</p>
+			<Equation tex={`r_{DS(on)} = \\dfrac{|V_P|}{2 I_{DSS}} = \\dfrac{1}{g_{fs0}}, \\qquad g_{fs0} = \\dfrac{2 I_{DSS}}{|V_P|}`} />
+			<Equation tex={`\\text{SPICE: } V_{to} = V_P, \\qquad \\text{Beta} = \\dfrac{I_{DSS}}{V_P^2} = \\dfrac{\\beta}{2}`} />
+			<p class="note">
+				<strong>How to use:</strong> with only |y_fs| printed, enter r_DS(on) = 1/|y_fs|. SPICE writes the
+				square law as Beta (V_GS - V_P)², so its Beta is half the beta used here.
+			</p>
+		</div>
+
+		<div class="formula">
 			<h3>Bias point</h3>
 			<p class="note">Halfway along the gate range is halfway up the conductance line, leaving equal room to swing both ways (or the middle of the measured window).</p>
 			<Equation tex={`V_C = \\dfrac{V_P}{2}, \\qquad G(V_C) = \\dfrac{I_{DSS}}{|V_P|}, \\qquad r_{DS}(V_C) = \\dfrac{|V_P|}{I_{DSS}}`} />

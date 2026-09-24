@@ -3,8 +3,11 @@
 	// and why) and LaTeX formulas, rendered with KaTeX (general form, then
 	// the same form with this design's actual numbers substituted in, each
 	// on its own line rather than crammed into a sentence). Content comes
-	// from src/lib/filter/explain.js.
+	// from the tools' explain.js. A guide can also hold a small table
+	// ({ type: 'table', head, rows }), numbered steps ({ type: 'steps',
+	// items }) and a circuit ({ type: 'figure', diagram, label }).
 
+	import DiagramView from './DiagramView.svelte';
 	import Equation from './Equation.svelte';
 
 	let { blocks, summary = 'Show the math' } = $props();
@@ -18,6 +21,29 @@
 				<p class="stageHead">{block.text}</p>
 			{:else if block.type === 'p'}
 				<p class="prose">{block.text}</p>
+			{:else if block.type === 'table'}
+				<div class="tableScroll">
+					<table class="guide">
+						<thead>
+							<tr>
+								{#each block.head as cell, c (c)}<th>{cell}</th>{/each}
+							</tr>
+						</thead>
+						<tbody>
+							{#each block.rows as row, r (r)}
+								<tr>
+									{#each row as cell, c (c)}<td>{cell}</td>{/each}
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			{:else if block.type === 'steps'}
+				<ol class="steps">
+					{#each block.items as item, k (k)}<li>{item}</li>{/each}
+				</ol>
+			{:else if block.type === 'figure'}
+				<div class="figure"><DiagramView diagram={block.diagram} label={block.label} /></div>
 			{:else}
 				<Equation tex={block.tex} />
 			{/if}
@@ -72,5 +98,37 @@
 		margin-top: 0;
 		padding-top: 0;
 		border-top: 0;
+	}
+
+	/* a guide's table holds words, so its cells wrap, unlike a table of numbers */
+	.guide th,
+	.guide td {
+		white-space: normal;
+		vertical-align: top;
+	}
+
+	.guide td {
+		font-family: inherit;
+		color: var(--textDim);
+	}
+
+	.guide td:first-child {
+		font-family: var(--mono);
+		color: var(--text);
+		white-space: nowrap;
+	}
+
+	.steps {
+		margin: 0;
+		padding-left: 1.3rem;
+		display: grid;
+		gap: 0.35rem;
+		font-size: 0.88rem;
+		color: var(--textDim);
+		max-width: 74ch;
+	}
+
+	.figure {
+		max-width: 560px;
 	}
 </style>

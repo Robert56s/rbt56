@@ -4,6 +4,25 @@ import { formatFarads, formatHenries, formatOhms } from './format';
 const SCALE = 48;
 const MARGIN = 24;
 
+/** Places a symbol so that its port `key` lands exactly on `p`, which keeps every wire to it straight. */
+function placeAt(name, key, p) {
+	const off = placeSymbol(name, 0, 0, SCALE).ports[key];
+	return placeSymbol(name, p.x - off.x, p.y - off.y, SCALE);
+}
+
+/**
+ * A voltmeter centred on (cx, cy), leads on top ('1') and below ('2').
+ * Drawn here because the schematic-symbols vertical meter turns its V on
+ * its side; it describes its own ports and body the way the logic gates
+ * do, so the schematic audit checks the wiring around it.
+ */
+function voltmeter(cx, cy) {
+	const r = 14;
+	const ports = { 1: { x: cx, y: cy - r }, 2: { x: cx, y: cy + r } };
+	const inner = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="currentColor" stroke-width="1.6" /><text x="${cx}" y="${cy + 4.5}" text-anchor="middle" class="glyph">V</text>`;
+	return { svg: `<g data-symbol="voltmeter" data-ports="${cx},${cy - r};${cx},${cy + r}" data-bbox="${cx - r},${cy - r},${cx + r},${cy + r}">${inner}</g>`, ports };
+}
+
 /**
  * JFET modulator gain cell: non-inverting amplifier where the carrier
  * xp(t) drives the + input, the JFET channel (drain at the - input node,
@@ -544,6 +563,66 @@ export function buildCarrierDividerDiagram({ top, bottom }) {
 
 	const width = out.x + 90;
 	return { svg: parts.join(''), viewBox: `0 30 ${width} 190` };
+}
+
+/**
+ * Bench setup for characterizing a JFET in its ohmic region, the way the
+ * Measured points mode reads it: a small V_in through R_series into the
+ * drain, the source grounded, the gate at an adjustable negative V_GS, a
+ * voltmeter on the drain and one on the gate.
+ */
+export function buildJfetTestDiagram() {
+	const railY = 90;
+	const D = { x: 300, y: railY };
+	const jfet = placeAt('njfet_transistor_horz', 'drain', { x: D.x, y: railY + 60 });
+	const rser = placeAt('resistor_right', '2', { x: D.x - 50, y: railY });
+	const vin = { x: MARGIN, y: railY };
+	const vd = voltmeter(D.x + 90, railY + 60);
+	const vdCorner = { x: vd.ports[1].x, y: railY };
+	const vdGnd = placeAt('ground_down', '1', { x: vd.ports[2].x, y: vd.ports[2].y + 16 });
+	const sGnd = placeAt('ground_down', '1', { x: jfet.ports.source.x, y: jfet.ports.source.y + 20 });
+	const G = { x: jfet.ports.gate.x - 110, y: jfet.ports.gate.y };
+	const vg = voltmeter(G.x, G.y + 50);
+	const vgGnd = placeAt('ground_down', '1', { x: vg.ports[2].x, y: vg.ports[2].y + 16 });
+	const supply = { x: MARGIN + 30, y: G.y };
+
+	const net = createNet();
+	net.wire(vin, rser.ports['1']);
+	net.wire(rser.ports['2'], D);
+	net.wire(D, jfet.ports.drain);
+	net.wire(D, vdCorner);
+	net.wire(vdCorner, vd.ports[1]);
+	net.wire(vd.ports[2], vdGnd.ports['1']);
+	net.wire(jfet.ports.source, sGnd.ports['1']);
+	net.wire(supply, G);
+	net.wire(G, jfet.ports.gate);
+	net.wire(G, vg.ports[1]);
+	net.wire(vg.ports[2], vgGnd.ports['1']);
+
+	const meterMid = (m) => (m.ports[1].y + m.ports[2].y) / 2;
+	const parts = [
+		rser.svg,
+		jfet.svg,
+		vd.svg,
+		vdGnd.svg,
+		sGnd.svg,
+		vg.svg,
+		vgGnd.svg,
+		net.svg(),
+		net.dots(portPoints(rser, jfet, vd, vdGnd, sGnd, vg, vgGnd)),
+		label('V_in, 0.1 to 0.2 V', vin.x, railY - 12, { anchor: 'start' }),
+		label('R_series', (rser.ports['1'].x + rser.ports['2'].x) / 2, railY - 16, { anchor: 'middle' }),
+		label('V_D', vd.ports[1].x + 22, meterMid(vd) + 4, { anchor: 'start' }),
+		label('V_GS', vg.ports[1].x + 22, meterMid(vg) + 4, { anchor: 'start' }),
+		label('adjustable, 0 V to V_P', supply.x, supply.y - 12, { anchor: 'start' }),
+		label('D', jfet.ports.drain.x + 8, jfet.ports.drain.y - 4, { anchor: 'start' }),
+		label('S', jfet.ports.source.x + 8, jfet.ports.source.y + 4, { anchor: 'start' }),
+		label('G', jfet.ports.gate.x - 8, jfet.ports.gate.y - 6, { anchor: 'end' })
+	];
+
+	const width = vd.ports[1].x + 70;
+	const bottom = vgGnd.ports['1'].y + 30;
+	return { svg: parts.join(''), viewBox: `0 50 ${width} ${bottom - 50}` };
 }
 
 /**

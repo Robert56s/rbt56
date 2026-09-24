@@ -429,6 +429,7 @@ const CASES = [
 	['oscillator/clamp', () => buildClampDiagram(designOscillator({ topology: 'quadrature', frequency: 1000, amplitude: 3 }))],
 	['oscillator/limiter-ladder', () => buildLimiterDiagram(designOscillator({ topology: 'bubba', frequency: 1000, amplitude: 3 }))],
 	['modulation/buildJfetInvertingCellDiagram', () => modulation.buildJfetInvertingCellDiagram({ r2: 3900 })],
+	['modulation/buildJfetTestDiagram', () => modulation.buildJfetTestDiagram()],
 	['modulation/buildBiasSummerDiagram', () => modulation.buildBiasSummerDiagram({ c: 2.2e-6, rac: 5600, rbias: 62000, rf: 10000 })],
 	['modulation/buildCarrierDividerDiagram', () => modulation.buildCarrierDividerDiagram({ top: 9100, bottom: 1000 })],
 	['modulation/buildSummerDiagram(n=3)', () => modulation.buildSummerDiagram({ inputs: ['x_p(t)', 'x_m(t)', 'V_DC (bias)'], r: 10000 })],

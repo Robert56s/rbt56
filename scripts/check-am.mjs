@@ -12,7 +12,7 @@
 
 import katex from 'katex';
 import { explainCarrierPath, explainConditioningChain, explainInvertingCell, explainJfetGainCell, explainJfetPhysics, explainOpampLimits } from '../src/lib/modulation/explain.js';
-import { explainJfetModel } from '../src/lib/modulation/explain.js';
+import { explainJfetModel, explainJfetSourcing } from '../src/lib/modulation/explain.js';
 import { fitModel, JFET_PRESETS, modelFromIdss, modelFromRdsOn, parseMeasurements } from '../src/lib/modulation/jfetModel.js';
 import { channelConductance, compareTopologies, conductanceDepth, designJfetModulator } from '../src/lib/modulation/jfetModulator.js';
 import { buildElements as buildModElements, generateNetlist as modNetlist, generateSchematic as modSchematic } from '../src/lib/modulation/spice.js';
@@ -324,6 +324,33 @@ check('carrier: peak current is Ac times the largest conductance', near(d.carrie
 		render(label, [...explainJfetPhysics(dd), ...explainJfetGainCell(dd), ...explainConditioningChain(dd), ...explainCarrierPath(dd), ...explainOpampLimits(dd)]);
 	}
 	check(`explanations: ${n} equations render under strict KaTeX, no "-" placeholders`, bad === 0, `${bad} failures`);
+}
+
+/* ------------------------------------------- the V_P, I_DSS, r_DS(on) guide */
+{
+	const guide = explainJfetSourcing();
+	const words = guide.flatMap((b) => {
+		if (b.type === 'table') return [...b.head, ...b.rows.flat()];
+		if (b.type === 'steps') return b.items;
+		if (b.type === 'figure') return [b.label];
+		return b.type === 'eq' ? [] : [b.text];
+	});
+	let bad = 0;
+	for (const b of guide.filter((x) => x.type === 'eq')) {
+		try {
+			katex.renderToString(b.tex, { throwOnError: true, strict: 'error' });
+		} catch (e) {
+			bad++;
+			console.log('KATEX FAIL guide', b.tex.slice(0, 80), e.message);
+		}
+	}
+	check('guide: its equations render under strict KaTeX', bad === 0 && guide.some((b) => b.type === 'eq'), `${guide.filter((b) => b.type === 'eq').length} equations`);
+	const wrong = words.filter((t) => typeof t !== 'string' || t.length === 0 || /undefined|NaN|[–—]/.test(t) || /\byou(r|rs)?\b/i.test(t));
+	check('guide: plain words, no placeholders, no long dashes, never "you"', wrong.length === 0, wrong.length ? wrong[0] : `${words.length} pieces of text`);
+	const table = guide.find((b) => b.type === 'table');
+	check('guide: the datasheet table covers V_P, I_DSS and r_DS(on)', !!table && ['V_P', 'I_DSS', 'r_DS(on)'].every((f) => table.rows.some((r) => r[0] === f)));
+	const fig = guide.find((b) => b.type === 'figure');
+	check('guide: draws the bench circuit, a JFET and two voltmeters', !!fig && /data-symbol="njfet_transistor_horz"/.test(fig.diagram.svg) && (fig.diagram.svg.match(/data-symbol="voltmeter"/g) ?? []).length === 2);
 }
 
 console.log(fails === 0 ? 'am checks clean' : `${fails} failure(s)`);

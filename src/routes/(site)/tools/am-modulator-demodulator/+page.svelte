@@ -33,6 +33,7 @@
 		explainJfetGainCell,
 		explainJfetModel,
 		explainJfetPhysics,
+		explainJfetSourcing,
 		explainOpampLimits,
 		explainRectifier
 	} from '$lib/modulation/explain';
@@ -62,6 +63,8 @@
 	let windowLow = $state(-3.5);
 	let windowHigh = $state(-0.5);
 	let presetNote = $state('');
+	// the guide to V_P, I_DSS and r_DS(on) is the same for every design
+	const jfetSourcing = explainJfetSourcing();
 	let swingFraction = $state(0.9);
 	let targetN = $state(0.85);
 	let sourceAmplitude = $state(1);
@@ -427,6 +430,8 @@
 				</div>
 			</div>
 
+			<MathPanel blocks={jfetSourcing} summary="How to find V_P, I_DSS and r_DS(on): datasheet, calculation, lab" />
+
 			{#if presetNote}
 				<p class="note">{presetNote}</p>
 			{/if}
@@ -701,24 +706,26 @@
 				{/if}
 				{#if topologyRows.length === 2}
 					<h3>Both cells on this JFET, carrier and op-amp</h3>
-					<table class="compare">
-						<thead>
-							<tr>
-								<th></th>
-								<th>Non-inverting</th>
-								<th>Inverting</th>
-							</tr>
-						</thead>
-						<tbody>
-							{#each [['Modulation index n (designed)', (r) => (r.ok ? r.n.toFixed(3) : 'not realizable')], ['n effective after the crest loss', (r) => (r.ok ? r.nEffective.toFixed(3) : '')], ['Noise gain at the crest K_max', (r) => (r.ok ? r.kCrest.toFixed(1) : '')], ['Closed-loop bandwidth at the crest', (r) => (r.ok ? formatHz(r.bwCrest) : '')], ['f_p K_max / GBW', (r) => (r.ok ? r.gbwRatio.toFixed(2) + (r.gbwRatio > 0.2 ? ' (over)' : '') : '')], ['Audio THD from the envelope', (r) => (r.ok ? (100 * r.thd).toFixed(2) + ' %' : '')], ['Output carrier amplitude', (r) => (r.ok ? formatVolts(r.carrierOut) : '')], ['Feedback resistor', (r) => (r.ok ? formatOhms(r.feedback) : '')], ['Op-amps', (r) => (r.ok ? String(r.opampCount) : '')]] as [name, cell] (name)}
+					<div class="tableScroll">
+						<table class="compare">
+							<thead>
 								<tr>
-									<td>{name}</td>
-									<td>{cell(topologyRows[0])}</td>
-									<td>{cell(topologyRows[1])}</td>
+									<th></th>
+									<th>Non-inverting</th>
+									<th>Inverting</th>
 								</tr>
-							{/each}
-						</tbody>
-					</table>
+							</thead>
+							<tbody>
+								{#each [['Modulation index n (designed)', (r) => (r.ok ? r.n.toFixed(3) : 'not realizable')], ['n effective after the crest loss', (r) => (r.ok ? r.nEffective.toFixed(3) : '')], ['Noise gain at the crest K_max', (r) => (r.ok ? r.kCrest.toFixed(1) : '')], ['Closed-loop bandwidth at the crest', (r) => (r.ok ? formatHz(r.bwCrest) : '')], ['f_p K_max / GBW', (r) => (r.ok ? r.gbwRatio.toFixed(2) + (r.gbwRatio > 0.2 ? ' (over)' : '') : '')], ['Audio THD from the envelope', (r) => (r.ok ? (100 * r.thd).toFixed(2) + ' %' : '')], ['Output carrier amplitude', (r) => (r.ok ? formatVolts(r.carrierOut) : '')], ['Feedback resistor', (r) => (r.ok ? formatOhms(r.feedback) : '')], ['Op-amps', (r) => (r.ok ? String(r.opampCount) : '')]] as [name, cell] (name)}
+									<tr>
+										<td>{name}</td>
+										<td>{cell(topologyRows[0])}</td>
+										<td>{cell(topologyRows[1])}</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
 					<p class="note">
 						Same JFET line, same swing, same carrier and op-amp. The non-inverting row uses the
 						target n above; the inverting row's n is the conductance depth s itself, since that

@@ -1,3 +1,4 @@
+import { buildJfetTestDiagram } from './circuits';
 import { formatFarads, formatHenries, formatHz, formatOhms, formatVolts } from './format';
 import { explainApproximation, explainOrder, explainSallenKey, explainStage } from '../filter/explain';
 
@@ -24,6 +25,15 @@ function eq(tex) {
 }
 function head(text) {
 	return { type: 'p', text, cls: 'stageHead' };
+}
+function table(headRow, rows) {
+	return { type: 'table', head: headRow, rows };
+}
+function steps(items) {
+	return { type: 'steps', items };
+}
+function figure(diagram, label) {
+	return { type: 'figure', diagram, label };
 }
 
 /* ------------------------------------------------------------------------ */
@@ -81,6 +91,54 @@ export function explainAmBasics(n = null) {
 /* ------------------------------------------------------------------------ */
 /* JFET modulator                                                            */
 /* ------------------------------------------------------------------------ */
+
+/**
+ * The guide under the JFET fields: which figures a datasheet prints, which
+ * the page works out from them, and how to measure the part in hand. The
+ * same for every design, so it takes no arguments.
+ */
+export function explainJfetSourcing() {
+	return [
+		head('1. Read on the datasheet'),
+		p('Three lines of the electrical characteristics table fill the fields above. Makers print limits (a minimum, a maximum or a range), never the value of the part in hand.'),
+		table(
+			['Field here', 'Datasheet line', 'Maker\'s test condition'],
+			[
+				['V_P', 'Gate-source cutoff voltage V_GS(off), also called pinch-off voltage', 'a tiny drain current, 1 nA to 1 µA'],
+				['I_DSS', 'Zero-gate-voltage drain current I_DSS', 'V_GS = 0, V_DS about 15 V, often a short pulse'],
+				['r_DS(on)', 'Drain-source on-resistance r_DS(on), on switching JFETs (J111 to J113)', 'V_GS = 0, V_DS of 0.1 V or less'],
+				['r_DS(on) ≈ 1/|y_fs|', 'Forward transfer admittance |y_fs| or g_fs, on amplifier JFETs (2N5457, 2N3819) that print no r_DS(on)', 'V_GS = 0, V_DS about 15 V, 1 kHz']
+			]
+		),
+		p('Enter V_P and one of the other two. For V_P take the middle of the V_GS(off) range, as the presets do. r_DS(on) is printed as a maximum and I_DSS as a minimum, so both describe the weakest part the maker will ship, not a typical one.'),
+		head('2. Worked out on this page'),
+		p('The design needs one straight line: the channel conductance G against the gate voltage. Its zero is V_P and its slope is beta. No datasheet prints beta; it follows from V_P and either of the other two figures, which is also why either one gives the other:'),
+		eq('G(V_{GS}) = \\beta\\,(V_{GS} - V_P), \\qquad \\beta = \\dfrac{2 I_{DSS}}{V_P^2} = \\dfrac{1}{r_{DS(on)}\\,|V_P|}'),
+		p('The same model says the channel conductance at V_GS = 0 equals the transconductance there, the figure amplifier datasheets print, hence the last row of the table:'),
+		eq('r_{DS(on)} = \\dfrac{|V_P|}{2 I_{DSS}} = \\dfrac{1}{g_{fs0}}, \\qquad g_{fs0} = \\dfrac{2 I_{DSS}}{|V_P|}'),
+		p('Everything after that is computed too: the bias V_C = V_P/2, the channel resistance there, and the JFET model of the LTspice export, whose Beta is half this page\'s beta because SPICE writes the square law as Beta (V_GS - V_P)²:'),
+		eq('\\text{SPICE: } V_{to} = V_P, \\qquad \\text{Beta} = \\dfrac{I_{DSS}}{V_P^2} = \\dfrac{\\beta}{2}'),
+		head('3. Measure it in the lab'),
+		p('Two JFETs with the same part number can differ by a factor of three or more, so the part that goes on the board is worth measuring. The safest way is also the one the Measured points mode reads: the channel as a resistor with a small voltage across it, exactly how the modulator uses it.'),
+		figure(buildJfetTestDiagram(), 'JFET channel measurement: V_in through R_series into the drain, source grounded, gate at an adjustable V_GS, a voltmeter on the drain and one on the gate'),
+		steps([
+			'Ground the source. Feed the drain from a small V_in, 0.1 V to 0.2 V, through R_series of about twice the expected r_DS(on), the channel\'s value at the bias point. V_D can never exceed V_in, which keeps the channel ohmic everywhere but in the last few tenths of a volt before V_P.',
+			'Drive the gate from an adjustable negative voltage, for instance a potentiometer across a negative supply. The gate draws almost no current.',
+			'Start at V_GS = 0 and step towards V_P in about ten steps. At each step read V_GS at the gate, V_in at the top of R_series and V_D at the drain.',
+			'Stop when V_D is almost V_in: the channel is nearly closed.',
+			'Choose Measured points above and enter one row per step: V_GS V_in V_D R_series, with R_series as measured on an ohmmeter. The page turns each row into a conductance and fits the line.',
+			'Set the fit window on the straight stretch, leaving out the last points near V_P, where a real channel closes gradually rather than at once.'
+		]),
+		eq('r_{DS} = R_{series}\\,\\dfrac{V_D}{V_{in} - V_D}, \\qquad G = \\dfrac{1}{r_{DS}} = a\\,V_{GS} + b \\ \\Rightarrow\\ V_P = -\\dfrac{b}{a}, \\quad \\beta = a'),
+		p('The fitted V_P lands a little closer to 0 V than a V_GS(off) reading, which is taken at a tiny current, out in that gradual tail. The design runs on the line, so the fitted value is the one to keep.'),
+		head('Quick readings without the fit'),
+		steps([
+			'V_P, any JFET: gate to ground, 1 MΩ from source to ground, drain at +15 V. The source rises until the channel is almost closed, so a 10 MΩ voltmeter on the source reads about |V_P| (V_GS(off) at a few microamps, like a datasheet).',
+			'I_DSS, low-current parts only: gate tied to source, V_DS about 10 V (more than |V_P|), read the drain current briefly. 10 V x 5 mA = 50 mW is fine for a 2N5457; a J111 passes 20 mA or more, so measure it the ohmic way instead.'
+		]),
+		p('Both go into the V_P and I_DSS mode.')
+	];
+}
 
 /** Where the JFET's numbers came from: the datasheet pair, or a line fitted to measurements. */
 export function explainJfetModel(model) {
