@@ -38,6 +38,7 @@ export const SHAPES = {
 	ind: { body: [[0, 16, 32, 96]], pins: [[16, 16], [16, 96]], windows: { 0: [36, 40, 'Left'], 3: [36, 80, 'Left'] } },
 	voltage: { body: circle(0, 56), pins: [[0, 16], [0, 96]], windows: { 0: [24, 16, 'Left'], 3: [24, 96, 'Left'] } },
 	bi: { body: circle(0, 40), pins: [[0, 0], [0, 80]], windows: { 0: [24, 0, 'Left'], 3: [24, 80, 'Left'] } },
+	bv: { body: circle(0, 56), pins: [[0, 16], [0, 96]], windows: { 0: [24, 16, 'Left'], 3: [24, 96, 'Left'] } },
 	diode: { body: [[0, 20, 32, 44]], pins: [[16, 0], [16, 64]], windows: { 0: [24, 0, 'Left'], 3: [24, 64, 'Left'] } },
 	njf: { body: [[4, 16, 48, 80]], pins: [[48, 0], [0, 64], [48, 96]], windows: { 0: [56, 32, 'Left'], 3: [56, 72, 'Left'] } },
 	// the triangle from (-32, 32)-(-32, 96) to the tip at (32, 64), in four slices
@@ -50,6 +51,17 @@ export const SHAPES = {
 		],
 		pins: [[-32, 48], [-32, 80], [32, 64]],
 		windows: { 0: [0, 32, 'Left'] }
+	},
+	// the same triangle, with V+ and V- on 16-unit leads above and below it
+	'Opamps\\opamp2': {
+		body: [
+			[-32, 32, -16, 96],
+			[-16, 40, 0, 88],
+			[0, 48, 16, 80],
+			[16, 56, 32, 72]
+		],
+		pins: [[-32, 80], [-32, 48], [0, 32], [0, 96], [32, 64]],
+		windows: { 0: [16, 32, 'Left'], 3: [16, 96, 'Left'] }
 	}
 };
 

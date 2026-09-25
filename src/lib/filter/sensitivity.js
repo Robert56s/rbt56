@@ -60,6 +60,8 @@ export const SALLEN_KEY_HP_SENSITIVITY = { C1: 0, C2: 0, Rbottom: 0.5, Rtop: -0.
  */
 export const TOW_THOMAS_SENSITIVITY = { R1: 0, Ra: -0.5, Rb: -0.5, Rd: 1, C1: 0.5, C2: -0.5 };
 export const TOW_THOMAS_HP_SENSITIVITY = { Cin: 0, Ra: -0.5, Rb: -0.5, Rd: 1, C1: 0.5, C2: -0.5 };
+/** The notch form: Cin and Rz only place the zeros (omega_z^2 = 1/(C Cin R Rz)), so Q is the same product. */
+export const TOW_THOMAS_NOTCH_SENSITIVITY = { Cin: 0, Rz: 0, Ra: -0.5, Rb: -0.5, Rd: 1, C1: 0.5, C2: -0.5 };
 
 export function mfbSensitivity({ R1, R2, R3 }) {
 	const sum = R1 * R2 + R1 * R3 + R2 * R3;

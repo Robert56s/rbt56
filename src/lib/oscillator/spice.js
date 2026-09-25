@@ -1,3 +1,4 @@
+import { opampModel, opampPhrase } from '../spice/opamps';
 import { renderNetlist, spiceValue } from '../spice/core';
 import { DIODES, JFETS } from './limiter';
 import { drawOscillator } from './schematic';
@@ -138,8 +139,9 @@ export function buildElements(design) {
 	return out;
 }
 
-function meta(design) {
+function meta(design, opampChoice = 'ideal') {
 	const { topo, f0, amplitude, thd, opamp, limiter } = design;
+	const real = opampModel(opampChoice).real;
 	const stab = limiter.kind === 'diodes' ? 'diode limiting' : limiter.kind === 'lamp' ? 'lamp stabilized' : limiter.kind === 'jfet' ? 'JFET gain control' : 'damped by a diode clamp';
 	const amp = limiter.amplitudeActual ?? amplitude;
 	return {
@@ -149,7 +151,9 @@ function meta(design) {
 			`output about ${amp.toFixed(2)} V peak; the loop needs a gain of ${design.requiredGain.toFixed(2)} and the amplifier is set to ${Number.isFinite(design.startGain) ? design.startGain.toFixed(2) : '?'} so it starts`,
 			`expected distortion around ${(100 * thd).toFixed(2)} %`,
 			...(limiter.regulates === false
-				? ['', 'WARNING: with these parts the amplitude control cannot bring the loop gain back', 'to 1, so the output grows without limit here (the op-amp model has no supply', 'rails) and would clip on the rails of a real one.']
+				? real
+					? ['', 'WARNING: with these parts the amplitude control cannot bring the loop gain back', 'to 1, so the output grows until it clips on the op-amp rails.']
+					: ['', 'WARNING: with these parts the amplitude control cannot bring the loop gain back', 'to 1, so the output grows without limit here (the op-amp model has no supply', 'rails) and would clip on the rails of a real one.']
 				: []),
 			'',
 			...outputNotes(design),
@@ -159,8 +163,9 @@ function meta(design) {
 			'internal state, so ignore the first few microseconds. The log (Ctrl+L)',
 			'reports fosc, the realized frequency, and vpk, the amplitude. The .four',
 			'distortion is only meaningful when fosc matches its frequency within',
-			'about 0.1 %. The op-amp has no rails and no slew limit: over-swing shows',
-			'as growth, not clipping.'
+			...(real
+				? ['about 0.1 %. The op-amps are ' + opampPhrase(opampChoice) + ', which adds', 'its own gain-bandwidth, slew rate and output limits to the design.']
+				: ['about 0.1 %. The op-amp has no rails and no slew limit: over-swing shows', 'as growth, not clipping.'])
 		]
 	};
 }
@@ -212,15 +217,16 @@ export function paramLines(design) {
 	return lines;
 }
 
-export function generateNetlist(design, { ideal = false } = {}) {
-	const { title, comments } = meta(design);
+export function generateNetlist(design, { ideal = false, opamp = 'ideal' } = {}) {
+	const { title, comments } = meta(design, opamp);
 	return renderNetlist({
 		elements: buildElements(design),
 		title,
 		comments: [...comments, '', 'Open in LTspice (File > Open, set the filter to All Files) and Run.'],
 		params: paramLines(design),
 		directives: analysisLines(design),
-		ideal
+		ideal,
+		opamp
 	});
 }
 
@@ -239,10 +245,11 @@ function schematicNotes(design) {
 	return lines;
 }
 
-export function generateSchematic(design) {
+export function generateSchematic(design, { opamp = 'ideal' } = {}) {
 	return drawOscillator(design, {
 		comments: schematicNotes(design),
 		directives: ['.lib opamp.sub', ...paramLines(design).filter((l) => !l.startsWith('.param AOL')), ...analysisLines(design)],
-		gbw: `${(design.opamp.gbw / 1e6).toPrecision(3)}Meg`
+		gbw: `${(design.opamp.gbw / 1e6).toPrecision(3)}Meg`,
+		opamp
 	});
 }

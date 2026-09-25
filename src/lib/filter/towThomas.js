@@ -28,6 +28,18 @@ import { capacitorCandidates, nearestCapacitor, nearestResistor } from './eserie
  *   V_hp/Vin = -(Cin / C1) s^2 / D(s)
  * so Cin = C gives a unity-magnitude (inverting) high-pass with the same
  * omega0 and Q, and A2's output becomes the band-pass.
+ *
+ * Notch (the stages of an elliptic or inverse Chebyshev filter, which need
+ * zeros on the jw axis): the high-pass form plus one resistor Rz from Vin
+ * into A2's summing node. With C1 = C2 = C and Ra = Rb = R, KCL gives
+ *   V_out/Vin = -[(Cin / C) s^2 + 1 / (C^2 R Rz)] / D(s)
+ * so the zeros sit at omega_z^2 = 1 / (C Cin R Rz), with gain -Cin/C far
+ * above them and -R/Rz at DC:
+ *   low-pass side  (omega_z > omega_0), DC gain 1:   Cin = C (omega_0/omega_z)^2, Rz = R
+ *   high-pass side (omega_z < omega_0), HF gain 1:   Cin = C, Rz = R (omega_0/omega_z)^2
+ * On the low-pass side Cin is rounded to a stocked capacitor and Rz is
+ * then solved for the exact omega_z, so the rounding shows up as a small
+ * DC gain error rather than as a misplaced zero.
  */
 
 const TT_R_MIN = 200;
@@ -35,6 +47,8 @@ const TT_R_MAX = 2_000_000;
 const TT_R_SWEET = 10_000;
 /** The inverter's two equal resistors: any equal value works, this matches the other stages' scale. */
 export const TT_INVERTER_R = 10_000;
+/** Below this a notch stage's feed-forward capacitor gets a penalty in the search. */
+const TT_CIN_MIN = 100e-12;
 
 function solveTowThomas(wn, q, C) {
 	const R = 1 / (wn * C);
@@ -108,4 +122,68 @@ export function designTowThomasHighPass(wn, q, { resistorSeries = 'E24', capacit
 
 export function designTowThomasHighPassFromCap(wn, q, C, { resistorSeries = 'E24', capacitors = null } = {}) {
 	return realize(wn, q, C, resistorSeries, { highPass: true, manual: true });
+}
+
+/**
+ * The notch form. `wz` is the zero, `lowSide` says which gain is held at 1:
+ * DC for a stage of a low-pass (wz above wn), infinity for a high-pass.
+ */
+function realizeNotch(wn, q, wz, C, { resistorSeries, capacitors, lowSide, manual }) {
+	const { R: Rtarget, Rd: RdIdeal } = solveTowThomas(wn, q, C);
+	const rInv = nearestResistor(TT_INVERTER_R, resistorSeries);
+	const R = nearestResistor(Rtarget, resistorSeries);
+	const Rd = nearestResistor(q * R, resistorSeries);
+	const CinIdeal = lowSide ? C * (wn / wz) ** 2 : C;
+	const Cin = lowSide ? nearestCapacitor(CinIdeal, capacitors) : C;
+	// Rz solved against the parts actually used, so the zero lands where it should
+	const RzTarget = 1 / (C * Cin * R * wz * wz);
+	const Rz = nearestResistor(RzTarget, resistorSeries);
+	const RzIdeal = lowSide ? Rtarget : Rtarget * (wn / wz) ** 2;
+	const outOfRange = ![R, Rd, Rz].every((v) => v > TT_R_MIN && v < TT_R_MAX);
+	return {
+		topology: 'towThomasNotch',
+		order: 2,
+		lowSide,
+		theoretical: { Cin: CinIdeal, Rz: RzIdeal, Ra: Rtarget, Rb: Rtarget, Rd: RdIdeal, C1: C, C2: C, r: rInv },
+		components: { Cin, Rz, Ra: R, Rb: R, Rd, C1: C, C2: C, r: rInv },
+		actual: { wn: 1 / (R * C), q: Rd / R, wz: 1 / Math.sqrt(C * Cin * R * Rz), gain: -Cin / C, dcGain: -R / Rz },
+		steps: { C, Rtarget, RdIdeal, Rrounded: R, RdTarget: q * R, CinIdeal, RzTarget, resistorSeries },
+		...(manual ? { ok: true, manual: true, outOfRange } : {})
+	};
+}
+
+/**
+ * A notch stage from the automatic capacitor search. Elliptic stages have
+ * high Qs and zeros close to the band edge, so a few percent of rounding
+ * shows in the response: besides keeping R near 10 kilo-ohm, the search
+ * weighs what rounding each part to stock would cost, f0 (R), Q (Rd), the
+ * zero (Rz) and, on the low-pass side, the DC gain (Cin), and takes the
+ * capacitor whose parts land closest.
+ */
+export function designTowThomasNotch(wn, q, wz, { lowSide = true, resistorSeries = 'E24', capacitors = null } = {}) {
+	let best = null;
+	for (const C of capacitorCandidates(capacitors)) {
+		const { R } = solveTowThomas(wn, q, C);
+		const Rr = nearestResistor(R, resistorSeries);
+		const RdIdeal = q * Rr;
+		const CinIdeal = lowSide ? C * (wn / wz) ** 2 : C;
+		const Cin = lowSide ? nearestCapacitor(CinIdeal, capacitors) : C;
+		const RzIdeal = 1 / (C * Cin * Rr * wz * wz);
+		if (![R, RdIdeal, RzIdeal].every((v) => v > TT_R_MIN && v < TT_R_MAX)) continue;
+		const err = (v, target) => Math.log(v / target) ** 2;
+		const rounding =
+			1000 * err(Rr, R) + 500 * err(nearestResistor(RdIdeal, resistorSeries), RdIdeal) + 250 * err(nearestResistor(RzIdeal, resistorSeries), RzIdeal) + 100 * err(Cin, CinIdeal);
+		// a Cin of a few tens of picofarads would compete with the op-amp's own input capacitance
+		const tinyCin = CinIdeal < TT_CIN_MIN ? Math.log(TT_CIN_MIN / CinIdeal) ** 2 : 0;
+		const level = Math.log(R / TT_R_SWEET) ** 2 + 0.125 * (Math.log(RdIdeal / TT_R_SWEET) ** 2 + Math.log(RzIdeal / TT_R_SWEET) ** 2);
+		const score = level + rounding + tinyCin;
+		if (best === null || score < best.score) best = { C, score };
+	}
+	if (!best) return null;
+	return realizeNotch(wn, q, wz, best.C, { resistorSeries, capacitors, lowSide, manual: false });
+}
+
+/** The same notch stage from a capacitor chosen by hand (the two integrator capacitors). */
+export function designTowThomasNotchFromCap(wn, q, wz, C, { lowSide = true, resistorSeries = 'E24', capacitors = null } = {}) {
+	return realizeNotch(wn, q, wz, C, { resistorSeries, capacitors, lowSide, manual: true });
 }

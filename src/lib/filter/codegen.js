@@ -1,3 +1,4 @@
+import approximationsSrc from './approximations.js?raw';
 import bodeSrc from './bode.js?raw';
 import eseriesSrc from './eseries.js?raw';
 import firstOrderSrc from './firstOrder.js?raw';
@@ -51,7 +52,7 @@ function header(filterType) {
 `;
 }
 
-function paramsBlock({ amaxDb, aminDb, fp, fs, fl, fh, fsl, fsh, filterType, response, topology, order, orderHp, orderLp, capOverrides, resistorStock, capacitorStock }) {
+function paramsBlock({ amaxDb, aminDb, fp, fs, fl, fh, fsl, fsh, filterType, response, responseHp, responseLp, topology, order, orderHp, orderLp, capOverrides, resistorStock, capacitorStock }) {
 	const hasOverrides = capOverrides && Object.keys(capOverrides).length > 0;
 	return `// =====================================================================
 // PARAMETERS - the only block meant to be edited
@@ -60,8 +61,14 @@ function paramsBlock({ amaxDb, aminDb, fp, fs, fl, fh, fsl, fsh, filterType, res
 const Amax = ${amaxDb};              // dB, max attenuation allowed in the passband
 const Amin = ${aminDb};              // dB, min attenuation required in the stopband
 const FILTER_TYPE = ${JSON.stringify(filterType)}; // 'lowpass', 'highpass', 'bandpass' or 'bandstop'
-const RESPONSE  = ${JSON.stringify(response)};  // 'butterworth' or 'chebyshev'
-const TOPOLOGY  = ${JSON.stringify(topology)};       // 'mfb' or 'sallenKey'
+// Responses: 'butterworth', 'chebyshev', 'legendre', 'bessel',
+// 'inverseChebyshev' or 'elliptic'.
+const RESPONSE  = ${JSON.stringify(response)};  // used by 'lowpass' and 'highpass'
+const RESPONSE_HP = ${JSON.stringify(responseHp ?? response)};  // band-pass / band-stop: the high-pass side's
+const RESPONSE_LP = ${JSON.stringify(responseLp ?? response)};  // band-pass / band-stop: the low-pass side's
+// 'mfb', 'sallenKey' or 'towThomas'. Stages with zeros (elliptic, inverse
+// Chebyshev) are always Tow-Thomas notch stages, whatever this says.
+const TOPOLOGY  = ${JSON.stringify(topology)};
 const RESISTOR_SERIES = ${JSON.stringify(resistorStock ?? 'E24')};
 // 'E24' or 'E96' for a full preferred series, or an explicit array of
 // ohm values to design against only what is actually in the drawer.
@@ -89,7 +96,7 @@ const ORDER_LP = ${orderLp};                 // set to null to use the minimum o
 // by stage index (0-based, same order as the STAGES report below). Leave a
 // stage out of this object to keep searching automatically for it. Needs
 // C1 and C2 for an MFB stage, Ctop and Cbottom for Sallen-Key, C for a
-// first-order (leftover, odd-n) stage.
+// first-order (leftover, odd-n) stage, a Tow-Thomas stage or a notch stage.
 const CAP_OVERRIDES = ${hasOverrides ? JSON.stringify(capOverrides, null, 2) : '{}'};
 `;
 }
@@ -103,36 +110,35 @@ console.log('='.repeat(72));
 console.log('ORDER');
 console.log('='.repeat(72));
 
+/** One side's order, printed with where it comes from. */
+function orderFor(label, response, k, forced) {
+	const min = minimumOrder(response, Amax, Amin, k);
+	if (min.tried) {
+		console.log(\`\${label}: \${RESPONSES[response].label}, k = \${k.toFixed(4)}, no closed formula: loss at the stopband edge by order \${min.tried.map((t) => \`n=\${t.n}: \${t.loss.toFixed(1)} dB\`).join(', ')}\`);
+	} else {
+		console.log(\`\${label}: \${RESPONSES[response].label}, k = \${k.toFixed(4)}, minimum order >= \${min.value.toFixed(4)}\`);
+	}
+	const n = forced ?? min.n;
+	if (n === null) throw new Error(\`\${RESPONSES[response].label} does not reach Amin = \${Amin} dB at any order up to \${SEARCH_LIMIT}: loosen the spec or pick a steeper response\`);
+	console.log(\`  -> using n = \${n}\`);
+	return n;
+}
+
 let design;
 if (FILTER_TYPE === 'bandpass') {
-	const kHp = transitionRatio(fsl, fl);
-	const minOrderHp = RESPONSE === 'chebyshev' ? chebyshevOrder(Amax, Amin, kHp) : butterworthOrder(Amax, Amin, kHp);
-	const nHp = ORDER_HP ?? Math.max(1, Math.ceil(minOrderHp));
-	const kLp = transitionRatio(fh, fsh);
-	const minOrderLp = RESPONSE === 'chebyshev' ? chebyshevOrder(Amax, Amin, kLp) : butterworthOrder(Amax, Amin, kLp);
-	const nLp = ORDER_LP ?? Math.max(1, Math.ceil(minOrderLp));
-	console.log(\`spec: Amax=\${Amax} dB, Amin=\${Amin} dB, \${RESPONSE}, bandpass (fl=\${fl} fh=\${fh} fsl=\${fsl} fsh=\${fsh} Hz)\`);
-	console.log(\`high-pass side: k = fsl/fl = \${kHp.toFixed(4)}, minimum order >= \${minOrderHp.toFixed(4)} -> using n = \${nHp}\`);
-	console.log(\`low-pass side:  k = fh/fsh = \${kLp.toFixed(4)}, minimum order >= \${minOrderLp.toFixed(4)} -> using n = \${nLp}\`);
-	design = designBandPass({ response: RESPONSE, amaxDb: Amax, aminDb: Amin, fl, fh, fsl, fsh, orderHigh: nHp, orderLow: nLp });
+	console.log(\`spec: Amax=\${Amax} dB, Amin=\${Amin} dB, bandpass (fl=\${fl} fh=\${fh} fsl=\${fsl} fsh=\${fsh} Hz)\`);
+	const nHp = orderFor('high-pass side', RESPONSE_HP, transitionRatio(fsl, fl), ORDER_HP);
+	const nLp = orderFor('low-pass side', RESPONSE_LP, transitionRatio(fh, fsh), ORDER_LP);
+	design = designBandPass({ responseHp: RESPONSE_HP, responseLp: RESPONSE_LP, amaxDb: Amax, aminDb: Amin, fl, fh, fsl, fsh, orderHigh: nHp, orderLow: nLp });
 } else if (FILTER_TYPE === 'bandstop') {
-	const kLp = transitionRatio(fl, fsl);
-	const minOrderLp = RESPONSE === 'chebyshev' ? chebyshevOrder(Amax, Amin, kLp) : butterworthOrder(Amax, Amin, kLp);
-	const nLp = ORDER_LP ?? Math.max(1, Math.ceil(minOrderLp));
-	const kHp = transitionRatio(fsh, fh);
-	const minOrderHp = RESPONSE === 'chebyshev' ? chebyshevOrder(Amax, Amin, kHp) : butterworthOrder(Amax, Amin, kHp);
-	const nHp = ORDER_HP ?? Math.max(1, Math.ceil(minOrderHp));
-	console.log(\`spec: Amax=\${Amax} dB, Amin=\${Amin} dB, \${RESPONSE}, bandstop (fl=\${fl} fsl=\${fsl} fsh=\${fsh} fh=\${fh} Hz)\`);
-	console.log(\`low-pass branch:  k = fl/fsl = \${kLp.toFixed(4)}, minimum order >= \${minOrderLp.toFixed(4)} -> using n = \${nLp}\`);
-	console.log(\`high-pass branch: k = fsh/fh = \${kHp.toFixed(4)}, minimum order >= \${minOrderHp.toFixed(4)} -> using n = \${nHp}\`);
-	design = designBandStop({ response: RESPONSE, amaxDb: Amax, aminDb: Amin, fl, fh, fsl, fsh, orderHigh: nHp, orderLow: nLp });
+	console.log(\`spec: Amax=\${Amax} dB, Amin=\${Amin} dB, bandstop (fl=\${fl} fsl=\${fsl} fsh=\${fsh} fh=\${fh} Hz)\`);
+	const nLp = orderFor('low-pass branch', RESPONSE_LP, transitionRatio(fl, fsl), ORDER_LP);
+	const nHp = orderFor('high-pass branch', RESPONSE_HP, transitionRatio(fsh, fh), ORDER_HP);
+	design = designBandStop({ responseHp: RESPONSE_HP, responseLp: RESPONSE_LP, amaxDb: Amax, aminDb: Amin, fl, fh, fsl, fsh, orderHigh: nHp, orderLow: nLp });
 } else {
+	console.log(\`spec: Amax=\${Amax} dB at \${fp} Hz, Amin=\${Amin} dB at \${fs} Hz, \${FILTER_TYPE}\`);
 	const k = FILTER_TYPE === 'highpass' ? transitionRatio(fs, fp) : transitionRatio(fp, fs);
-	const minOrder = RESPONSE === 'chebyshev' ? chebyshevOrder(Amax, Amin, k) : butterworthOrder(Amax, Amin, k);
-	const n = ORDER ?? Math.max(1, Math.ceil(minOrder));
-	console.log(\`spec: Amax=\${Amax} dB at \${fp} Hz, Amin=\${Amin} dB at \${fs} Hz, \${RESPONSE}, \${FILTER_TYPE}\`);
-	console.log(FILTER_TYPE === 'highpass' ? \`k = fs/fp = \${k.toFixed(4)}\` : \`k = fp/fs = \${k.toFixed(4)}\`);
-	console.log(\`minimum order >= \${minOrder.toFixed(4)} -> using n = \${n}\`);
+	const n = orderFor(FILTER_TYPE === 'highpass' ? 'k = fs/fp' : 'k = fp/fs', RESPONSE, k, ORDER);
 	design =
 		FILTER_TYPE === 'highpass'
 			? designHighPass({ response: RESPONSE, amaxDb: Amax, aminDb: Amin, fp, fs, order: n })
@@ -143,27 +149,31 @@ if (FILTER_TYPE === 'bandpass') {
 		// so that exactly Amax dB is lost at fp. eps = 1 only at Amax = 3.0103 dB.
 		console.log(\`Butterworth: eps = sqrt(10^(Amax/10) - 1) = \${design.eps.toFixed(4)}, pole circle at fp x eps^(\${FILTER_TYPE === 'highpass' ? '+' : '-'}1/n) = \${fp} x \${design.wcScale.toFixed(4)} = \${(design.wc / (2 * Math.PI)).toFixed(1)} Hz (the -3 dB frequency)\`);
 	}
+	if (design.prototype && Number.isFinite(design.prototype.aminReached)) {
+		console.log(\`the extra order goes to the stopband: at least \${design.prototype.aminReached.toFixed(2)} dB across it (Amin = \${Amin} dB)\`);
+	}
 }
 
 console.log();
 console.log('='.repeat(72));
 console.log('STAGES');
 console.log('='.repeat(72));
+const OPTS = { resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS };
+const printParts = (r) => {
+	for (const [name, value] of Object.entries(r.components)) {
+		const isR = /^[Rr]/.test(name);
+		console.log(\`  \${name} = \${isR ? value.toFixed(0) + ' ohm' : value.toExponential(4) + ' F'}\`);
+	}
+};
 const realized = design.stages.map((stage, i) => {
 	const ov = CAP_OVERRIDES[i];
 
 	if (stage.order === 1) {
 		let r;
 		if (stage.filterType === 'highpass') {
-			r =
-				ov && ov.C
-					? designFirstOrderHighPassFromCap(stage.tau, ov.C, { resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS })
-					: designFirstOrderHighPass(stage.tau, { resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS });
+			r = ov && ov.C ? designFirstOrderHighPassFromCap(stage.tau, ov.C, OPTS) : designFirstOrderHighPass(stage.tau, OPTS);
 		} else {
-			r =
-				ov && ov.C
-					? designFirstOrderLowPassFromCap(stage.tau, ov.C, { resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS })
-					: designFirstOrderLowPass(stage.tau, { resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS });
+			r = ov && ov.C ? designFirstOrderLowPassFromCap(stage.tau, ov.C, OPTS) : designFirstOrderLowPass(stage.tau, OPTS);
 		}
 		console.log(\`stage \${i + 1} (1st order, \${stage.filterType}): tau = \${stage.tau.toExponential(4)} s\`);
 		console.log(\`  R = \${r.components.R} ohm, C = \${r.components.C.toExponential(4)} F\`);
@@ -171,39 +181,48 @@ const realized = design.stages.map((stage, i) => {
 		return r;
 	}
 	const f0 = stage.wn / (2 * Math.PI);
-	console.log(\`stage \${i + 1} (\${stage.filterType}): f0 = \${f0.toFixed(1)} Hz, Q = \${stage.q.toFixed(4)}\`);
 
+	if (Number.isFinite(stage.wz)) {
+		// a stage with zeros: always the Tow-Thomas notch (feed-forward) form
+		const fz = stage.wz / (2 * Math.PI);
+		const lowSide = stage.filterType === 'lowpass';
+		console.log(\`stage \${i + 1} (\${stage.filterType} notch): f0 = \${f0.toFixed(1)} Hz, Q = \${stage.q.toFixed(4)}, zero at fz = \${fz.toFixed(1)} Hz\`);
+		const r = ov && ov.C ? designTowThomasNotchFromCap(stage.wn, stage.q, stage.wz, ov.C, { ...OPTS, lowSide }) : designTowThomasNotch(stage.wn, stage.q, stage.wz, { ...OPTS, lowSide });
+		printParts(r);
+		const f0Actual = r.actual.wn / (2 * Math.PI);
+		const fzActual = r.actual.wz / (2 * Math.PI);
+		console.log(
+			\`  actual f0 = \${f0Actual.toFixed(1)} Hz (\${(100 * (f0Actual - f0) / f0).toFixed(2)}%), Q = \${r.actual.q.toFixed(4)} (\${(100 * (r.actual.q - stage.q) / stage.q).toFixed(2)}%), fz = \${fzActual.toFixed(1)} Hz (\${(100 * (fzActual - fz) / fz).toFixed(2)}%)\`
+		);
+		console.log(lowSide ? \`  DC gain = \${r.actual.dcGain.toFixed(4)} (Cin rounded to a stocked value; Rz solved so the zero stays put)\` : \`  gain above the zero = \${r.actual.gain.toFixed(4)}\`);
+		console.log(\`  Q sensitivity to 1% component error: \${worstCaseQError(TOW_THOMAS_NOTCH_SENSITIVITY, 1).toFixed(2)}% (root-sum-square, fixed for this topology)\`);
+		return r;
+	}
+
+	console.log(\`stage \${i + 1} (\${stage.filterType}): f0 = \${f0.toFixed(1)} Hz, Q = \${stage.q.toFixed(4)}\`);
 	let r;
 	if (stage.filterType === 'highpass') {
 		if (TOPOLOGY === 'towThomas') {
-			const auto = designTowThomasHighPass(stage.wn, stage.q, { resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS });
-			r = ov && ov.C ? designTowThomasHighPassFromCap(stage.wn, stage.q, ov.C, { resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS }) : auto;
+			r = ov && ov.C ? designTowThomasHighPassFromCap(stage.wn, stage.q, ov.C, OPTS) : designTowThomasHighPass(stage.wn, stage.q, OPTS);
 		} else if (TOPOLOGY === 'sallenKey') {
-			const auto = designSallenKeyHighPass(stage.wn, stage.q, { resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS });
-			r = ov && ov.C ? designSallenKeyHighPassFromCap(stage.wn, stage.q, ov.C, { resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS }) : auto;
+			r = ov && ov.C ? designSallenKeyHighPassFromCap(stage.wn, stage.q, ov.C, OPTS) : designSallenKeyHighPass(stage.wn, stage.q, OPTS);
 		} else {
-			const auto = designMfbHighPass(stage.wn, stage.q, { resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS });
-			r = ov && ov.C ? designMfbHighPassFromCap(stage.wn, stage.q, ov.C, { resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS }) : auto;
+			r = ov && ov.C ? designMfbHighPassFromCap(stage.wn, stage.q, ov.C, OPTS) : designMfbHighPass(stage.wn, stage.q, OPTS);
 		}
 	} else if (TOPOLOGY === 'towThomas') {
-		const auto = designTowThomasLowPass(stage.wn, stage.q, { resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS });
-		r = ov && ov.C ? designTowThomasLowPassFromCap(stage.wn, stage.q, ov.C, { resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS }) : auto;
+		r = ov && ov.C ? designTowThomasLowPassFromCap(stage.wn, stage.q, ov.C, OPTS) : designTowThomasLowPass(stage.wn, stage.q, OPTS);
 	} else if (TOPOLOGY === 'sallenKey') {
-		const auto = designSallenKeyLowPass(stage.wn, stage.q, { resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS });
+		const auto = designSallenKeyLowPass(stage.wn, stage.q, OPTS);
 		if (ov && (ov.Ctop || ov.Cbottom)) {
-			const Ctop = ov.Ctop || auto.components.Ctop;
-			const Cbottom = ov.Cbottom || auto.components.Cbottom;
-			const manual = designSallenKeyLowPassFromCaps(stage.wn, stage.q, Ctop, Cbottom, { resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS });
+			const manual = designSallenKeyLowPassFromCaps(stage.wn, stage.q, ov.Ctop || auto.components.Ctop, ov.Cbottom || auto.components.Cbottom, OPTS);
 			r = manual.ok ? manual : auto;
 		} else {
 			r = auto;
 		}
 	} else {
-		const auto = designMfbLowPass(stage.wn, stage.q, { resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS });
+		const auto = designMfbLowPass(stage.wn, stage.q, OPTS);
 		if (ov && (ov.C1 || ov.C2)) {
-			const C1 = ov.C1 || auto.components.C1;
-			const C2 = ov.C2 || auto.components.C2;
-			const manual = designMfbLowPassFromCaps(stage.wn, stage.q, C1, C2, { resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS });
+			const manual = designMfbLowPassFromCaps(stage.wn, stage.q, ov.C1 || auto.components.C1, ov.C2 || auto.components.C2, OPTS);
 			if (manual.ok) {
 				r = manual;
 			} else {
@@ -214,10 +233,7 @@ const realized = design.stages.map((stage, i) => {
 			r = auto;
 		}
 	}
-	for (const [name, value] of Object.entries(r.components)) {
-		const isR = /^[Rr]/.test(name);
-		console.log(\`  \${name} = \${isR ? value.toFixed(0) + ' ohm' : value.toExponential(4) + ' F'}\`);
-	}
+	printParts(r);
 	const f0Actual = r.actual.wn / (2 * Math.PI);
 	console.log(
 		\`  actual f0 = \${f0Actual.toFixed(1)} Hz (\${(100 * (f0Actual - f0) / f0).toFixed(2)}%), Q = \${r.actual.q.toFixed(4)} (\${(100 * (r.actual.q - stage.q) / stage.q).toFixed(2)}%)\`
@@ -228,68 +244,60 @@ const realized = design.stages.map((stage, i) => {
 	} else if (TOPOLOGY === 'towThomas') {
 		console.log(\`  Q sensitivity to 1% component error: \${worstCaseQError(TOW_THOMAS_SENSITIVITY, 1).toFixed(2)}% (root-sum-square, fixed for this topology)\`);
 	} else if (TOPOLOGY === 'mfb') {
-		const sens = mfbSensitivity(r.components);
-		console.log(\`  Q sensitivity to 1% component error: \${worstCaseQError(sens, 1).toFixed(2)}% (root-sum-square)\`);
+		console.log(\`  Q sensitivity to 1% component error: \${worstCaseQError(mfbSensitivity(r.components), 1).toFixed(2)}% (root-sum-square)\`);
 	} else {
 		console.log(\`  Q sensitivity to 1% component error: \${worstCaseQError(SALLEN_KEY_SENSITIVITY, 1).toFixed(2)}% (root-sum-square, fixed for this topology)\`);
 	}
 	return r;
 });
 
+// the band-stop's two branches and how the combiner weighs them
+let branches = null;
+let weights = null;
 if (FILTER_TYPE === 'bandstop') {
+	branches = [realized.slice(0, design.lp.stages.length), realized.slice(design.lp.stages.length)];
+	const choice = combinerChoice(branches, fsl, fsh);
+	const lpGain = Math.abs(branchDcGain(branches[0]));
+	const parts = combinerDesign(choice.mode, SUMMING_R, lpGain, (v) => nearestResistor(v, RESISTOR_SERIES));
+	weights = parts.weights;
 	console.log();
 	console.log('='.repeat(72));
-	const lpBranch = realized.slice(0, design.lp.stages.length);
-	const hpBranch = realized.slice(design.lp.stages.length);
-	const choice = combinerChoice([lpBranch, hpBranch], fsl, fsh);
-	const kLp = choice.signs[0];
 	console.log(\`  notch centre \${choice.centreHz.toFixed(0)} Hz: plain sum \${choice.sumDb.toFixed(1)} dB, difference \${choice.differenceDb.toFixed(1)} dB -> \${choice.mode}\`);
-	console.log(\`  branch signs: low-pass \${branchSign(lpBranch) > 0 ? '+1' : '-1'} (order \${branchOrder(lpBranch)}), high-pass \${branchSign(hpBranch) > 0 ? '+1' : '-1'} (order \${branchOrder(hpBranch)})\`);
-	if (kLp > 0) {
-		console.log('SUMMING AMPLIFIER (combines the low-pass and high-pass branches above)');
-		console.log('='.repeat(72));
-		console.log(\`  Ra = Rb = Rf = \${SUMMING_R} ohm (any equal value works exactly)\`);
-		console.log('  Vout = -(V_lp + V_hp)   (the deeper notch of the two combiners)');
-	} else {
-		console.log('DIFFERENCE AMPLIFIER (the deeper notch of the two combiners)');
-		console.log('='.repeat(72));
-		console.log(\`  four equal resistors of \${SUMMING_R} ohm: V_hp into the + input (with R to ground), V_lp into the - input (R as feedback)\`);
-		console.log('  Vout = V_hp - V_lp');
-	}
+	console.log(\`  branch signs: low-pass \${branchSign(branches[0]) > 0 ? '+1' : '-1'} (order \${branchOrder(branches[0])}), high-pass \${branchSign(branches[1]) > 0 ? '+1' : '-1'} (order \${branchOrder(branches[1])})\`);
+	console.log(choice.mode === 'difference' ? 'DIFFERENCE AMPLIFIER (the deeper notch of the two combiners)' : 'SUMMING AMPLIFIER (combines the low-pass and high-pass branches above)');
+	console.log('='.repeat(72));
+	for (const [name, value] of Object.entries(parts.resistors)) console.log(\`  \${name} = \${value.toFixed(0)} ohm\`);
+	if (Math.abs(lpGain - 1) > 1e-6) console.log(\`  the low-pass branch passes DC at \${lpGain.toFixed(4)} (a notch stage's rounded Cin), so its input resistor is scaled by that factor\`);
+	console.log(choice.mode === 'difference' ? '  Vout = V_hp - V_lp' : '  Vout = -(V_lp + V_hp)');
 }
 
 console.log();
 console.log('='.repeat(72));
 console.log('FREQUENCY RESPONSE (from the rounded, realized components)');
 console.log('='.repeat(72));
-if (FILTER_TYPE === 'bandpass') {
-	for (const f of [fsl / 10, fsl, fl, Math.sqrt(fl * fh), fh, fsh, fsh * 10]) {
-		const { db } = magnitudePhaseAt(realized, f);
-		console.log(\`  \${f.toFixed(0).padStart(9)} Hz : \${db.toFixed(2).padStart(8)} dB\`);
-	}
-	const attnAtFsl = -magnitudePhaseAt(realized, fsl).db;
-	const attnAtFsh = -magnitudePhaseAt(realized, fsh).db;
-	console.log(\`\\nattenuation at fsl = \${attnAtFsl.toFixed(1)} dB, at fsh = \${attnAtFsh.toFixed(1)} dB (spec asks for >= \${Amin} dB on both): \${attnAtFsl >= Amin && attnAtFsh >= Amin ? 'OK' : 'NOT MET'}\`);
-} else if (FILTER_TYPE === 'bandstop') {
-	const lpBranch = realized.slice(0, design.lp.stages.length);
-	const hpBranch = realized.slice(design.lp.stages.length);
-	const branches = [lpBranch, hpBranch];
-	const combineSigns = combinerChoice(branches, fsl, fsh).signs;
-	for (const f of [fl / 10, fl, fsl, Math.sqrt(fsl * fsh), fsh, fh, fh * 10]) {
-		const { db } = magnitudePhaseAtParallelSum(branches, f, combineSigns);
-		console.log(\`  \${f.toFixed(0).padStart(9)} Hz : \${db.toFixed(2).padStart(8)} dB\`);
-	}
-	const attnAtFsl = -magnitudePhaseAtParallelSum(branches, fsl, combineSigns).db;
-	const attnAtFsh = -magnitudePhaseAtParallelSum(branches, fsh, combineSigns).db;
-	console.log(\`\\nattenuation at fsl = \${attnAtFsl.toFixed(1)} dB, at fsh = \${attnAtFsh.toFixed(1)} dB (spec asks for >= \${Amin} dB on both): \${attnAtFsl >= Amin && attnAtFsh >= Amin ? 'OK' : 'NOT MET'}\`);
-} else {
-	for (const f of [fp / 10, fp, Math.sqrt(fp * fs), fs, fs * 10]) {
-		const { db } = magnitudePhaseAt(realized, f);
-		console.log(\`  \${f.toFixed(0).padStart(9)} Hz : \${db.toFixed(2).padStart(8)} dB\`);
-	}
-	const attnAtFs = -magnitudePhaseAt(realized, fs).db;
-	console.log(\`\\nattenuation at fs = \${attnAtFs.toFixed(1)} dB (spec asks for >= \${Amin} dB): \${attnAtFs >= Amin ? 'OK' : 'NOT MET'}\`);
+const gainDb = (f) => (FILTER_TYPE === 'bandstop' ? magnitudePhaseAtParallelSum(branches, f, weights).db : magnitudePhaseAt(realized, f).db);
+const bands = {
+	lowpass: { pass: [[fp / 100, fp]], stop: [[fs, fs * 100]], points: [fp / 10, fp, Math.sqrt(fp * fs), fs, fs * 10] },
+	highpass: { pass: [[fp, fp * 100]], stop: [[fs / 100, fs]], points: [fs / 10, fs, Math.sqrt(fp * fs), fp, fp * 10] },
+	bandpass: { pass: [[fl, fh]], stop: [[fsl / 100, fsl], [fsh, fsh * 100]], points: [fsl / 10, fsl, fl, Math.sqrt(fl * fh), fh, fsh, fsh * 10] },
+	bandstop: { pass: [[fl / 100, fl], [fh, fh * 100]], stop: [[fsl, fsh]], points: [fl / 10, fl, fsl, Math.sqrt(fsl * fsh), fsh, fh, fh * 10] }
+}[FILTER_TYPE];
+for (const f of bands.points) console.log(\`  \${f.toFixed(0).padStart(9)} Hz : \${gainDb(f).toFixed(2).padStart(8)} dB\`);
+// Amax and Amin count from the top of the passband (an even-order Chebyshev
+// or elliptic ripples above its DC gain), and the stopband is searched over
+// its whole width (an elliptic or inverse Chebyshev bounces between zeros)
+const scan = (ranges) => {
+	const out = [];
+	for (const [a, b] of ranges) for (let i = 0; i <= 600; i++) out.push(a * (b / a) ** (i / 600));
+	return out;
+};
+const top = Math.max(...scan(bands.pass).map(gainDb));
+let worst = { db: Infinity, f: 0 };
+for (const f of scan(bands.stop)) {
+	const att = top - gainDb(f);
+	if (att < worst.db) worst = { db: att, f };
 }
+console.log(\`\\npassband top \${top.toFixed(2)} dB; least attenuation in the stopband \${worst.db.toFixed(1)} dB at \${worst.f.toFixed(0)} Hz (spec asks for >= \${Amin} dB): \${worst.db >= Amin ? 'OK' : 'NOT MET'}\`);
 `;
 }
 
@@ -372,6 +380,8 @@ export function generateScript({
 	fsh,
 	filterType,
 	response,
+	responseHp = response,
+	responseLp = response,
 	topology,
 	order,
 	orderHp,
@@ -393,6 +403,8 @@ export function generateScript({
 			fsh,
 			filterType,
 			response,
+			responseHp,
+			responseLp,
 			topology,
 			order,
 			orderHp,
@@ -405,6 +417,7 @@ export function generateScript({
 		inline(eseriesSrc),
 		inline(formatSrc),
 		inline(orderSrc),
+		inline(approximationsSrc),
 		inline(stagesSrc),
 		inline(mfbSrc),
 		inline(mfbHighPassSrc),

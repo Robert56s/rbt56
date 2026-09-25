@@ -159,6 +159,33 @@ function drawTowThomas(sheet, parts, p, highPass) {
 	return cont;
 }
 
+/**
+ * Tow-Thomas notch (a stage of an elliptic or inverse Chebyshev filter):
+ * one ring, with A1 on the main line and both A2 and A3 on the bottom row
+ * facing back. The input splits at once: Cin on to A1 along the main
+ * line, and Rz down, along the very bottom and up into A2's summing node,
+ * outside the ring, so nothing crosses it. The output is A1's; the main
+ * line runs on far enough for the bottom row to fit under it, and Rb
+ * drops from its end into A2's summing node.
+ */
+function drawTowThomasNotch(sheet, parts, p) {
+	const [Cin, Rz, Ra, C1, Rd, Ua, Rb, C2, Ub, Rr1, Rr2, Uc] = parts;
+	const split = run(sheet, p, 'right', 48);
+	const first = integrator(sheet, Cin, [C1, Rd], Ua, split, { room: 96 });
+	// the bottom row is 768 wide (Rb, A2, the inverter), plus room for Ra's column
+	const corner = run(sheet, first.OUT, 'right', 640);
+	const second = integrator(sheet, Rb, [C2], Ub, run(sheet, corner, 'down', 256), { room: 96, dir: 'left' });
+	const inv = integrator(sheet, Rr1, [Rr2], Uc, second.OUT, { room: 64, dir: 'left' });
+	const raFoot = { x: first.N.x, y: inv.OUT.y };
+	sheet.wire(inv.OUT, raFoot);
+	sheet.wire(sheet.placeFrom(Ra, raFoot, 'up', { labels: 'left' }).pins[1], first.N);
+	// Rz: down from the split, along the bottom, up into A2's summing node
+	const laneY = second.N.y + 176;
+	const rzEnd = series(sheet, Rz, run(sheet, split, 'down', laneY - split.y), 'right');
+	sheet.route(rzEnd, { x: second.N.x, y: laneY }, second.N);
+	return corner;
+}
+
 const DRAW = {
 	mfb: drawMfb,
 	mfbHp: drawMfb,
@@ -167,14 +194,16 @@ const DRAW = {
 	firstOrder: drawFirstOrder,
 	firstOrderHp: drawFirstOrder,
 	towThomas: (sheet, parts, p) => drawTowThomas(sheet, parts, p, false),
-	towThomasHp: (sheet, parts, p) => drawTowThomas(sheet, parts, p, true)
+	towThomasHp: (sheet, parts, p) => drawTowThomas(sheet, parts, p, true),
+	towThomasNotch: drawTowThomasNotch
 };
 
 /**
  * A chain of stages from `p`; `index` numbers the first stage as the
- * netlist does. Returns the chain's output point.
+ * netlist does. Returns the chain's output point. Exported so another
+ * tool can draw the same stages behind its own front end.
  */
-function drawChain(sheet, stages, p, index) {
+export function drawChain(sheet, stages, p, index) {
 	let at = p;
 	stages.forEach((stage, k) => {
 		const parts = stageElements(stage, index + k, 'in', 'out');
@@ -236,9 +265,9 @@ function drawCombiner(sheet, E, lp, hp, mode) {
  * list (for the source and the combiner parts), the stages come from
  * realizedStages exactly as the netlist numbers them.
  */
-export function drawFilter({ elements, realizedStages, filterType, lpCount = 0, combinerMode = 'sum' }, { comments = [], directives = [], gbw = '3Meg' }) {
+export function drawFilter({ elements, realizedStages, filterType, lpCount = 0, combinerMode = 'sum' }, { comments = [], directives = [], gbw = '3Meg', opamp = 'ideal' }) {
 	const E = Object.fromEntries(elements.filter((e) => e.kind !== 'LABEL').map((e) => [e.name, e]));
-	const sheet = createSheet({ gbw });
+	const sheet = createSheet({ gbw, opamp });
 	const RAIL = 384;
 	const vin = source(sheet, E.V1, RAIL);
 	let vout;
@@ -249,7 +278,7 @@ export function drawFilter({ elements, realizedStages, filterType, lpCount = 0, 
 		const lpOut = drawChain(sheet, lpStages, split, 1);
 		// the high-pass row goes under everything the low-pass row put below
 		// its rail, far enough that its own feedback clears it
-		const probe = createSheet({ gbw });
+		const probe = createSheet({ gbw, opamp });
 		const probeOut = drawChain(probe, hpStages, { x: split.x, y: RAIL }, 1 + lpStages.length);
 		void probeOut;
 		const above = RAIL - probe.bounds().minY;

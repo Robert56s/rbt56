@@ -41,3 +41,15 @@ export function designEnvelopeLowPass({ response, amaxDb, aminDb, fp, fs, order,
 
 	return { k, minOrder, n, wc, wcScale, eps, beta: proto.beta, filterType: 'lowpass', stages, realized, response, amaxDb, aminDb, fp, fs };
 }
+
+/**
+ * |H(j 2 pi f)| of the realized filter: each unity-gain Sallen-Key stage is
+ * 1 / (1 - x^2 + j x / Q) with x = f / f0, all with their rounded parts.
+ */
+export function envelopeGainAt(design, f) {
+	const w = 2 * Math.PI * f;
+	return design.realized.reduce((g, s) => {
+		const x = w / s.actual.wn;
+		return g / Math.hypot(1 - x * x, x / s.actual.q);
+	}, 1);
+}

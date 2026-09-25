@@ -10,7 +10,8 @@
  *
  * All arguments are optional, so a caller may pass a subset:
  *   filterType      'lowpass' | 'highpass' | 'bandpass' | 'bandstop'
- *   response        'butterworth' | 'chebyshev'
+ *   response        'butterworth' | 'chebyshev' | 'legendre' | 'bessel' | 'inverseChebyshev' | 'elliptic'
+ *                   (for a band type, the low-pass side's, which the figures follow)
  *   topology        'mfb' | 'sallenKey' | 'towThomas'
  *   order, stages   the order used and the count of realized stages
  *   fp, fs          edges of a low-pass or high-pass, Hz
@@ -26,9 +27,10 @@
  *   stock           'E24' | 'E96' | 'lab' | 'custom'
  */
 
+import { RESPONSES } from './approximations';
 import { nearestResistor } from './eseries';
 import { butterworthOrder, chebyshevOrder, transitionRatio } from './order';
-import { designLowPass } from './stages';
+import { designLowPass, minimumOrder } from './stages';
 
 const h = (text) => ({ h: text });
 const p = (text) => ({ p: text });
@@ -129,7 +131,7 @@ function specOk(side, amaxDb, aminDb) {
 
 /** The second-order stages as { f0, q } and the first-order corner, from a design's stage list. */
 function stageTable(design) {
-	const second = design.stages.filter((s) => s.order === 2 && allPos(s.wn, s.q)).map((s) => ({ f0: s.wn / TWO_PI, q: s.q }));
+	const second = design.stages.filter((s) => s.order === 2 && allPos(s.wn, s.q)).map((s) => ({ f0: s.wn / TWO_PI, q: s.q, ...(allPos(s.wz) ? { fz: s.wz / TWO_PI } : {}) }));
 	const first = design.stages.find((s) => s.order === 1 && allPos(s.tau));
 	return { second, fc: first ? 1 / (TWO_PI * first.tau) : null };
 }
@@ -271,10 +273,36 @@ function oneRc({ type, side, amaxDb, aminDb, ok }) {
 
 /* ----------------------------------------------------------- 4. the order */
 
+/**
+ * What choosing a response other than Butterworth does to the count, in one
+ * sentence: how the curve differs and what panel 02 reports next to the
+ * Butterworth order.
+ */
+function responseCountLine(resp, nResp, nButter, side) {
+	const vs = (n) => (n === null ? 'no order up to its limit' : n === nButter ? `the same ${n} as Butterworth` : `${n} where Butterworth needs ${nButter}`);
+	switch (resp) {
+		case 'chebyshev':
+			return nResp < nButter
+				? ` With Chebyshev chosen the curve drops faster past ${side.a} for the same n, so panel 02 reports ${nResp} where Butterworth needs ${nButter}; the next section says what that costs.`
+				: ` With Chebyshev chosen the curve drops faster past ${side.a} for the same n, though this spec needs n = ${nButter} either way.`;
+		case 'legendre':
+			return ` With Legendre chosen the curve still never wobbles but drops faster past ${side.a}, so panel 02 reports ${vs(nResp)}.`;
+		case 'bessel':
+			return ` With Bessel chosen the curve bends over more gently, to keep the delay flat, so panel 02 reports ${vs(nResp)}.`;
+		case 'inverseChebyshev':
+			return ` With the inverse Chebyshev chosen the passband stays flat and the stopband ripples between zeros past ${side.b}, so panel 02 reports ${vs(nResp)}.`;
+		case 'elliptic':
+			return ` With elliptic chosen both bands ripple and zeros sit past ${side.b}, the steepest drop there is, so panel 02 reports ${vs(nResp)}.`;
+		default:
+			return '';
+	}
+}
+
 function theOrder({ type, response, side, amaxDb, aminDb, ok, order }) {
 	const band = type === 'bandpass' || type === 'bandstop';
 	const high = side.kind === 'highpass';
-	const cheby = response === 'chebyshev';
+	const resp = RESPONSES[response] ? response : 'butterworth';
+	const cheby = resp !== 'butterworth';
 	// the gap: fs over fp for a low-pass, fp over fs for a high-pass, always above 1
 	const ratio = ok ? (high ? side.fp / side.fs : side.fs / side.fp) : NaN;
 	const [lowEdge, highEdge] = high ? [side.b, side.a] : [side.a, side.b];
@@ -292,7 +320,7 @@ function theOrder({ type, response, side, amaxDb, aminDb, ok, order }) {
 				'Take the drop demanded, Amin, and divide it by the drop one slope gives across the gap from fp to fs, then round up. Panel 02 does the same count exactly, with Amax included. The figure draws the whole family of orders against the two zones, and the smallest n that clears both is the minimum panel 02 reports.'
 			),
 			eq('n \\ge \\dfrac{A_{min}}{20\\log_{10}(f_s/f_p)}', 'The rough count: the drop demanded divided by the drop per slope across the gap:'),
-			widget('order-on-spec', { response: cheby ? 'chebyshev' : 'butterworth' })
+			widget('order-on-spec', { response: resp })
 		);
 		return blocks;
 	}
@@ -306,8 +334,9 @@ function theOrder({ type, response, side, amaxDb, aminDb, ok, order }) {
 	// shown to one decimal, or two when one would round onto a whole number that disagrees with the count
 	const roughText = Math.max(1, Math.ceil(Number(rough.toFixed(1)))) === roughN ? rough.toFixed(1) : rough.toFixed(2);
 	const nButter = Math.max(1, Math.ceil(butterworthOrder(amaxDb, aminDb, k)));
-	const nCheby = Math.max(1, Math.ceil(chebyshevOrder(amaxDb, aminDb, k)));
-	// with Chebyshev chosen, panel 02 counts for Chebyshev: the Butterworth count is named as such
+	// the chosen response's own count (null when a searched response never gets there)
+	const nResp = resp === 'butterworth' ? nButter : minimumOrder(resp, amaxDb, aminDb, k).n;
+	// with another response chosen, panel 02 counts for it: the Butterworth count is named as such
 	let exact;
 	if (cheby) {
 		exact =
@@ -328,12 +357,8 @@ function theOrder({ type, response, side, amaxDb, aminDb, ok, order }) {
 			`Take the drop demanded, Amin, and divide it by the drop one slope gives across the gap from ${lowEdge} to ${highEdge}. Here ${highEdge} is ${gapText} times ${lowEdge}, one slope loses ${perText} dB across that gap, and ${plain(aminDb)} dB of drop needs ${roughText} slopes, so ${roughN}. ${exact}${sideNote}`
 		)
 	);
-	const chebyLine = cheby
-		? nCheby < nButter
-			? ` With Chebyshev chosen the curve drops faster past ${side.a} for the same n, so panel 02 reports ${nCheby} where Butterworth needs ${nButter}; the next section says what that costs.`
-			: ` With Chebyshev chosen the curve drops faster past ${side.a} for the same n, though this spec needs n = ${nButter} either way.`
-		: '';
-	const limitLine = (cheby ? nCheby : nButter) > MAX_ORDER ? ` That is past the tool's limit of ${MAX_ORDER}, so panel 02 asks for a looser spec.` : '';
+	const chebyLine = responseCountLine(resp, nResp, nButter, side);
+	const limitLine = nResp === null || nResp > MAX_ORDER ? ` That is past the tool's limit of ${MAX_ORDER}, so panel 02 asks for a looser spec.` : '';
 	blocks.push(
 		p(
 			`The figure draws the whole family of orders against the two zones, and the smallest n that clears both is the minimum panel 02 reports.${chebyLine}${limitLine}`
@@ -347,16 +372,34 @@ function theOrder({ type, response, side, amaxDb, aminDb, ok, order }) {
 		)
 	);
 	const n0 = side.design ? side.design.n : !band && isNum(order) ? order : null;
-	blocks.push(widget('order-on-spec', { ...specProps(side, amaxDb, aminDb, type, ok), response: cheby ? 'chebyshev' : 'butterworth', ...(isNum(n0) ? { n0 } : {}) }));
+	blocks.push(widget('order-on-spec', { ...specProps(side, amaxDb, aminDb, type, ok), response: resp, ...(isNum(n0) ? { n0 } : {}) }));
 	return blocks;
 }
 
 /* ---------------------------------------------------- 5. op-amps and Q */
 
+/** What the stage Qs of a response other than Butterworth and Chebyshev I are for, in a sentence or two. */
+function responseStory(resp, { high, side }) {
+	const beyond = `in the stopband, beyond ${side.b}`;
+	switch (resp) {
+		case 'legendre':
+			return ` Their product never wobbles, like Butterworth's, but it gives up some flatness near ${high ? 'the top of the band' : 'DC'} to drop faster past ${side.a}: the steepest drop a curve can have without ripple. That is what Legendre means.`;
+		case 'bessel':
+			return ' Their Q values are low on purpose: the product delays every frequency of the passband by nearly the same time, so a pulse or a square wave keeps its shape. That is what Bessel means, and the price is a gentler drop than Butterworth\'s.';
+		case 'inverseChebyshev':
+			return ` Each of them also carries a pair of zeros, a frequency it blocks completely, placed ${beyond}: the passband stays flat like Butterworth's, and the stopband bounces between those zeros instead of falling steadily. That is the inverse Chebyshev.`;
+		case 'elliptic':
+			return ` Each of them also carries a pair of zeros, a frequency it blocks completely, placed ${beyond}, and their Q values are high: the passband ripples by at most Amax, the stopband bounces between the zeros, and no other response drops as fast. That is what elliptic means.`;
+		default:
+			return '';
+	}
+}
+
 function opampAndQ({ type, response, side, amaxDb, aminDb, ok }) {
 	const band = type === 'bandpass' || type === 'bandstop';
 	const high = side.kind === 'highpass';
-	const cheby = response === 'chebyshev';
+	const resp = RESPONSES[response] ? response : 'butterworth';
+	const cheby = resp === 'chebyshev';
 	const blocks = [
 		h('Why an op-amp, and what Q is'),
 		p(
@@ -390,6 +433,9 @@ function opampAndQ({ type, response, side, amaxDb, aminDb, ok }) {
 		let text;
 		if (n === 1 || second.length === 0) {
 			text = `${lead} 1 is a single RC stage, listed in panel 03: with one slope there is no knee to sharpen, so no Q.`;
+		} else if (resp !== 'butterworth' && resp !== 'chebyshev') {
+			const listing = `${lead} ${n} is ${count}${fc ? ' plus one plain RC stage' : ''}, listed in panel 03 with ${f0Text} and Q = ${listText(qs)}${fc ? `, the RC stage at ${hzText(fc)}` : ''}.`;
+			text = `${listing}${responseStory(resp, { high, side })}`;
 		} else if (!cheby) {
 			const parts = second.length + (fc ? 1 : 0);
 			const listing = `${lead} ${n} is ${count}${fc ? ' plus one plain RC stage for the leftover slope' : ''}, listed in panel 03 with ${f0Text} and Q = ${listText(qs)}${fc ? `, the RC stage at ${hzText(fc)}` : ''}.`;
@@ -463,6 +509,7 @@ const CORNER = {
 	sallenKeyHp: { sym: 'f_0 = \\dfrac{1}{2\\pi\\sqrt{R_{\\text{top}} R_{\\text{bottom}} C_1 C_2}}', parts: ['Rtop', 'Rbottom', 'C1', 'C2'] },
 	towThomas: { sym: 'f_0 = \\dfrac{1}{2\\pi R C}, \\quad R = R_a = R_b,\\ \\ C = C_1 = C_2', parts: ['Ra', 'C1'], simple: true },
 	towThomasHp: { sym: 'f_0 = \\dfrac{1}{2\\pi R C}, \\quad R = R_a = R_b,\\ \\ C = C_1 = C_2', parts: ['Ra', 'C1'], simple: true },
+	towThomasNotch: { sym: 'f_0 = \\dfrac{1}{2\\pi R C}, \\quad R = R_a = R_b,\\ \\ C = C_1 = C_2', parts: ['Ra', 'C1'], simple: true },
 	firstOrder: { sym: 'f_c = \\dfrac{1}{2\\pi R C}', parts: ['R', 'C'], simple: true },
 	firstOrderHp: { sym: 'f_c = \\dfrac{1}{2\\pi R C}', parts: ['R', 'C'], simple: true }
 };
@@ -495,6 +542,10 @@ function stagesToParts({ topology, stock, design, realizedStages }) {
 			: `The Topology menu sets how they are wired around the op-amp, and this page is set to ${TOPOLOGY_NAME[topology]}.`;
 	}
 	const rounding = ROUNDING[stock] ?? 'fixes the capacitors from the values in stock, solves for the resistors, rounds each to the nearest value in stock';
+	// stages with zeros ignore the menu
+	if (Array.isArray(realizedStages) && realizedStages.some((s) => s?.topology === 'towThomasNotch')) {
+		menu += ' Stages with zeros are the exception: they are always Tow-Thomas notch stages, the one wiring here that can place a zero.';
+	}
 
 	const stage = Array.isArray(realizedStages) ? realizedStages[0] : null;
 	const corner = stageCorner(stage);
@@ -570,6 +621,8 @@ const GLOSSARY = [
 	['order (n)', 'the number of slopes; far from the corner the curve falls 20 n dB per decade'],
 	['stage', 'one op-amp block, second order (two slopes) or first order (one), with its own f0 and Q'],
 	['Q', "the sharpness of a stage's knee; 0.707 is flattest, higher bumps, lower sags"],
+	['response', 'the recipe the Q values come from: Butterworth flattest, Chebyshev and elliptic steeper with ripple, Legendre steepest without, Bessel best for pulses'],
+	['zero (fz)', 'a frequency a stage blocks completely; elliptic and inverse Chebyshev stages each carry a pair'],
 	['op-amp', 'the amplifier chip each stage is built around; it is what makes the filter active']
 ];
 

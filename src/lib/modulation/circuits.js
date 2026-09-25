@@ -5,9 +5,9 @@ const SCALE = 48;
 const MARGIN = 24;
 
 /** Places a symbol so that its port `key` lands exactly on `p`, which keeps every wire to it straight. */
-function placeAt(name, key, p) {
-	const off = placeSymbol(name, 0, 0, SCALE).ports[key];
-	return placeSymbol(name, p.x - off.x, p.y - off.y, SCALE);
+function placeAt(name, key, p, opts = {}) {
+	const off = placeSymbol(name, 0, 0, SCALE, opts).ports[key];
+	return placeSymbol(name, p.x - off.x, p.y - off.y, SCALE, opts);
 }
 
 /**
@@ -256,127 +256,185 @@ export function buildDividerDiagram({ top, bottom, vcc }) {
 	return { svg: parts.join(''), viewBox: `0 -16 ${width} 210` };
 }
 
-/** Diode + parallel RLC tank: summer output -> diode -> tank (L, C, R all in parallel) -> Vout. */
-export function buildDiodeTankDiagram({ l, c, r }) {
-	const y0 = 170;
-	const Vin = { x: MARGIN, y: y0 };
-	const diode = placeSymbol('diode_right', Vin.x + 90, y0, SCALE);
-	const node = diode.ports.neg;
-
-	// Each symbol's port '1' sits at a different local offset from its own
-	// placement point (inductor_down 0.504, capacitor_down 0.3, resistor_down
-	// 0.51, all * SCALE) - compensating per symbol lands every port '1' on the
-	// same topY so the shared top rail is a straight line, not a zigzag.
-	const topY = node.y - 60;
-	const L = placeSymbol('inductor_down', node.x + 60, topY + 0.5040157954121098 * SCALE, SCALE);
-	const C = placeSymbol('capacitor_down', node.x + 130, topY + 0.3 * SCALE, SCALE);
-	const R = placeSymbol('resistor_down', node.x + 200, topY + 0.51 * SCALE, SCALE);
-	const gndL = placeSymbol('ground_down', L.ports['2'].x - 0.01 * SCALE, L.ports['2'].y + 0.29 * SCALE, SCALE);
-	const gndC = placeSymbol('ground_down', C.ports['2'].x - 0.01 * SCALE, C.ports['2'].y + 0.29 * SCALE, SCALE);
-	const gndR = placeSymbol('ground_down', R.ports['2'].x - 0.01 * SCALE, R.ports['2'].y + 0.29 * SCALE, SCALE);
-	const Vout = { x: R.ports['1'].x + 70, y: topY };
+/**
+ * The diode modulator's summer: the carrier through R_p, the message
+ * through R_m and, when the diode wants a bias, -Vcc through R_b, into
+ * one inverting op-amp with R_f; its output v_s drives the diode through
+ * R_s. The op-amp's - input sits level with the carrier's row, so that
+ * row runs straight in and the bus hangs below it: one junction where
+ * the rows meet, and R_f rises from a tap of its own. The op-amp is
+ * drawn with its - input on top, so the + input's ground drops clear of
+ * everything.
+ */
+export function buildDiodeSummerDiagram({ rp, rm, rb, rf }) {
+	const inputs = [
+		{ name: 'x_p(t)', text: `R_p ${formatOhms(rp)}` },
+		{ name: 'x_m(t)', text: `R_m ${formatOhms(rm)}` },
+		...(rb ? [{ name: '-Vcc', text: `R_b ${formatOhms(rb)}` }] : [])
+	];
+	const spacing = 70;
+	const top = 120;
+	const opamp = placeAt('opamp_no_power_right', 'inp2', { x: MARGIN + 330, y: top }, { flipY: true });
+	const negNode = opamp.ports.inp2;
+	const sumX = negNode.x - 110;
+	const gndPlus = placeAt('ground_down', '1', { x: opamp.ports.inp1.x - 20, y: opamp.ports.inp1.y + 30 });
+	const rows = inputs.map((inp, i) => {
+		const y = top + i * spacing;
+		return { ...inp, y, R: placeAt('resistor_right', '1', { x: sumX - 124, y }) };
+	});
+	const Vout = { x: opamp.ports.out.x + 80, y: opamp.ports.out.y };
+	const railY = top - 70;
+	const tap = { x: sumX + 30, y: top };
+	const Rf = placeAt('resistor_right', '1', { x: Math.round((tap.x + Vout.x) / 2 - 24), y: railY });
 
 	const net = createNet();
-	net.wire(Vin, diode.ports.pos);
-	net.wire(node, { x: node.x, y: topY });
-	net.wire({ x: node.x, y: topY }, L.ports['1']);
-	net.wire(L.ports['1'], C.ports['1']);
-	net.wire(C.ports['1'], R.ports['1']);
-	net.wire(R.ports['1'], Vout);
-	net.wire(L.ports['2'], gndL.ports['1']);
-	net.wire(C.ports['2'], gndC.ports['1']);
-	net.wire(R.ports['2'], gndR.ports['1']);
+	net.elbow(opamp.ports.inp1, gndPlus.ports['1'], 'h');
+	for (const { R, y } of rows) {
+		net.wire({ x: MARGIN, y }, R.ports['1']);
+		net.wire(R.ports['2'], { x: sumX, y });
+	}
+	for (let k = 1; k < rows.length; k++) net.wire({ x: sumX, y: rows[k - 1].y }, { x: sumX, y: rows[k].y });
+	net.wire({ x: sumX, y: top }, tap);
+	net.wire(tap, negNode);
+	net.wire(tap, { x: tap.x, y: railY });
+	net.wire({ x: tap.x, y: railY }, Rf.ports['1']);
+	net.wire(Rf.ports['2'], { x: Vout.x, y: railY });
+	net.wire({ x: Vout.x, y: railY }, Vout);
+	net.wire(opamp.ports.out, Vout);
+	net.wire(Vout, { x: Vout.x + 30, y: Vout.y });
 
 	const parts = [
-		diode.svg,
-		L.svg,
-		C.svg,
-		R.svg,
-		gndL.svg,
-		gndC.svg,
-		gndR.svg,
+		opamp.svg,
+		gndPlus.svg,
+		Rf.svg,
+		...rows.map((r) => r.R.svg),
 		net.svg(),
-		net.dots(portPoints(diode, L, C, R, gndL, gndC, gndR)),
-		label('sum(t)', Vin.x, Vin.y - 12, { anchor: 'start' }),
+		net.dots(portPoints(opamp, gndPlus, Rf, ...rows.map((r) => r.R))),
+		...rows.map((r) => label(r.name, MARGIN, r.y - 10, { anchor: 'start' })),
+		...rows.map((r) => label(r.text, r.R.ports['1'].x, r.y - 14, { anchor: 'start' })),
+		label('v_s', Vout.x + 34, Vout.y + 5, { anchor: 'start' }),
+		label(`R_f ${formatOhms(rf)}`, Rf.ports['1'].x, railY - 12, { anchor: 'start' })
+	];
+
+	const width = Vout.x + 30 + 60;
+	const bottom = Math.max(gndPlus.ports['1'].y + 40, rows[rows.length - 1].y + 40);
+	return { svg: parts.join(''), viewBox: `0 ${railY - 30} ${width} ${bottom - (railY - 30)}` };
+}
+
+/**
+ * The diode and its tank: v_s through R_s and the diode into the tank,
+ * whose parts (L, the capacitor or the stock pair that makes it, and R_t)
+ * hang side by side from one rail; the rail is the output.
+ */
+export function buildDiodeTankDiagram({ rs, l, capacitors, r }) {
+	const y0 = 170;
+	const Vin = { x: MARGIN, y: y0 };
+	const Rs = placeAt('resistor_right', '1', { x: Vin.x + 50, y: y0 });
+	const diode = placeAt('diode_right', 'pos', { x: Rs.ports['2'].x + 50, y: y0 });
+	const node = diode.ports.neg;
+	const topY = node.y - 60;
+	const caps = capacitors.length > 1 ? capacitors.map((c, k) => ['capacitor_down', `C${k + 1} ${formatFarads(c)}`]) : [['capacitor_down', `C ${formatFarads(capacitors[0])}`]];
+	const specs = [['inductor_down', `L ${formatHenries(l)}`], ...caps, ['resistor_down', `R_t ${formatOhms(r)}`]];
+	// each hangs by its port '1' on the rail, whatever the symbol's own offset
+	const hung = specs.map(([name, text], k) => {
+		const sym = placeAt(name, '1', { x: node.x + 60 + 90 * k, y: topY });
+		const gnd = placeSymbol('ground_down', sym.ports['2'].x - 0.01 * SCALE, sym.ports['2'].y + 0.29 * SCALE, SCALE);
+		return { sym, gnd, text };
+	});
+	const last = hung[hung.length - 1].sym;
+	const Vout = { x: last.ports['1'].x + 70, y: topY };
+
+	const net = createNet();
+	net.wire(Vin, Rs.ports['1']);
+	net.wire(Rs.ports['2'], diode.ports.pos);
+	net.wire(node, { x: node.x, y: topY });
+	let prev = { x: node.x, y: topY };
+	for (const h of hung) {
+		net.wire(prev, h.sym.ports['1']);
+		net.wire(h.sym.ports['2'], h.gnd.ports['1']);
+		prev = h.sym.ports['1'];
+	}
+	net.wire(prev, Vout);
+
+	const parts = [
+		Rs.svg,
+		diode.svg,
+		...hung.flatMap((h) => [h.sym.svg, h.gnd.svg]),
+		net.svg(),
+		net.dots(portPoints(Rs, diode, ...hung.flatMap((h) => [h.sym, h.gnd]))),
+		label('v_s', Vin.x, Vin.y - 12, { anchor: 'start' }),
+		label(`R_s ${formatOhms(rs)}`, Rs.ports['1'].x, y0 - 14, { anchor: 'start' }),
+		label('D', (diode.ports.pos.x + diode.ports.neg.x) / 2, y0 + 26, { anchor: 'middle' }),
 		label('Vout', Vout.x + 6, Vout.y - 10, { anchor: 'start' }),
-		label(`L ${formatHenries(l)}`, L.ports['1'].x, topY - 12, { anchor: 'middle' }),
-		label(`C ${formatFarads(c)}`, C.ports['1'].x, topY - 12, { anchor: 'middle' }),
-		label(`R ${formatOhms(r)}`, R.ports['1'].x, topY - 12, { anchor: 'middle' })
+		...hung.map((h) => label(h.text, h.sym.ports['1'].x, topY - 12, { anchor: 'middle' }))
 	];
 
 	const width = Vout.x + 60;
-	return { svg: parts.join(''), viewBox: `0 ${topY - 30} ${width} 220` };
+	const bottom = Math.max(y0 + 40, ...hung.map((h) => h.gnd.ports['1'].y + 30));
+	return { svg: parts.join(''), viewBox: `0 ${topY - 30} ${width} ${bottom - (topY - 30)}` };
 }
 
 /**
  * Precision full-wave rectifier (absolute-value circuit), verified against
- * TI TIDU030 ("Precision Full-Wave Rectifier, Dual-Supply"), Figure 2/3/4.
- * D1 and D2 anodes both sit at U1A's output; D1's cathode (node F) drives
- * U1A's own - input and continues into R1; R1/R2 meet at node G = U1B's -
- * input; D2's cathode drives U1B's + input with R3 biasing it to ground;
- * R2 is U1B's feedback resistor from Vout. With R1 = R2 = R3, Vout = |Vin|.
- *
- * The two op-amps' - input feedback nets are routed along a top rail and
- * dropped into each - input from just left of that op-amp, so no wire runs
- * through a diode or an op-amp triangle.
+ * TI TIDU030 ("Precision Full-Wave Rectifier, Dual-Supply"), Figure 2, and
+ * in LTspice, and drawn the way TI draws it: both op-amps with the -
+ * input on top. A top rail joins U1A's - input (node F), D1's anode and
+ * R1; D1 points down from it into U1A's output P; D2 runs from P along the
+ * output line into U1B's + input, with R3 from there to ground; R1 and R2
+ * run along the rail, G drops into U1B's - input, and R2 comes down into
+ * U1B's output. With R1 = R2 = R3, Vout = |Vin|. (With D1 the other way
+ * up, both anodes on P, the circuit gives no full-wave output at all.)
+ * Every part is placed by its pins, so every wire is straight, and
+ * nothing crosses.
  */
 export function buildPrecisionRectifierDiagram({ r1, r2, r3 }) {
-	const mainY = 220;
-
-	const u1a = placeSymbol('opamp_no_power_right', MARGIN + 120, mainY, SCALE);
-	const Vin = { x: MARGIN, y: u1a.ports.inp1.y };
-	const P = { x: u1a.ports.out.x + 46, y: u1a.ports.out.y }; // both diode anodes
-
-	const d1 = placeSymbol('diode_up', P.x, P.y - 110, SCALE);
-	const nodeF = d1.ports.neg; // cathode; the whole top rail sits at its height
-	const railY = nodeF.y;
-
-	const R1 = placeSymbol('resistor_right', nodeF.x + 70, railY, SCALE);
-	const nodeG = R1.ports['2'];
-	const R2 = placeSymbol('resistor_right', nodeG.x + 90, railY, SCALE);
-
-	const u1b = placeSymbol('opamp_no_power_right', R2.ports['2'].x + 90, mainY, SCALE);
-	// D2 sits at U1B's + input height so its cathode wire is a clean
-	// horizontal; R3 biases that same + node to ground (there is no separate
-	// ground on the + input - D2 and R3 share it).
-	const d2 = placeSymbol('diode_right', u1b.ports.inp1.x - 96, u1b.ports.inp1.y, SCALE);
-	const R3 = placeSymbol('resistor_down', d2.ports.neg.x, d2.ports.neg.y + 56, SCALE);
-	const gndR3 = placeSymbol('ground_down', R3.ports['2'].x - 0.01 * SCALE, R3.ports['2'].y + 0.29 * SCALE, SCALE);
-
-	const Vout = { x: u1b.ports.out.x + 80, y: u1b.ports.out.y };
+	const mainY = 230;
+	const u1a = placeAt('opamp_no_power_right', 'inp1', { x: MARGIN + 130, y: mainY }, { flipY: true });
+	const Vin = { x: MARGIN, y: mainY };
+	const P = { x: u1a.ports.out.x + 50, y: u1a.ports.out.y };
+	const railY = u1a.ports.inp2.y - 110;
+	const F = { x: P.x, y: railY };
+	const d1 = placeAt('diode_down', 'pos', { x: P.x, y: railY + 22 });
+	const d2 = placeAt('diode_right', 'pos', { x: P.x + 50, y: P.y });
+	const H = { x: d2.ports.neg.x + 34, y: P.y };
+	const R3 = placeAt('resistor_down', '1', { x: H.x, y: H.y + 28 });
+	const gndR3 = placeAt('ground_down', '1', { x: H.x, y: R3.ports['2'].y + 14 });
+	const R1 = placeAt('resistor_right', '1', { x: F.x + 44, y: railY });
+	const G = { x: H.x + 44, y: railY };
+	const R2 = placeAt('resistor_right', '1', { x: G.x + 34, y: railY });
+	const u1b = placeAt('opamp_no_power_right', 'inp1', { x: G.x + 60, y: P.y }, { flipY: true });
+	const Vout = { x: u1b.ports.out.x + 40, y: u1b.ports.out.y };
+	const fX = u1a.ports.inp2.x - 24;
 
 	const net = createNet();
 	net.wire(Vin, u1a.ports.inp1);
+	// U1A's - input up to the rail, from its left, and along to F
+	net.wire(u1a.ports.inp2, { x: fX, y: u1a.ports.inp2.y });
+	net.wire({ x: fX, y: u1a.ports.inp2.y }, { x: fX, y: railY });
+	net.wire({ x: fX, y: railY }, F);
+	// D1 from the rail down into U1A's output line
+	net.wire(F, d1.ports.pos);
+	net.wire(d1.ports.neg, P);
 	net.wire(u1a.ports.out, P);
-	net.wire(P, d1.ports.pos);
-	net.elbow(P, d2.ports.pos, 'h');
-
-	// node F -> R1 along the rail, and F down into U1A's - input from just
-	// left of U1A (never through the diode or the triangle)
-	net.wire(nodeF, R1.ports['1']);
-	const fDropX = u1a.ports.inp2.x - 24;
-	net.wire(nodeF, { x: fDropX, y: railY });
-	net.wire({ x: fDropX, y: railY }, { x: fDropX, y: u1a.ports.inp2.y });
-	net.wire({ x: fDropX, y: u1a.ports.inp2.y }, u1a.ports.inp2);
-
-	// node G -> R2 along the rail, and G straight down (left of R2) into
-	// U1B's - input
-	net.wire(nodeG, R2.ports['1']);
-	net.wire(nodeG, { x: nodeG.x, y: u1b.ports.inp2.y });
-	net.wire({ x: nodeG.x, y: u1b.ports.inp2.y }, u1b.ports.inp2);
-
-	// R2 feedback down to Vout (past U1B, then in)
+	// D2 along the output line to H, R3 from H to ground, H on into U1B's +
+	net.wire(P, d2.ports.pos);
+	net.wire(d2.ports.neg, H);
+	net.wire(H, R3.ports['1']);
+	net.wire(R3.ports['2'], gndR3.ports['1']);
+	net.wire(H, u1b.ports.inp1);
+	// R1 and R2 along the rail, G down into U1B's - input
+	net.wire(F, R1.ports['1']);
+	net.wire(R1.ports['2'], G);
+	net.wire(G, R2.ports['1']);
+	net.wire(G, { x: G.x, y: u1b.ports.inp2.y });
+	net.wire({ x: G.x, y: u1b.ports.inp2.y }, u1b.ports.inp2);
+	// R2 on to the output's column and down into it
 	net.wire(R2.ports['2'], { x: Vout.x, y: railY });
 	net.wire({ x: Vout.x, y: railY }, Vout);
 	net.wire(u1b.ports.out, Vout);
 	net.wire(Vout, { x: Vout.x + 30, y: Vout.y });
 
-	// D2 cathode -> U1B + input (horizontal), and R3 down to ground
-	net.wire(d2.ports.neg, u1b.ports.inp1);
-	net.wire(d2.ports.neg, R3.ports['1']);
-	net.wire(R3.ports['2'], gndR3.ports['1']);
-
-	const uCenter = (o) => (o.ports.inp1.x + o.ports.out.x) / 2;
+	const middle = (o) => (o.ports.inp1.x + o.ports.out.x) / 2;
 	const parts = [
 		u1a.svg,
 		u1b.svg,
@@ -390,18 +448,56 @@ export function buildPrecisionRectifierDiagram({ r1, r2, r3 }) {
 		net.dots(portPoints(u1a, u1b, d1, d2, R1, R2, R3, gndR3)),
 		label('Vin', Vin.x, Vin.y - 12, { anchor: 'start' }),
 		label('Vout', Vout.x + 34, Vout.y + 5, { anchor: 'start' }),
-		label('U1A', uCenter(u1a), mainY + 40, { anchor: 'middle' }),
-		label('U1B', uCenter(u1b), mainY + 40, { anchor: 'middle' }),
-		label('D1', d1.ports.pos.x + 12, (d1.ports.pos.y + d1.ports.neg.y) / 2, { anchor: 'start' }),
-		label('D2', d2.ports.pos.x + 4, d2.ports.pos.y - 12, { anchor: 'start' }),
+		label('U1A', middle(u1a), mainY + 32, { anchor: 'middle' }),
+		label('U1B', middle(u1b), P.y + 38, { anchor: 'middle' }),
+		label('D1', P.x + 12, (d1.ports.pos.y + d1.ports.neg.y) / 2 + 4, { anchor: 'start' }),
+		label('D2', (d2.ports.pos.x + d2.ports.neg.x) / 2, P.y - 12, { anchor: 'middle' }),
 		label(`R1 ${formatOhms(r1)}`, R1.ports['1'].x, railY - 12, { anchor: 'start' }),
 		label(`R2 ${formatOhms(r2)}`, R2.ports['1'].x, railY - 12, { anchor: 'start' }),
-		label(`R3 ${formatOhms(r3)}`, R3.ports['1'].x + 12, (R3.ports['1'].y + R3.ports['2'].y) / 2, { anchor: 'start' })
+		label(`R3 ${formatOhms(r3)}`, R3.ports['1'].x + 14, (R3.ports['1'].y + R3.ports['2'].y) / 2 + 4, { anchor: 'start' })
 	];
 
 	const width = Vout.x + 30 + 60;
-	const height = mainY + 120 - (railY - 40);
-	return { svg: parts.join(''), viewBox: `0 ${railY - 40} ${width} ${height}` };
+	const top = railY - 40;
+	const bottom = gndR3.ports['1'].y + 36;
+	return { svg: parts.join(''), viewBox: `0 ${top} ${width} ${bottom - top}` };
+}
+
+/**
+ * Half-wave rectifier: one diode from the AM input, and the load resistor
+ * from its cathode to ground that gives the diode somewhere to send its
+ * current (the envelope filter after it takes no DC).
+ */
+export function buildHalfWaveDiagram({ rl }) {
+	const y0 = 120;
+	const Vin = { x: MARGIN, y: y0 };
+	const d = placeAt('diode_right', 'pos', { x: Vin.x + 90, y: y0 });
+	const N = { x: d.ports.neg.x + 70, y: y0 };
+	const R = placeAt('resistor_down', '1', { x: N.x, y: N.y + 30 });
+	const gnd = placeSymbol('ground_down', R.ports['2'].x - 0.01 * SCALE, R.ports['2'].y + 0.29 * SCALE, SCALE);
+	const Vout = { x: N.x + 110, y: y0 };
+
+	const net = createNet();
+	net.wire(Vin, d.ports.pos);
+	net.wire(d.ports.neg, N);
+	net.wire(N, R.ports['1']);
+	net.wire(R.ports['2'], gnd.ports['1']);
+	net.wire(N, Vout);
+
+	const parts = [
+		d.svg,
+		R.svg,
+		gnd.svg,
+		net.svg(),
+		net.dots(portPoints(d, R, gnd)),
+		label('Vin', Vin.x, Vin.y - 12, { anchor: 'start' }),
+		label('Vout', Vout.x + 6, Vout.y - 10, { anchor: 'start' }),
+		label('D1', (d.ports.pos.x + d.ports.neg.x) / 2, y0 - 18, { anchor: 'middle' }),
+		label(`R_L ${formatOhms(rl)}`, R.ports['1'].x + 14, (R.ports['1'].y + R.ports['2'].y) / 2 + 4, { anchor: 'start' })
+	];
+
+	const width = Vout.x + 60;
+	return { svg: parts.join(''), viewBox: `0 ${y0 - 40} ${width} ${gnd.ports['1'].y + 36 - (y0 - 40)}` };
 }
 
 /** Envelope-recovery low-pass: unity-gain Sallen-Key, same topology as the filter-design tool. */

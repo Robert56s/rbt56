@@ -504,6 +504,154 @@ export function buildTowThomasHpDiagram(components) {
 	return towThomasCore(components, true);
 }
 
+/** Places a symbol so that its port `key` lands exactly on `p`. */
+function atPort(name, key, p) {
+	const off = placeSymbol(name, 0, 0, SCALE).ports[key];
+	return placeSymbol(name, p.x - off.x, p.y - off.y, SCALE);
+}
+
+/**
+ * Tow-Thomas notch (the feed-forward form, towThomas.js): the stage of an
+ * elliptic or inverse Chebyshev filter. Drawn as one loop with nothing
+ * crossing it: A1 on top (Cin in, C1 and Rd across it, output on the
+ * right), Rb down the right side into A2's summing node, A2 and A3 along
+ * the bottom facing left, Ra up the left side into A1's summing node, and
+ * Rz along the very bottom from the input to A2's summing node.
+ */
+export function buildTowThomasNotchDiagram(components) {
+	const c = components;
+	const y0 = 190;
+	const Vin = { x: MARGIN, y: y0 };
+	const J0 = { x: MARGIN + 40, y: y0 };
+	const Cin = atPort('capacitor_right', '1', { x: J0.x + 40, y: y0 });
+	const N1 = Cin.ports['2'];
+	const A1 = atPort('opamp_no_power_right', 'inp2', { x: N1.x + 90, y: y0 });
+	const gnd1 = atPort('ground_down', '1', { x: A1.ports.inp1.x - 35, y: A1.ports.inp1.y + 40 });
+	// A1's feedback closes right after its output; the output then runs on
+	// far enough for the bottom row to fit under it
+	const FB = { x: A1.ports.out.x + 24, y: A1.ports.out.y };
+	const V1 = { x: N1.x + 430, y: FB.y };
+	const railY1 = y0 - 120;
+	const railY2 = y0 - 76;
+	const C1 = placeSymbol('capacitor_right', (N1.x + FB.x) / 2, railY1, SCALE);
+	const Rd = atPort('resistor_right', '1', { x: (N1.x + FB.x) / 2 - 22.56, y: railY2 });
+	const out = { x: V1.x + 70, y: V1.y };
+
+	// right side: Rb down from the output into A2's summing node
+	const Rb = atPort('resistor_down', '1', { x: V1.x, y: V1.y + 40 });
+	const yB = y0 + 170;
+	const N2 = { x: V1.x, y: yB };
+	// bottom row, facing left: A2 (integrator) then A3 (inverter)
+	const N2a = { x: N2.x - 30, y: yB };
+	const A2 = atPort('opamp_no_power_left', 'inp2', { x: N2.x - 60, y: yB });
+	const gnd2 = atPort('ground_down', '1', { x: A2.ports.inp1.x + 16, y: A2.ports.inp1.y + 40 });
+	const V2 = { x: A2.ports.out.x - 36, y: A2.ports.out.y };
+	const loop2Y = yB - 64;
+	const C2 = placeSymbol('capacitor_right', (N2a.x + V2.x) / 2, loop2Y, SCALE);
+	const r1 = atPort('resistor_right', '2', { x: V2.x - 24, y: V2.y });
+	const N3 = { x: r1.ports['1'].x - 24, y: V2.y };
+	const N3a = { x: N3.x - 20, y: V2.y };
+	const A3 = atPort('opamp_no_power_left', 'inp2', { x: N3.x - 44, y: V2.y });
+	const gnd3 = atPort('ground_down', '1', { x: A3.ports.inp1.x + 16, y: A3.ports.inp1.y + 40 });
+	const V3 = { x: A3.ports.out.x - 30, y: A3.ports.out.y };
+	const loop3Y = V2.y - 64;
+	const r2 = atPort('resistor_right', '1', { x: (N3a.x + V3.x) / 2 - 22.56, y: loop3Y });
+	// left side: Ra up into N1
+	const Ra = atPort('resistor_down', '1', { x: N1.x, y: y0 + 50 });
+	const raFoot = { x: N1.x, y: V3.y };
+	// the feed-forward lane along the bottom
+	const laneY = yB + 90;
+	const Rz = atPort('resistor_right', '1', { x: (J0.x + N2.x) / 2 - 22.56, y: laneY });
+
+	const net = createNet();
+	net.wire(Vin, J0);
+	net.wire(J0, Cin.ports['1']);
+	net.wire(N1, A1.ports.inp2);
+	net.elbow(A1.ports.inp1, gnd1.ports['1'], 'h');
+	net.wire(A1.ports.out, FB);
+	net.wire(FB, V1);
+	net.wire(V1, out);
+	// A1 feedback: C1 on the top rail, Rd on the rail under it
+	net.wire(N1, { x: N1.x, y: railY2 });
+	net.wire({ x: N1.x, y: railY2 }, { x: N1.x, y: railY1 });
+	net.wire({ x: N1.x, y: railY1 }, C1.ports['1']);
+	net.wire({ x: N1.x, y: railY2 }, Rd.ports['1']);
+	net.wire(C1.ports['2'], { x: FB.x, y: railY1 });
+	net.wire(Rd.ports['2'], { x: FB.x, y: railY2 });
+	net.wire({ x: FB.x, y: railY1 }, { x: FB.x, y: railY2 });
+	net.wire({ x: FB.x, y: railY2 }, FB);
+	// Rb down into N2
+	net.wire(V1, Rb.ports['1']);
+	net.wire(Rb.ports['2'], N2);
+	// A2 with C2 over it
+	net.wire(N2, N2a);
+	net.wire(N2a, A2.ports.inp2);
+	net.elbow(A2.ports.inp1, gnd2.ports['1'], 'h');
+	net.wire(A2.ports.out, V2);
+	net.wire(N2a, { x: N2a.x, y: loop2Y });
+	net.wire({ x: N2a.x, y: loop2Y }, C2.ports['2']);
+	net.wire(C2.ports['1'], { x: V2.x, y: loop2Y });
+	net.wire({ x: V2.x, y: loop2Y }, V2);
+	// A3 inverter with r2 over it
+	net.wire(V2, r1.ports['2']);
+	net.wire(r1.ports['1'], N3);
+	net.wire(N3, N3a);
+	net.wire(N3a, A3.ports.inp2);
+	net.elbow(A3.ports.inp1, gnd3.ports['1'], 'h');
+	net.wire(A3.ports.out, V3);
+	net.wire(N3, { x: N3.x, y: loop3Y });
+	net.wire({ x: N3.x, y: loop3Y }, r2.ports['2']);
+	net.wire(r2.ports['1'], { x: V3.x, y: loop3Y });
+	net.wire({ x: V3.x, y: loop3Y }, V3);
+	// back to N1 through Ra
+	net.wire(V3, raFoot);
+	net.wire(raFoot, Ra.ports['2']);
+	net.wire(Ra.ports['1'], N1);
+	// Rz from the input, along the bottom, up into N2
+	net.wire(J0, { x: J0.x, y: laneY });
+	net.wire({ x: J0.x, y: laneY }, Rz.ports['1']);
+	net.wire(Rz.ports['2'], { x: N2.x, y: laneY });
+	net.wire({ x: N2.x, y: laneY }, N2);
+
+	const parts = [
+		Cin.svg,
+		A1.svg,
+		gnd1.svg,
+		C1.svg,
+		Rd.svg,
+		Rb.svg,
+		A2.svg,
+		gnd2.svg,
+		C2.svg,
+		r1.svg,
+		A3.svg,
+		gnd3.svg,
+		r2.svg,
+		Ra.svg,
+		Rz.svg,
+		net.svg(),
+		net.dots(portPoints(Cin, A1, gnd1, C1, Rd, Rb, A2, gnd2, C2, r1, A3, gnd3, r2, Ra, Rz)),
+		label('Vin', Vin.x, Vin.y - 12, { anchor: 'start' }),
+		label(`Cin ${formatFarads(c.Cin)}`, N1.x - 10, y0 - 22, { anchor: 'end' }),
+		label(`C1 ${formatFarads(c.C1)}`, C1.ports['1'].x, railY1 - 12, { anchor: 'start' }),
+		label(`Rd ${formatOhms(c.Rd)}`, Rd.ports['1'].x, railY2 - 12, { anchor: 'start' }),
+		label(`Rb ${formatOhms(c.Rb)}`, V1.x + 12, (Rb.ports['1'].y + Rb.ports['2'].y) / 2 + 4, { anchor: 'start' }),
+		label(`C2 ${formatFarads(c.C2)}`, C2.ports['1'].x - 10, loop2Y - 14, { anchor: 'start' }),
+		label(`r ${formatOhms(c.r)}`, r1.ports['1'].x, V2.y + 22, { anchor: 'start' }),
+		label(`r ${formatOhms(c.r)}`, r2.ports['1'].x, loop3Y - 12, { anchor: 'start' }),
+		label(`Ra ${formatOhms(c.Ra)}`, N1.x + 12, (Ra.ports['1'].y + Ra.ports['2'].y) / 2 + 4, { anchor: 'start' }),
+		label(`Rz ${formatOhms(c.Rz)}`, Rz.ports['1'].x, laneY + 22, { anchor: 'start' }),
+		label('A1', A1.ports.out.x - 24, y0 + 26, { anchor: 'middle' }),
+		label('A2', A2.ports.out.x + 24, yB + 26, { anchor: 'middle' }),
+		label('A3', A3.ports.out.x + 24, V2.y + 26, { anchor: 'middle' }),
+		label('Vout', out.x + 6, out.y + 4, { anchor: 'start' })
+	];
+
+	const width = out.x + 60;
+	const top = railY1 - 30;
+	return { svg: parts.join(''), viewBox: `0 ${top} ${width} ${laneY + 36 - top}` };
+}
+
 /**
  * Unity-gain difference amplifier: used in place of the summing amplifier
  * when a band-stop's two branches arrive with opposite signs (one of them
@@ -512,7 +660,8 @@ export function buildTowThomasHpDiagram(components) {
  * through R with R as feedback, so Vout = V_hp - V_lp: with opposite signs
  * that is the sum of the two magnitudes, and the notch is preserved.
  */
-export function buildDifferenceAmpDiagram(R) {
+export function buildDifferenceAmpDiagram(R, values = {}) {
+	const v = { RCH: R, RCG: R, RCL: R, RCF: R, ...values };
 	const opamp = placeSymbol('opamp_no_power_right', MARGIN + 260, 200, SCALE);
 	const yTop = opamp.ports.inp1.y; // + input row carries V_hp
 	const yBot = opamp.ports.inp2.y + 110; // - input row carries V_lp
@@ -558,10 +707,10 @@ export function buildDifferenceAmpDiagram(R) {
 		label('V_hp', VinHp.x, VinHp.y - 12, { anchor: 'start' }),
 		label('V_lp', VinLp.x, VinLp.y - 12, { anchor: 'start' }),
 		label('Vout', Vout.x + 48, Vout.y + 5, { anchor: 'start' }),
-		label(`R ${formatOhms(R)}`, Rh.ports['1'].x, yTop - 24, { anchor: 'start' }),
-		label(`R ${formatOhms(R)}`, Rl.ports['1'].x, yBot - 24, { anchor: 'start' }),
-		label(`Rg ${formatOhms(R)}`, P.x - 12, (Rg.ports['1'].y + Rg.ports['2'].y) / 2 + 4, { anchor: 'end' }),
-		label(`Rf ${formatOhms(R)}`, Rf.ports['1'].x, railY + 24, { anchor: 'start' })
+		label(`R ${formatOhms(v.RCH)}`, Rh.ports['1'].x, yTop - 24, { anchor: 'start' }),
+		label(`Rl ${formatOhms(v.RCL)}`, Rl.ports['1'].x, yBot - 24, { anchor: 'start' }),
+		label(`Rg ${formatOhms(v.RCG)}`, P.x - 12, (Rg.ports['1'].y + Rg.ports['2'].y) / 2 + 4, { anchor: 'end' }),
+		label(`Rf ${formatOhms(v.RCF)}`, Rf.ports['1'].x, railY + 24, { anchor: 'start' })
 	];
 
 	const width = Vout.x + 40 + 60;
@@ -574,7 +723,8 @@ export function buildDifferenceAmpDiagram(R) {
  * branch outputs of a band-stop design. Ra and Rb into the summing node, Rf
  * in feedback from Vout, + input grounded (lead offset sideways).
  */
-export function buildSummingAmpDiagram(R) {
+export function buildSummingAmpDiagram(R, values = {}) {
+	const v = { RCA: R, RCB: R, RCF: R, ...values };
 	const yTop = 140;
 	const yBottom = 260;
 	const yMid = (yTop + yBottom) / 2;
@@ -626,9 +776,9 @@ export function buildSummingAmpDiagram(R) {
 		label('V_lp', VinLp.x, VinLp.y - 12, { anchor: 'start' }),
 		label('V_hp', VinHp.x, VinHp.y - 12, { anchor: 'start' }),
 		label('Vout', Vout.x + 48, Vout.y + 5, { anchor: 'start' }),
-		label(`Ra ${formatOhms(R)}`, Ra.ports['1'].x, Ra.ports['1'].y - 24, { anchor: 'start' }),
-		label(`Rb ${formatOhms(R)}`, Rb.ports['1'].x, Rb.ports['1'].y + 30, { anchor: 'start' }),
-		label(`Rf ${formatOhms(R)}`, Rf.ports['1'].x, railY - 12, { anchor: 'start' })
+		label(`Ra ${formatOhms(v.RCA)}`, Ra.ports['1'].x, Ra.ports['1'].y - 24, { anchor: 'start' }),
+		label(`Rb ${formatOhms(v.RCB)}`, Rb.ports['1'].x, Rb.ports['1'].y + 30, { anchor: 'start' }),
+		label(`Rf ${formatOhms(v.RCF)}`, Rf.ports['1'].x, railY - 12, { anchor: 'start' })
 	];
 
 	const width = Vout.x + 40 + 60;

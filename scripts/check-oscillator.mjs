@@ -25,6 +25,7 @@ import { buildElements, generateNetlist, generateSchematic } from '../src/lib/os
 import { compareOscillators, designOscillator, solveLadder, TOPOLOGIES } from '../src/lib/oscillator/topologies.js';
 import { parseSchematic, spiceValue } from '../src/lib/spice/core.js';
 import { audit } from '../src/lib/spice/geometry.js';
+import { realOpampProblems } from './lib-real-opamp.mjs';
 
 let fails = 0;
 const check = (label, ok, detail) => {
@@ -251,6 +252,32 @@ const WT = 2 * Math.PI * 3e6;
 			}
 		}
 		check('export: every drawing across the range is clean', messy.length === 0 && drawn > 50, messy.length ? messy.slice(0, 3).join('; ') : `${drawn} drawings`);
+	}
+	// the same designs with a real op-amp: five-pin symbols on v++ and v--,
+	// the rail sources, the part's subcircuit, and the same wiring
+	{
+		let drawn = 0;
+		const messy = [];
+		for (const t of TOPOLOGIES) {
+			for (const s of t.id === 'wien' ? ['diodes', 'lamp', 'jfet'] : ['diodes']) {
+				for (const f of [1000, 55000]) {
+					let d;
+					try {
+						d = designOscillator({ topology: t.id, stabilizer: s, frequency: f, amplitude: s === 'jfet' ? 4 : 3 });
+					} catch {
+						continue;
+					}
+					if (!d) continue;
+					const ideal = generateSchematic(d);
+					for (const part of ['TL082', 'LM741']) {
+						const { problems, issues } = realOpampProblems(ideal, generateSchematic(d, { opamp: part }), part);
+						drawn++;
+						if (problems.length || issues.length) messy.push(`${t.id}/${s} ${f} Hz ${part}: ${problems[0] ?? `${issues[0].kind}: ${issues[0].detail}`}`);
+					}
+				}
+			}
+		}
+		check('export: with a real op-amp, every drawing wired as the ideal one, on v++ and v--, drawn clean', messy.length === 0 && drawn >= 20, messy.length ? messy.slice(0, 3).join('; ') : `${drawn} drawings`);
 	}
 	const lamp = generateNetlist(designOscillator({ topology: 'wien', stabilizer: 'lamp', frequency: 1000, amplitude: 3 }));
 	check('export: the lamp is a resistor that heats up, started hot', /RLAMP nm 0 R=\{Rcold\*\(1\+alpha\*V\(theta\)\)\}/.test(lamp) && /BTH 0 theta I=/.test(lamp) && /CTH theta 0 .* IC=/.test(lamp) && /\.param Rcold=/.test(lamp));

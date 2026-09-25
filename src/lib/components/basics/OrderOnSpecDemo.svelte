@@ -4,17 +4,20 @@
 	// on the slider, red where it enters a zone. The magnitude is the one the
 	// tool designs to: Butterworth 1 / (1 + eps^2 (f/fp)^(2n)), Chebyshev
 	// 1 / (1 + eps^2 Cn(f/fp)^2), with eps^2 = 10^(Amax/10) - 1 so that the
-	// loss at fp is exactly Amax (fp/f in place of f/fp for a high-pass).
+	// loss at fp is exactly Amax (fp/f in place of f/fp for a high-pass);
+	// the other responses come from their prototypes (approximations.js),
+	// measured from the top of their passband as the page measures them.
 	// The fs and Amin sliders move the stopband zone; the answer line is the
-	// tool's own count, butterworthOrder or chebyshevOrder from order.js,
-	// rounded up. The sliders follow the page until moved.
+	// tool's own count, minimumOrder from stages.js. The sliders follow the
+	// page until moved.
 	//   kind              'lowpass' | 'highpass' (a band type passes its low-pass side)
-	//   response          'butterworth' | 'chebyshev'
+	//   response          any key of RESPONSES
 	//   fp, fs            the two edges, Hz
 	//   amaxDb, aminDb    the two limits
 	//   n0                the order the page uses for this side
 	//   live, side        as in the RC figure
-	import { butterworthOrder, chebyshevOrder } from '$lib/filter/order';
+	import { prototypeFor, prototypeLossDb, RESPONSES, SEARCH_LIMIT } from '$lib/filter/approximations';
+	import { minimumOrder } from '$lib/filter/stages';
 	import Slider from './Slider.svelte';
 	import XYPlot from './XYPlot.svelte';
 	import { dbText, frameBottom, hzText, logSpace, plain, specFrame, specZones } from './bodeFigure.js';
@@ -43,8 +46,25 @@
 
 	const eps2 = $derived(10 ** (amaxDb / 10) - 1);
 	const chebPoly = (m, x) => (x <= 1 ? Math.cos(m * Math.acos(x)) : Math.cosh(m * Math.acosh(x)));
+	const closedForm = $derived(response === 'butterworth' || response === 'chebyshev');
+	// the other responses, one prototype per order, each shifted so that the
+	// top of its passband is 0 dB (an even-order elliptic peaks above its DC value)
+	const prototypes = $derived.by(() => {
+		if (closedForm) return [];
+		const kSel = high ? fsSel / fp : fp / fsSel;
+		return Array.from({ length: MAX_N }, (_, i) => {
+			const proto = prototypeFor(response, i + 1, amaxDb, aminSel, kSel);
+			let top = -Infinity;
+			for (let j = 0; j <= 200; j++) top = Math.max(top, -prototypeLossDb(proto, 10 ** (-3 + (3 * j) / 200)));
+			return { proto, top };
+		});
+	});
 	function dbAt(m, f) {
 		const x = high ? fp / f : f / fp;
+		if (!closedForm) {
+			const { proto, top } = prototypes[m - 1];
+			return -prototypeLossDb(proto, x) - top;
+		}
 		const c = cheby ? chebPoly(m, x) : x ** m;
 		return -10 * Math.log10(1 + eps2 * c * c);
 	}
@@ -69,22 +89,31 @@
 	const clears = $derived(stopOk && passOk);
 	// the tool's own count for the sliders' spec: k = fp/fs (fs/fp for a high-pass), always below 1
 	const k = $derived(high ? fsSel / fp : fp / fsSel);
-	// the Chebyshev count is not a number when Amin sits at or below Amax; any order then does
-	const rawAnswer = $derived(cheby ? chebyshevOrder(amaxDb, aminSel, k) : butterworthOrder(amaxDb, aminSel, k));
-	const answer = $derived(Number.isFinite(rawAnswer) ? Math.max(1, Math.ceil(rawAnswer)) : 1);
+	// the tool's own count; it is not a number when Amin sits at or below Amax (any order then
+	// does), and a searched response returns no order at all when none up to its limit gets there
+	const counted = $derived(aminSel > amaxDb ? minimumOrder(response, amaxDb, aminSel, k) : null);
+	const unreachable = $derived(counted !== null && counted.n === null);
+	const answer = $derived(counted && Number.isFinite(counted.value) ? Math.max(1, Math.ceil(counted.value)) : 1);
 	const specUntouched = $derived(ownFs === null && ownAmin === null);
 
+	const SECOND = {
+		butterworth: 'Pulling fs toward fp or raising Amin moves the answer one whole step at a time, never smoothly.',
+		chebyshev: 'The Chebyshev curve wobbles inside the passband but never drops below the Amax line.',
+		legendre: 'The Legendre curve never wobbles, and falls faster than a Butterworth curve of the same order.',
+		bessel: 'The Bessel curves bend over gently: they keep the delay flat, and pay in steepness.',
+		inverseChebyshev: 'The inverse Chebyshev curve is flat in the passband and bounces between its zeros past fs, never above the Amin line.',
+		elliptic: 'The elliptic curve wobbles in both bands: within Amax up to fp, and between its zeros past fs, never above the Amin line.'
+	};
 	const notice = $derived.by(() => {
 		let first;
-		if (answer > MAX_N) first = `This spec needs order ${answer}, past the tool's limit of ${MAX_N}: moving fs away from fp or lowering Amin brings it back within reach.`;
-		else if (n < answer) first = `${answer - n === 1 ? 'One order' : `${answer - n} orders`} short: n = ${n} still enters the stopband zone at fs, and n = ${answer} clears it.`;
+		if (unreachable) first = `A ${RESPONSES[response].label} filter never reaches this spec, even at order ${SEARCH_LIMIT}: moving fs away from fp or lowering Amin brings it back within reach.`;
+		else if (answer > MAX_N) first = `This spec needs order ${answer}, past the tool's limit of ${MAX_N}: moving fs away from fp or lowering Amin brings it back within reach.`;
+		else if (n < answer) first = `${answer - n === 1 ? 'One order' : `${answer - n} orders`} short: n = ${n} still enters the stopband zone, and n = ${answer} clears it.`;
 		else if (n === answer) first = `n = ${n} is the smallest order that clears both zones${specUntouched && live ? ', the number in panel 02' : ' for these slider values'}.`;
 		else first = `n = ${n} clears both zones with room to spare: ${n - answer === 1 ? 'the extra order is' : `the ${n - answer} extra orders are`} margin beyond the minimum of ${answer}.`;
-		const second = cheby
-			? 'The Chebyshev curve wobbles inside the passband but never drops below the Amax line.'
-			: 'Pulling fs toward fp or raising Amin moves the answer one whole step at a time, never smoothly.';
-		return `${first} ${second}`;
+		return `${first} ${SECOND[response] ?? SECOND.butterworth}`;
 	});
+	const hasZeros = $derived(RESPONSES[response]?.zeros ?? false);
 
 	const caption = $derived(
 		!live
@@ -119,11 +148,11 @@
 	/>
 	<p class="mono">
 		<span class={clears ? 'ok' : 'bad'}>n = {n}: loss at fs {dbText(lossFs)} dB, needs {plain(aminSel)}, {clears ? 'clears both zones' : stopOk ? 'enters the passband zone' : 'enters the stopband zone'}</span>
-		<span>the tool's answer for this spec: n = {answer}{answer > MAX_N ? `, past its limit of ${MAX_N}` : ''}</span>
-		<span>slope far out: {20 * n} dB per decade</span>
+		<span>the tool's answer for this spec: {unreachable ? `none up to n = ${SEARCH_LIMIT}` : `n = ${answer}`}{!unreachable && answer > MAX_N ? `, past its limit of ${MAX_N}` : ''}</span>
+		<span>{hasZeros ? `far out: zeros of transmission, then ${n % 2 === 0 ? 'a floor at the stopband ripple' : '20 dB per decade'}` : `slope far out: ${20 * n} dB per decade`}</span>
 	</p>
 	<p class="read">
-		{cheby ? 'Chebyshev' : 'Butterworth'}, as chosen in panel 01. {notice}
+		{RESPONSES[response]?.label ?? 'Butterworth'}, as chosen in panel 01. {notice}
 		{caption}
 	</p>
 	{#if ownN !== null || ownFs !== null || ownAmin !== null}

@@ -11,7 +11,8 @@
 		buildSallenKeyDiagram,
 		buildSallenKeyHpDiagram,
 		buildTowThomasDiagram,
-		buildTowThomasHpDiagram
+		buildTowThomasHpDiagram,
+		buildTowThomasNotchDiagram
 	} from '$lib/filter/circuits';
 
 	let { design } = $props();
@@ -19,6 +20,7 @@
 	const diagram = $derived.by(() => {
 		if (design.topology === 'towThomas') return buildTowThomasDiagram(design.components);
 		if (design.topology === 'towThomasHp') return buildTowThomasHpDiagram(design.components);
+		if (design.topology === 'towThomasNotch') return buildTowThomasNotchDiagram(design.components);
 		if (design.topology === 'mfb') return buildMfbDiagram(design.components);
 		if (design.topology === 'sallenKey') return buildSallenKeyDiagram(design.components);
 		if (design.topology === 'firstOrder') return buildFirstOrderDiagram(design.components, design.actual.tau);

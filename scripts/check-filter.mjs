@@ -16,9 +16,16 @@
 // 4. The new explanations render under strict KaTeX.
 // Exits non-zero on any failure.
 
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import katex from 'katex';
+import { besselPrototype, ellipticOrder, inverseChebyshevOrder, legendrePolynomial, prototypeFor, prototypeLossDb } from '../src/lib/filter/approximations.js';
 import { combinerChoice, magnitudePhaseAt, magnitudePhaseAtParallelSum } from '../src/lib/filter/bode.js';
-import { explainSummingAmp, explainTowThomas, explainTowThomasHp } from '../src/lib/filter/explain.js';
+import { generateScript } from '../src/lib/filter/codegen.js';
+import { explainApproximation, explainHpStage, explainOrder, explainStage, explainSummingAmp, explainTowThomas, explainTowThomasHp } from '../src/lib/filter/explain.js';
+import { explainTowThomasNotch } from '../src/lib/filter/explainResponses.js';
 import { designFirstOrderLowPass } from '../src/lib/filter/firstOrder.js';
 import { designFirstOrderHighPass } from '../src/lib/filter/firstOrderHighPass.js';
 import { designMfbLowPass } from '../src/lib/filter/mfb.js';
@@ -28,7 +35,7 @@ import { designSallenKeyHighPass } from '../src/lib/filter/sallenKeyHighPass.js'
 import { LAB_KIT } from '../src/lib/filter/eseries.js';
 import { TOW_THOMAS_SENSITIVITY } from '../src/lib/filter/sensitivity.js';
 import { designBandStop, designHighPass, designLowPass } from '../src/lib/filter/stages.js';
-import { designTowThomasHighPass, designTowThomasLowPass, designTowThomasLowPassFromCap } from '../src/lib/filter/towThomas.js';
+import { designTowThomasHighPass, designTowThomasLowPass, designTowThomasLowPassFromCap, designTowThomasNotch } from '../src/lib/filter/towThomas.js';
 
 let fails = 0;
 const check = (label, ok, detail) => {
@@ -199,6 +206,179 @@ check('combiner never leaves depth on the table', worstLoss <= 1e-9, `${worstLos
 	}
 	check(`chebyshev: ${n} even-order designs meet Amin and Amax measured from the passband top`, n > 50 && bad === 0, `${bad} misses`);
 	check('chebyshev: an even order rises to +Amax exactly', worstTop < 0.02, `worst ${worstTop.toFixed(3)} dB off`);
+}
+
+/* ----------------------- 7. Legendre, Bessel, inverse Chebyshev, elliptic */
+{
+	// Legendre: the published polynomials, and a derivative that never goes negative
+	const table = { 1: [0, 1], 2: [0, 0, 1], 3: [0, 1, -3, 3], 4: [0, 0, 3, -8, 6], 5: [0, 1, -8, 28, -40, 20], 6: [0, 0, 6, -40, 105, -120, 50], 8: [0, 0, 10, -120, 615, -1624, 2310, -1680, 490] };
+	let worst = 0;
+	for (const [n, want] of Object.entries(table)) {
+		const got = legendrePolynomial(Number(n));
+		worst = Math.max(worst, ...want.map((c, i) => Math.abs((got[i] ?? 0) - c)));
+	}
+	check('legendre: L1..L6 and L8 equal the published polynomials', worst < 1e-9, `max coefficient error ${worst.toExponential(1)}`);
+	let monotone = true;
+	for (let n = 1; n <= 12; n++) {
+		const L = legendrePolynomial(n);
+		const at = (w) => L.reduceRight((acc, c) => acc * w + c, 0);
+		if (Math.abs(at(0)) > 1e-12 || Math.abs(at(1) - 1) > 1e-9) monotone = false;
+		for (let i = 1; i <= 400; i++) if (at((2 * i) / 400) < at((2 * (i - 1)) / 400) - 1e-12) monotone = false;
+	}
+	check('legendre: L_n(0) = 0, L_n(1) = 1 and never decreasing, n = 1..12', monotone);
+
+	// Bessel: the published poles normalized to -3 dB at 1 rad/s
+	const published = {
+		2: [[-1.1016, 0.636]],
+		3: [[-1.0474, 0.9993], [-1.3227, 0]],
+		4: [[-0.9952, 1.2571], [-1.3701, 0.4102]],
+		5: [[-0.9577, 1.4711], [-1.3809, 0.7179], [-1.5023, 0]]
+	};
+	let poleErr = 0;
+	for (const [n, list] of Object.entries(published)) {
+		const p = besselPrototype(Number(n), 10 * Math.log10(2));
+		const got = [...p.sections.map((s) => [-s.a / 2, Math.sqrt(s.b - (s.a / 2) ** 2)]), ...(p.real ? [[-p.real.breal, 0]] : [])];
+		for (const [re, im] of list) poleErr = Math.max(poleErr, Math.min(...got.map(([r, i]) => Math.hypot(r - re, i - im))));
+	}
+	check('bessel: poles of orders 2 to 5 equal the published ones', poleErr < 2e-4, `worst ${poleErr.toExponential(1)}`);
+
+	// elliptic and inverse Chebyshev: exact ripple in both bands, stopband from fs,
+	// and the order formula: the order it gives meets the spec, one less does not
+	let props = 0;
+	let propBad = 0;
+	for (const response of ['elliptic', 'inverseChebyshev']) {
+		for (const [amax, amin, k] of [[0.1, 50, 0.9], [0.5, 60, 0.8], [1, 40, 0.5], [2, 30, 0.2], [3, 40, 1 / 3.5], [1, 70, 0.6]]) {
+			const nFloat = response === 'elliptic' ? ellipticOrder(amax, amin, k) : inverseChebyshevOrder(amax, amin, k);
+			const n = Math.ceil(nFloat);
+			for (const m of [n, n - 1]) {
+				if (m < 1) continue;
+				const p = prototypeFor(response, m, amax, amin, k);
+				const grid = (a, b, count) => Array.from({ length: count + 1 }, (_, i) => a * (b / a) ** (i / count));
+				const pass = grid(1e-3, 1, 3000).map((w) => prototypeLossDb(p, w));
+				const peak = -Math.min(...pass);
+				const passMax = Math.max(...pass) + peak;
+				const stopMin = Math.min(...grid(1 / k, 1000 / k, 20000).map((w) => prototypeLossDb(p, w) + peak));
+				props++;
+				const ok = m === n ? Math.abs(passMax - amax) < 1e-3 && stopMin >= amin - 1e-6 && Math.abs(stopMin - p.aminReached) < 2e-3 : stopMin < amin;
+				if (!ok) {
+					propBad++;
+					console.log('   RIPPLE', response, amax, amin, k, `n=${m}`, passMax.toFixed(4), stopMin.toFixed(4), p.aminReached.toFixed(4));
+				}
+			}
+		}
+	}
+	check(`elliptic, inverse Chebyshev: ${props} prototypes ripple exactly Amax and Amin', and the order is the smallest that holds`, propBad === 0, `${propBad} misses`);
+
+	// every response, as designed (ideal parts): Amax at fp from the passband top, Amin across the stopband
+	let designs = 0;
+	let designBad = 0;
+	for (const response of ['butterworth', 'chebyshev', 'legendre', 'bessel', 'inverseChebyshev', 'elliptic']) {
+		for (const [type, fp, fs] of [['lowpass', 10000, 35000], ['lowpass', 10000, 20000], ['highpass', 10000, 3000], ['highpass', 10000, 1500]]) {
+			for (const [amax, amin] of [[0.5, 30], [1, 40], [3, 40]]) {
+				const make = type === 'highpass' ? designHighPass : designLowPass;
+				const d = make({ response, amaxDb: amax, aminDb: amin, fp, fs, order: null });
+				if (!Number.isFinite(d.minOrder) || d.n > 12) continue;
+				designs++;
+				const stages = d.stages.map((s) => (s.order === 2 ? { order: 2, topology: type === 'highpass' && !Number.isFinite(s.wz) ? 'x Hp' : 'x', actual: { wn: s.wn, q: s.q, ...(Number.isFinite(s.wz) ? { wz: s.wz, gain: type === 'highpass' ? 1 : (s.wn / s.wz) ** 2 } : {}) } } : { order: 1, topology: type === 'highpass' ? 'x Hp' : 'x', actual: { tau: s.tau } }));
+				const pass = type === 'highpass' ? [fp, fp * 100] : [fp / 100, fp];
+				const stop = type === 'highpass' ? [fs / 1000, fs] : [fs, fs * 1000];
+				const scan = ([a, b]) => Array.from({ length: 1201 }, (_, i) => a * (b / a) ** (i / 1200));
+				const top = Math.max(...scan(pass).map((f) => magnitudePhaseAt(stages, f).db));
+				const atFp = top - magnitudePhaseAt(stages, fp).db;
+				const stopMin = Math.min(...scan(stop).map((f) => top - magnitudePhaseAt(stages, f).db));
+				if (Math.abs(atFp - amax) > 1e-3 || stopMin < amin - 1e-3) {
+					designBad++;
+					console.log('   SPEC', response, type, fp, fs, amax, amin, `n=${d.n}`, atFp.toFixed(4), stopMin.toFixed(3));
+				}
+			}
+		}
+	}
+	check(`all six responses: ${designs} ideal designs lose exactly Amax at fp and at least Amin across the stopband`, designs > 50 && designBad === 0, `${designBad} misses`);
+
+	// the notch stage: actual values from the general formula on the rounded parts
+	let notchBad = 0;
+	for (const [f0, q, fz, lowSide] of [[10000, 4.1, 21400, true], [5600, 0.8, 49000, true], [8400, 1.45, 3700, false], [7700, 0.55, 1500, false], [1000, 12, 1100, true]]) {
+		const wn = 2 * Math.PI * f0;
+		const wz = 2 * Math.PI * fz;
+		const r = designTowThomasNotch(wn, q, wz, { lowSide });
+		const c = r.components;
+		const wnF = 1 / Math.sqrt(c.C1 * c.C2 * c.Ra * c.Rb);
+		const qF = c.Rd * Math.sqrt(c.C1 / (c.C2 * c.Ra * c.Rb));
+		const wzF = 1 / Math.sqrt(c.Cin * c.C2 * c.Ra * c.Rz);
+		const ok =
+			r.topology === 'towThomasNotch' &&
+			Math.abs(wnF / r.actual.wn - 1) < 1e-9 &&
+			Math.abs(qF / r.actual.q - 1) < 1e-9 &&
+			Math.abs(wzF / r.actual.wz - 1) < 1e-9 &&
+			Math.abs(r.actual.gain + c.Cin / c.C1) < 1e-12 &&
+			Math.abs(r.actual.dcGain + c.Rb / c.Rz) < 1e-12 &&
+			Math.abs(r.actual.wz / wz - 1) < 0.035 &&
+			Math.abs(r.actual.wn / wn - 1) < 0.05 &&
+			(lowSide ? true : c.Cin === c.C1);
+		if (!ok) {
+			notchBad++;
+			console.log('   NOTCH', f0, q, fz, lowSide, JSON.stringify(r.actual), JSON.stringify(c));
+		}
+	}
+	check('notch stages: actual f0, Q, fz and gains equal the formulas on the rounded parts, zero within E24 rounding', notchBad === 0, `${notchBad} misses`);
+
+	// the new explanations: strict KaTeX, plain words
+	const blocks = [];
+	for (const response of ['legendre', 'bessel', 'inverseChebyshev', 'elliptic']) {
+		for (const type of ['lowpass', 'highpass']) {
+			const make = type === 'highpass' ? designHighPass : designLowPass;
+			const d = make({ response, amaxDb: 1, aminDb: 40, fp: 10000, fs: type === 'highpass' ? 4000 : 25000, order: null });
+			if (!d || !d.stages.length) continue;
+			blocks.push(...explainApproximation(d), ...explainOrder({ response, amaxDb: 1, aminDb: 40, k: d.k, minOrder: d.minOrder, filterType: type, tried: d.orderSearch }));
+			d.stages.forEach((_, i) => blocks.push(...(type === 'highpass' ? explainHpStage(d, i) : explainStage(d, i))));
+			for (const s of d.stages.filter((x) => Number.isFinite(x.wz))) blocks.push(...explainTowThomasNotch(designTowThomasNotch(s.wn, s.q, s.wz, { lowSide: type === 'lowpass' }), s.wn, s.q, s.wz));
+		}
+	}
+	blocks.push(...explainSummingAmp(10000, { mode: 'sum', lpGain: 1.08, resistors: { RCA: 10800, RCB: 10000, RCF: 10000 } }), ...explainSummingAmp(10000, { mode: 'difference', lpGain: 0.93, resistors: { RCH: 10000, RCG: 9300, RCL: 9300, RCF: 10000 } }));
+	let texBad = 0;
+	let wordBad = 0;
+	for (const b of blocks) {
+		if (b.type === 'eq') {
+			try {
+				katex.renderToString(b.tex, { throwOnError: true, strict: 'ignore' });
+			} catch (e) {
+				texBad++;
+				console.log('   KATEX', b.tex.slice(0, 90), e.message.slice(0, 80));
+			}
+		} else if (/undefined|NaN|[–—]|\byou(r)?\b/i.test(b.text)) {
+			wordBad++;
+			console.log('   TEXT', b.text.slice(0, 120));
+		}
+	}
+	check(`new explanations: ${blocks.filter((b) => b.type === 'eq').length} equations render, no placeholders, no long dashes, never "you"`, texBad === 0 && wordBad === 0, `${texBad} TeX, ${wordBad} text`);
+
+	// the downloadable script runs for the new responses and finds its own spec met
+	const dir = mkdtempSync(join(tmpdir(), 'rbt56-filter-'));
+	let scriptBad = 0;
+	const scripts = [
+		{ filterType: 'lowpass', response: 'elliptic', amaxDb: 1, aminDb: 40, fp: 10000, fs: 20000 },
+		{ filterType: 'highpass', response: 'inverseChebyshev', amaxDb: 1, aminDb: 40, fp: 10000, fs: 4000 },
+		{ filterType: 'lowpass', response: 'bessel', amaxDb: 3, aminDb: 40, fp: 10000, fs: 35000 },
+		{ filterType: 'lowpass', response: 'legendre', amaxDb: 3, aminDb: 40, fp: 10000, fs: 35000 },
+		{ filterType: 'bandstop', response: 'elliptic', responseHp: 'butterworth', responseLp: 'elliptic', amaxDb: 3, aminDb: 40, fl: 1000, fh: 30000, fsl: 3000, fsh: 10000 },
+		{ filterType: 'bandpass', response: 'legendre', responseHp: 'legendre', responseLp: 'inverseChebyshev', amaxDb: 3, aminDb: 40, fl: 1000, fh: 10000, fsl: 300, fsh: 30000 }
+	];
+	for (const spec of scripts) {
+		const code = generateScript({ fp: 10000, fs: 35000, fl: 1000, fh: 10000, fsl: 300, fsh: 30000, topology: 'mfb', order: null, orderHp: null, orderLp: null, capOverrides: {}, ...spec });
+		const file = join(dir, `${spec.filterType}-${spec.response}.js`);
+		writeFileSync(file, code);
+		try {
+			const out = execFileSync(process.execPath, [file], { encoding: 'utf8' });
+			if (!/least attenuation in the stopband .*: OK/.test(out)) {
+				scriptBad++;
+				console.log('   SCRIPT', spec.filterType, spec.response, out.trim().split('\n').pop());
+			}
+		} catch (e) {
+			scriptBad++;
+			console.log('   SCRIPT', spec.filterType, spec.response, String(e.stderr || e.message).split('\n').slice(0, 3).join(' / '));
+		}
+	}
+	check(`downloadable script: runs for ${scripts.length} new-response designs and reports its spec met`, scriptBad === 0, `${scriptBad} failures`);
 }
 
 console.log(fails === 0 ? 'filter checks clean' : `${fails} failure(s)`);

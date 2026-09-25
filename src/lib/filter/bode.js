@@ -67,6 +67,11 @@ function stageGainComplex(stage, s) {
 	const gain = stage.actual.gain ?? 1;
 	// s^2 = -omega^2 (real), (wn/q)*s = j*(wn/q)*omega (imaginary)
 	const den = { re: wn * wn - s.im * s.im, im: (wn / q) * s.im };
+	if (Number.isFinite(stage.actual.wz)) {
+		// a notch stage: gain * (s^2 + wz^2), gain being the value far above the zero
+		const wz = stage.actual.wz;
+		return complexDivide({ re: gain * (wz * wz - s.im * s.im), im: 0 }, den);
+	}
 	const num = isHp
 		? { re: -gain * s.im * s.im, im: 0 } // gain * s^2, s^2 = -omega^2
 		: { re: gain * wn * wn, im: 0 };
@@ -151,4 +156,31 @@ export function combinerChoice(branches, fsl, fsh) {
 
 export function combinerSigns(branches, fsl, fsh) {
 	return combinerChoice(branches, fsl, fsh).signs;
+}
+
+/** Gain of a branch at DC (its real value, sign included): 1 or -1 unless a notch stage's rounded Cin moved it. */
+export function branchDcGain(stages) {
+	return responseAt(stages, 0).re;
+}
+
+/**
+ * The combiner's resistors and the weights it gives each branch, for a
+ * low-pass branch whose passband gain is lpGain in size (1 for every stage
+ * but a low-pass notch, whose DC gain follows a rounded capacitor ratio).
+ * With lpGain = 1 every resistor is R. Otherwise the low-pass input
+ * resistor is scaled by lpGain (rounded with `round`), so both passbands
+ * still come out at the same level:
+ *   sum         Vout = -(RCF/RCA V_lp + RCF/RCB V_hp)
+ *   difference  Vout = (1 + RCF/RCL) RCG/(RCH + RCG) V_hp - (RCF/RCL) V_lp
+ * The weights are what the band-stop response multiplies each branch by
+ * (the sum's overall inversion left out, as for the signs above).
+ */
+export function combinerDesign(mode, R, lpGain = 1, round = (v) => v) {
+	const scaled = Math.abs(lpGain - 1) < 1e-9 ? R : round(R * lpGain);
+	if (mode === 'difference') {
+		const r = { RCH: R, RCG: scaled, RCL: scaled, RCF: R };
+		return { mode, resistors: r, weights: [-(r.RCF / r.RCL), (1 + r.RCF / r.RCL) * (r.RCG / (r.RCH + r.RCG))] };
+	}
+	const r = { RCA: scaled, RCB: R, RCF: R };
+	return { mode, resistors: r, weights: [r.RCF / r.RCA, r.RCF / r.RCB] };
 }

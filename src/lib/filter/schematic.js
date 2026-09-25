@@ -11,19 +11,22 @@ import { symbols } from 'schematic-symbols';
  * SVG has positive y pointing down, so every y gets negated on the way out.
  */
 
-function primitiveToSvg(p) {
+function primitiveToSvg(p, flipY = false) {
+	// y points up in the symbol data and down in SVG; a symbol mirrored
+	// top to bottom simply keeps its y
+	const Y = (y) => (flipY ? y : -y);
 	switch (p.type) {
 		case 'path': {
 			const d =
-				p.points.map((pt, i) => `${i === 0 ? 'M' : 'L'}${pt.x} ${-pt.y}`).join(' ') +
+				p.points.map((pt, i) => `${i === 0 ? 'M' : 'L'}${pt.x} ${Y(pt.y)}`).join(' ') +
 				(p.closed ? ' Z' : '');
 			const fill = p.closed && p.fill ? 'currentColor' : 'none';
 			return `<path d="${d}" fill="${fill}" stroke="currentColor" stroke-width="${p.strokeWidth ?? 0.02}" stroke-linecap="round" stroke-linejoin="round" />`;
 		}
 		case 'circle':
-			return `<circle cx="${p.x}" cy="${-p.y}" r="${p.radius}" fill="${p.fill ? 'currentColor' : 'none'}" ${p.fill ? '' : 'stroke="currentColor" stroke-width="0.02"'} />`;
+			return `<circle cx="${p.x}" cy="${Y(p.y)}" r="${p.radius}" fill="${p.fill ? 'currentColor' : 'none'}" ${p.fill ? '' : 'stroke="currentColor" stroke-width="0.02"'} />`;
 		case 'box':
-			return `<rect x="${p.x}" y="${-p.y - p.height}" width="${p.width}" height="${p.height}" fill="currentColor" />`;
+			return `<rect x="${p.x}" y="${flipY ? p.y : -p.y - p.height}" width="${p.width}" height="${p.height}" fill="currentColor" />`;
 		default:
 			return '';
 	}
@@ -36,21 +39,24 @@ function primitiveToSvg(p) {
  * semantic name when it has one, e.g. "inp1" or "pos") - which labels
  * exist for a given orientation isn't fully consistent across the symbol
  * set, so layout code should use whichever key reads best per component.
+ *
+ * `flipY` mirrors the symbol top to bottom: an op-amp then has its - input
+ * on top, the way most textbooks draw an inverting stage.
  */
-export function placeSymbol(name, x, y, scale = 48) {
+export function placeSymbol(name, x, y, scale = 48, { flipY = false } = {}) {
 	const sym = symbols[name];
 	if (!sym) throw new Error(`Unknown schematic symbol: ${name}`);
 	const inner = sym.primitives
 		.filter((p) => p.type !== 'text')
-		.map(primitiveToSvg)
+		.map((p) => primitiveToSvg(p, flipY))
 		.join('');
 	// data-symbol is not used for rendering; it lets scripts/check-schematics.mjs
 	// recover each placed symbol's name (and so its port positions) from the
 	// generated SVG when it audits every diagram's wiring geometry.
-	const svg = `<g transform="translate(${x} ${y}) scale(${scale})" data-symbol="${name}">${inner}</g>`;
+	const svg = `<g transform="translate(${x} ${y}) scale(${scale})" data-symbol="${name}${flipY ? ':flipY' : ''}">${inner}</g>`;
 	const ports = {};
 	for (const port of sym.ports) {
-		const abs = { x: x + port.x * scale, y: y - port.y * scale };
+		const abs = { x: x + port.x * scale, y: flipY ? y + port.y * scale : y - port.y * scale };
 		for (const key of port.labels) ports[key] = abs;
 	}
 	return { svg, ports };

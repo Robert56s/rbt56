@@ -296,10 +296,10 @@ export function drawOscillatorInto(sheet, design, E) {
 }
 
 /** The drawn schematic of a design, with a short note and the directives under it. */
-export function drawOscillator(design, { comments = [], directives = [], gbw = '3Meg' }) {
+export function drawOscillator(design, { comments = [], directives = [], gbw = '3Meg', opamp = 'ideal' }) {
 	const elements = buildElements(design);
 	const E = byName(elements);
-	const sheet = createSheet({ gbw });
+	const sheet = createSheet({ gbw, opamp });
 	drawOscillatorInto(sheet, design, E);
 	sheet.notes({ comments, directives });
 	return sheet.render();

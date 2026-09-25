@@ -138,7 +138,7 @@ function checkText(where, text) {
 
 	// bare configurations: the menus alone, with and without numbers
 	for (const filterType of ['lowpass', 'highpass', 'bandpass', 'bandstop']) {
-		for (const response of ['butterworth', 'chebyshev']) {
+		for (const response of ['butterworth', 'chebyshev', 'legendre', 'bessel', 'inverseChebyshev', 'elliptic']) {
 			// the exact values of the page's Topology menu: a key the module
 			// does not know would throw at render time
 			for (const topology of ['mfb', 'sallenKey', 'towThomas']) {
@@ -157,7 +157,7 @@ function checkText(where, text) {
 	// real designs, built with the tool's own library the way the page
 	// builds them, so that the figures' props (the realized stages, the
 	// band-stop branches and signs, the flags of panel 05) are exercised
-	const { designBandPass, designBandStop, designHighPass, designLowPass } = await import('../src/lib/filter/stages.js');
+	const { designBandPass, designBandStop, designHighPass, designLowPass, minimumOrder } = await import('../src/lib/filter/stages.js');
 	const { butterworthOrder, chebyshevOrder, transitionRatio } = await import('../src/lib/filter/order.js');
 	const { combinerChoice, magnitudePhaseAt, magnitudePhaseAtParallelSum } = await import('../src/lib/filter/bode.js');
 	const { LAB_KIT } = await import('../src/lib/filter/eseries.js');
@@ -165,7 +165,7 @@ function checkText(where, text) {
 	const { designMfbHighPass } = await import('../src/lib/filter/mfbHighPass.js');
 	const { designSallenKeyLowPass } = await import('../src/lib/filter/sallenKey.js');
 	const { designSallenKeyHighPass } = await import('../src/lib/filter/sallenKeyHighPass.js');
-	const { designTowThomasHighPass, designTowThomasLowPass } = await import('../src/lib/filter/towThomas.js');
+	const { designTowThomasHighPass, designTowThomasLowPass, designTowThomasNotch } = await import('../src/lib/filter/towThomas.js');
 	const { designFirstOrderLowPass } = await import('../src/lib/filter/firstOrder.js');
 	const { designFirstOrderHighPass } = await import('../src/lib/filter/firstOrderHighPass.js');
 
@@ -180,7 +180,9 @@ function checkText(where, text) {
 		lab: { resistorSeries: LAB_KIT.resistors, capacitors: LAB_KIT.capacitors }
 	};
 	const buildStage = (stage, topology, opts) =>
-		stage.order === 1
+		Number.isFinite(stage.wz)
+			? designTowThomasNotch(stage.wn, stage.q, stage.wz, { ...opts, lowSide: stage.filterType === 'lowpass' })
+			: stage.order === 1
 			? (stage.filterType === 'highpass' ? designFirstOrderHighPass : designFirstOrderLowPass)(stage.tau, opts)
 			: SECOND[topology][stage.filterType === 'highpass' ? 1 : 0](stage.wn, stage.q, opts);
 
@@ -188,7 +190,8 @@ function checkText(where, text) {
 	function pageValues(spec, response, topology, stock, orderOverride = null) {
 		const { filterType, amaxDb, aminDb } = spec;
 		const band = filterType === 'bandpass' || filterType === 'bandstop';
-		const count = (k) => Math.max(1, Math.ceil(response === 'chebyshev' ? chebyshevOrder(amaxDb, aminDb, k) : butterworthOrder(amaxDb, aminDb, k)));
+		// the page's count: null when a searched response never gets there, which counts as past the limit
+		const count = (k) => minimumOrder(response, amaxDb, aminDb, k).n ?? 99;
 		// the page keeps every edge in its state, whatever the filter type
 		const e = { fp: 10000, fs: 35000, fl: 1000, fh: 10000, fsl: 300, fsh: 30000, ...spec };
 		const lpFp = filterType === 'bandstop' ? e.fl : e.fh;
@@ -264,7 +267,7 @@ function checkText(where, text) {
 	];
 	let designs = 0;
 	for (const spec of SPECS) {
-		for (const response of ['butterworth', 'chebyshev']) {
+		for (const response of ['butterworth', 'chebyshev', 'legendre', 'bessel', 'inverseChebyshev', 'elliptic']) {
 			for (const topology of ['mfb', 'sallenKey', 'towThomas']) {
 				for (const stock of Object.keys(STOCK)) {
 					const values = pageValues(spec, response, topology, stock);
@@ -361,7 +364,7 @@ function checkText(where, text) {
 
 	// diode and tank: the page's defaults, a faster carrier, a tank that
 	// lands on the carrier, and nothing designed
-	const diodePage = { sidebandMargin: 1.2, diodeVf: 0.7, biasMargin: 0.3 };
+	const diodePage = { sidebandMargin: 3, targetModulationIndex: 0.8, carrierDrive: 2, vcc: 12 };
 	for (const [fp, fm, amp, mod, inductance] of [
 		[40000, 1000, 1, 1, 1e-3],
 		[55000, 1500, 1, 0.5, 1e-3],
@@ -376,7 +379,7 @@ function checkText(where, text) {
 
 	// demodulator: both rectifiers, both responses, a few specs, and nothing designed
 	for (const rectifierType of ['full', 'half']) {
-		for (const response of ['butterworth', 'chebyshev']) {
+		for (const response of ['butterworth', 'chebyshev', 'legendre', 'bessel', 'inverseChebyshev', 'elliptic']) {
 			for (const [fp, fm, amaxDb, aminDb, demoModIndex] of [
 				[40000, 1000, 1, 40, 0.9],
 				[55000, 2000, 0.5, 60, 0.5],
@@ -412,7 +415,8 @@ function checkText(where, text) {
 		// f_0 is whatever the engine's stock capacitor (or pair) gives: taken from the engine, not typed here
 		const dd = designDiodeMixerModulator({ ...diodePage, fp: 40000, fmMax: 1000, carrierAmplitude: 1, modAmplitude: 1, inductance: 1e-3 });
 		const f0k = String(Number((dd.f0Actual / 1000).toPrecision(3)));
-		check(`modulation basics: the diode defaults give the engine's f_0 = ${f0k} kHz, Q = 16.7 and a 3 V bias`, eqs('diode/40000/1000').includes(`${f0k}\\ \\text{kHz}`) && eqs('diode/40000/1000').includes('= 16.7') && eqs('diode/40000/1000').includes('= 3\\ \\text{V}'));
+		const ideal = dd.idealIndex.toFixed(2);
+		check(`modulation basics: the diode defaults give the engine's f_0 = ${f0k} kHz, Q = 6.67 and the ideal-switch index ${ideal}`, eqs('diode/40000/1000').includes(`${f0k}\\ \\text{kHz}`) && eqs('diode/40000/1000').includes('= 6.67') && eqs('diode/40000/1000').includes(`= ${ideal}`) && words('diode/40000/1000').includes(`n = ${dd.modulationIndex.toFixed(2)}`));
 	}
 	check('modulation basics: the demodulator defaults give f_c = 2.12 kHz and order 2', eqs('demod/full/butterworth/40000/1000').includes('2.12\\ \\text{kHz}') && words('demod/full/butterworth/40000/1000').includes('order 2 here'));
 	{

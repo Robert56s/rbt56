@@ -1,4 +1,5 @@
 import { buildJfetTestDiagram } from './circuits';
+import { DIODE_MODELS } from './diodeLaw';
 import { formatFarads, formatHenries, formatHz, formatOhms, formatVolts } from './format';
 import { explainApproximation, explainOrder, explainSallenKey, explainStage } from '../filter/explain';
 
@@ -477,68 +478,83 @@ export function explainOpampLimits(design) {
 /* Diode + resonant tank modulator                                           */
 /* ------------------------------------------------------------------------ */
 
+/** A current in TeX, nA or uA. */
+function texCurrent(i) {
+	if (!Number.isFinite(i)) return '-';
+	return i >= 1e-6 ? `${Number((i * 1e6).toPrecision(3))}\\,\\mu\\text{A}` : `${Number((i * 1e9).toPrecision(3))}\\,\\text{nA}`;
+}
+
 export function explainDiodeModulator(design) {
-	const { fp, fmMax, sidebandMargin, bandwidth, q, inductance, capacitance, capacitors, cTarget, resistance, rTarget, bandwidthNeeded, f0Actual, qActual, bwActual, bandLow, bandHigh, sidebandsInBand, requiredBias, diodeVf } = design;
+	const { fp, fmMax, sidebandMargin, bandwidthNeeded, inductance, capacitance, capacitors, cTarget, f0Actual, summer: s, rs, rt, rSource, rEff, bwLoaded, bandLow, bandHigh, sidebandsInBand, idealIndex, idealCarrier, modulationIndex, thd, thdAtFmMax, carrierOut, peakCurrent, sidebandGain, indexAtFmMax, carrierAmplitude, modAmplitude, targetModulationIndex, vcc } = design;
+	const dm = DIODE_MODELS[design.diode] ?? DIODE_MODELS['1N4148'];
 	const w0 = 2 * Math.PI * fp;
 	const capPair = Array.isArray(capacitors) && capacitors.length === 2 ? `${formatFarads(capacitors[0])} \\parallel ${formatFarads(capacitors[1])}` : formatFarads(capacitance);
+	// one equation per resistor, so none runs off a narrow screen
+	const gains = [
+		`A_d = \\dfrac{R_f}{R_p}\\,A_c = \\dfrac{${formatOhms(s.rf)}}{${formatOhms(s.rp)}} \\times ${formatVolts(carrierAmplitude)} = ${formatVolts(s.drive)}`,
+		`u_m = \\dfrac{R_f}{R_m}\\,A_m = \\dfrac{${formatOhms(s.rf)}}{${formatOhms(s.rm)}} \\times ${formatVolts(modAmplitude)} = ${formatVolts(s.um)}`,
+		...(s.rb ? [`V_B = \\dfrac{R_f}{R_b}\\,V_{cc} = \\dfrac{${formatOhms(s.rf)}}{${formatOhms(s.rb)}} \\times ${formatVolts(vcc)} = ${formatVolts(s.vb)}`] : [])
+	];
 	return [
+		head('Why a diode makes sidebands'),
 		p(
-			'This modulator has no amplifier with a variable gain. It relies on a fact about any curved (nonlinear) component: push two frequencies through it together and new frequencies come out. A diode is strongly curved, and its curve is smooth, so around the bias point it can be approximated by a polynomial (a Taylor expansion):'
+			"This modulator has no amplifier with a variable gain. It relies on a curved component: push the sum of two frequencies through it and new frequencies come out. For small signals a diode's curve can be written as a polynomial, and its squared term holds the product of the carrier and the message, which is the pair of sidebands:"
 		),
-		eq('i = I_S\\left(e^{v/(\\eta V_T)} - 1\\right) \\ \\approx\\ I_0 + a\\,v + b\\,v^2 + \\cdots'),
+		eq('i \\approx a\\,v + b\\,v^2, \\qquad v = A\\cos(\\omega_p t) + u\\cos(\\omega_m t) \\ \\Rightarrow\\ b\\,v^2 \\ni b\\,A\\,u\\,\\big[\\cos((\\omega_p-\\omega_m)t) + \\cos((\\omega_p+\\omega_m)t)\\big]'),
 		p(
-			'The linear term a v cannot create anything new: it only scales what goes in. The squared term can. Feed the diode the sum of the carrier and the message (plus a DC bias, discussed at the end) and square it:'
+			"The signals here are a volt or so, many times the 45 mV or so that changes a diode's current by a factor of e. At that size the diode does not bend gently: it switches, conducting while its drive is above its knee and blocking below it. Driven mostly by the carrier, it conducts for half of every carrier cycle, so its current is the drive through R_s, turned on and off by a square wave at the carrier. A square wave that is on half the time is this sum of cosines:"
 		),
-		eq('v = A_p\\cos(\\omega_p t) + A_m\\cos(\\omega_m t)'),
-		eq('v^2 = A_p^2\\cos^2(\\omega_p t) + A_m^2\\cos^2(\\omega_m t) + 2A_pA_m\\cos(\\omega_p t)\\cos(\\omega_m t)'),
-		p('Each piece is rewritten with two identities, cos² x = (1 + cos 2x)/2 and cos α cos β = [cos(α-β) + cos(α+β)]/2:'),
-		eq(
-			'b\\,v^2 = \\underbrace{\\tfrac{b}{2}(A_p^2 + A_m^2)}_{\\text{DC}} + \\underbrace{\\tfrac{b}{2}A_p^2\\cos(2\\omega_p t) + \\tfrac{b}{2}A_m^2\\cos(2\\omega_m t)}_{\\text{harmonics}} + \\underbrace{bA_pA_m\\big[\\cos((\\omega_p-\\omega_m)t) + \\cos((\\omega_p+\\omega_m)t)\\big]}_{\\text{sidebands}}'
-		),
+		eq('s(t) = \\dfrac{1}{2} + \\dfrac{2}{\\pi}\\cos(\\omega_p t) - \\dfrac{2}{3\\pi}\\cos(3\\omega_p t) + \\cdots'),
+		head('The switching modulator'),
 		p(
-			'The last bracket is the pair of sidebands from the AM basics, and the linear term supplies the carrier line a A_p cos(ω_p t) next to them. So the diode current contains everything at once: DC, the message at ω_m, the carrier at ω_p, harmonics at 2ω_m and 2ω_p, the wanted sidebands at ω_p ± ω_m, and weaker higher-order products. An AM signal is only the carrier plus its two sidebands, so the rest has to be filtered out, and that is the tank\'s job.'
+			"The summer adds the carrier, the message and a small bias V_B that puts the switching point on the carrier's zero crossings. It inverts, which only turns the carrier and the message over and changes nothing in AM:"
 		),
+		eq('v_s(t) = A_d\\cos(\\omega_p t) + u_m\\,m(t) + V_B'),
+		p(
+			"Multiply the drive by the square wave and keep what lands on the carrier: the carrier times the constant half, and the message times the square wave's own cosine at the carrier. The rest, the message itself, a DC level and the harmonics, falls outside the tank's band:"
+		),
+		eq('i_p(t) = \\dfrac{1}{R_s}\\left[\\dfrac{A_d}{2} + \\dfrac{2}{\\pi}\\,u_m\\,m(t)\\right]\\cos(\\omega_p t) = \\dfrac{A_d}{2R_s}\\left[1 + \\dfrac{4\\,u_m}{\\pi A_d}\\,m(t)\\right]\\cos(\\omega_p t)'),
+		p("That is an AM wave, and its bracket gives the index an ideal switch would reach, with this design's drive:"),
+		eq(`n_{ideal} = \\dfrac{4\\,u_m}{\\pi A_d} = \\dfrac{4 \\times ${n3(s.um)}}{\\pi \\times ${n3(s.drive)}} = ${n3(idealIndex)}`),
+		head('The real diode, cycle by cycle'),
+		p(
+			'A real diode switches softly: its current grows exponentially over its last few tenths of a volt, so the ideal figure is only a guide. The page works the circuit out instead. For one value of the message it takes one carrier cycle and finds, at every instant, the current the drive pushes through R_s and the diode, then keeps the carrier component of that current. The tank answers that component with a voltage that subtracts from the drive, so the cycle is solved together with it. The diode is the same model the LTspice files carry:'
+		),
+		eq(`i = I_S\\left(e^{v_D/(N V_T)} - 1\\right), \\qquad v_s(\\theta) = R_s\\,i + v_D + v_{tank}(\\theta), \\qquad I_S = ${texCurrent(dm.Is)},\\ N = ${dm.N}`),
+		p(
+			"Repeated over one message cycle, that traces the envelope. Its average is the carrier at the output, its swing gives the index, and its harmonics are the distortion that would come back out of a demodulator:"
+		),
+		eq(`A_{out} = ${formatVolts(carrierOut)}, \\qquad n = ${n3(modulationIndex)}\\ (\\text{target } ${n2(targetModulationIndex)}), \\qquad \\text{THD} = ${n2(100 * thd)}\\,\\%, \\qquad i_{max} = ${texCurrent(peakCurrent)}`),
+		p(
+			`The bias decides where the switch flips. Too little and the diode conducts for less than half a cycle, too much and for more; either bends the envelope. The page takes the bias with the least distortion at the target index, then the stock resistors: R_p and R_m set the two gains${s.rb ? ' and R_b, from -V_cc, sets the bias' : ', and no R_b: the best bias is next to nothing here, as it is for a Schottky diode'}.${Math.abs(modulationIndex - targetModulationIndex) > 0.005 ? ' The index lands a little off the target because the resistors are stock values.' : ''}`
+		),
+		...gains.map((tex) => eq(tex)),
+		head('The tank'),
 		p(
 			'A parallel RLC tank is a frequency-selective load: at one frequency it looks like a large resistor, everywhere else like a small impedance that shorts the unwanted terms to ground. Add the three branch admittances (admittance is 1/impedance, so parallel branches simply add):'
 		),
 		eq('Y = \\dfrac{1}{R} + j\\omega C + \\dfrac{1}{j\\omega L} = \\dfrac{1}{R} + j\\left(\\omega C - \\dfrac{1}{\\omega L}\\right)'),
-		p(
-			'The imaginary part vanishes where the capacitor and the inductor cancel each other; there the tank is just R, its maximum impedance. That frequency is the resonance:'
-		),
+		p('The imaginary part vanishes where the capacitor and the inductor cancel each other; there the tank is just R, its maximum impedance. That frequency is the resonance:'),
 		eq('\\omega_0 C = \\dfrac{1}{\\omega_0 L} \\ \\Rightarrow\\ \\omega_0 = \\dfrac{1}{\\sqrt{LC}}, \\qquad f_0 = \\dfrac{1}{2\\pi\\sqrt{LC}}'),
-		p(
-			'How selective it is: the impedance has dropped to R/sqrt(2) (half power) where the imaginary part equals 1/R. Solving ωC - 1/(ωL) = ±1/R gives two frequencies whose spacing is exactly 1/(RC). That spacing is the bandwidth, and its ratio to f_0 defines Q:'
-		),
+		p('How selective it is: the impedance has dropped to R/sqrt(2) (half power) where the imaginary part equals 1/R. Solving ωC - 1/(ωL) = ±1/R gives two frequencies whose spacing is exactly 1/(RC). That spacing is the bandwidth, and its ratio to f_0 defines Q:'),
 		eq('\\Delta\\omega = \\dfrac{1}{RC} \\ \\Rightarrow\\ BW = \\dfrac{f_0}{Q}, \\qquad Q = \\omega_0 R C = R\\sqrt{\\dfrac{C}{L}}'),
+		p('The capacitor comes from the resonance. One stock part can miss by a few percent, enough to push a sideband out of the band, so it is built as two stock capacitors in parallel:'),
+		eq(`C = \\dfrac{1}{\\omega_0^2 L} = \\dfrac{1}{(2\\pi \\times ${fp})^2 \\times ${formatHenries(inductance)}} = ${formatFarads(cTarget ?? 1 / (w0 * w0 * inductance))} \\rightarrow ${capPair} = ${formatFarads(capacitance)}, \\qquad f_0 = ${formatHz(f0Actual)}`),
 		p(
-			`Design: the tank must let both sidebands through, so its bandwidth must cover ±f_m,max around f_p, with some margin (${n2(sidebandMargin)} here) so the sideband edges are not already attenuated. That fixes Q. A practical inductor is chosen and C follows from the resonance. One standard capacitor rarely lands close enough: a few percent off moves the whole band by more than the margin and drops a sideband. So C is built as two standard capacitors in parallel, which lands within a fraction of a percent:`
+			`R in those formulas is everything across the tank. Through the switching diode, R_s is connected for half of each cycle, so the tank sees it as a source of about 2 R_s, in parallel with its own R_t. The page measures that source on the computed cycle and sizes R_t so that the pair gives the band asked for, the sideband margin (${n2(sidebandMargin)}) times the two sidebands' span, widened by any detuning. R_s itself is taken at twice the band's resistance, so R_t stays in charge:`
 		),
-		eq(`BW = 2 \\times ${n2(sidebandMargin)} \\times ${formatHz(fmMax)} = ${formatHz(bandwidth)}, \\qquad Q = \\dfrac{f_p}{BW} = \\dfrac{${formatHz(fp)}}{${formatHz(bandwidth)}} = ${n2(q)}`),
-		eq(
-			`C = \\dfrac{1}{\\omega_0^2 L} = \\dfrac{1}{(2\\pi \\times ${fp})^2 \\times ${formatHenries(inductance)}} = ${formatFarads(cTarget ?? 1 / (w0 * w0 * inductance))} \\rightarrow ${capPair} = ${formatFarads(capacitance)}`
-		),
+		eq(`R_{eff} = R_t \\parallel R_{src} = ${formatOhms(rt)} \\parallel ${formatOhms(rSource)} = ${formatOhms(rEff)}, \\qquad BW = \\dfrac{1}{2\\pi R_{eff} C} = ${formatHz(bwLoaded)}\\ (\\text{asked } ${formatHz(bandwidthNeeded)})`),
+		p("An ideal switch would give the carrier below at the output, the carrier current of the switching modulator across R_eff; the diode's soft knee takes some off:"),
+		eq(`A_{out,ideal} = \\dfrac{A_d\\,R_{eff}}{2R_s} = \\dfrac{${formatVolts(s.drive)} \\times ${formatOhms(rEff)}}{2 \\times ${formatOhms(rs)}} = ${formatVolts(idealCarrier)}, \\qquad A_{out} = ${formatVolts(carrierOut)}`),
+		head("The sidebands on the tank's slope"),
 		p(
-			'R sets the bandwidth, which for a parallel tank is 1/(2πRC) whatever L is. The band is widened by what detuning the capacitors left, so both sidebands keep their margin, and R is rounded down in its series, since a smaller R only widens the band:'
+			"The sidebands sit f_m away from the carrier, on the slope of the tank's response, so the tank passes them a little less than the carrier. A tone near the top of the message band therefore modulates less deeply than a slow one:"
 		),
-		eq(
-			`BW' = BW + 2\\,|f_0 - f_p| = ${formatHz(bandwidthNeeded ?? bandwidth)}, \\qquad R = \\dfrac{1}{2\\pi\\,BW'\\,C} = \\dfrac{1}{2\\pi \\times ${formatHz(bandwidthNeeded ?? bandwidth)} \\times ${formatFarads(capacitance)}} = ${formatOhms(rTarget ?? 1 / (2 * Math.PI * bandwidth * capacitance))} \\rightarrow ${formatOhms(resistance)}`
-		),
-		eq(`f_0\\text{ actual} = ${formatHz(f0Actual)}, \\qquad Q\\text{ actual} = R\\sqrt{\\dfrac{C}{L}} = ${n2(qActual)}, \\qquad BW\\text{ actual} = \\dfrac{1}{2\\pi R C} = ${formatHz(bwActual)}`),
+		eq(`|H(f_m)| = \\dfrac{1}{\\sqrt{1 + (2f_m/BW)^2}} = ${n3(sidebandGain)}\\ \\text{at } ${formatHz(fmMax)}, \\qquad n(f_{m,max}) = ${n3(modulationIndex)} \\times ${n3(sidebandGain)} = ${n3(indexAtFmMax)}`),
 		p(
-			sidebandsInBand === false
-				? `The band runs from ${formatHz(bandLow)} to ${formatHz(bandHigh)}, which does not hold both sidebands at ${formatHz(fp - fmMax)} and ${formatHz(fp + fmMax)}: a larger sideband margin fixes it.`
-				: `The band runs from ${formatHz(bandLow)} to ${formatHz(bandHigh)}, holding both sidebands at ${formatHz(fp - fmMax)} and ${formatHz(fp + fmMax)} with room to spare.`
-		),
-		p(
-			'The DC bias is what keeps the diode on its curve: if the summed voltage ever dropped below the forward threshold, the diode would switch off and the polynomial would no longer describe it. The worst instant is when the carrier and the message peak together:'
-		),
-		eq(
-			Number.isFinite(requiredBias)
-				? `V_{DC} \\ge A_p + A_m + V_f + \\text{margin} = ${formatVolts(requiredBias)} \\quad (V_f = ${formatVolts(diodeVf)})`
-				: 'V_{DC} \\ge A_p + A_m + V_f + \\text{margin}'
-		),
-		p(
-			'Unlike the JFET modulator, the depth of modulation here is not designed in: the sidebands are b A_p A_m tall and the carrier a A_p, so n = 2 b A_m / a depends on how curved the diode is at the bias point. It is set on the bench by adjusting A_m and the bias while watching the envelope.'
+			sidebandsInBand
+				? `Both sidebands, ${formatHz(fp - fmMax)} and ${formatHz(fp + fmMax)}, sit inside the band the tank passes, ${formatHz(bandLow)} to ${formatHz(bandHigh)}. A larger sideband margin flattens the slope but lets more of the carrier's harmonics through; ${n2(sidebandMargin)} is the trade made here. A ${formatHz(fmMax)} tone also comes out a little cleaner than a slow one, ${n2(100 * thdAtFmMax)} % THD, since its harmonics sit further out on the slope still.`
+				: `The band the tank passes, ${formatHz(bandLow)} to ${formatHz(bandHigh)}, does not hold both sidebands at ${formatHz(fp - fmMax)} and ${formatHz(fp + fmMax)}: a larger sideband margin fixes it.`
 		)
 	];
 }

@@ -17,7 +17,8 @@ export const SERIES = { E6, E12, E24, E96 };
 export function seriesValues(series, decadeMin, decadeMax) {
 	const out = [];
 	for (let k = decadeMin; k <= decadeMax; k++) {
-		for (const m of series) out.push(m * 10 ** k);
+		// rounded to 12 digits so 5.1 x 10^5 reads 510000, not 509999.99999999994
+		for (const m of series) out.push(Number((m * 10 ** k).toPrecision(12)));
 	}
 	return out;
 }

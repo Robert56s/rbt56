@@ -1,4 +1,5 @@
 import amMathSrc from './amMath.js?raw';
+import diodeLawSrc from './diodeLaw.js?raw';
 import diodeMixerModulatorSrc from './diodeMixerModulator.js?raw';
 import envelopeFilterSrc from './envelopeFilter.js?raw';
 import eseriesSrc from './eseries.js?raw';
@@ -158,17 +159,20 @@ if (!design) {
 
 function diodeParamsBlock(p) {
 	return `// =====================================================================
-// PARAMETERS - diode + resonant-tank modulator
+// PARAMETERS - diode + resonant-tank modulator (a switching modulator)
 // =====================================================================
 
 const FP = ${p.fp};                    // Hz, carrier frequency (tank resonance)
 const FM_MAX = ${p.fmMax};                 // Hz, highest modulating frequency to pass
-const SIDEBAND_MARGIN = ${p.sidebandMargin};        // >= 1, extra tank bandwidth headroom
-const CARRIER_AMPLITUDE = ${p.carrierAmplitude};       // V, for the bias-margin check below
-const MOD_AMPLITUDE = ${p.modAmplitude};           // V, for the bias-margin check below
-const DIODE_VF = ${p.diodeVf};               // V, diode forward threshold
-const BIAS_MARGIN = ${p.biasMargin};             // V, extra headroom above the strict minimum bias
+const SIDEBAND_MARGIN = ${p.sidebandMargin};        // the tank's band as a multiple of the 2 x FM_MAX the sidebands span
 const INDUCTANCE = ${p.inductance};             // H, tank inductor (pick a realistic off-the-shelf value)
+const CARRIER_AMPLITUDE = ${p.carrierAmplitude};       // V, carrier source
+const MOD_AMPLITUDE = ${p.modAmplitude};           // V, message source
+const TARGET_MODULATION_INDEX = ${p.targetModulationIndex}; // for a slow message
+const CARRIER_DRIVE = ${p.carrierDrive};           // V, carrier amplitude wanted at the diode
+const VCC = ${p.vcc};                   // V, supply rail (the bias comes from -VCC)
+const OPAMP_SWING = ${p.opampSwing};           // V, what the summer's op-amp reaches on this supply
+const DIODE = ${JSON.stringify(p.diode ?? '1N4148')};           // '1N4148' or 'BAT54'
 const RESISTOR_SERIES = 'E24';
 `;
 }
@@ -179,21 +183,36 @@ function diodeReportBlock() {
 // =====================================================================
 
 const design = designDiodeMixerModulator({
-	fp: FP, fmMax: FM_MAX, sidebandMargin: SIDEBAND_MARGIN,
-	carrierAmplitude: CARRIER_AMPLITUDE, modAmplitude: MOD_AMPLITUDE,
-	diodeVf: DIODE_VF, biasMargin: BIAS_MARGIN, inductance: INDUCTANCE, resistorSeries: RESISTOR_SERIES
+	fp: FP, fmMax: FM_MAX, sidebandMargin: SIDEBAND_MARGIN, inductance: INDUCTANCE,
+	carrierAmplitude: CARRIER_AMPLITUDE, modAmplitude: MOD_AMPLITUDE, targetModulationIndex: TARGET_MODULATION_INDEX,
+	carrierDrive: CARRIER_DRIVE, vcc: VCC, opampSwing: OPAMP_SWING, diode: DIODE, resistorSeries: RESISTOR_SERIES
 });
-if (!design) { console.log('Invalid parameters (check FP > 0, FM_MAX > 0, INDUCTANCE > 0).'); } else {
+if (!design) {
+	console.log('No design: check that FP > 2 x FM_MAX, every amplitude and INDUCTANCE is positive, and 0 < TARGET_MODULATION_INDEX <= 1.');
+} else {
+	const s = design.summer;
 	console.log('='.repeat(72));
-	console.log('RESONANT TANK');
+	console.log('SUMMER (inverting: carrier through Rp, message through Rm, bias from -VCC through Rb)');
 	console.log('='.repeat(72));
-	console.log(\`target: f0 = \${design.fp} Hz, Q = \${design.q.toFixed(2)}  (BW = \${design.bandwidth.toFixed(1)} Hz = 2 x margin x fmMax)\`);
-	console.log(\`L = \${design.inductance.toExponential(4)} H (chosen), C = \${design.capacitance.toExponential(4)} F, R = \${design.resistance.toFixed(1)} ohm\`);
-	console.log(\`actual: f0 = \${design.f0Actual.toFixed(1)} Hz, Q = \${design.qActual.toFixed(2)}, BW = \${design.bwActual.toFixed(1)} Hz\`);
-	if (design.requiredBias != null) {
-		console.log();
-		console.log(\`required DC bias >= \${design.requiredBias.toFixed(2)} V (carrier + modulant amplitudes + diode Vf + margin)\`);
-	}
+	console.log(\`Rf = \${s.rf} ohm, Rp = \${s.rp} ohm (carrier at the diode \${s.drive.toFixed(3)} V), Rm = \${s.rm} ohm (message \${s.um.toFixed(3)} V)\`);
+	console.log(s.rb ? \`Rb = \${s.rb} ohm from -VCC: bias \${s.vb.toFixed(3)} V (least distortion at \${s.vbBest.toFixed(3)} V)\` : 'no Rb: this diode switches cleanly with no bias');
+	console.log(\`peak output \${s.peak.toFixed(2)} V against a swing of \${s.opampSwing} V -> \${s.swingOk ? 'fits' : 'DOES NOT FIT'}; noise gain \${s.noiseGain.toFixed(2)}, fp x noise gain / GBW = \${s.gbwRatio.toFixed(3)} \${s.gbwOk ? '(fine for a TL08x)' : '(too much for a TL08x)'}\`);
+	console.log();
+	console.log('='.repeat(72));
+	console.log('DIODE AND TANK');
+	console.log('='.repeat(72));
+	console.log(\`Rs = \${design.rs} ohm, diode \${design.diode}\`);
+	console.log(\`L = \${design.inductance.toExponential(4)} H, C = \${design.capacitors.map((c) => c.toExponential(3)).join(' + ')} F = \${design.capacitance.toExponential(4)} F, Rt = \${design.rt} ohm\`);
+	console.log(\`f0 = \${design.f0Actual.toFixed(1)} Hz; source seen through the diode \${design.rSource.toFixed(0)} ohm, Rt in parallel \${design.rEff.toFixed(0)} ohm\`);
+	console.log(\`band: asked \${design.bandwidthNeeded.toFixed(1)} Hz, with the source \${design.bwLoaded.toFixed(1)} Hz (Q \${design.qLoaded.toFixed(2)}), \${design.bandLow.toFixed(0)} to \${design.bandHigh.toFixed(0)} Hz -> sidebands \${design.sidebandsInBand ? 'inside' : 'OUTSIDE'}\`);
+	console.log();
+	console.log('='.repeat(72));
+	console.log('WHAT COMES OUT (the diode worked out cycle by cycle)');
+	console.log('='.repeat(72));
+	console.log(\`carrier at the output \${design.carrierOut.toFixed(4)} V (an ideal switch: \${design.idealCarrier.toFixed(4)} V)\`);
+	console.log(\`index \${design.modulationIndex.toFixed(4)} for a slow message (target \${TARGET_MODULATION_INDEX}; an ideal switch: \${design.idealIndex.toFixed(4)})\`);
+	console.log(\`index \${design.indexAtFmMax.toFixed(4)} for a \${FM_MAX} Hz tone: the tank passes its sidebands at \${(100 * design.sidebandGain).toFixed(1)} % of the carrier\`);
+	console.log(\`envelope THD \${(100 * design.thd).toFixed(2)} % (slow), \${(100 * design.thdAtFmMax).toFixed(2)} % (\${FM_MAX} Hz tone); peak diode current \${(1000 * design.peakCurrent).toFixed(3)} mA\`);
 }
 `;
 }
@@ -210,6 +229,7 @@ const AMAX_DB = ${p.amaxDb};                // dB, max attenuation allowed up to
 const AMIN_DB = ${p.aminDb};                // dB, min attenuation required at the ripple frequency
 const ORDER = ${p.order ?? 'null'};                  // set to null to use the minimum even order that meets the spec
 const RESPONSE = ${JSON.stringify(p.response)};      // 'butterworth' or 'chebyshev'
+const TEST_INDEX = ${p.index ?? 0.9};              // modulation index of the 1 V test wave the last lines use
 const RESISTOR_SERIES = 'E24';
 `;
 }
@@ -225,8 +245,8 @@ console.log('='.repeat(72));
 console.log('RECTIFIER (' + RECTIFIER_TYPE + '-wave)');
 console.log('='.repeat(72));
 console.log(RECTIFIER_TYPE === 'full'
-	? \`precision full-wave: R1=R2=R3=\${rectifier.r1} ohm, diode \${rectifier.diode}. Ripple fundamental at 2 x fp = \${rippleHz} Hz.\`
-	: \`half-wave: single diode \${rectifier.diode}. Ripple fundamental at fp = \${rippleHz} Hz.\`);
+	? \`precision full-wave (TI TIDU030): R1=R2=R3=\${rectifier.r1} ohm, diode \${rectifier.diode}, D1 from U1A's - input into its output. Ripple fundamental at 2 x fp = \${rippleHz} Hz.\`
+	: \`half-wave: single diode \${rectifier.diode} with RL = \${rectifier.rl} ohm to ground. Ripple fundamental at fp = \${rippleHz} Hz.\`);
 
 console.log();
 console.log('='.repeat(72));
@@ -241,6 +261,14 @@ design.realized.forEach((r, i) => {
 	console.log(\`  R = \${r.components.R1} ohm, Ctop = \${r.components.Ctop.toExponential(4)} F, Cbottom = \${r.components.Cbottom.toExponential(4)} F\`);
 	console.log(\`  actual f0 = \${f0Actual.toFixed(1)} Hz (\${(100 * (f0Actual - f0Target) / f0Target).toFixed(2)}%), Q = \${r.actual.q.toFixed(4)}\`);
 });
+
+console.log();
+console.log('='.repeat(72));
+console.log(\`WHAT COMES OUT (a 1 V carrier at index \${TEST_INDEX}, a \${FM_MAX} Hz tone)\`);
+console.log('='.repeat(72));
+const out = recoveredEnvelope({ rectifierType: RECTIFIER_TYPE, rectifier, envelope: design, fm: FM_MAX, index: TEST_INDEX, amplitude: 1 });
+console.log(\`output mean \${out.mean.toFixed(4)} V, recovered tone \${out.tone.toFixed(4)} V (the filter's \${out.gainDb.toFixed(2)} dB at \${FM_MAX} Hz included)\`);
+if (!out.exact) console.log(\`an ideal rectifier would give \${out.ideal.mean.toFixed(4)} V and \${out.ideal.tone.toFixed(4)} V: the bare diode loses its drop on every crest\`);
 `;
 }
 
@@ -252,6 +280,7 @@ const ENGINE = [
 	envelopeFilterSrc,
 	jfetModelSrc,
 	jfetModulatorSrc,
+	diodeLawSrc,
 	diodeMixerModulatorSrc,
 	rectifierSrc,
 	amMathSrc

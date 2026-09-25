@@ -1,5 +1,5 @@
 <script>
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import BasicsPanel from '$lib/components/BasicsPanel.svelte';
 	import OrderOnSpecDemo from '$lib/components/basics/OrderOnSpecDemo.svelte';
 	import RcOnSpecDemo from '$lib/components/basics/RcOnSpecDemo.svelte';
@@ -12,6 +12,7 @@
 	import MathPanel from '$lib/components/MathPanel.svelte';
 	import { generateScript, NEXT_STEPS } from '$lib/filter/codegen';
 	import { generateSchematic } from '$lib/filter/spice';
+	import { DEFAULT_OPAMP, OPAMP_MODELS } from '$lib/spice/opamps';
 	import {
 		explainApproximation,
 		explainFirstOrder,
@@ -32,7 +33,9 @@
 	import { formatFarads, formatHz, formatOhms, formatPercent, relativeErrorPercent } from '$lib/filter/format';
 	import { designMfbLowPass, designMfbLowPassFromCaps } from '$lib/filter/mfb';
 	import { designMfbHighPass, designMfbHighPassFromCap } from '$lib/filter/mfbHighPass';
-	import { butterworthOrder, chebyshevOrder, transitionRatio } from '$lib/filter/order';
+	import { transitionRatio } from '$lib/filter/order';
+	import { RESPONSES, SEARCH_LIMIT } from '$lib/filter/approximations';
+	import { explainTowThomasNotch, orderSummaryTex } from '$lib/filter/explainResponses';
 	import { designSallenKeyLowPass, designSallenKeyLowPassFromCaps, capRatio } from '$lib/filter/sallenKey';
 	import {
 		designSallenKeyHighPass,
@@ -43,7 +46,9 @@
 		designTowThomasHighPass,
 		designTowThomasHighPassFromCap,
 		designTowThomasLowPass,
-		designTowThomasLowPassFromCap
+		designTowThomasLowPassFromCap,
+		designTowThomasNotch,
+		designTowThomasNotchFromCap
 	} from '$lib/filter/towThomas';
 	import {
 		mfbSensitivity,
@@ -52,10 +57,11 @@
 		SALLEN_KEY_HP_SENSITIVITY,
 		TOW_THOMAS_SENSITIVITY,
 		TOW_THOMAS_HP_SENSITIVITY,
+		TOW_THOMAS_NOTCH_SENSITIVITY,
 		worstCaseQError
 	} from '$lib/filter/sensitivity';
-	import { designLowPass, designHighPass, designBandPass, designBandStop } from '$lib/filter/stages';
-	import { branchOrder, branchSign, combinerChoice, magnitudePhaseAt, sweep, magnitudePhaseAtParallelSum, sweepParallelSum } from '$lib/filter/bode';
+	import { designLowPass, designHighPass, designBandPass, designBandStop, minimumOrder } from '$lib/filter/stages';
+	import { branchDcGain, branchOrder, branchSign, combinerChoice, combinerDesign, magnitudePhaseAt, sweep, magnitudePhaseAtParallelSum, sweepParallelSum } from '$lib/filter/bode';
 	import { buildDifferenceAmpDiagram, buildSummingAmpDiagram } from '$lib/filter/circuits';
 	import { LAB_KIT, nearestResistor } from '$lib/filter/eseries';
 
@@ -73,7 +79,12 @@
 	let fsh = $state(30000);
 	let filterType = $state('lowpass');
 	let response = $state('butterworth');
+	// a band-pass or band-stop is two independent filters, so each side can
+	// have its own response
+	let responseHp = $state('butterworth');
+	let responseLp = $state('butterworth');
 	let topology = $state('mfb');
+	const RESPONSE_KEYS = ['butterworth', 'chebyshev', 'legendre', 'bessel', 'inverseChebyshev', 'elliptic'];
 
 	// Which values the component search is allowed to pick from: a preferred
 	// series, the lab drawer, or a list pasted in below. Restricting the
@@ -190,6 +201,12 @@
 			fsl = 3000;
 			fsh = 10000;
 		}
+		// entering a band type starts both sides on the response already chosen
+		if (filterType === 'bandpass' || filterType === 'bandstop') {
+			const single = untrack(() => response);
+			responseHp = single;
+			responseLp = single;
+		}
 	});
 
 	// Manual capacitor values, in nanofarads, keyed by stage index. A stage
@@ -241,18 +258,15 @@
 				: transitionRatio(fp, fs)
 			: null
 	);
-	const minOrder = $derived(
-		k !== null
-			? response === 'chebyshev'
-				? chebyshevOrder(amaxDb, aminDb, k)
-				: butterworthOrder(amaxDb, aminDb, k)
-			: null
-	);
-	const minOrderCeil = $derived(minOrder !== null ? Math.max(1, Math.ceil(minOrder)) : null);
+	// the order: a formula for most responses, a count for Bessel and Legendre
+	// (minimumOrder returns n = null when no order up to SEARCH_LIMIT gets there)
+	const orderInfo = $derived(k !== null ? minimumOrder(response, amaxDb, aminDb, k) : null);
+	const minOrder = $derived(orderInfo ? orderInfo.value : null);
+	const minOrderCeil = $derived(orderInfo ? orderInfo.n : null);
 	const order = $derived(
 		orderOverride !== null ? Math.min(MAX_ORDER, Math.max(1, orderOverride)) : minOrderCeil
 	);
-	const orderTooHigh = $derived(minOrderCeil !== null && minOrderCeil > MAX_ORDER);
+	const orderTooHigh = $derived(orderInfo !== null && (minOrderCeil === null || minOrderCeil > MAX_ORDER));
 
 	// Band-pass: a high-pass section (fl/fsl) cascaded with a low-pass
 	// section (fh/fsh) - see designBandPass in stages.js. Band-stop: a
@@ -267,38 +281,40 @@
 	const lpFs = $derived(filterType === 'bandstop' ? fsl : fsh);
 
 	const kHp = $derived(valid && isBandType ? transitionRatio(hpFs, hpFp) : null);
-	const minOrderHp = $derived(
-		kHp !== null
-			? response === 'chebyshev'
-				? chebyshevOrder(amaxDb, aminDb, kHp)
-				: butterworthOrder(amaxDb, aminDb, kHp)
-			: null
-	);
-	const minOrderHpCeil = $derived(minOrderHp !== null ? Math.max(1, Math.ceil(minOrderHp)) : null);
+	const orderInfoHp = $derived(kHp !== null ? minimumOrder(responseHp, amaxDb, aminDb, kHp) : null);
+	const minOrderHp = $derived(orderInfoHp ? orderInfoHp.value : null);
+	const minOrderHpCeil = $derived(orderInfoHp ? orderInfoHp.n : null);
 	const orderHp = $derived(
 		orderOverrideHp !== null ? Math.min(MAX_ORDER, Math.max(1, orderOverrideHp)) : minOrderHpCeil
 	);
-	const orderHpTooHigh = $derived(minOrderHpCeil !== null && minOrderHpCeil > MAX_ORDER);
+	const orderHpTooHigh = $derived(orderInfoHp !== null && (minOrderHpCeil === null || minOrderHpCeil > MAX_ORDER));
 
 	const kLp = $derived(valid && isBandType ? transitionRatio(lpFp, lpFs) : null);
-	const minOrderLp = $derived(
-		kLp !== null
-			? response === 'chebyshev'
-				? chebyshevOrder(amaxDb, aminDb, kLp)
-				: butterworthOrder(amaxDb, aminDb, kLp)
-			: null
-	);
-	const minOrderLpCeil = $derived(minOrderLp !== null ? Math.max(1, Math.ceil(minOrderLp)) : null);
+	const orderInfoLp = $derived(kLp !== null ? minimumOrder(responseLp, amaxDb, aminDb, kLp) : null);
+	const minOrderLp = $derived(orderInfoLp ? orderInfoLp.value : null);
+	const minOrderLpCeil = $derived(orderInfoLp ? orderInfoLp.n : null);
 	const orderLp = $derived(
 		orderOverrideLp !== null ? Math.min(MAX_ORDER, Math.max(1, orderOverrideLp)) : minOrderLpCeil
 	);
-	const orderLpTooHigh = $derived(minOrderLpCeil !== null && minOrderLpCeil > MAX_ORDER);
+	const orderLpTooHigh = $derived(orderInfoLp !== null && (minOrderLpCeil === null || minOrderLpCeil > MAX_ORDER));
+
+	/** The one-line reason a side cannot be built: its order past the limit, or a response that never gets there. */
+	function tooHighText(info, resp, edges) {
+		if (info?.n === null) {
+			const last = info.tried?.[info.tried.length - 1];
+			return `${RESPONSES[resp].label} never gets there: even at order ${SEARCH_LIMIT} it loses only ${last ? last.loss.toFixed(1) : '?'} dB at the stopband edge. Loosen Amax, Amin or ${edges}, or pick a steeper response.`;
+		}
+		return `That needs order ${info?.n}, past this tool's limit of ${MAX_ORDER}. Loosen Amax, Amin or ${edges}, or pick a steeper response.`;
+	}
+
+	/** Every response in one list, with what it is best at. */
+	const responseOptions = RESPONSE_KEYS.map((key) => ({ key, label: RESPONSES[key].label, best: RESPONSES[key].best }));
 
 	const design = $derived.by(() => {
 		if (!valid) return null;
 		if (isBandType) {
 			if (orderHpTooHigh || orderLpTooHigh) return null;
-			const args = { response, amaxDb, aminDb, fl, fh, fsl, fsh, orderHigh: orderHp, orderLow: orderLp };
+			const args = { responseHp, responseLp, amaxDb, aminDb, fl, fh, fsl, fsh, orderHigh: orderHp, orderLow: orderLp };
 			return filterType === 'bandstop' ? designBandStop(args) : designBandPass(args);
 		}
 		if (orderTooHigh) return null;
@@ -309,6 +325,16 @@
 
 	function buildStage(stage, i, opts) {
 		const ov = capOverrides[i];
+
+		// a stage with zeros (elliptic, inverse Chebyshev) is always a Tow-Thomas notch
+		if (Number.isFinite(stage.wz)) {
+			const notchOpts = { ...opts, lowSide: stage.filterType === 'lowpass' };
+			if (ov?.C > 0) {
+				const r = designTowThomasNotchFromCap(stage.wn, stage.q, stage.wz, ov.C * 1e-9, notchOpts);
+				if (r.ok) return r;
+			}
+			return designTowThomasNotch(stage.wn, stage.q, stage.wz, notchOpts);
+		}
 
 		if (stage.filterType === 'highpass') {
 			if (stage.order === 1) {
@@ -394,6 +420,7 @@
 	});
 
 	const shortfallStages = $derived(realizedStages.flatMap((r, i) => (r.stockShortfall ? [i + 1] : [])));
+	const hasZeros = $derived(!!design && design.stages.some((s) => Number.isFinite(s.wz)));
 
 	// Band-stop only: the two branches (low-pass, high-pass) that run in
 	// parallel and get summed, split back out of the flat realizedStages
@@ -409,8 +436,19 @@
 	// The two branches must reach the combiner with the same sign; when they
 	// do not, the combiner is a difference amplifier (see combinerSigns).
 	const combiner = $derived(bandStopBranches ? combinerChoice(bandStopBranches, fsl, fsh) : null);
-	const combineSigns = $derived(combiner ? combiner.signs : null);
 	const combinerMode = $derived(combiner ? combiner.mode : 'sum');
+	// a low-pass notch stage passes DC at a rounded capacitor ratio; the
+	// combiner's low-pass input resistor takes that factor out again
+	const lpBranchGain = $derived(bandStopBranches ? Math.abs(branchDcGain(bandStopBranches[0])) : 1);
+	const combinerParts = $derived(
+		combiner ? combinerDesign(combinerMode, combinerR, lpBranchGain, (v) => nearestResistor(v, componentOpts.resistorSeries)) : null
+	);
+	const combineSigns = $derived(combinerParts ? combinerParts.weights : null);
+	const COMBINER_NAMES = { RCA: 'Ra (low-pass in)', RCB: 'Rb (high-pass in)', RCF: 'Rf (feedback)', RCH: 'R (high-pass in)', RCG: 'Rg (to ground)', RCL: 'Rl (low-pass in)' };
+	const combinerRows = $derived(combinerParts ? Object.entries(combinerParts.resistors).map(([key, value]) => ({ name: COMBINER_NAMES[key], value })) : []);
+	const combinerDiagram = $derived(
+		combinerMode === 'difference' ? buildDifferenceAmpDiagram(combinerR, combinerParts?.resistors) : buildSummingAmpDiagram(combinerR, combinerParts?.resistors)
+	);
 
 	const bodePoints = $derived.by(() => {
 		if (!design || realizedStages.length === 0) return [];
@@ -424,11 +462,14 @@
 	// stages of unity DC gain, so an even-order one ripples between 0 dB and
 	// +Amax (and a band type can stack the ripple of its two sides): measured
 	// from 0 dB its stopband would look Amax short when it meets the spec.
-	// So for a Chebyshev the reference is the highest gain in the passband.
+	// The same holds for an even-order elliptic, and a notch stage's rounded
+	// Cin moves the whole passband a little. So the reference is always the
+	// highest gain found in the passband.
+	const gainDbAt = (f) =>
+		filterType === 'bandstop' ? magnitudePhaseAtParallelSum(bandStopBranches, f, combineSigns).db : magnitudePhaseAt(realizedStages, f).db;
 	const passbandPeakDb = $derived.by(() => {
-		if (!design || realizedStages.length === 0 || response !== 'chebyshev') return 0;
-		const gainDb = (f) =>
-			filterType === 'bandstop' ? magnitudePhaseAtParallelSum(bandStopBranches, f, combineSigns).db : magnitudePhaseAt(realizedStages, f).db;
+		if (!design || realizedStages.length === 0) return 0;
+		const gainDb = gainDbAt;
 		const ranges =
 			filterType === 'lowpass'
 				? [[fp / 100, fp]]
@@ -440,13 +481,46 @@
 								[fl / 100, fl],
 								[fh, fh * 100]
 							];
-		let peak = 0;
+		let peak = -Infinity;
 		for (const [a, b] of ranges) {
 			if (!(a > 0 && b > a)) continue;
 			for (let i = 0; i <= 400; i++) peak = Math.max(peak, gainDb(a * (b / a) ** (i / 400)));
 		}
-		return peak;
+		return Number.isFinite(peak) ? peak : 0;
 	});
+
+	// The stopband over its whole width, not just at its edge: an elliptic or
+	// inverse Chebyshev response comes back up between its zeros, and with
+	// rounded parts those bumps are where the spec is missed first. The
+	// least attenuation found across the stopband, and where.
+	const stopbandWorst = $derived.by(() => {
+		if (!design || realizedStages.length === 0) return null;
+		const ranges =
+			filterType === 'lowpass'
+				? [[fs, fs * 100]]
+				: filterType === 'highpass'
+					? [[fs / 100, fs]]
+					: filterType === 'bandpass'
+						? [
+								[fsl / 100, fsl],
+								[fsh, fsh * 100]
+							]
+						: [[fsl, fsh]];
+		let worst = { db: Infinity, freq: null };
+		for (const [a, b] of ranges) {
+			for (let i = 0; i <= 800; i++) {
+				const f = a * (b / a) ** (i / 800);
+				const att = passbandPeakDb - gainDbAt(f);
+				if (att < worst.db) worst = { db: att, freq: f };
+			}
+		}
+		return worst;
+	});
+	// a response with zeros can dip below Amin inside the band while its edges are fine
+	const stopbandDipsInside = $derived(
+		stopbandWorst !== null &&
+			(isBandType ? stopbandWorst.db < Math.min(attenuationAtFsl ?? Infinity, attenuationAtFsh ?? Infinity) - 0.05 : stopbandWorst.db < (attenuationAtFs ?? Infinity) - 0.05)
+	);
 
 	const attenuationAtFs = $derived.by(() => {
 		if (!design || realizedStages.length === 0 || isBandType) return null;
@@ -502,6 +576,7 @@
 		if (stageDesign.topology === 'sallenKeyHp') return { ...SALLEN_KEY_HP_SENSITIVITY };
 		if (stageDesign.topology === 'towThomas') return { ...TOW_THOMAS_SENSITIVITY };
 		if (stageDesign.topology === 'towThomasHp') return { ...TOW_THOMAS_HP_SENSITIVITY };
+		if (stageDesign.topology === 'towThomasNotch') return { ...TOW_THOMAS_NOTCH_SENSITIVITY };
 		return null;
 	}
 
@@ -512,6 +587,7 @@
 		if (stageDesign.topology === 'sallenKeyHp') return explainSallenKeyHp(stageDesign, design.stages[i].q);
 		if (stageDesign.topology === 'towThomas') return explainTowThomas(stageDesign, design.stages[i].wn, design.stages[i].q);
 		if (stageDesign.topology === 'towThomasHp') return explainTowThomasHp(stageDesign, design.stages[i].wn, design.stages[i].q);
+		if (stageDesign.topology === 'towThomasNotch') return explainTowThomasNotch(stageDesign, design.stages[i].wn, design.stages[i].q, design.stages[i].wz);
 		if (stageDesign.topology === 'firstOrderHp') return explainFirstOrderHp(stageDesign);
 		return explainFirstOrder(stageDesign);
 	}
@@ -547,6 +623,8 @@
 			fsh,
 			filterType,
 			response,
+			responseHp,
+			responseLp,
 			topology,
 			order,
 			orderHp,
@@ -558,12 +636,19 @@
 		saveFile(code, 'filter-design.js', 'text/javascript');
 	}
 
+	// the op-amp the LTspice file uses: the ideal single-pole model, or a
+	// real part on +/-15 V rails
+	let spiceOpamp = $state(DEFAULT_OPAMP);
+
 	function downloadSchematic() {
 		if (!design || realizedStages.length === 0) return;
 		const schematic = generateSchematic({
+			opamp: spiceOpamp,
 			realizedStages,
 			filterType,
-			response,
+			response: isBandType ? (responseHp === responseLp ? responseLp : null) : response,
+			responseHp,
+			responseLp,
 			amaxDb,
 			aminDb,
 			fp,
@@ -575,7 +660,8 @@
 			topology,
 			lpCount: filterType === 'bandstop' ? design.lp.stages.length : 0,
 			combinerMode,
-			combinerR: combinerR
+			combinerR: combinerR,
+			combinerResistors: combinerParts?.resistors ?? null
 		});
 		saveFile(schematic, 'filter-design.asc', 'text/plain');
 	}
@@ -689,13 +775,27 @@
 					<input id="fs" type="number" min="1" step="100" bind:value={fs} />
 				</div>
 			{/if}
-			<div class="field">
-				<label for="response">Response</label>
-				<select id="response" bind:value={response}>
-					<option value="butterworth">Butterworth</option>
-					<option value="chebyshev">Chebyshev I</option>
-				</select>
-			</div>
+			{#if isBandType}
+				<div class="field">
+					<label for="responseHp">Response, high-pass {filterType === 'bandstop' ? 'branch' : 'side'}</label>
+					<select id="responseHp" bind:value={responseHp}>
+						{#each responseOptions as r (r.key)}<option value={r.key}>{r.label}</option>{/each}
+					</select>
+				</div>
+				<div class="field">
+					<label for="responseLp">Response, low-pass {filterType === 'bandstop' ? 'branch' : 'side'}</label>
+					<select id="responseLp" bind:value={responseLp}>
+						{#each responseOptions as r (r.key)}<option value={r.key}>{r.label}</option>{/each}
+					</select>
+				</div>
+			{:else}
+				<div class="field">
+					<label for="response">Response</label>
+					<select id="response" bind:value={response}>
+						{#each responseOptions as r (r.key)}<option value={r.key}>{r.label}</option>{/each}
+					</select>
+				</div>
+			{/if}
 			<div class="field">
 				<label for="topology">Topology</label>
 				<select id="topology" bind:value={topology}>
@@ -725,6 +825,18 @@
 			{/if}
 		</p>
 
+		<p class="note">
+			{#if isBandType}
+				High-pass {filterType === 'bandstop' ? 'branch' : 'side'}: {RESPONSES[responseHp].label}, {RESPONSES[responseHp].best}.
+				Low-pass {filterType === 'bandstop' ? 'branch' : 'side'}: {RESPONSES[responseLp].label}, {RESPONSES[responseLp].best}.
+			{:else}
+				{RESPONSES[response].label}: {RESPONSES[response].best}.
+			{/if}
+			{#if (isBandType ? RESPONSES[responseHp].zeros || RESPONSES[responseLp].zeros : RESPONSES[response].zeros)}
+				Stages with zeros are always built as Tow-Thomas notch stages; the topology below sets the others.
+			{/if}
+		</p>
+
 		{#if !valid}
 			<p class="flag bad">
 				{#if filterType === 'highpass'}
@@ -748,7 +860,7 @@
 		minutes={5}
 		blocks={filterBasics({
 			filterType,
-			response,
+			response: isBandType ? responseLp : response,
 			topology,
 			order: isBandType ? (orderLp ?? 0) + (orderHp ?? 0) : order,
 			stages: realizedStages.length,
@@ -794,26 +906,21 @@
 					<h3 class="subhead">High-pass side (fl = {fl} Hz, fsl = {fsl} Hz)</h3>
 					<Equation tex={`k = \\dfrac{f_{sl}}{f_l} = \\dfrac{${fsl}}{${fl}} = ${kHp.toFixed(4)}`} />
 				{/if}
-				{#if response === 'butterworth'}
-					<Equation
-						tex={`n \\geq \\dfrac{\\log\\!\\left[\\dfrac{10^{A_{min}/10}-1}{10^{A_{max}/10}-1}\\right]}{2\\log(1/k)} = ${(filterType === 'bandstop' ? minOrderLp : minOrderHp).toFixed(4)}`}
-					/>
+				{#if filterType === 'bandstop'}
+					<Equation tex={orderSummaryTex({ response: responseLp, minOrder: minOrderLp, tried: orderInfoLp?.tried, aminDb })} />
 				{:else}
-					<Equation
-						tex={`n \\geq \\dfrac{\\operatorname{acosh}\\!\\sqrt{\\dfrac{10^{A_{min}/10}-1}{10^{A_{max}/10}-1}}}{\\operatorname{acosh}(1/k)} = ${(filterType === 'bandstop' ? minOrderLp : minOrderHp).toFixed(4)}`}
-					/>
+					<Equation tex={orderSummaryTex({ response: responseHp, minOrder: minOrderHp, tried: orderInfoHp?.tried, aminDb })} />
 				{/if}
 				<MathPanel
-					summary="Show where this formula comes from"
+					summary="Show where this order comes from"
 					blocks={filterType === 'bandstop'
-						? explainOrder({ response, amaxDb, aminDb, k: kLp, minOrder: minOrderLp, filterType: 'lowpass' })
-						: explainOrder({ response, amaxDb, aminDb, k: kHp, minOrder: minOrderHp, filterType: 'highpass' })}
+						? explainOrder({ response: responseLp, amaxDb, aminDb, k: kLp, minOrder: minOrderLp, filterType: 'lowpass', tried: orderInfoLp?.tried })
+						: explainOrder({ response: responseHp, amaxDb, aminDb, k: kHp, minOrder: minOrderHp, filterType: 'highpass', tried: orderInfoHp?.tried })}
 				/>
 
 				{#if filterType === 'bandstop' ? orderLpTooHigh : orderHpTooHigh}
 					<p class="flag bad">
-						That needs order {filterType === 'bandstop' ? minOrderLpCeil : minOrderHpCeil}, past
-						this tool's limit of {MAX_ORDER}. Loosen Amax, Amin or the fl/fsl edges.
+						{filterType === 'bandstop' ? tooHighText(orderInfoLp, responseLp, 'the fl/fsl edges') : tooHighText(orderInfoHp, responseHp, 'the fl/fsl edges')}
 					</p>
 				{:else}
 					<div class="field order-field">
@@ -857,26 +964,21 @@
 					<h3 class="subhead">Low-pass side (fh = {fh} Hz, fsh = {fsh} Hz)</h3>
 					<Equation tex={`k = \\dfrac{f_h}{f_{sh}} = \\dfrac{${fh}}{${fsh}} = ${kLp.toFixed(4)}`} />
 				{/if}
-				{#if response === 'butterworth'}
-					<Equation
-						tex={`n \\geq \\dfrac{\\log\\!\\left[\\dfrac{10^{A_{min}/10}-1}{10^{A_{max}/10}-1}\\right]}{2\\log(1/k)} = ${(filterType === 'bandstop' ? minOrderHp : minOrderLp).toFixed(4)}`}
-					/>
+				{#if filterType === 'bandstop'}
+					<Equation tex={orderSummaryTex({ response: responseHp, minOrder: minOrderHp, tried: orderInfoHp?.tried, aminDb })} />
 				{:else}
-					<Equation
-						tex={`n \\geq \\dfrac{\\operatorname{acosh}\\!\\sqrt{\\dfrac{10^{A_{min}/10}-1}{10^{A_{max}/10}-1}}}{\\operatorname{acosh}(1/k)} = ${(filterType === 'bandstop' ? minOrderHp : minOrderLp).toFixed(4)}`}
-					/>
+					<Equation tex={orderSummaryTex({ response: responseLp, minOrder: minOrderLp, tried: orderInfoLp?.tried, aminDb })} />
 				{/if}
 				<MathPanel
-					summary="Show where this formula comes from"
+					summary="Show where this order comes from"
 					blocks={filterType === 'bandstop'
-						? explainOrder({ response, amaxDb, aminDb, k: kHp, minOrder: minOrderHp, filterType: 'highpass' })
-						: explainOrder({ response, amaxDb, aminDb, k: kLp, minOrder: minOrderLp, filterType: 'lowpass' })}
+						? explainOrder({ response: responseHp, amaxDb, aminDb, k: kHp, minOrder: minOrderHp, filterType: 'highpass', tried: orderInfoHp?.tried })
+						: explainOrder({ response: responseLp, amaxDb, aminDb, k: kLp, minOrder: minOrderLp, filterType: 'lowpass', tried: orderInfoLp?.tried })}
 				/>
 
 				{#if filterType === 'bandstop' ? orderHpTooHigh : orderLpTooHigh}
 					<p class="flag bad">
-						That needs order {filterType === 'bandstop' ? minOrderHpCeil : minOrderLpCeil}, past
-						this tool's limit of {MAX_ORDER}. Loosen Amax, Amin or the fh/fsh edges.
+						{filterType === 'bandstop' ? tooHighText(orderInfoHp, responseHp, 'the fh/fsh edges') : tooHighText(orderInfoLp, responseLp, 'the fh/fsh edges')}
 					</p>
 				{:else}
 					<div class="field order-field">
@@ -943,26 +1045,15 @@
 					<Equation tex={`k = \\dfrac{f_p}{f_s} = \\dfrac{${fp}}{${fs}} = ${k.toFixed(4)}`} />
 				{/if}
 
-				{#if response === 'butterworth'}
-					<Equation
-						tex={`n \\geq \\dfrac{\\log\\!\\left[\\dfrac{10^{A_{min}/10}-1}{10^{A_{max}/10}-1}\\right]}{2\\log(1/k)} = ${minOrder.toFixed(4)}`}
-					/>
-				{:else}
-					<Equation
-						tex={`n \\geq \\dfrac{\\operatorname{acosh}\\!\\sqrt{\\dfrac{10^{A_{min}/10}-1}{10^{A_{max}/10}-1}}}{\\operatorname{acosh}(1/k)} = ${minOrder.toFixed(4)}`}
-					/>
-				{/if}
+				<Equation tex={orderSummaryTex({ response, minOrder, tried: orderInfo?.tried, aminDb })} />
 
 				<MathPanel
-					summary="Show where this formula comes from"
-					blocks={explainOrder({ response, amaxDb, aminDb, k, minOrder, filterType })}
+					summary="Show where this order comes from"
+					blocks={explainOrder({ response, amaxDb, aminDb, k, minOrder, filterType, tried: orderInfo?.tried })}
 				/>
 
 				{#if orderTooHigh}
-					<p class="flag bad">
-						That needs order {minOrderCeil}, past this tool's limit of {MAX_ORDER}. Loosen Amax,
-						Amin or k.
-					</p>
+					<p class="flag bad">{tooHighText(orderInfo, response, 'the edges')}</p>
 				{:else}
 					<div class="field order-field">
 						<label for="order">
@@ -1031,16 +1122,23 @@
 					/>
 				{:else if filterType === 'highpass'}
 					<p class="note">
-						Denormalized with s → s/ωc (high-pass; ωc = 2π·fp·ε^(+1/n) for Butterworth, 2π·fp for Chebyshev, derived below). Each row is
+						Denormalized with s → s/ωc (high-pass; ωc = 2π·fp·ε^(+1/n) for Butterworth, 2π·fp for the other responses, derived below). Each row is
 						one realizable second-order block:
 					</p>
 					<Equation tex={`H(s) = \\dfrac{s^2}{s^2 + \\frac{\\omega_n}{Q}s + \\omega_n^2}`} />
 				{:else}
 					<p class="note">
-						Denormalized with s → s/ωc (low-pass; ωc = 2π·fp·ε^(-1/n) for Butterworth, 2π·fp for Chebyshev, derived below). Each row is one realizable
+						Denormalized with s → s/ωc (low-pass; ωc = 2π·fp·ε^(-1/n) for Butterworth, 2π·fp for the other responses, derived below). Each row is one realizable
 						second-order block:
 					</p>
 					<Equation tex={`H(s) = \\dfrac{\\omega_n^2}{s^2 + \\frac{\\omega_n}{Q}s + \\omega_n^2}`} />
+				{/if}
+				{#if hasZeros}
+					<p class="note">
+						A row with a zero fz is a notch stage: a pair of zeros on top blocks fz completely, with
+						gain 1 at DC on a low-pass side and far above the zero on a high-pass side.
+					</p>
+					<Equation tex={`H(s) = K\\,\\dfrac{s^2 + \\omega_z^2}{s^2 + \\frac{\\omega_n}{Q}s + \\omega_n^2}, \\qquad \\omega_z = 2\\pi f_z`} />
 				{/if}
 
 				<MathPanel
@@ -1055,30 +1153,34 @@
 						: explainApproximation(design)}
 				/>
 
-				<table>
-					<thead>
-						<tr>
-							<th>Stage</th>
-							<th>f0 = ωn/2π</th>
-							<th>Q</th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each design.stages as stage, i (i)}
+				<div class="tableScroll">
+					<table>
+						<thead>
 							<tr>
-								<td>
-									{i + 1}{stage.order === 1 ? ' (1st order)' : ''}{isBandType
-										? stage.filterType === 'highpass'
-											? ' (HP side)'
-											: ' (LP side)'
-										: ''}
-								</td>
-								<td>{stage.order === 1 ? '-' : formatHz(stage.wn / (2 * Math.PI))}</td>
-								<td>{stage.order === 1 ? '-' : stage.q.toFixed(4)}</td>
+								<th>Stage</th>
+								<th>f0 = ωn/2π</th>
+								<th>Q</th>
+								{#if hasZeros}<th>fz (zero)</th>{/if}
 							</tr>
-						{/each}
-					</tbody>
-				</table>
+						</thead>
+						<tbody>
+							{#each design.stages as stage, i (i)}
+								<tr>
+									<td>
+										{i + 1}{stage.order === 1 ? ' (1st order)' : ''}{isBandType
+											? stage.filterType === 'highpass'
+												? ' (HP side)'
+												: ' (LP side)'
+											: ''}
+									</td>
+									<td>{stage.order === 1 ? '-' : formatHz(stage.wn / (2 * Math.PI))}</td>
+									<td>{stage.order === 1 ? '-' : stage.q.toFixed(4)}</td>
+									{#if hasZeros}<td>{Number.isFinite(stage.wz) ? formatHz(stage.wz / (2 * Math.PI)) : '-'}</td>{/if}
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
 
 				<MathPanel
 					summary="Show the math for every stage"
@@ -1184,6 +1286,14 @@
 						the comparison with MFB and Sallen-Key.
 					</p>
 				{/if}
+				{#if hasZeros}
+					<p class="note">
+						The stages with a zero are Tow-Thomas notch stages: the Tow-Thomas high-pass (input
+						capacitor Cin into A1) plus a resistor Rz from the input into A2, which together put a pair
+						of zeros exactly at fz. On a low-pass side Cin is rounded to a stocked capacitor and Rz
+						solved against it, so the zero stays put and the rounding shows as a small DC gain error.
+					</p>
+				{/if}
 
 				{#each realizedStages as stageDesign, i (i)}
 					{@const sens = sensitivityFor(stageDesign)}
@@ -1246,6 +1356,21 @@
 													<th>Resistor ratio needed</th>
 													<td>{capRatioHp(design.stages[i].q).toFixed(1)}:1</td>
 												</tr>
+											{:else if stageDesign.topology === 'towThomasNotch'}
+												<tr>
+													<th>fz actual</th>
+													<td>
+														{formatHz(stageDesign.actual.wz / (2 * Math.PI))}
+														<span class="err">({formatPercent(relativeErrorPercent(stageDesign.actual.wz, design.stages[i].wz))})</span>
+													</td>
+												</tr>
+												<tr>
+													<th>{stageDesign.lowSide ? 'DC gain' : 'Gain above fz'}</th>
+													<td>
+														{(stageDesign.lowSide ? stageDesign.actual.dcGain : stageDesign.actual.gain).toFixed(3)}
+														<span class="err">({(20 * Math.log10(Math.abs(stageDesign.lowSide ? stageDesign.actual.dcGain : stageDesign.actual.gain))).toFixed(2)} dB)</span>
+													</td>
+												</tr>
 											{/if}
 										</tbody>
 									</table>
@@ -1261,7 +1386,7 @@
 							<CircuitDiagram design={stageDesign} />
 							<div class="math-full cap-picker">
 								<p class="note">
-									{#if stageDesign.topology === 'firstOrder' || stageDesign.topology === 'firstOrderHp' || stageDesign.topology === 'mfbHp' || stageDesign.topology === 'sallenKeyHp' || stageDesign.topology === 'towThomas' || stageDesign.topology === 'towThomasHp'}
+									{#if stageDesign.topology === 'firstOrder' || stageDesign.topology === 'firstOrderHp' || stageDesign.topology === 'mfbHp' || stageDesign.topology === 'sallenKeyHp' || stageDesign.topology === 'towThomas' || stageDesign.topology === 'towThomasHp' || stageDesign.topology === 'towThomasNotch'}
 										Pick a different C value if the one above does not match what is in stock; the
 										resistors above are recalculated to fit.
 									{:else}
@@ -1271,7 +1396,7 @@
 									{/if}
 								</p>
 								<div class="row">
-									{#if stageDesign.topology === 'firstOrder' || stageDesign.topology === 'firstOrderHp' || stageDesign.topology === 'mfbHp' || stageDesign.topology === 'sallenKeyHp' || stageDesign.topology === 'towThomas' || stageDesign.topology === 'towThomasHp'}
+									{#if stageDesign.topology === 'firstOrder' || stageDesign.topology === 'firstOrderHp' || stageDesign.topology === 'mfbHp' || stageDesign.topology === 'sallenKeyHp' || stageDesign.topology === 'towThomas' || stageDesign.topology === 'towThomasHp' || stageDesign.topology === 'towThomasNotch'}
 										<div class="field">
 											<label for={`cap-C-${i}`}>C (nF)</label>
 											<input
@@ -1374,33 +1499,33 @@
 										</tr>
 									</thead>
 									<tbody>
-										<tr>
-											<td>Ra</td>
-											<td>{formatOhms(combinerR)}</td>
-										</tr>
-										<tr>
-											<td>Rb</td>
-											<td>{formatOhms(combinerR)}</td>
-										</tr>
-										<tr>
-											<td>Rf</td>
-											<td>{formatOhms(combinerR)}</td>
-										</tr>
+										{#each combinerRows as row (row.name)}
+											<tr>
+												<td>{row.name}</td>
+												<td>{formatOhms(row.value)}</td>
+											</tr>
+										{/each}
 									</tbody>
 								</table>
 								<p class="note">
 									Combines the low-pass and high-pass branches above into the final band-stop
-									output. Any equal resistor value works exactly - there is nothing to search or
-									round here.
+									output.
+									{#if Math.abs(lpBranchGain - 1) > 1e-6}
+										The low-pass branch passes DC at {lpBranchGain.toFixed(3)} (its notch stages'
+										rounded Cin), so its input resistor is scaled by that factor and both passbands
+										come out at the same level; the other resistors can be any equal value.
+									{:else}
+										Any equal resistor value works exactly - there is nothing to search or round here.
+									{/if}
 								</p>
 							</div>
 							<svg
-								viewBox={(combinerMode === 'difference' ? buildDifferenceAmpDiagram(combinerR) : buildSummingAmpDiagram(combinerR)).viewBox}
+								viewBox={combinerDiagram.viewBox}
 								role="img"
 								aria-label="{combinerMode} amplifier schematic"
 								class="summing-svg"
 							>
-								{@html (combinerMode === 'difference' ? buildDifferenceAmpDiagram(combinerR) : buildSummingAmpDiagram(combinerR)).svg}
+								{@html combinerDiagram.svg}
 							</svg>
 							<div class="math-full">
 								<MathPanel
@@ -1413,7 +1538,9 @@
 									hpOrder: bandStopBranches ? branchOrder(bandStopBranches[1]) : 2,
 									centreHz: combiner ? combiner.centreHz : 0,
 									sumDb: combiner ? combiner.sumDb : 0,
-									differenceDb: combiner ? combiner.differenceDb : 0
+									differenceDb: combiner ? combiner.differenceDb : 0,
+									lpGain: lpBranchGain,
+									resistors: combinerParts?.resistors ?? null
 								})}
 								/>
 							</div>
@@ -1445,12 +1572,17 @@
 					amaxDb={amaxDb - passbandPeakDb}
 					aminDb={aminDb - passbandPeakDb}
 				/>
-				{#if passbandPeakDb > 0.05}
+				{#if Math.abs(passbandPeakDb) > 0.05}
 					<p class="note">
-						The passband rises to +{passbandPeakDb.toFixed(2)} dB: a Chebyshev built from stages of unity gain ripples above 0 dB
-						{isBandType ? 'where the ripples of its two sides meet' : 'when its order is even'}. The spec's limits are measured from
-						that top, so the amber Amax and Amin lines and the figures below sit {passbandPeakDb.toFixed(2)} dB higher than they would
-						from 0 dB.
+						The top of the passband is at {passbandPeakDb > 0 ? '+' : ''}{passbandPeakDb.toFixed(2)} dB:
+						{#if passbandPeakDb > 0}
+							a response with passband ripple (Chebyshev, elliptic) built from stages of unity gain ripples above 0 dB
+							{isBandType ? 'where the ripples of its two sides meet' : 'when its order is even'}{hasZeros ? ', and a notch stage\'s rounded Cin moves the level a little' : ''}.
+						{:else}
+							a notch stage's rounded Cin moves the passband level a little.
+						{/if}
+						The spec's limits are measured from that top, so the amber Amax and Amin lines and the figures below
+						sit {Math.abs(passbandPeakDb).toFixed(2)} dB {passbandPeakDb > 0 ? 'higher' : 'lower'} than they would from 0 dB.
 					</p>
 				{/if}
 				<div class="legend">
@@ -1464,13 +1596,22 @@
 
 				{#if isBandType}
 					{#if attenuationAtFsl !== null && attenuationAtFsh !== null}
-						{#if attenuationAtFsl >= aminDb && attenuationAtFsh >= aminDb}
+						{#if attenuationAtFsl >= aminDb && attenuationAtFsh >= aminDb && (stopbandWorst?.db ?? Infinity) >= aminDb - 1e-6}
 							<p class="flag ok">
 								Meets the spec: {attenuationAtFsl.toFixed(1)} dB at fsl and {attenuationAtFsh.toFixed(
 									1
-								)} dB at fsh, at least {aminDb} dB required{filterType === 'bandstop'
+								)} dB at fsh{stopbandDipsInside
+									? `, and at least ${stopbandWorst.db.toFixed(1)} dB anywhere in the stopband (the least at ${formatHz(stopbandWorst.freq)}, between two zeros)`
+									: ''}, at least {aminDb} dB required{filterType === 'bandstop'
 									? ' across the stopband'
 									: ' on both sides'}.
+							</p>
+						{:else if attenuationAtFsl >= aminDb && attenuationAtFsh >= aminDb}
+							<p class="flag bad">
+								Both stopband edges hold ({attenuationAtFsl.toFixed(1)} dB at fsl, {attenuationAtFsh.toFixed(1)} dB at fsh),
+								but between two zeros the loss comes back up to only {stopbandWorst.db.toFixed(1)} dB at
+								{formatHz(stopbandWorst.freq)}, under Amin = {aminDb} dB. The rounded parts moved a zero or a
+								pole: try a higher order or the E96 series.
 							</p>
 						{:else}
 							<p class="flag bad">
@@ -1482,10 +1623,18 @@
 						{/if}
 					{/if}
 				{:else if attenuationAtFs !== null}
-					{#if attenuationAtFs >= aminDb}
+					{#if attenuationAtFs >= aminDb && (stopbandWorst?.db ?? Infinity) >= aminDb - 1e-6}
 						<p class="flag ok">
-							Meets the spec: {attenuationAtFs.toFixed(1)} dB of attenuation at fs, at least
-							{aminDb} dB required.
+							Meets the spec: {attenuationAtFs.toFixed(1)} dB of attenuation at fs{stopbandDipsInside
+								? `, and at least ${stopbandWorst.db.toFixed(1)} dB anywhere past it (the least at ${formatHz(stopbandWorst.freq)}, between two zeros)`
+								: ''}, at least {aminDb} dB required.
+						</p>
+					{:else if attenuationAtFs >= aminDb}
+						<p class="flag bad">
+							At fs the loss is {attenuationAtFs.toFixed(1)} dB, but between two zeros further on it comes
+							back up to only {stopbandWorst.db.toFixed(1)} dB at {formatHz(stopbandWorst.freq)}, under
+							Amin = {aminDb} dB. The rounded parts moved a zero or a pole: try a higher order or the E96
+							series.
 						</p>
 					{:else}
 						<p class="flag bad">
@@ -1565,6 +1714,17 @@
 					report shown above, plus notes on simulating, building and testing the result.
 				</p>
 
+				<div class="grid">
+					<div class="field">
+						<label for="spiceOpamp">Op-amp in the LTspice file</label>
+						<select id="spiceOpamp" bind:value={spiceOpamp}>
+							{#each Object.values(OPAMP_MODELS) as m (m.id)}
+								<option value={m.id}>{m.label}</option>
+							{/each}
+						</select>
+					</div>
+				</div>
+
 				<div class="row downloads">
 					<button type="button" onclick={downloadScript}>Download filter-design.js</button>
 					<button type="button" onclick={downloadSchematic}>Download filter-design.asc (LTspice)</button>
@@ -1573,10 +1733,17 @@
 				<p class="note">
 					An LTspice schematic with the same component values as the tables above and the AC
 					analysis already set up: open it, press Run, plot V(vout). Each stage is drawn wire by
-					wire, the way a textbook draws it. Each op-amp is LTspice's ideal
-					single-pole model with its gain-bandwidth as an editable attribute (3Meg for a TL07x,
-					10Meg for an NE5532), so the simulation shows what a real part does to the response,
-					which the ideal maths on this page cannot.
+					wire, the way a textbook draws it.
+					{#if OPAMP_MODELS[spiceOpamp]?.real}
+						Each op-amp is the {spiceOpamp} with its supply pins showing, on +15 V and -15 V rails
+						(the two sources under the drawing, nets v++ and v--); its model is written into the
+						file, so it runs with no library to install. The simulation shows what the part does to
+						the response, which the ideal maths on this page cannot.
+					{:else}
+						Each op-amp is LTspice's ideal single-pole model with its gain-bandwidth as an editable
+						attribute (3Meg for a TL07x, 10Meg for an NE5532), so the simulation shows what the
+						gain-bandwidth alone does to the response.
+					{/if}
 				</p>
 
 				<p class="note formula-link">

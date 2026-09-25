@@ -14,13 +14,14 @@
 	import {
 		buildBiasSummerDiagram,
 		buildCarrierDividerDiagram,
+		buildDiodeSummerDiagram,
 		buildDiodeTankDiagram,
 		buildEnvelopeLowPassDiagram,
 		buildGainStageDiagram,
+		buildHalfWaveDiagram,
 		buildJfetGainCellDiagram,
 		buildJfetInvertingCellDiagram,
-		buildPrecisionRectifierDiagram,
-		buildSummerDiagram
+		buildPrecisionRectifierDiagram
 	} from '$lib/modulation/circuits';
 	import { generateDemodScript, generateDiodeScript, generateJfetScript } from '$lib/modulation/codegen';
 	import {
@@ -38,17 +39,33 @@
 		explainRectifier
 	} from '$lib/modulation/explain';
 	import { designDiodeMixerModulator } from '$lib/modulation/diodeMixerModulator';
+	import { DIODE_MODELS } from '$lib/modulation/diodeLaw';
 	import { designEnvelopeLowPass } from '$lib/modulation/envelopeFilter';
 	import { formatFarads, formatHenries, formatHz, formatOhms, formatVolts } from '$lib/modulation/format';
 	import { compareTopologies, conductanceDepth, designJfetModulator } from '$lib/modulation/jfetModulator';
-	import { generateNetlist as generateModNetlist, generateSchematic as generateModSchematic } from '$lib/modulation/spice';
+	import {
+		demodExpectation,
+		generateDemodNetlist,
+		generateDemodSchematic,
+		generateDiodeNetlist,
+		generateDiodeSchematic,
+		generateNetlist as generateModNetlist,
+		generateSchematic as generateModSchematic
+	} from '$lib/modulation/spice';
 	import { buildOscillatorDiagram } from '$lib/oscillator/circuits';
+	import { DEFAULT_OPAMP, OPAMP_MODELS } from '$lib/spice/opamps';
 	import { designOscillator } from '$lib/oscillator/topologies';
 	import { fitModel, IDSS_WARNING, JFET_PRESETS, modelFromIdss, modelFromRdsOn, parseMeasurements } from '$lib/modulation/jfetModel';
 	import { designHalfWaveRectifier, designPrecisionRectifier, rectifiedEnvelopeStats } from '$lib/modulation/rectifier';
 	import { amSignal, envelope as envelopeWave, rectify } from '$lib/modulation/waveform';
 
 	let mode = $state('jfet'); // 'jfet' | 'diode' | 'demod'
+	// the op-amp the LTspice files use, shared by the three circuits: the
+	// ideal single-pole model, or a real part on +/-15 V rails
+	let spiceOpamp = $state(DEFAULT_OPAMP);
+	const spiceReal = $derived(OPAMP_MODELS[spiceOpamp]?.real ?? false);
+	// an LM741 (1 MHz, 0.5 V/us) cannot keep up with a carrier past a few kHz
+	const slowPart = (fp) => spiceOpamp === 'LM741' && fp > 5000;
 
 	// ------------------------------------------------------------------
 	// JFET modulator
@@ -230,45 +247,39 @@
 	// ------------------------------------------------------------------
 	let fpDiode = $state(40000);
 	let fmMaxDiode = $state(1000);
-	let sidebandMargin = $state(1.2);
+	let sidebandMargin = $state(3);
 	let carrierAmp = $state(1);
 	let modAmp = $state(1);
-	let diodeVf = $state(0.7);
-	let biasMargin = $state(0.3);
+	let targetNDiode = $state(0.8);
+	let carrierDrive = $state(2);
+	let vccDiode = $state(12);
+	let diodePart = $state('1N4148');
 	let inductanceMh = $state(1);
 
 	const inductance = $derived(inductanceMh / 1000);
-	const diodeValid = $derived(fpDiode > 0 && fmMaxDiode > 0 && fmMaxDiode < fpDiode / 2 && inductance > 0);
-	const diodeDesign = $derived.by(() =>
-		diodeValid
-			? designDiodeMixerModulator({
-					fp: fpDiode,
-					fmMax: fmMaxDiode,
-					sidebandMargin,
-					carrierAmplitude: carrierAmp,
-					modAmplitude: modAmp,
-					diodeVf,
-					biasMargin,
-					inductance
-				})
-			: null
+	const diodeValid = $derived(
+		fpDiode > 0 && fmMaxDiode > 0 && fmMaxDiode < fpDiode / 2 && inductance > 0 && sidebandMargin > 0 && carrierAmp > 0 && modAmp > 0 && targetNDiode > 0 && targetNDiode <= 1 && carrierDrive > 0 && vccDiode > 0
 	);
+	// the op-amp's reach on this supply, as for a TL08x
+	const diodeParams = $derived({
+		fp: fpDiode,
+		fmMax: fmMaxDiode,
+		sidebandMargin,
+		inductance,
+		carrierAmplitude: carrierAmp,
+		modAmplitude: modAmp,
+		targetModulationIndex: targetNDiode,
+		carrierDrive,
+		vcc: vccDiode,
+		opampSwing: Math.max(0.5, vccDiode - 1.5),
+		diode: diodePart
+	});
+	const diodeDesign = $derived.by(() => (diodeValid ? designDiodeMixerModulator(diodeParams) : null));
+	const diodePreview = $derived.by(() => (diodeDesign ? amSignal(fpDiode, fmMaxDiode, diodeDesign.carrierOut, diodeDesign.indexAtFmMax, 4 / fmMaxDiode) : null));
 
 	function downloadDiode() {
 		if (!diodeDesign) return;
-		download(
-			generateDiodeScript({
-				fp: fpDiode,
-				fmMax: fmMaxDiode,
-				sidebandMargin,
-				carrierAmplitude: carrierAmp,
-				modAmplitude: modAmp,
-				diodeVf,
-				biasMargin,
-				inductance
-			}),
-			'diode-tank-am-modulator.js'
-		);
+		download(generateDiodeScript(diodeParams), 'diode-tank-am-modulator.js');
 	}
 
 	// ------------------------------------------------------------------
@@ -292,6 +303,9 @@
 	);
 	const rectifierInfo = $derived(rectifierType === 'full' ? designPrecisionRectifier({}) : designHalfWaveRectifier({}));
 	const rectStats = $derived(rectifiedEnvelopeStats(1, fpCarrierDemod, rectifierType));
+	// the demodulator with a 1 V test wave at the preview index: what comes out, as the LTspice run gets it
+	const demodOptions = $derived(envelopeDesign ? { rectifierType, rectifier: rectifierInfo, envelope: envelopeDesign, fp: fpCarrierDemod, fm: fmMaxDemod, index: demoModIndex } : null);
+	const demodOut = $derived(demodOptions && demoModIndex > 0 ? demodExpectation(demodOptions) : null);
 
 	const demodPreview = $derived.by(() => {
 		const duration = 4 / fmMaxDemod;
@@ -312,7 +326,8 @@
 				amaxDb,
 				aminDb,
 				order: orderOverride,
-				response
+				response,
+				index: demoModIndex
 			}),
 			'am-demodulator.js'
 		);
@@ -330,6 +345,19 @@
 		setTimeout(() => URL.revokeObjectURL(url), 10000);
 	}
 </script>
+
+{#snippet opampPicker(id)}
+	<div class="grid">
+		<div class="field">
+			<label for={id}>Op-amp in the LTspice files</label>
+			<select {id} bind:value={spiceOpamp}>
+				{#each Object.values(OPAMP_MODELS) as m (m.id)}
+					<option value={m.id}>{m.label}</option>
+				{/each}
+			</select>
+		</div>
+	</div>
+{/snippet}
 
 <svelte:head>
 	<title>AM Modulator/Demodulator Design · rbt56</title>
@@ -828,23 +856,26 @@
 					<h2>Download</h2>
 				</div>
 				<p class="note">A standalone script with this exact design, parameterized at the top, runnable with <code>node jfet-am-modulator.js</code>.</p>
+				{@render opampPicker('spiceOpampJfet')}
 				<div class="row downloads">
 					<button type="button" onclick={downloadJfet}>Download jfet-am-modulator.js</button>
-					<button type="button" onclick={() => saveFile(generateModSchematic({ design: jfetDesign, fmPreview, oscillator: carrierOscillator }), 'jfet-am-modulator.asc')}>Download .asc (LTspice)</button>
-					<button type="button" onclick={() => saveFile(generateModNetlist({ design: jfetDesign, fmPreview, oscillator: carrierOscillator }), 'jfet-am-modulator.cir')}>Download .cir (netlist)</button>
+					<button type="button" onclick={() => saveFile(generateModSchematic({ design: jfetDesign, fmPreview, oscillator: carrierOscillator, opamp: spiceOpamp }), 'jfet-am-modulator.asc')}>Download .asc (LTspice)</button>
+					<button type="button" onclick={() => saveFile(generateModNetlist({ design: jfetDesign, fmPreview, oscillator: carrierOscillator, opamp: spiceOpamp }), 'jfet-am-modulator.cir')}>Download .cir (netlist)</button>
 				</div>
 				<p class="note">
 					The LTspice files carry the whole modulator: the gate-drive summer, the carrier path{carrierOscillator ? ' with its oscillator' : ''},
 					and the gain cell, with a transient run at {formatHz(fmPreview)} already set up. The JFET goes in as a
 					real SPICE device rather than the straight line this page designs against (Vto = V_P, Beta = I_DSS / V_P&sup2;
-					give the same curve), and the op-amps carry the gain-bandwidth entered above. That is the point of
+					give the same curve), and {spiceReal ? `the op-amps are the ${spiceOpamp} with its supply pins on +15 V and -15 V rails, its model written into the file` : 'the op-amps carry the gain-bandwidth entered above'}. That is the point of
 					simulating it: the crest compression and the distortion predicted in section 05 come from those two
 					departures from the ideal, and the transient shows them directly. Plot V(vout), and V(vgate) for the gate drive.
 					The .asc is drawn wire by wire{carrierOscillator ? ', the oscillator as its own block underneath, joined to the divider by the label vcar' : ''}. The run holds the coupling capacitor at
 					its steady-state charge so the gate bias is right from the first cycle, and, with the oscillator on board, starts
 					the carrier at full amplitude and saves the four message periods after it has settled. The index measured from
 					the carrier peaks in that run should read about {jfetDesign.opamp.peakModulationIndex.toFixed(3)}: the V_DS squared term lifts every
-					peak by the same amount, crest and trough alike, which is why it sits a little under the envelope's own figure.
+					peak by the same amount, crest and trough alike, which is why it sits a little under the envelope's own figure.{slowPart(fp)
+						? ` An LM741 (1 MHz, 0.5 V/us) is far too slow for a ${formatHz(fp)} carrier: expect a much lower index from it.`
+						: ''}
 				</p>
 				<p class="note formula-link">
 					Every formula this design used: <a href="/tools/am-modulator-demodulator/formulas/">Formula sheet</a>.
@@ -867,56 +898,98 @@
 					<input id="fmd" type="number" step="10" min="1" bind:value={fmMaxDiode} />
 				</div>
 				<div class="field">
-					<label for="margin">Sideband margin (&gt;= 1)</label>
-					<input id="margin" type="number" step="0.1" min="1" bind:value={sidebandMargin} />
+					<label for="margin">Sideband margin (band / 2 fm)</label>
+					<input id="margin" type="number" step="0.1" min="0.1" bind:value={sidebandMargin} />
 				</div>
 				<div class="field">
 					<label for="ind">Tank inductor L (mH)</label>
 					<input id="ind" type="number" step="0.1" min="0.001" bind:value={inductanceMh} />
 				</div>
 				<div class="field">
-					<label for="ap">Carrier amplitude (V)</label>
+					<label for="ap">Carrier source amplitude (V)</label>
 					<input id="ap" type="number" step="0.1" min="0.01" bind:value={carrierAmp} />
 				</div>
 				<div class="field">
-					<label for="am">Modulating amplitude (V)</label>
+					<label for="am">Message source amplitude (V)</label>
 					<input id="am" type="number" step="0.1" min="0.01" bind:value={modAmp} />
 				</div>
 				<div class="field">
-					<label for="vf">Diode forward voltage Vf (V)</label>
-					<input id="vf" type="number" step="0.05" min="0.1" bind:value={diodeVf} />
+					<label for="nd">Target modulation index n</label>
+					<input id="nd" type="number" step="0.05" min="0.05" max="1" bind:value={targetNDiode} />
 				</div>
 				<div class="field">
-					<label for="bm">Bias margin (V)</label>
-					<input id="bm" type="number" step="0.05" min="0" bind:value={biasMargin} />
+					<label for="drive">Carrier amplitude at the diode (V)</label>
+					<input id="drive" type="number" step="0.1" min="0.2" bind:value={carrierDrive} />
+				</div>
+				<div class="field">
+					<label for="vccd">Supply rail Vcc (V)</label>
+					<input id="vccd" type="number" step="1" min="1" bind:value={vccDiode} />
+				</div>
+				<div class="field">
+					<label for="dpart">Diode</label>
+					<select id="dpart" bind:value={diodePart}>
+						{#each Object.values(DIODE_MODELS) as d (d.id)}
+							<option value={d.id}>{d.label}</option>
+						{/each}
+					</select>
 				</div>
 			</div>
 			{#if !diodeValid}
-				<p class="flag bad">fp and the modulating frequency must be positive, with fp &gt; 2 x fmMax (carrier well above the modulating band).</p>
+				<p class="flag bad">fp and the modulating frequency must be positive, with fp &gt; 2 x fmMax; the amplitudes, the margin and the supply positive; n between 0 and 1.</p>
+			{:else if !diodeDesign}
+				<p class="flag bad">No set of stock parts reaches this index with this carrier level: lower the target n or raise the carrier at the diode.</p>
 			{/if}
+			<p class="note">
+				At a volt or so the diode is not a gentle curve but a switch: the summer brings the carrier to it
+				with the message and a small bias on top, and the diode passes current for half of each carrier
+				cycle. The page works the diode out cycle by cycle with its real law, so the index, the carrier and
+				the distortion below are the figures LTspice gives, not a rule of thumb.
+			</p>
 		</section>
 
 		{#if diodeDesign}
 			<section class="panel">
 				<div class="panel-head">
 					<span class="num">02</span>
-					<h2>Summer and resonant tank</h2>
-					<span class="hint">Q = {diodeDesign.q.toFixed(2)}</span>
+					<h2>Summer</h2>
+					<span class="hint">carrier {formatVolts(diodeDesign.summer.drive)}, message {formatVolts(diodeDesign.summer.um)}{diodeDesign.summer.rb ? `, bias ${formatVolts(diodeDesign.summer.vb)}` : ''}</span>
 				</div>
-				<DiagramView diagram={buildSummerDiagram({ inputs: ['x_p(t)', 'x_m(t)', 'V_DC (bias)'], r: 10000 })} label="carrier + modulant + bias summer" />
-				<DiagramView diagram={buildDiodeTankDiagram({ l: diodeDesign.inductance, c: diodeDesign.capacitance, r: diodeDesign.resistance })} label="diode and resonant tank" />
+				<DiagramView diagram={buildDiodeSummerDiagram(diodeDesign.summer)} label="carrier, message and bias summer" />
 				<table>
 					<tbody>
-						<tr><td>Resonant frequency f0 (actual)</td><td>{formatHz(diodeDesign.f0Actual)} ({diodeDesign.detuning >= 0 ? '+' : ''}{((100 * diodeDesign.detuning) / diodeDesign.fp).toFixed(2)} % from the carrier)</td></tr>
-						<tr><td>Tank bandwidth (target / actual)</td><td>{formatHz(diodeDesign.bandwidth)} / {formatHz(diodeDesign.bwActual)}</td></tr>
-						<tr><td>Band actually passed</td><td>{formatHz(diodeDesign.bandLow)} to {formatHz(diodeDesign.bandHigh)}</td></tr>
-						<tr><td>Q (target / actual)</td><td>{diodeDesign.q.toFixed(2)} / {diodeDesign.qActual.toFixed(2)}</td></tr>
+						<tr><td>R_f</td><td>{formatOhms(diodeDesign.summer.rf)}</td></tr>
+						<tr><td>R_p (carrier gain R_f / R_p)</td><td>{formatOhms(diodeDesign.summer.rp)}, carrier at the diode {formatVolts(diodeDesign.summer.drive)} (asked {formatVolts(diodeDesign.summer.driveTarget)})</td></tr>
+						<tr><td>R_m (message gain R_f / R_m)</td><td>{formatOhms(diodeDesign.summer.rm)}, message at the diode {formatVolts(diodeDesign.summer.um)}</td></tr>
+						<tr><td>R_b (bias from -Vcc)</td><td>{diodeDesign.summer.rb ? `${formatOhms(diodeDesign.summer.rb)}, bias ${formatVolts(diodeDesign.summer.vb)}` : 'none: this diode switches cleanly with no bias'}</td></tr>
+						<tr><td>Peak output / op-amp swing</td><td>{formatVolts(diodeDesign.summer.peak)} / {formatVolts(diodeDesign.summer.opampSwing)}</td></tr>
+					</tbody>
+				</table>
+				{#if !diodeDesign.summer.swingOk}
+					<p class="flag bad">The summer's peak output is past what the op-amp reaches on this supply: lower the carrier at the diode or raise Vcc.</p>
+				{/if}
+				{#if !diodeDesign.summer.gbwOk}
+					<p class="flag warn">At {formatHz(diodeDesign.fp)} a TL08x (3 MHz) runs this summer at a noise gain of {diodeDesign.summer.noiseGain.toFixed(1)}, past the rule of thumb (f_p times the noise gain under 0.2 of the gain-bandwidth): the carrier comes out smaller and late. A faster op-amp fixes it.</p>
+				{/if}
+			</section>
+
+			<section class="panel">
+				<div class="panel-head">
+					<span class="num">03</span>
+					<h2>Diode and tank</h2>
+					<span class="hint">Q = {diodeDesign.qLoaded.toFixed(2)} with the source</span>
+				</div>
+				<DiagramView diagram={buildDiodeTankDiagram({ rs: diodeDesign.rs, l: diodeDesign.inductance, capacitors: diodeDesign.capacitors, r: diodeDesign.rt })} label="diode and resonant tank" />
+				<table>
+					<tbody>
+						<tr><td>R_s (series, sets the diode's current)</td><td>{formatOhms(diodeDesign.rs)}</td></tr>
+						<tr><td>Diode</td><td>{diodeDesign.diodeLabel}</td></tr>
 						<tr><td>L</td><td>{formatHenries(diodeDesign.inductance)}</td></tr>
 						<tr><td>C</td><td>{diodeDesign.capacitors.length === 2 ? `${formatFarads(diodeDesign.capacitors[0])} in parallel with ${formatFarads(diodeDesign.capacitors[1])} = ${formatFarads(diodeDesign.capacitance)}` : formatFarads(diodeDesign.capacitance)}</td></tr>
-						<tr><td>R (sets the bandwidth)</td><td>{formatOhms(diodeDesign.resistance)}</td></tr>
-						{#if diodeDesign.requiredBias}
-							<tr><td>Required DC bias</td><td>{formatVolts(diodeDesign.requiredBias)}</td></tr>
-						{/if}
+						<tr><td>R_t (across the tank)</td><td>{formatOhms(diodeDesign.rt)}</td></tr>
+						<tr><td>Resonant frequency f0</td><td>{formatHz(diodeDesign.f0Actual)} ({diodeDesign.detuning >= 0 ? '+' : ''}{((100 * diodeDesign.detuning) / diodeDesign.fp).toFixed(2)} % from the carrier)</td></tr>
+						<tr><td>Source seen through the diode, and R_t in parallel with it</td><td>{formatOhms(diodeDesign.rSource)}, {formatOhms(diodeDesign.rEff)}</td></tr>
+						<tr><td>Band: asked / with the source</td><td>{formatHz(diodeDesign.bandwidthNeeded)} / {formatHz(diodeDesign.bwLoaded)}</td></tr>
+						<tr><td>Band actually passed</td><td>{formatHz(diodeDesign.bandLow)} to {formatHz(diodeDesign.bandHigh)}</td></tr>
 					</tbody>
 				</table>
 				{#if diodeDesign.sidebandsInBand}
@@ -924,16 +997,59 @@
 				{:else}
 					<p class="flag bad">The band the tank passes does not hold both sidebands at {formatHz(diodeDesign.fp - diodeDesign.fmMax)} and {formatHz(diodeDesign.fp + diodeDesign.fmMax)}. A larger sideband margin widens it.</p>
 				{/if}
+			</section>
+
+			<section class="panel">
+				<div class="panel-head">
+					<span class="num">04</span>
+					<h2>What comes out</h2>
+					<span class="hint">n = {diodeDesign.modulationIndex.toFixed(3)}, carrier {formatVolts(diodeDesign.carrierOut)}</span>
+				</div>
+				<table>
+					<tbody>
+						<tr><td>Carrier at the output</td><td>{formatVolts(diodeDesign.carrierOut)} (an ideal switch would give {formatVolts(diodeDesign.idealCarrier)})</td></tr>
+						<tr><td>Modulation index for a slow message</td><td>{diodeDesign.modulationIndex.toFixed(3)}, target {diodeDesign.targetModulationIndex.toFixed(2)}</td></tr>
+						<tr><td>Index for a {formatHz(diodeDesign.fmMax)} tone</td><td>{diodeDesign.indexAtFmMax.toFixed(3)}: the tank passes its sidebands at {(100 * diodeDesign.sidebandGain).toFixed(1)} % of the carrier</td></tr>
+						<tr><td>Envelope distortion (THD): slow message / {formatHz(diodeDesign.fmMax)} tone</td><td>{(100 * diodeDesign.thd).toFixed(2)} % / {(100 * diodeDesign.thdAtFmMax).toFixed(2)} %</td></tr>
+						<tr><td>Envelope max / min</td><td>{formatVolts(diodeDesign.envelopeMax)} / {formatVolts(diodeDesign.envelopeMin)}</td></tr>
+						<tr><td>Peak diode current</td><td>{(diodeDesign.peakCurrent * 1000).toFixed(2)} mA</td></tr>
+						<tr><td>Index of an ideal switch, 4 u_m / (pi A_d)</td><td>{diodeDesign.idealIndex.toFixed(3)}</td></tr>
+					</tbody>
+				</table>
+				{#if diodeDesign.sidebandGain < 0.9}
+					<p class="flag warn">The tank's slope takes {(100 * (1 - diodeDesign.sidebandGain)).toFixed(0)} % off the index of a {formatHz(diodeDesign.fmMax)} tone: a larger sideband margin flattens it.</p>
+				{/if}
+				{#if diodePreview}
+					<TimePlot series={[{ t: diodePreview.t, y: diodePreview.y, color: 'var(--blue)' }]} unit="ms" />
+				{/if}
+				<p class="note">The preview draws a {formatHz(diodeDesign.fmMax)} tone at the carrier and index the tank hands on. Power efficiency at that index: eta = {(powerEfficiency(diodeDesign.indexAtFmMax) * 100).toFixed(2)}%.</p>
 				<MathPanel blocks={explainDiodeModulator(diodeDesign)} />
 			</section>
 
 			<section class="panel">
 				<div class="panel-head">
-					<span class="num">03</span>
+					<span class="num">05</span>
 					<h2>Download</h2>
 				</div>
 				<p class="note">A standalone script with this exact design, runnable with <code>node diode-tank-am-modulator.js</code>.</p>
-				<button type="button" onclick={downloadDiode}>Download diode-tank-am-modulator.js</button>
+				{@render opampPicker('spiceOpampDiode')}
+				<div class="row downloads">
+					<button type="button" onclick={downloadDiode}>Download diode-tank-am-modulator.js</button>
+					<button type="button" onclick={() => saveFile(generateDiodeSchematic({ design: diodeDesign, opamp: spiceOpamp }), 'diode-tank-am-modulator.asc')}>Download .asc (LTspice)</button>
+					<button type="button" onclick={() => saveFile(generateDiodeNetlist({ design: diodeDesign, opamp: spiceOpamp }), 'diode-tank-am-modulator.cir')}>Download .cir (netlist)</button>
+				</div>
+				<p class="note">
+					The LTspice files carry the whole modulator: the carrier and message sources, the summer with its
+					{diodeDesign.summer.rb ? `bias from a -${diodeDesign.vcc} V supply` : 'two inputs'}, R_s, the diode and the tank, with a transient
+					run of a {formatHz(diodeDesign.fmMax)} tone already set up. The diode is the same SPICE model the page
+					works with, so the run should show a carrier of about {formatVolts(diodeDesign.carrierOut)} and an index of about
+					{diodeDesign.indexAtFmMax.toFixed(2)}, read off the envelope or from the sidebands in an FFT. Plot V(vout) for
+					the AM wave and V(vs) for the summed drive.
+					{spiceReal
+						? `The summer's op-amp is the ${spiceOpamp} with its supply pins on +15 V and -15 V rails, its model written into the file.`
+						: 'The op-amp is the same single-pole model as in the other exports, with the gain-bandwidth of a TL08x.'}
+					{slowPart(diodeDesign.fp) ? `An LM741 (1 MHz, 0.5 V/us) struggles with a ${formatHz(diodeDesign.fp)} carrier: expect the carrier to come out smaller.` : ''}
+				</p>
 				<p class="note formula-link">
 					Every formula this design used: <a href="/tools/am-modulator-demodulator/formulas/">Formula sheet</a>.
 				</p>
@@ -1000,8 +1116,24 @@
 						<tr><td>Diode</td><td>{rectifierInfo.diode}</td></tr>
 					</tbody>
 				</table>
+				<p class="note">
+					D1 points from U1A's - input into its output, D2 from that output into U1B's + input. Turned the
+					other way, D1 leaves the circuit with no full-wave output at all. R1 = R2 = R3 = 1 k is the value
+					TI used: at a fast carrier the diode that is switched off still couples a few pF, and 10 k would let
+					about 1 % of the swing through it.
+				</p>
 			{:else}
-				<p class="note">Single diode ({rectifierInfo.diode}) from the modulated signal to the envelope low-pass filter below: y(t) = max(x(t), 0).</p>
+				<DiagramView diagram={buildHalfWaveDiagram(rectifierInfo)} label="half-wave rectifier" />
+				<table>
+					<tbody>
+						<tr><td>Diode</td><td>{rectifierInfo.diode}</td></tr>
+						<tr><td>R_L (to ground, the diode's return path)</td><td>{formatOhms(rectifierInfo.rl)}</td></tr>
+					</tbody>
+				</table>
+				<p class="note">
+					The envelope filter after it takes no DC, so R_L is what lets the output come down again when the
+					envelope does: without it the diode would charge the filter to the highest crest and hold it there.
+				</p>
 			{/if}
 			<MathPanel blocks={explainRectifier(rectifierType, fpCarrierDemod)} />
 		</section>
@@ -1044,6 +1176,17 @@
 					/>
 				{/if}
 				<p class="note">Faint: modulated input. Blue: rectified. Amber: recovered envelope (before the low-pass filter smooths the ripple away).</p>
+				{#if demodOut}
+					<table>
+						<tbody>
+							<tr><td>Output mean, for a 1 V carrier</td><td>{formatVolts(demodOut.mean)}{demodOut.exact ? ' (2/pi of the carrier)' : ` (an ideal diode: ${formatVolts(demodOut.ideal.mean)})`}</td></tr>
+							<tr><td>Recovered tone at {formatHz(fmMaxDemod)}, index {demoModIndex}</td><td>{formatVolts(demodOut.tone)}{demodOut.exact ? '' : ` (an ideal diode: ${formatVolts(demodOut.ideal.tone)})`}, the filter's {demodOut.gainDb.toFixed(2)} dB included</td></tr>
+						</tbody>
+					</table>
+					{#if !demodOut.exact}
+						<p class="flag warn">The bare diode loses its drop on every crest and stops conducting where the envelope dips under it: the tone comes out at {((100 * demodOut.tone) / demodOut.ideal.tone).toFixed(0)} % of what an ideal diode would give, and distorted where the envelope is lowest. The precision rectifier gives twice the ideal half-wave figure, with no loss.</p>
+					{/if}
+				{/if}
 			</section>
 
 			<section class="panel">
@@ -1052,7 +1195,25 @@
 					<h2>Download</h2>
 				</div>
 				<p class="note">A standalone script with this exact design, runnable with <code>node am-demodulator.js</code>.</p>
-				<button type="button" onclick={downloadDemod}>Download am-demodulator.js</button>
+				{@render opampPicker('spiceOpampDemod')}
+				<div class="row downloads">
+					<button type="button" onclick={downloadDemod}>Download am-demodulator.js</button>
+					<button type="button" onclick={() => saveFile(generateDemodSchematic({ ...demodOptions, opamp: spiceOpamp }), 'am-demodulator.asc')}>Download .asc (LTspice)</button>
+					<button type="button" onclick={() => saveFile(generateDemodNetlist({ ...demodOptions, opamp: spiceOpamp }), 'am-demodulator.cir')}>Download .cir (netlist)</button>
+				</div>
+				<p class="note">
+					The LTspice files carry the whole demodulator behind a test source: a 1 V AM wave at
+					{formatHz(fpCarrierDemod)} carrying a {formatHz(fmMaxDemod)} tone at index {demoModIndex}, all three on one .param
+					line to change at will, then the {rectifierType === 'full' ? 'precision full-wave rectifier' : 'half-wave rectifier'} and the
+					{envelopeDesign.realized.length === 1 ? 'Sallen-Key stage' : `${envelopeDesign.realized.length} Sallen-Key stages`} of the low-pass. Plot V(vam), V(vrect)
+					and V(vout); the .meas lines print the output's mean and peak-to-peak{demodOut ? `, which should read about ${formatVolts(demodOut.mean)} and ${formatVolts(2 * demodOut.tone)}` : ''}.
+					{spiceReal ? `The op-amps are the ${spiceOpamp} with its supply pins on +15 V and -15 V rails, its model written into the file.` : "The op-amps are the single-pole model with a TL08x's gain-bandwidth."}
+					{slowPart(fpCarrierDemod)
+						? `An LM741 (1 MHz, 0.5 V/us) is too slow for a ${formatHz(fpCarrierDemod)} carrier: it cannot swing through the diodes' drop at each zero crossing in time, and the recovered tone comes out well short.`
+						: rectifierType === 'full'
+							? "The op-amp takes a moment to cross the diodes' drop at each zero crossing, so the mean reads a percent or so low."
+							: ''}
+				</p>
 				<p class="note formula-link">
 					Every formula this design used: <a href="/tools/am-modulator-demodulator/formulas/">Formula sheet</a>.
 				</p>

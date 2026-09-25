@@ -10,7 +10,8 @@
 //
 // Exits non-zero on any mismatch.
 
-import { magnitudePhaseAt, magnitudePhaseAtParallelSum, combinerChoice } from '../src/lib/filter/bode.js';
+import { branchDcGain, combinerChoice, combinerDesign, magnitudePhaseAt, magnitudePhaseAtParallelSum } from '../src/lib/filter/bode.js';
+import { nearestResistor } from '../src/lib/filter/eseries.js';
 import { designFirstOrderLowPass } from '../src/lib/filter/firstOrder.js';
 import { designFirstOrderHighPass } from '../src/lib/filter/firstOrderHighPass.js';
 import { designMfbLowPass } from '../src/lib/filter/mfb.js';
@@ -21,7 +22,8 @@ import { buildElements, generateNetlist, generateSchematic } from '../src/lib/fi
 import { parseSchematic, spiceValue } from '../src/lib/spice/core.js';
 import { audit } from '../src/lib/spice/geometry.js';
 import { designBandPass, designBandStop, designHighPass, designLowPass } from '../src/lib/filter/stages.js';
-import { designTowThomasHighPass, designTowThomasLowPass } from '../src/lib/filter/towThomas.js';
+import { designTowThomasHighPass, designTowThomasLowPass, designTowThomasNotch } from '../src/lib/filter/towThomas.js';
+import { realOpampProblems } from './lib-real-opamp.mjs';
 
 let fails = 0;
 const check = (label, ok, detail) => {
@@ -174,36 +176,72 @@ const second = {
 	sallenKey: (s) => (s.filterType === 'highpass' ? designSallenKeyHighPass(s.wn, s.q) : designSallenKeyLowPass(s.wn, s.q)),
 	towThomas: (s) => (s.filterType === 'highpass' ? designTowThomasHighPass(s.wn, s.q) : designTowThomasLowPass(s.wn, s.q))
 };
+// a stage with zeros is always a Tow-Thomas notch, as on the page
 const realize = (t) => (s) =>
-	s.order === 1 ? (s.filterType === 'highpass' ? designFirstOrderHighPass(s.tau) : designFirstOrderLowPass(s.tau)) : second[t](s);
+	Number.isFinite(s.wz)
+		? designTowThomasNotch(s.wn, s.q, s.wz, { lowSide: s.filterType === 'lowpass' })
+		: s.order === 1
+			? s.filterType === 'highpass'
+				? designFirstOrderHighPass(s.tau)
+				: designFirstOrderLowPass(s.tau)
+			: second[t](s);
 
 const SPECS = [
 	{ filterType: 'lowpass', amaxDb: 0.2, aminDb: 40, fp: 10000, fs: 35000 },
 	{ filterType: 'lowpass', amaxDb: 3, aminDb: 40, fp: 10000, fs: 35000 },
 	{ filterType: 'highpass', amaxDb: 3, aminDb: 40, fp: 10000, fs: 3000 },
+	// gentle enough for a Bessel high-pass to be built too
+	{ filterType: 'highpass', amaxDb: 3, aminDb: 25, fp: 10000, fs: 1500 },
 	{ filterType: 'bandpass', amaxDb: 3, aminDb: 40, fl: 1000, fh: 10000, fsl: 300, fsh: 30000 },
 	{ filterType: 'bandstop', amaxDb: 3, aminDb: 40, fl: 1000, fh: 30000, fsl: 3000, fsh: 10000 }
 ];
-
+const RESPONSE_KEYS = ['butterworth', 'chebyshev', 'legendre', 'bessel', 'inverseChebyshev', 'elliptic'];
+const MIXED = [
+	['bessel', 'elliptic'],
+	['elliptic', 'butterworth'],
+	['inverseChebyshev', 'chebyshev'],
+	['legendre', 'inverseChebyshev']
+];
+const isBand = (t) => t === 'bandpass' || t === 'bandstop';
+const CASES = [];
 for (const spec of SPECS) {
 	for (const topology of Object.keys(second)) {
-		for (const response of ['butterworth', 'chebyshev']) {
-			const args = { response, ...spec };
+		for (const response of RESPONSE_KEYS) CASES.push({ spec, topology, responseHp: response, responseLp: response });
+		if (isBand(spec.filterType)) for (const [responseHp, responseLp] of MIXED) CASES.push({ spec, topology, responseHp, responseLp });
+	}
+}
+let skipped = 0;
+
+for (const { spec, topology, responseHp, responseLp } of CASES) {
+	{
+		{
+			const response = responseLp;
+			const args = { response, responseHp, responseLp, ...spec };
 			let design;
 			if (spec.filterType === 'bandpass') design = designBandPass({ ...args, orderLow: null, orderHigh: null });
 			else if (spec.filterType === 'bandstop') design = designBandStop({ ...args, orderLow: null, orderHigh: null });
 			else if (spec.filterType === 'highpass') design = designHighPass({ ...args, order: null });
 			else design = designLowPass({ ...args, order: null });
+			// what the page would refuse: past its order limit, or a response that never gets there
+			const orders = isBand(spec.filterType) ? [design.lp, design.hp] : [design];
+			if (orders.some((d) => !Number.isFinite(d.minOrder) || d.n > 8)) {
+				skipped++;
+				continue;
+			}
 
 			const realized = design.stages.map(realize(topology));
 			const lpCount = spec.filterType === 'bandstop' ? design.lp.stages.length : 0;
 			let combinerMode = 'sum';
+			let combinerResistors = null;
 			let expected;
 			if (spec.filterType === 'bandstop') {
 				const branches = [realized.slice(0, lpCount), realized.slice(lpCount)];
 				const choice = combinerChoice(branches, spec.fsl, spec.fsh);
 				combinerMode = choice.mode;
-				expected = (f) => magnitudePhaseAtParallelSum(branches, f, choice.signs).db;
+				// the combiner evens out a low-pass notch stage's DC gain, as on the page
+				const parts = combinerDesign(choice.mode, 10000, Math.abs(branchDcGain(branches[0])), (v) => nearestResistor(v, 'E24'));
+				combinerResistors = parts.resistors;
+				expected = (f) => magnitudePhaseAtParallelSum(branches, f, parts.weights).db;
 			} else {
 				expected = (f) => magnitudePhaseAt(realized, f).db;
 			}
@@ -214,6 +252,7 @@ for (const spec of SPECS) {
 				lpCount,
 				combinerMode,
 				combinerR: 10000,
+				combinerResistors,
 				ideal: true,
 				...args
 			});
@@ -232,16 +271,17 @@ for (const spec of SPECS) {
 					worstAt = f;
 				}
 			}
-			const label = `${spec.filterType.padEnd(8)} ${topology.padEnd(10)} ${response.padEnd(12)} n=${design.n ?? `${design.lp.n}+${design.hp.n}`}${spec.filterType === 'bandstop' ? ` ${combinerMode}` : ''}`;
+			const respText = responseHp === responseLp ? responseLp : `${responseHp}/${responseLp}`;
+			const label = `${spec.filterType.padEnd(8)} ${topology.padEnd(10)} ${respText.padEnd(16)} n=${design.n ?? `${design.lp.n}+${design.hp.n}`}${spec.filterType === 'bandstop' ? ` ${combinerMode}` : ''}`;
 			check(label, worst < 0.02, `ecart max ${worst.toFixed(4)} dB a ${worstAt.toFixed(0)} Hz, ${elements.length} elements`);
 
 			// the .asc has to describe exactly the same circuit. It is drawn, so
 			// most of its nets carry no name: what must match is which pins
 			// share a net, every name that is drawn, the values and the
 			// directives
-			const opts = { realizedStages: realized, topology, lpCount, combinerMode, combinerR: 10000, ...args };
+			const opts = { realizedStages: realized, topology, lpCount, combinerMode, combinerR: 10000, combinerResistors, ...args };
 			const asc = generateSchematic(opts);
-			const wanted = buildElements({ realizedStages: realized, filterType: spec.filterType, lpCount, combinerMode, combinerR: 10000 }).filter((e) => e.kind !== 'LABEL');
+			const wanted = buildElements({ realizedStages: realized, filterType: spec.filterType, lpCount, combinerMode, combinerR: 10000, combinerResistors }).filter((e) => e.kind !== 'LABEL');
 			const { elements: got, clashes, dangling, directives } = parseSchematic(asc);
 			const problems = [...clashes, ...dangling];
 			if (got.length !== wanted.length) problems.push(`${got.length} symbols for ${wanted.length} elements`);
@@ -300,6 +340,40 @@ for (const spec of SPECS) {
 		}
 	}
 	check('every drawing from a few hertz to a few hundred kilohertz is clean', messy.length === 0, messy.length ? messy.slice(0, 3).join('; ') : `${drawn} drawings`);
+}
+
+// the same drawings with a real op-amp: the five-pin symbol on v++ and
+// v--, the rail sources, the part's subcircuit, and the same wiring
+{
+	let drawn = 0;
+	const messy = [];
+	for (const spec of SPECS) {
+		for (const topology of Object.keys(second)) {
+			for (const response of ['butterworth', 'chebyshev', 'elliptic']) {
+				const args = { response, ...spec };
+				let design;
+				if (spec.filterType === 'bandpass') design = designBandPass({ ...args, orderLow: null, orderHigh: null });
+				else if (spec.filterType === 'bandstop') design = designBandStop({ ...args, orderLow: null, orderHigh: null });
+				else if (spec.filterType === 'highpass') design = designHighPass({ ...args, order: null });
+				else design = designLowPass({ ...args, order: null });
+				const realized = design.stages.map(realize(topology));
+				const lpCount = spec.filterType === 'bandstop' ? design.lp.stages.length : 0;
+				const combinerMode = spec.filterType === 'bandstop' ? combinerChoice([realized.slice(0, lpCount), realized.slice(lpCount)], spec.fsl, spec.fsh).mode : 'sum';
+				const opts = { realizedStages: realized, topology, lpCount, combinerMode, combinerR: 10000, ...args };
+				const ideal = generateSchematic(opts);
+				for (const part of ['TL082', 'LM741']) {
+					const { problems, issues } = realOpampProblems(ideal, generateSchematic({ ...opts, opamp: part }), part);
+					drawn++;
+					if (problems.length || issues.length) messy.push(`${spec.filterType} ${topology} ${response} ${part}: ${problems[0] ?? `${issues[0].kind}: ${issues[0].detail}`}`);
+				}
+				if (drawn === 2) {
+					const cir = generateNetlist({ ...opts, opamp: 'TL082' });
+					check('real op-amps: the .cir carries the TL082 subcircuit, the rails and five-node op-amps', /^\.SUBCKT TL082/m.test(cir) && /^VPOS v\+\+ 0 15$/m.test(cir) && /^VNEG v-- 0 -15$/m.test(cir) && /^X\S+ \S+ \S+ v\+\+ v-- \S+ TL082$/m.test(cir) && !/OPAMP/.test(cir.replace(/OPERATIONAL AMPLIFIER/g, '')));
+				}
+			}
+		}
+	}
+	check('real op-amps: every drawing wired as the ideal one, on v++ and v--, drawn clean', messy.length === 0, messy.length ? messy.slice(0, 3).join('; ') : `${drawn} drawings`);
 }
 
 console.log(fails === 0 ? 'netlists LTspice conformes au modele de l outil' : `${fails} failure(s)`);

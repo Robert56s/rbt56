@@ -950,7 +950,7 @@
 	</section>
 	<section class="panel">
 		<div class="panel-head">
-			<span class="num">10</span>
+			<span class="num">19</span>
 			<h2>Tow-Thomas biquad</h2>
 		</div>
 
@@ -1022,6 +1022,161 @@
 				when the band-pass or notch output is wanted too. For an ordinary low-Q stage, MFB or
 				Sallen-Key does the same job with one op-amp.
 			</p>
+		</div>
+	</section>
+
+	<section class="panel">
+		<div class="panel-head">
+			<span class="num">20</span>
+			<h2>Legendre (optimum L)</h2>
+		</div>
+
+		<div class="formula">
+			<h3>Response</h3>
+			<p class="note">
+				Butterworth's form with the power (ω/ωp)^(2n) replaced by a polynomial L_n of the same degree
+				that starts at 0, reaches 1 at the edge, never decreases (its derivative is a perfect square)
+				and has the largest slope at the edge of all such polynomials: the steepest roll-off without
+				ripple. ε is Butterworth's, so exactly Amax is lost at fp.
+			</p>
+			<Equation tex={`\\left|H(j\\omega)\\right|^2 = \\dfrac{1}{1 + \\varepsilon^2 L_n\\!\\left(\\omega^2/\\omega_p^2\\right)}, \\qquad \\varepsilon = \\sqrt{10^{A_{max}/10} - 1}`} />
+			<Equation tex={`L_n(w) = \\dfrac{1}{2(k+1)^2}\\int_{-1}^{2w-1}\\left[\\sum_{i=0}^{k}(2i+1)\\,P_i(x)\\right]^2 dx \\quad (n = 2k+1)`} />
+			<Equation tex={`L_n(w) = \\dfrac{1}{(k+1)(k+2)}\\int_{-1}^{2w-1}(x+1)\\left[\\sum_{i \\equiv k\\ (\\mathrm{mod}\\ 2)}(2i+1)\\,P_i(x)\\right]^2 dx \\quad (n = 2k+2)`} />
+			<Equation tex={`L_3 = 3\\omega^6 - 3\\omega^4 + \\omega^2, \\qquad L_4 = 6\\omega^8 - 8\\omega^6 + 3\\omega^4 \\quad (\\omega \\text{ in units of } \\omega_p)`} />
+			<p class="note">
+				<strong>How to use:</strong> the poles are the stable roots of 1 + ε² L_n(-s²/ωp²), found
+				numerically. There is no closed order formula: the loss at fs is computed for n = 1, 2, ...
+				until it reaches Amin.
+			</p>
+			<Equation tex={`A_n = 10\\log_{10}\\!\\left(1 + \\varepsilon^2 L_n\\!\\left(\\tfrac{1}{k^2}\\right)\\right) \\ge A_{min}`} />
+		</div>
+	</section>
+
+	<section class="panel">
+		<div class="panel-head">
+			<span class="num">21</span>
+			<h2>Bessel (Thomson)</h2>
+		</div>
+
+		<div class="formula">
+			<h3>Response</h3>
+			<p class="note">
+				The delay -dφ/dω made as flat as possible at DC, so a pulse keeps its shape. The denominator is
+				the reverse Bessel polynomial; this H(s) delays by exactly 1 s at DC.
+			</p>
+			<Equation tex={`H(s) = \\dfrac{\\theta_n(0)}{\\theta_n(s)}, \\qquad \\theta_n(s) = \\sum_{k=0}^{n} \\dfrac{(2n-k)!}{2^{\\,n-k}\\,k!\\,(n-k)!}\\, s^k`} />
+			<Equation tex={`\\theta_2 = s^2 + 3s + 3, \\qquad \\theta_3 = s^3 + 6s^2 + 15s + 15`} />
+			<p class="note">
+				<strong>How to use:</strong> the poles are the roots of θ_n, found numerically, then scaled
+				in frequency until exactly Amax is lost at fp. The order is counted like Legendre's, from the
+				loss at fs. As n grows the response tends to a Gaussian, whose loss in dB grows with the square
+				of the frequency, so a sharp spec may be out of reach at any order.
+			</p>
+			<Equation tex={`A_n = -20\\log_{10}\\left|H_n\\!\\left(j\\,\\tfrac{1}{k}\\right)\\right| \\ge A_{min}, \\qquad \\lim_{n\\to\\infty} A(2\\,\\omega_{A}) = 4\\,A_{max}`} />
+		</div>
+	</section>
+
+	<section class="panel">
+		<div class="panel-head">
+			<span class="num">22</span>
+			<h2>Inverse Chebyshev (Chebyshev II)</h2>
+		</div>
+
+		<div class="formula">
+			<h3>Response, zeros and poles</h3>
+			<p class="note">
+				Flat passband, ripple in the stopband between zeros of transmission. Written with the stopband
+				edge ωs as the reference; the poles are Chebyshev I poles for ε = 1/εs, inverted.
+			</p>
+			<Equation tex={`\\left|H(j\\omega)\\right|^2 = \\dfrac{1}{1 + \\dfrac{1}{\\varepsilon_s^2\\, C_n^2(\\omega_s/\\omega)}}, \\qquad \\omega_{z,i} = \\dfrac{\\omega_s}{\\cos\\theta_i}, \\qquad p_i = \\dfrac{1}{s_i}`} />
+			<Equation tex={`s_i = -\\sinh(\\beta)\\sin\\theta_i + j\\cosh(\\beta)\\cos\\theta_i, \\qquad \\beta = \\dfrac{\\operatorname{asinh}(\\varepsilon_s)}{n}, \\qquad \\theta_i = \\dfrac{(2i+1)\\pi}{2n}`} />
+		</div>
+
+		<div class="formula">
+			<h3>Order and stopband ripple</h3>
+			<p class="note">
+				The same order formula as Chebyshev I. With ωs placed at fs and exactly Amax lost at fp, the
+				stopband ripple follows; rounding n up makes it deeper than Amin.
+			</p>
+			<Equation tex={`n \\ge \\dfrac{\\operatorname{acosh}(\\varepsilon_s/\\varepsilon_p)}{\\operatorname{acosh}(1/k)}, \\qquad \\varepsilon_s = \\varepsilon_p\\,C_n(1/k) = \\varepsilon_p\\cosh\\!\\left(n\\operatorname{acosh}\\tfrac{1}{k}\\right), \\qquad A_{min}' = 10\\log_{10}(1 + \\varepsilon_s^2)`} />
+		</div>
+	</section>
+
+	<section class="panel">
+		<div class="panel-head">
+			<span class="num">23</span>
+			<h2>Elliptic (Cauer)</h2>
+		</div>
+
+		<div class="formula">
+			<h3>Response and order</h3>
+			<p class="note">
+				Equal ripple in both bands, zeros in the stopband: the steepest transition for a given order.
+				R_n is the elliptic rational function; k = ωp/ωs is the selectivity and k1 = εp/εs the
+				discrimination. K is the complete elliptic integral of the first kind, K'(k) = K(√(1-k²)).
+			</p>
+			<Equation tex={`\\left|H(j\\omega)\\right|^2 = \\dfrac{1}{1 + \\varepsilon_p^2 R_n^2(\\omega/\\omega_p)}, \\qquad n \\ge \\dfrac{K(k)\\,K'(k_1)}{K'(k)\\,K(k_1)}`} />
+			<Equation tex={`K(k) = \\int_0^{\\pi/2}\\dfrac{d\\phi}{\\sqrt{1 - k^2\\sin^2\\phi}} = \\dfrac{\\pi}{2\\,\\operatorname{AGM}\\!\\left(1, \\sqrt{1-k^2}\\right)}`} />
+			<p class="note">
+				<strong>How to use:</strong> with n rounded up, the degree equation is solved for k1 at the
+				spec's k, through the nomes q = exp(-πK'/K): q1 = q^n. The stopband then loses Amin' ≥ Amin.
+			</p>
+			<Equation tex={`q_1 = q^n, \\qquad k_1^2 = 16\\,q_1\\left(\\dfrac{\\sum_{j\\ge0} q_1^{\\,j(j+1)}}{1 + 2\\sum_{j\\ge1} q_1^{\\,j^2}}\\right)^4, \\qquad A_{min}' = 10\\log_{10}\\!\\left(1 + \\dfrac{\\varepsilon_p^2}{k_1^2}\\right)`} />
+		</div>
+
+		<div class="formula">
+			<h3>Zeros and poles</h3>
+			<p class="note">
+				From the Jacobi elliptic functions sn, cn, dn at n equally spaced points of the quarter
+				period, the poles shifted off the axis by v0, which carries Amax (F is the incomplete integral
+				of the first kind).
+			</p>
+			<Equation tex={`\\omega_{z,i} = \\dfrac{\\omega_p}{k\\,\\operatorname{sn}(u_i K/n,\\ k)}, \\qquad u_i = n-1,\\ n-3,\\ \\ldots`} />
+			<Equation tex={`p_i = -\\dfrac{c\\,d\\,s_v c_v + j\\,s\\,d_v}{1 - (d\\,s_v)^2}, \\qquad v_0 = \\dfrac{K(k)\\,F\\!\\left(\\arctan(1/\\varepsilon_p),\\ k_1'\\right)}{n\\,K(k_1)}`} />
+		</div>
+	</section>
+
+	<section class="panel">
+		<div class="panel-head">
+			<span class="num">24</span>
+			<h2>Stages with zeros (notch stages)</h2>
+		</div>
+
+		<div class="formula">
+			<h3>Stage and denormalization</h3>
+			<p class="note">
+				Each pole pair of an elliptic or inverse Chebyshev prototype carries a pair of zeros ±j√z. The
+				stage has gain 1 at DC (low-pass) or far above the zero (high-pass); s → s/ωc denormalizes
+				it, and s → 1/s moves a low-pass zero z to 1/z for a high-pass.
+			</p>
+			<Equation tex={`H(s) = \\dfrac{b}{z}\\,\\dfrac{s^2 + z}{s^2 + as + b}, \\qquad \\omega_z = \\omega_c\\sqrt{z}, \\qquad z_{hp} = \\dfrac{1}{z}`} />
+			<Equation tex={`H(s) = K\\,\\dfrac{s^2 + \\omega_z^2}{s^2 + \\frac{\\omega_n}{Q}s + \\omega_n^2}`} />
+		</div>
+
+		<div class="formula">
+			<h3>Tow-Thomas notch (feed-forward)</h3>
+			<p class="note">
+				The Tow-Thomas high-pass (Cin into A1) plus Rz from the input into A2: an s² term and a
+				constant on top, no s term, so the zeros sit on the jω axis. Output at A1.
+			</p>
+			<Equation tex={`\\dfrac{V_{out}}{V_{in}} = -\\dfrac{\\frac{C_{in}}{C}\\,s^2 + \\frac{1}{C^2 R R_z}}{s^2 + \\frac{s}{C R_d} + \\frac{1}{C^2 R^2}}, \\qquad \\omega_z^2 = \\dfrac{1}{C\\,C_{in} R R_z}, \\qquad H(\\infty) = -\\dfrac{C_{in}}{C},\\ \\ H(0) = -\\dfrac{R}{R_z}`} />
+			<Equation tex={`\\text{low-pass side: } R_z = R,\\ C_{in} = C\\left(\\dfrac{\\omega_n}{\\omega_z}\\right)^2; \\qquad \\text{high-pass side: } C_{in} = C,\\ R_z = R\\left(\\dfrac{\\omega_n}{\\omega_z}\\right)^2`} />
+			<p class="note">
+				<strong>How to use:</strong> on the low-pass side round Cin to a stocked capacitor, then solve
+				Rz = 1/(C Cin R ωz²) against the parts used: the zero stays put and the rounding becomes a
+				small DC gain error, R/Rz. The zero's sensitivity is -1/2 to each of C, Cin, R and Rz; Q's
+				are the Tow-Thomas's (section 19).
+			</p>
+		</div>
+
+		<div class="formula">
+			<h3>Checking the spec, and the band-stop combiner</h3>
+			<p class="note">
+				Amax and Amin are measured from the top of the passband, and the stopband over its whole
+				width, since an elliptic or inverse Chebyshev response comes back up between its zeros. In a
+				band-stop, a low-pass branch whose DC gain is G gets its combiner input resistor scaled by G.
+			</p>
+			<Equation tex={`A(f) = \\max_{\\text{passband}} \\left|H\\right|_{dB} - \\left|H(f)\\right|_{dB}, \\qquad \\min_{f\\,\\in\\,\\text{stopband}} A(f) \\ge A_{min}, \\qquad R_a = G\\,R_f`} />
 		</div>
 	</section>
 </article>

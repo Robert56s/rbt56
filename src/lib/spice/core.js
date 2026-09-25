@@ -14,18 +14,26 @@
  *   { kind: 'C', name, nodes: [a, b], value, ic } ic: initial voltage, V
  *   { kind: 'L', name, nodes: [a, b], value }
  *   { kind: 'V', name, nodes: [plus, minus], spice }        source spec text
- *   { kind: 'B', name, nodes: [plus, minus], spice }        behavioral source,
- *                                                           spice = 'I=..' or 'V=..'
+ *   { kind: 'B', name, nodes: [plus, minus], spice }        behavioral current
+ *                                                           source, spice = 'I=..'
+ *   { kind: 'BV', name, nodes: [plus, minus], spice }       behavioral voltage
+ *                                                           source, spice = 'V=..'
  *   { kind: 'D', name, nodes: [anode, cathode], model }
  *   { kind: 'J', name, nodes: [drain, gate, source], model } N-channel JFET
  *   { kind: 'OP', name, nodes: [nonInverting, inverting, out] }
  *   { kind: 'LABEL', text }                                 a comment only
+ *
+ * Every op-amp is { kind: 'OP' }; which model it becomes (the ideal
+ * single-pole one, or a real part on +/-15 V rails) is chosen when the
+ * list is rendered, see opamps.js.
  *
  * The .asc is drawn per tool with draw.js, which places these symbols in
  * LTspice's own orientations and wires them; geometry.js models what the
  * drawing looks like on screen, and parseSchematic here reads it back so
  * the checkers can compare it with the netlist.
  */
+
+import { opampModel, RAIL_NEG, RAIL_POS, supplyElements } from './opamps';
 
 /** Value with an engineering suffix LTspice understands (220p, 4.7n, 1.5k). */
 export function spiceValue(v) {
@@ -58,6 +66,8 @@ export const SYMBOLS = {
 	V: { name: 'voltage', prefix: 'V', pins: [{ dx: 0, dy: 16 }, { dx: 0, dy: 96 }], order: [0, 1] },
 	// behavioral current source: + on top, current leaves at the - pin
 	B: { name: 'bi', prefix: 'B', pins: [{ dx: 0, dy: 0 }, { dx: 0, dy: 80 }], order: [0, 1] },
+	// behavioral voltage source, pins where the plain voltage source has them
+	BV: { name: 'bv', prefix: 'B', pins: [{ dx: 0, dy: 16 }, { dx: 0, dy: 96 }], order: [0, 1] },
 	// anode first (SpiceOrder 1 is the "+" pin)
 	D: { name: 'diode', prefix: 'D', pins: [{ dx: 16, dy: 0 }, { dx: 16, dy: 64 }], order: [0, 1] },
 	// njf: D(48,0), G(0,64), S(48,96); our order is drain, gate, source already
@@ -71,6 +81,16 @@ export const SYMBOLS = {
 		prefix: 'X',
 		pins: [{ dx: -32, dy: 48 }, { dx: -32, dy: 80 }, { dx: 32, dy: 64 }],
 		order: [1, 0, 2]
+	},
+	// Opamps\opamp2, the five-pin symbol for a real part: the signal pins
+	// where opamp has them, and V+ (top) and V- (bottom) on short leads.
+	// SpiceOrder In+, In-, V+, V-, OUT; our order is non-inverting,
+	// inverting, output, then the two rails
+	OP2: {
+		name: 'Opamps\\opamp2',
+		prefix: 'X',
+		pins: [{ dx: -32, dy: 80 }, { dx: -32, dy: 48 }, { dx: 0, dy: 32 }, { dx: 0, dy: 96 }, { dx: 32, dy: 64 }],
+		order: [0, 1, 3, 4, 2]
 	}
 };
 
@@ -101,7 +121,7 @@ export function textSafe(s) {
 
 /** Value text of an element as its netlist line carries it. */
 function valueText(e) {
-	if (e.kind === 'V' || e.kind === 'B') return e.spice;
+	if (e.kind === 'V' || e.kind === 'B' || e.kind === 'BV') return e.spice;
 	if (e.kind === 'D' || e.kind === 'J') return e.model;
 	const v = typeof e.value === 'string' ? e.value : spiceValue(e.value);
 	return e.kind === 'C' && Number.isFinite(e.ic) ? `${v} IC=${spiceValue(e.ic)}` : v;
@@ -109,13 +129,16 @@ function valueText(e) {
 
 /**
  * The SYMATTR lines an element's symbol instance needs in a .asc. An
- * op-amp carries its gain-bandwidth; a capacitor with an initial
- * condition carries it on the SpiceLine, which LTspice appends to the
- * netlist line exactly as the .cir writes it.
+ * ideal op-amp carries its gain-bandwidth, a real one its part name (the
+ * subcircuit the file defines); a capacitor with an initial condition
+ * carries it on the SpiceLine, which LTspice appends to the netlist line
+ * exactly as the .cir writes it.
  */
-export function symbolAttributes(e, { gbw = '3Meg', aol = '1Meg' } = {}) {
+export function symbolAttributes(e, { gbw = '3Meg', aol = '1Meg', opamp = 'ideal' } = {}) {
 	const lines = [`SYMATTR InstName ${e.name}`];
-	if (e.kind === 'OP') {
+	if (e.kind === 'OP' && opampModel(opamp).real) {
+		lines.push(`SYMATTR Value ${opampModel(opamp).id}`);
+	} else if (e.kind === 'OP') {
 		lines.push('SYMATTR Value opamp', `SYMATTR SpiceLine Aol=${aol}`, `SYMATTR SpiceLine2 GBW=${gbw}`);
 	} else if (e.kind === 'C') {
 		lines.push(`SYMATTR Value ${typeof e.value === 'string' ? e.value : spiceValue(e.value)}`);
@@ -151,27 +174,35 @@ export function opampSubckt({ ideal = false } = {}) {
  *   params      lines of .param, .model, .ic ... placed before the circuit
  *   directives  analysis lines placed after it
  *   ideal       replace the op-amp model with an ideal one (for checking)
+ *   opamp       'ideal' (the single-pole model) or a real part from
+ *               opamps.js, which brings its subcircuit and the two rails
  */
-export function renderNetlist({ elements, title, comments = [], params = [], directives = [], ideal = false }) {
+export function renderNetlist({ elements, title, comments = [], params = [], directives = [], ideal = false, opamp = 'ideal' }) {
+	const model = opampModel(opamp);
+	const hasOpamp = elements.some((e) => e.kind === 'OP');
+	const all = model.real && hasOpamp ? [...elements, ...supplyElements(opamp)] : elements;
 	const body = [];
-	for (const e of elements) {
+	for (const e of all) {
 		if (e.kind === 'LABEL') {
 			body.push('', `* ${e.text}`);
 			continue;
 		}
 		if (!SYMBOLS[e.kind]) throw new Error(`no netlist form for element kind ${e.kind}`);
 		const n = e.nodes.join(' ');
-		if (e.kind === 'OP') body.push(`X${e.name} ${n} OPAMP`);
+		if (e.kind === 'OP' && model.real) body.push(`X${e.name} ${e.nodes[0]} ${e.nodes[1]} ${RAIL_POS} ${RAIL_NEG} ${e.nodes[2]} ${model.id}`);
+		else if (e.kind === 'OP') body.push(`X${e.name} ${n} OPAMP`);
 		else body.push(`${e.name} ${n} ${valueText(e)}`);
 	}
+	// a real part brings its own subcircuit, and needs no AOL or GBW
+	const library = model.real ? (hasOpamp ? [model.subckt, ''] : []) : opampSubckt({ ideal });
 	return [
 		`* ${title}`,
 		'*',
 		...comments.map((l) => `* ${l}`),
 		'',
-		...params,
+		...(model.real ? params.filter((l) => !/^\.param AOL/i.test(l)) : params),
 		'',
-		...opampSubckt({ ideal }),
+		...library,
 		...body,
 		'',
 		...directives,
@@ -304,7 +335,10 @@ export function parseSchematic(text) {
 			if (!attached) dangling.push(`${s.attrs.InstName} has a pin with nothing attached`);
 			nodes[info.order[k]] = netName(find(at));
 		});
-		elements.push({ kind: info.kind, name: s.attrs.InstName, nodes, value: s.attrs.Value, spiceLine: s.attrs.SpiceLine ?? null });
+		// a five-pin op-amp reads as an op-amp on its three signal nodes,
+		// with the rails it is wired to alongside
+		if (info.kind === 'OP2') elements.push({ kind: 'OP', name: s.attrs.InstName, nodes: nodes.slice(0, 3), rails: nodes.slice(3), value: s.attrs.Value, spiceLine: null });
+		else elements.push({ kind: info.kind, name: s.attrs.InstName, nodes, value: s.attrs.Value, spiceLine: s.attrs.SpiceLine ?? null });
 	}
 	return { elements, clashes, dangling, directives };
 }

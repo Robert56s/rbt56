@@ -12,9 +12,13 @@
 	import { explainBarkhausen, explainOpampLimit, explainStabilizer, explainTopology } from '$lib/oscillator/explain';
 	import { DIODES, JFETS } from '$lib/oscillator/limiter';
 	import { generateNetlist, generateSchematic } from '$lib/oscillator/spice';
+	import { DEFAULT_OPAMP, OPAMP_MODELS } from '$lib/spice/opamps';
 	import { compareOscillators, designOscillator, STABILIZERS, TOPOLOGIES } from '$lib/oscillator/topologies';
 
 	let topology = $state('wien');
+	// the op-amp the LTspice files use: the ideal single-pole model, or a
+	// real part on +/-15 V rails
+	let spiceOpamp = $state(DEFAULT_OPAMP);
 	let stabilizer = $state('diodes');
 	let diode = $state('1N4148');
 	let jfet = $state('generic');
@@ -451,9 +455,19 @@
 				<span class="num">06</span>
 				<h2>Download</h2>
 			</div>
+			<div class="grid">
+				<div class="field">
+					<label for="spiceOpamp">Op-amp in the LTspice files</label>
+					<select id="spiceOpamp" bind:value={spiceOpamp}>
+						{#each Object.values(OPAMP_MODELS) as m (m.id)}
+							<option value={m.id}>{m.label}</option>
+						{/each}
+					</select>
+				</div>
+			</div>
 			<div class="row downloads">
-				<button type="button" disabled={!!exportError} onclick={() => save(generateSchematic(design), `${stem}.asc`)}>Download {stem}.asc (LTspice)</button>
-				<button type="button" disabled={!!exportError} onclick={() => save(generateNetlist(design), `${stem}.cir`)}>Download {stem}.cir (netlist)</button>
+				<button type="button" disabled={!!exportError} onclick={() => save(generateSchematic(design, { opamp: spiceOpamp }), `${stem}.asc`)}>Download {stem}.asc (LTspice)</button>
+				<button type="button" disabled={!!exportError} onclick={() => save(generateNetlist(design, { opamp: spiceOpamp }), `${stem}.cir`)}>Download {stem}.cir (netlist)</button>
 			</div>
 			{#if exportError}
 				<p class="flag bad">
@@ -466,10 +480,17 @@
 				The .asc is a drawn schematic with these values and the amplitude control as real devices: the diodes are the model the design was sized against, the AGC's
 				JFET is a SPICE JFET, and the lamp is a resistor that heats up. The run starts from an initial condition
 				at the design amplitude, so the limiter only has to hold it, and the log (Ctrl+L after Run) reports
-				fosc, the realized frequency, and vpk, the amplitude, next to the .four distortion. The op-amp is the
-				ideal single-pole model with its gain-bandwidth set to the value entered here, so the frequency it
-				reports is the one predicted above, and lowering the gain-bandwidth on the sheet shows the lag doing
-				its work.
+				fosc, the realized frequency, and vpk, the amplitude, next to the .four distortion.
+				{#if OPAMP_MODELS[spiceOpamp]?.real}
+					The op-amp is the {spiceOpamp} with its supply pins showing, on +15 V and -15 V rails (the two
+					sources under the drawing, nets v++ and v--), its model written into the file. It adds its own
+					slew rate and output limits to the gain-bandwidth the page designs with, so the run shows what the
+					real part does; the ideal op-amp gives the page's own figures.
+				{:else}
+					The op-amp is the ideal single-pole model with its gain-bandwidth set to the value entered here, so
+					the frequency it reports is the one predicted above, and lowering the gain-bandwidth on the sheet
+					shows the lag doing its work.
+				{/if}
 			</p>
 			<p class="note formula-link">
 				Every formula this design used: <a href="/tools/oscillator/formulas/">Formula sheet</a>.

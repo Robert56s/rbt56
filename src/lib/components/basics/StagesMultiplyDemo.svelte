@@ -9,7 +9,7 @@
 	//   kind        'lowpass' | 'highpass' (a band type passes its low-pass side)
 	//   fp          the passband edge, Hz
 	//   amaxDb      the passband limit
-	//   stages      the second-order stages, [{ f0, q }], in the table's order
+	//   stages      the second-order stages, [{ f0, q, fz? }], in the table's order (fz: a zero)
 	//   fc          the first-order stage's corner, Hz, present for an odd order
 	//   order       the order n
 	//   live        true for the page's design, false for the default one
@@ -30,9 +30,15 @@
 	let ownQ2 = $state(null);
 	const qs = $derived(table.map((s, i) => (i === 0 && ownQ1 !== null ? ownQ1 : i === 1 && ownQ2 !== null ? ownQ2 : s.q)));
 
-	function secondOrder(f, f0, q) {
+	// a stage with a zero at fz (elliptic, inverse Chebyshev): the same knee
+	// times |fz^2 - f^2|, scaled to gain 1 at DC (low-pass) or far above (high-pass)
+	function secondOrder(f, f0, q, fz) {
 		const u = f / f0;
 		const m = 1 / Math.sqrt((1 - u * u) ** 2 + (u / q) ** 2);
+		if (fz > 0) {
+			const z = fz / f0;
+			return high ? m * Math.abs(z * z - u * u) : (m * Math.abs(z * z - u * u)) / (z * z);
+		}
 		return high ? m * u * u : m;
 	}
 	function firstOrder(f) {
@@ -43,7 +49,7 @@
 	const toDb = (m) => 20 * Math.log10(Math.max(m, 1e-9));
 	function productDb(f) {
 		let db = hasFirst ? toDb(firstOrder(f)) : 0;
-		table.forEach((s, i) => (db += toDb(secondOrder(f, s.f0, qs[i]))));
+		table.forEach((s, i) => (db += toDb(secondOrder(f, s.f0, qs[i], s.fz))));
 		return db;
 	}
 
@@ -52,7 +58,7 @@
 	const x1 = $derived(f0 * 10);
 	const xs = $derived(logSpace(x0, x1, 300));
 	const series = $derived.by(() => {
-		const out = table.map((s, i) => ({ ys: xs.map((f) => toDb(secondOrder(f, s.f0, qs[i]))), color: 'var(--textDim)', width: 1.2 }));
+		const out = table.map((s, i) => ({ ys: xs.map((f) => toDb(secondOrder(f, s.f0, qs[i], s.fz))), color: 'var(--textDim)', width: 1.2 }));
 		if (hasFirst) out.push({ ys: xs.map((f) => toDb(firstOrder(f))), color: 'var(--textDim)', width: 1.2, dash: [4, 3] });
 		out.push({ ys: xs.map(productDb), color: 'var(--blue)', width: 2.5 });
 		return out;
@@ -84,12 +90,12 @@
 
 	const notice = $derived.by(() => {
 		if (atTable) {
-			if (bump > 0.05) return `With the table's values the product ripples inside the passband by up to ${dbText(bump)} dB: those bumps are the Chebyshev ripple, kept on purpose to buy a steeper drop.`;
+			if (bump > 0.05) return `With the table's values the product ripples inside the passband by up to ${dbText(bump)} dB: those bumps are the ripple of the response, kept on purpose to buy a steeper drop.`;
 			if (parts >= 2) return `With the table's values the product is flat right ${edgeWay} the edge, and ${parts === 2 ? 'neither stage' : 'no single stage'} is flat alone.`;
 			return `With the table's value this one stage is already flat right ${edgeWay} the edge: Q = ${table[0].q.toFixed(2)} is the flattest a stage can be.`;
 		}
 		if (!passOk) return `The passband sags early: the loss at fp is over the limit of ${plain(amaxDb)} dB.`;
-		if (bump > 0.05) return `The product now has a bump of ${dbText(bump)} dB before the edge: a high Q does that, and Chebyshev does it on purpose.`;
+		if (bump > 0.05) return `The product now has a bump of ${dbText(bump)} dB before the edge: a high Q does that, and Chebyshev and elliptic do it on purpose.`;
 		return 'Still flat, and within the limit at fp.';
 	});
 
@@ -100,6 +106,7 @@
 		if (side === 'bandstop') out.push('For a band-stop these are the stages of the low-pass branch, and fp here is fl.');
 		if (table.length > 3) out.push("Stages 3 and 4 are drawn at the table's values and counted in the product.");
 		else if (table.length === 3) out.push("Stage 3 is drawn at the table's values and counted in the product.");
+		if (table.some((s) => s.fz > 0)) out.push('A stage with a zero drops to nothing at its own frequency, past the edge: that notch is what lets the product fall so fast.');
 		if (hasFirst) out.push(`The dashed curve is the first-order stage at ${hzText(fc)}: it has no Q, so no slider.`);
 		return out.join(' ');
 	});

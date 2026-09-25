@@ -1,3 +1,4 @@
+import { explainModernApproximation, explainModernOrder, isClassic, modernRealPoleBlocks, modernStageBlocks } from './explainResponses';
 import { formatFarads, formatHz, formatOhms, formatSeconds } from './format';
 
 /**
@@ -49,9 +50,13 @@ export function explainApproximation(design) {
 		),
 		eq('\\left|H(j\\omega)\\right|^2 = \\dfrac{1}{1 + a_1\\,\\omega^2 + a_2\\,\\omega^4 + \\cdots + a_n\\,\\omega^{2n}}'),
 		p(
-			'The a coefficients are the only freedom left, and the two classic responses are two different ways of spending it.'
+			isClassic(design.response)
+				? 'The a coefficients are the only freedom left, and the two classic responses are two different ways of spending it.'
+				: 'The a coefficients are the only freedom left, and each response is a different way of spending it (two of them also add a numerator, zeros, to spend some more).'
 		)
 	];
+
+	if (!isClassic(design.response)) return [...blocks, ...explainModernApproximation(design)];
 
 	if (design.response === 'chebyshev') {
 		blocks.push(
@@ -140,7 +145,8 @@ export function explainApproximation(design) {
  * condition left is "at least Amin dB at fs", and that is the one that
  * contains n.
  */
-export function explainOrder({ response, amaxDb, aminDb, k, minOrder, filterType = 'lowpass', nUsed = null, evenOnly = false }) {
+export function explainOrder({ response, amaxDb, aminDb, k, minOrder, filterType = 'lowpass', nUsed = null, evenOnly = false, tried = null }) {
+	if (!isClassic(response)) return explainModernOrder({ response, amaxDb, aminDb, k, minOrder, tried, filterType, nUsed });
 	const eps = rippleFactor(amaxDb);
 	const hp = filterType === 'highpass';
 	const invK = 1 / k;
@@ -326,6 +332,7 @@ function denormalizeBlocks(design, s, stage) {
 /** Pole placement + denormalization for one second-order low-pass stage. */
 export function explainStage(design, stageIndex) {
 	const stage = design.stages[stageIndex];
+	if (!isClassic(design.response)) return stage.order === 1 ? modernRealPoleBlocks(design, stage) : modernStageBlocks(design, stageIndex);
 
 	if (stage.order === 1) {
 		return [
@@ -352,6 +359,7 @@ export function explainStage(design, stageIndex) {
  */
 export function explainHpStage(design, stageIndex) {
 	const stage = design.stages[stageIndex];
+	if (!isClassic(design.response)) return stage.order === 1 ? modernRealPoleBlocks(design, stage) : modernStageBlocks(design, stageIndex);
 
 	if (stage.order === 1) {
 		const brealHp = stage.normalized.brealHp;
@@ -744,11 +752,24 @@ export function explainTowThomasHp(stageDesign, targetWn, targetQ) {
  * Explains the summing amplifier that combines a band-stop design's
  * low-pass and high-pass branches into the final notch output.
  */
-export function explainSummingAmp(R, { mode = 'sum', lpSign = 1, hpSign = 1, lpOrder = 2, hpOrder = 2, centreHz = 0, sumDb = 0, differenceDb = 0 } = {}) {
+export function explainSummingAmp(R, { mode = 'sum', lpSign = 1, hpSign = 1, lpOrder = 2, hpOrder = 2, centreHz = 0, sumDb = 0, differenceDb = 0, lpGain = 1, resistors = null } = {}) {
 	const signWord = (s) => (s > 0 ? '+1' : '-1');
+	const scaled = Math.abs(Math.abs(lpGain) - 1) > 1e-6;
 	const intro = p(
-		`The low-pass branch and the high-pass branch above run in parallel from the same input, each producing its own output, and one op-amp combines them into the notch. Far from the notch only one branch is alive, so the output is that branch alone whatever the combiner does. Inside the notch both branches are down to their tails, and the tails have known phases: a low-pass of order n falls like 1/s^n, which is a phase of -n times 90 degrees, and a high-pass of order m rises like s^m, +m times 90 degrees, each multiplied by the branch's passband sign (every second-order stage has an exactly known gain: MFB and the Tow-Thomas high-pass -1, Sallen-Key and the Tow-Thomas low-pass +1, first-order stages +1, whatever the rounding). Here the low-pass branch has order ${lpOrder} and sign ${signWord(lpSign)}, the high-pass branch order ${hpOrder} and sign ${signWord(hpSign)}.`
+		`The low-pass branch and the high-pass branch above run in parallel from the same input, each producing its own output, and one op-amp combines them into the notch. Far from the notch only one branch is alive, so the output is that branch alone whatever the combiner does. Inside the notch both branches are down to their tails, and the tails have known phases: a low-pass of order n falls like 1/s^n, which is a phase of -n times 90 degrees, and a high-pass of order m rises like s^m, +m times 90 degrees, each multiplied by the branch's passband sign (every second-order stage has a known gain: MFB, the Tow-Thomas high-pass and the notch stages -1, Sallen-Key and the Tow-Thomas low-pass +1, first-order stages +1, whatever the rounding). Here the low-pass branch has order ${lpOrder} and sign ${signWord(lpSign)}, the high-pass branch order ${hpOrder} and sign ${signWord(hpSign)}.`
 	);
+	const trim = scaled
+		? [
+				p(
+					`One gain is not exactly 1 here: a notch stage on the low-pass side passes DC at R/Rz, and its Cin had to be rounded to a stocked capacitor, so the low-pass branch comes out with a DC gain of ${Math.abs(lpGain).toFixed(4)} (${(20 * Math.log10(Math.abs(lpGain))).toFixed(2)} dB). The combiner evens it out: the resistor that brings the low-pass branch in is scaled by the same factor, so both passbands still come out at the same level.`
+				),
+				eq(
+					mode === 'difference'
+						? `R_{l} = R_{g} = ${Math.abs(lpGain).toFixed(4)} \\times ${formatOhms(R)} \\rightarrow ${formatOhms(resistors?.RCL ?? R * Math.abs(lpGain))}, \\qquad R = R_f = ${formatOhms(R)}`
+						: `R_a = ${Math.abs(lpGain).toFixed(4)} \\times ${formatOhms(R)} \\rightarrow ${formatOhms(resistors?.RCA ?? R * Math.abs(lpGain))}, \\qquad R_b = R_f = ${formatOhms(R)}`
+				)
+			]
+		: [];
 	const rule = p(
 		`Near the centre of the notch (${formatHz(centreHz)}) the two tails are about the same size, and the notch is deepest when they arrive in antiphase and cancel. Whether adding or subtracting the branches does that depends on the two orders and signs, and on how far the realized poles sit from their asymptotes, so rather than trust a rule of thumb both combiners are evaluated with the rounded components: a plain sum gives ${sumDb.toFixed(1)} dB of attenuation at the centre, a difference ${differenceDb.toFixed(1)} dB, so the ${mode === 'difference' ? 'difference amplifier' : 'summing amplifier'} is used. Far from the centre the choice changes nothing, since only one branch is alive there.`
 	);
@@ -762,7 +783,14 @@ export function explainSummingAmp(R, { mode = 'sum', lpSign = 1, hpSign = 1, lpO
 			eq(
 				'V_+ = \\dfrac{V_{hp}}{2}, \\qquad \\dfrac{V_{lp} - V_-}{R} = \\dfrac{V_- - V_{out}}{R},\\ \\ V_- = V_+ \\ \\Rightarrow\\ V_{out} = 2V_+ - V_{lp} = V_{hp} - V_{lp}'
 			),
-			eq(`R = R_g = R_f = ${formatOhms(R)}\\ \\ \\Rightarrow\\ \\ V_{out} = V_{hp} - V_{lp}`),
+			eq(`R = R_l = R_g = R_f = ${formatOhms(R)}\\ \\ \\Rightarrow\\ \\ V_{out} = V_{hp} - V_{lp}`),
+			...(scaled
+				? [
+						p('With the low-pass input resistor R_l and the ground resistor R_g both scaled by the branch gain G, the same balance gives:'),
+						eq('V_{out} = \\left(1 + \\dfrac{R_f}{R_l}\\right)\\dfrac{R_g}{R + R_g}\\,V_{hp} - \\dfrac{R_f}{R_l}\\,V_{lp} = V_{hp} - \\dfrac{V_{lp}}{G}'),
+						...trim
+					]
+				: []),
 			p(
 				'Far below the stopband, the low-pass branch passes at full strength while the high-pass branch is already deep in its own stopband, so the output is essentially the low-pass branch alone (and the mirror image far above the stopband). Inside the stopband, both branches are attenuated at once, so the output drops too: that drop is the notch, and how deep it gets is set by the same Amax/Amin order search used for every other filter type in this tool, not by matching any component pair precisely.'
 			)
@@ -777,6 +805,7 @@ export function explainSummingAmp(R, { mode = 'sum', lpSign = 1, hpSign = 1, lpO
 		eq('\\dfrac{V_{lp}}{R_a} + \\dfrac{V_{hp}}{R_b} = -\\dfrac{V_{out}}{R_f} \\ \\Rightarrow\\ V_{out} = -\\left(\\dfrac{R_f}{R_a}V_{lp} + \\dfrac{R_f}{R_b}V_{hp}\\right)'),
 		p('Making Ra, Rb and Rf all equal gives an exact, rounding-proof unity-magnitude sum:'),
 		eq(`R_a = R_b = R_f = ${formatOhms(R)}\\ \\ \\Rightarrow\\ \\ V_{out} = -(V_{lp} + V_{hp})`),
+		...trim,
 		p(
 			'Far below the stopband, the low-pass branch passes at full strength while the high-pass branch is already deep in its own stopband, so the sum is essentially just the low-pass branch (and the mirror image far above the stopband). Inside the stopband, both branches are attenuated at once, so the sum drops too: that drop is the notch, and how deep it gets is set by the same Amax/Amin order search used for every other filter type in this tool, not by matching any component pair precisely.'
 		)

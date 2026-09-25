@@ -273,48 +273,87 @@
 		</div>
 
 		<div class="formula">
-			<h3>Nonlinear mixing (Taylor expansion)</h3>
+			<h3>Nonlinear mixing</h3>
 			<p class="note">
-				A diode's smooth, strongly curved current-voltage law can be approximated around the bias
-				point by a polynomial. The linear term only scales; the squared term creates new
-				frequencies. Feeding it the sum of carrier and message and squaring, with cos² x = (1 +
-				cos 2x)/2 and the product-to-sum identity, sorts the result into DC, harmonics and the
-				wanted sidebands.
+				A curved component turns a sum of two frequencies into new ones. Written as a polynomial, the
+				squared term holds the product of the carrier and the message, which is the pair of sidebands.
+				That is the idea; with volt-sized signals the diode goes further and switches.
 			</p>
-			<Equation tex={`i = I_S\\left(e^{v/(\\eta V_T)} - 1\\right) \\approx I_0 + a\\,v + b\\,v^2 + \\cdots, \\qquad v = A_p\\cos(\\omega_p t) + A_m\\cos(\\omega_m t)`} />
-			<Equation
-				tex={`b\\,v^2 = \\underbrace{\\tfrac{b}{2}(A_p^2 + A_m^2)}_{\\text{DC}} + \\underbrace{\\tfrac{b}{2}A_p^2\\cos(2\\omega_p t) + \\tfrac{b}{2}A_m^2\\cos(2\\omega_m t)}_{\\text{harmonics}} + \\underbrace{bA_pA_m\\big[\\cos((\\omega_p-\\omega_m)t) + \\cos((\\omega_p+\\omega_m)t)\\big]}_{\\text{sidebands}}`}
-			/>
+			<Equation tex={`i \\approx a\\,v + b\\,v^2, \\qquad v = A\\cos(\\omega_p t) + u\\cos(\\omega_m t) \\ \\Rightarrow\\ b\\,v^2 \\ni b\\,A\\,u\\,\\big[\\cos((\\omega_p-\\omega_m)t) + \\cos((\\omega_p+\\omega_m)t)\\big]`} />
+		</div>
+
+		<div class="formula">
+			<h3>Switching modulator</h3>
 			<p class="note">
-				<strong>How to use:</strong> the diode current holds DC, omega_m, omega_p, 2 omega_m,
-				2 omega_p and omega_p &plusmn; omega_m all at once; the tank keeps only omega_p and its
-				two sidebands. The depth of modulation, n = 2bA_m/a, depends on the diode's curvature and
-				is set on the bench, not designed.
+				The summer adds the carrier, the message and a small bias. Driven mostly by the carrier, the
+				diode conducts for half of each carrier cycle: its current is the drive through R_s times a
+				square wave at the carrier. The carrier times the square wave's constant half, and the message
+				times its cosine at the carrier, are what land on the carrier.
 			</p>
+			<Equation tex={`v_s(t) = A_d\\cos(\\omega_p t) + u_m\\,m(t) + V_B, \\qquad s(t) = \\dfrac{1}{2} + \\dfrac{2}{\\pi}\\cos(\\omega_p t) - \\dfrac{2}{3\\pi}\\cos(3\\omega_p t) + \\cdots`} />
+			<Equation tex={`i_p(t) = \\dfrac{A_d}{2R_s}\\left[1 + \\dfrac{4\\,u_m}{\\pi A_d}\\,m(t)\\right]\\cos(\\omega_p t) \\ \\Rightarrow\\ n_{ideal} = \\dfrac{4\\,u_m}{\\pi A_d}`} />
+			<p class="note">
+				<strong>How to use:</strong> a guide only. A real diode switches softly over its last few tenths
+				of a volt, so the tool works one carrier cycle at a time with the diode law below, for each value
+				of the message, and reads the index, the carrier and the distortion off the envelope that traces.
+			</p>
+		</div>
+
+		<div class="formula">
+			<h3>The diode, cycle by cycle</h3>
+			<p class="note">
+				At each instant of a carrier cycle the drive is shared between R_s, the diode and the tank's own
+				voltage, which is the tank's answer to the carrier component of the current. The carrier
+				component of the current, over one message cycle, is the envelope.
+			</p>
+			<Equation tex={`i = I_S\\left(e^{v_D/(N V_T)} - 1\\right), \\qquad v_s(\\theta) = R_s\\,i + v_D + v_{tank}(\\theta), \\qquad v_{tank} = Z(f_p)\\,I_1`} />
+			<Equation tex={`n = \\dfrac{E_1}{E_0}, \\qquad \\text{THD} = \\dfrac{\\sqrt{E_2^2 + E_3^2 + E_4^2 + E_5^2}}{E_1}`} />
+			<p class="note">
+				<strong>How to use:</strong> E_0 is the envelope's average (the carrier out) and E_k its k-th
+				harmonic over the message cycle. The bias V_B is the one with the least distortion at the target
+				index; the message gain u_m is then solved for that index. 1N4148: I_S = 2.52 nA, N = 1.752, the
+				model the LTspice files carry.
+			</p>
+		</div>
+
+		<div class="formula">
+			<h3>Summer</h3>
+			<p class="note">
+				One inverting op-amp: the carrier through R_p, the message through R_m, the bias from -V_cc
+				through R_b, R_f as feedback. The minus sign only turns the carrier and the message over.
+			</p>
+			<Equation tex={`v_s = -\\dfrac{R_f}{R_p}\\,x_p - \\dfrac{R_f}{R_m}\\,x_m + \\dfrac{R_f}{R_b}\\,V_{cc} \\ \\Rightarrow\\ A_d = \\dfrac{R_f}{R_p}A_c, \\qquad u_m = \\dfrac{R_f}{R_m}A_m, \\qquad V_B = \\dfrac{R_f}{R_b}V_{cc}`} />
 		</div>
 
 		<div class="formula">
 			<h3>Resonant tank (parallel RLC)</h3>
 			<p class="note">
-				Parallel branches add as admittances. The imaginary part vanishes where the capacitor and
-				the inductor cancel: that is the resonance, where the tank is just R. The impedance falls
-				to R/sqrt(2) where the imaginary part equals 1/R; those two frequencies are 1/(RC) apart,
-				which defines the bandwidth and Q.
+				Parallel branches add as admittances. The imaginary part vanishes where the capacitor and the
+				inductor cancel: that is the resonance, where the tank is just R. The impedance falls to
+				R/sqrt(2) where the imaginary part equals 1/R; those two frequencies are 1/(RC) apart, which
+				defines the bandwidth and Q.
 			</p>
 			<Equation tex={`Y = \\dfrac{1}{R} + j\\left(\\omega C - \\dfrac{1}{\\omega L}\\right) \\ \\Rightarrow\\ \\omega_0 = \\dfrac{1}{\\sqrt{LC}}, \\qquad f_0 = \\dfrac{1}{2\\pi\\sqrt{LC}}`} />
 			<Equation tex={`\\omega C - \\dfrac{1}{\\omega L} = \\pm\\dfrac{1}{R} \\ \\Rightarrow\\ \\Delta\\omega = \\dfrac{1}{RC}, \\qquad Q = \\omega_0 R C = R\\sqrt{\\dfrac{C}{L}}, \\qquad BW = \\dfrac{f_0}{Q}`} />
 			<p class="note">
-				<strong>How to use:</strong> BW = 2 &times; margin &times; f_m,max (margin &ge; 1) so both
-				sidebands pass; Q = f_p / BW; pick a practical L, then C = 1/(omega_0² L) and R = Q /
-				(omega_0 C), each rounded to a preferred value, then recompute the actual f_0, Q and BW.
+				<strong>How to use:</strong> pick a practical L, then C = 1/(omega_0² L) as a stock pair in
+				parallel, and recompute the actual f_0.
 			</p>
 		</div>
 
 		<div class="formula">
-			<h3>Bias margin</h3>
-			<p class="note">The polynomial only describes a conducting diode: the summed voltage must stay above the forward threshold even when the carrier and the message peak together.</p>
-			<Equation tex={`V_{DC} \\geq A_p + A_m + V_f + \\text{margin}`} />
-			<p class="note"><strong>How to use:</strong> size the DC-bias input of the summer to at least this value.</p>
+			<h3>Loaded band and the sidebands</h3>
+			<p class="note">
+				R in the tank's formulas is everything across it: R_t, and the source the conducting diode puts
+				there, about 2 R_s since R_s is connected half of each cycle. R_t is sized so that the two in
+				parallel give the band asked for. The sidebands sit f_m off the carrier, on the tank's slope.
+			</p>
+			<Equation tex={`R_{eff} = R_t \\parallel R_{src}, \\quad R_{src} \\approx 2R_s, \\qquad BW = \\dfrac{1}{2\\pi R_{eff} C} = 2 \\cdot \\text{margin} \\cdot f_{m,max}`} />
+			<Equation tex={`|H(f_m)| = \\dfrac{1}{\\sqrt{1 + (2f_m/BW)^2}}, \\qquad n(f_m) = n\\,|H(f_m)|, \\qquad A_{out,ideal} = \\dfrac{A_d\\,R_{eff}}{2R_s}`} />
+			<p class="note">
+				<strong>How to use:</strong> R_s = 2 R_eff keeps R_t in charge of the band; a larger margin
+				flattens the slope at f_m,max, a smaller one rejects the carrier's harmonics better.
+			</p>
 		</div>
 	</section>
 
@@ -355,13 +394,26 @@
 		<div class="formula">
 			<h3>Precision full-wave rectifier</h3>
 			<p class="note">
-				Two op-amps, two diodes, R1 = R2 = R3 (any equal value). The diodes sit inside feedback
-				loops, so their forward drop is corrected. Positive input: D2 conducts, D1 is off, no
-				current in R1/R2, both op-amps are followers. Negative input: D1 conducts, D2 is off, U1B
-				is an inverting amplifier fed through R1 with R2 as feedback.
+				Two op-amps, two diodes, R1 = R2 = R3. D1 points from U1A's - input into its output, D2 from
+				that output into U1B's + input, which R3 ties to ground. The diodes sit inside feedback loops,
+				so their forward drop is corrected. Positive input: D2 conducts, D1 is off, no current in
+				R1/R2, both op-amps are followers. Negative input: D1 conducts, D2 is off, U1B is an inverting
+				amplifier fed through R1 with R2 as feedback.
 			</p>
 			<Equation tex={`V_{out} = V_{in}\\ (V_{in} > 0), \\qquad V_{out} = -\\dfrac{R_2}{R_1}V_{in} = -V_{in}\\ (V_{in} < 0) \\ \\Rightarrow\\ V_{out} = |V_{in}|`} />
-			<p class="note"><strong>How to use:</strong> checked against Texas Instruments TIDU030; use it whenever a single diode's ripple and 0.7 V loss are not acceptable.</p>
+			<p class="note"><strong>How to use:</strong> checked against Texas Instruments TIDU030 and in LTspice; 1 k, TI's value, keeps a switched-off diode's few pF from leaking through at a fast carrier. Use it whenever a single diode's ripple and 0.7 V loss are not acceptable.</p>
+		</div>
+
+		<div class="formula">
+			<h3>Half-wave rectifier and what comes out</h3>
+			<p class="note">
+				One diode, and R_L from its cathode to ground: the envelope filter takes no DC, so without R_L the
+				diode would charge it to the highest crest and hold it there. The precision rectifier hands the
+				filter exactly 2/pi of the envelope; the bare diode loses its drop on every crest, so the tool
+				works it out with the diode law, R_L for the DC and R_L in parallel with the filter's first
+				resistor for the carrier's own swing.
+			</p>
+			<Equation tex={`\\overline{v}_{full} = \\dfrac{2}{\\pi}\\,A_p\\big[1 + n\\,m(t)\\big] \\ \\Rightarrow\\ \\text{tone} = \\dfrac{2}{\\pi}\\,A_p\\,n\\,|H(f_m)|, \\qquad \\overline{v}_{half} < \\dfrac{1}{\\pi}\\,A_p\\big[1 + n\\,m(t)\\big]`} />
 		</div>
 
 		<div class="formula">

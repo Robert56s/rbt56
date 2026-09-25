@@ -19,7 +19,7 @@
 import { symbols } from 'schematic-symbols';
 import * as filter from '../src/lib/filter/circuits.js';
 import * as modulation from '../src/lib/modulation/circuits.js';
-import { designTowThomasHighPass, designTowThomasLowPass } from '../src/lib/filter/towThomas.js';
+import { designTowThomasHighPass, designTowThomasLowPass, designTowThomasNotch } from '../src/lib/filter/towThomas.js';
 import { buildAgcDiagram, buildClampDiagram, buildLimiterDiagram, buildOscillatorDiagram } from '../src/lib/oscillator/circuits.js';
 import { designOscillator, TOPOLOGIES } from '../src/lib/oscillator/topologies.js';
 import { buildTwoLevelDiagram } from '../src/lib/karnaugh/circuit.js';
@@ -115,11 +115,13 @@ function parseDiagram(svg) {
 			segs.push({ a: { x: x0, y: y0 }, b: { x: x1, y: y0 } }, { a: { x: x1, y: y0 }, b: { x: x1, y: y1 } });
 			segs.push({ a: { x: x1, y: y1 }, b: { x: x0, y: y1 } }, { a: { x: x0, y: y1 }, b: { x: x0, y: y0 } });
 		}
-		const sym = symbols[name];
+		// a symbol mirrored top to bottom is named "<symbol>:flipY"
+		const [base, flip] = name.split(':');
+		const sym = symbols[base];
 		const ports = sym.ports.map((p) => ({
 			label: p.labels[p.labels.length - 1],
 			x: X + p.x * S,
-			y: Y - p.y * S
+			y: flip === 'flipY' ? Y + p.y * S : Y - p.y * S
 		}));
 		const bbox = boxOf(pts);
 		parts.symbols.push({ name, X, Y, S, segs, ports, bbox });
@@ -413,6 +415,8 @@ const CASES = [
 	['filter/buildDifferenceAmpDiagram', () => filter.buildDifferenceAmpDiagram(10000)],
 	['filter/buildTowThomasDiagram', () => filter.buildTowThomasDiagram(designTowThomasLowPass(2 * Math.PI * 10000, 0.7071).components)],
 	['filter/buildTowThomasHpDiagram', () => filter.buildTowThomasHpDiagram(designTowThomasHighPass(2 * Math.PI * 10000, 1.3066).components)],
+	['filter/buildTowThomasNotchDiagram (low side)', () => filter.buildTowThomasNotchDiagram(designTowThomasNotch(2 * Math.PI * 10000, 1.5, 2 * Math.PI * 21000, { lowSide: true }).components)],
+	['filter/buildTowThomasNotchDiagram (high side)', () => filter.buildTowThomasNotchDiagram(designTowThomasNotch(2 * Math.PI * 10000, 1.5, 2 * Math.PI * 4700, { lowSide: false }).components)],
 	['modulation/buildJfetGainCellDiagram', () => modulation.buildJfetGainCellDiagram({ rb: 13600 })],
 	['modulation/buildGainStageDiagram', () => modulation.buildGainStageDiagram({ rtop: 8200, rbottom: 10000 })],
 	['modulation/buildHighPassDiagram', () => modulation.buildHighPassDiagram({ r: 100000, c: 2.2e-7 })],
@@ -434,8 +438,12 @@ const CASES = [
 	['modulation/buildCarrierDividerDiagram', () => modulation.buildCarrierDividerDiagram({ top: 9100, bottom: 1000 })],
 	['modulation/buildSummerDiagram(n=3)', () => modulation.buildSummerDiagram({ inputs: ['x_p(t)', 'x_m(t)', 'V_DC (bias)'], r: 10000 })],
 	['modulation/buildDividerDiagram', () => modulation.buildDividerDiagram({ top: 51000, bottom: 10000, vcc: 12 })],
-	['modulation/buildDiodeTankDiagram', () => modulation.buildDiodeTankDiagram({ l: 1e-3, c: 1.5e-8, r: 4300 })],
+	['modulation/buildDiodeTankDiagram(pair)', () => modulation.buildDiodeTankDiagram({ rs: 3300, l: 1e-3, capacitors: [15e-9, 820e-12], r: 2200 })],
+	['modulation/buildDiodeTankDiagram(single)', () => modulation.buildDiodeTankDiagram({ rs: 8200, l: 1e-3, capacitors: [15e-9], r: 5100 })],
+	['modulation/buildDiodeSummerDiagram(bias)', () => modulation.buildDiodeSummerDiagram({ rp: 4700, rm: 8200, rb: 510000, rf: 10000 })],
+	['modulation/buildDiodeSummerDiagram(no bias)', () => modulation.buildDiodeSummerDiagram({ rp: 4700, rm: 7500, rb: null, rf: 10000 })],
 	['modulation/buildPrecisionRectifierDiagram', () => modulation.buildPrecisionRectifierDiagram({ r1: 10000, r2: 10000, r3: 10000 })],
+	['modulation/buildHalfWaveDiagram', () => modulation.buildHalfWaveDiagram({ rl: 1000 })],
 	['modulation/buildEnvelopeLowPassDiagram', () => modulation.buildEnvelopeLowPassDiagram({ R1: 11000, R2: 11000, Ctop: 2.2e-8, Cbottom: 1e-8 })],
 	['karnaugh/sop 2 terms (B\'D\' + BD)', () => karnaughCase(4, [0, 2, 5, 7, 8, 10, 13, 15], [], 'sop')],
 	['karnaugh/pos 2 terms', () => karnaughCase(4, [0, 2, 5, 7, 8, 10, 13, 15], [], 'pos')],

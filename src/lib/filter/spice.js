@@ -1,4 +1,6 @@
+import { opampModel, opampPhrase } from '../spice/opamps';
 import { renderNetlist, spiceValue } from '../spice/core';
+import { RESPONSES } from './approximations';
 import { drawFilter } from './sheet';
 
 export { spiceValue };
@@ -105,6 +107,28 @@ export function stageElements(stage, i, nIn, nOut) {
 				op('c', '0', N4, N3)
 			];
 		}
+		case 'towThomasNotch': {
+			// the high-pass loop plus Rz from the input into A2: A1's output is the notch
+			const N1 = n('n1');
+			const N2 = n('n2');
+			const B = n('bp');
+			const N4 = n('n4');
+			const N3 = n('inv');
+			return [
+				C('in', nIn, N1, c.Cin),
+				R('z', nIn, N2, c.Rz),
+				R('a', N3, N1, c.Ra),
+				C('1', N1, nOut, c.C1),
+				R('d', N1, nOut, c.Rd),
+				op('a', '0', N1, nOut),
+				R('b', nOut, N2, c.Rb),
+				C('2', N2, B, c.C2),
+				op('b', '0', N2, B),
+				R('r1', B, N4, c.r),
+				R('r2', N4, N3, c.r),
+				op('c', '0', N4, N3)
+			];
+		}
 		case 'firstOrder': {
 			// passive RC then the unity-gain buffer the schematic shows
 			const A = n('a');
@@ -119,7 +143,8 @@ export function stageElements(stage, i, nIn, nOut) {
 	}
 }
 
-function chainElements(stages, from, to, startIndex = 1) {
+/** Stages in cascade from node `from` to node `to`, numbered from `startIndex`. */
+export function chainElements(stages, from, to, startIndex = 1) {
 	const out = [];
 	let node = from;
 	stages.forEach((stage, k) => {
@@ -139,11 +164,14 @@ const isBand = (t) => t === 'bandpass' || t === 'bandstop';
  * Every element of the circuit, format-independent. The source V1 is
  * included so both renderers drive the input the same way.
  */
-export function buildElements({ realizedStages, filterType, lpCount = 0, combinerMode = 'sum', combinerR = 10000 }) {
+export function buildElements({ realizedStages, filterType, lpCount = 0, combinerMode = 'sum', combinerR = 10000, combinerResistors = null }) {
 	const out = [{ kind: 'V', name: 'V1', nodes: ['vin', '0'], spice: 'AC 1 SIN(0 1 1k)' }];
 	if (filterType === 'bandstop') {
 		const lp = realizedStages.slice(0, lpCount);
 		const hp = realizedStages.slice(lpCount);
+		// the combiner's resistors: all equal, unless the low-pass branch's
+		// input resistor was scaled to even out a notch stage's DC gain
+		const rv = (key) => combinerResistors?.[key] ?? combinerR;
 		out.push({ kind: 'LABEL', text: 'low-pass branch' }, ...chainElements(lp, 'vin', 'lpout', 1));
 		out.push({ kind: 'LABEL', text: 'high-pass branch' }, ...chainElements(hp, 'vin', 'hpout', 1 + lp.length));
 		if (combinerMode === 'difference') {
@@ -151,18 +179,18 @@ export function buildElements({ realizedStages, filterType, lpCount = 0, combine
 			// because it gives the deeper notch for these branch orders
 			out.push(
 				{ kind: 'LABEL', text: 'difference amplifier: Vout = V(hpout) - V(lpout)' },
-				{ kind: 'R', name: 'RCH', nodes: ['hpout', 'cmp'], value: combinerR },
-				{ kind: 'R', name: 'RCG', nodes: ['cmp', '0'], value: combinerR },
-				{ kind: 'R', name: 'RCL', nodes: ['lpout', 'cmm'], value: combinerR },
-				{ kind: 'R', name: 'RCF', nodes: ['cmm', 'vout'], value: combinerR },
+				{ kind: 'R', name: 'RCH', nodes: ['hpout', 'cmp'], value: rv('RCH') },
+				{ kind: 'R', name: 'RCG', nodes: ['cmp', '0'], value: rv('RCG') },
+				{ kind: 'R', name: 'RCL', nodes: ['lpout', 'cmm'], value: rv('RCL') },
+				{ kind: 'R', name: 'RCF', nodes: ['cmm', 'vout'], value: rv('RCF') },
 				{ kind: 'OP', name: 'UC', nodes: ['cmp', 'cmm', 'vout'] }
 			);
 		} else {
 			out.push(
 				{ kind: 'LABEL', text: 'inverting summing amplifier: Vout = -(V(lpout) + V(hpout))' },
-				{ kind: 'R', name: 'RCA', nodes: ['lpout', 'csum'], value: combinerR },
-				{ kind: 'R', name: 'RCB', nodes: ['hpout', 'csum'], value: combinerR },
-				{ kind: 'R', name: 'RCF', nodes: ['vout', 'csum'], value: combinerR },
+				{ kind: 'R', name: 'RCA', nodes: ['lpout', 'csum'], value: rv('RCA') },
+				{ kind: 'R', name: 'RCB', nodes: ['hpout', 'csum'], value: rv('RCB') },
+				{ kind: 'R', name: 'RCF', nodes: ['vout', 'csum'], value: rv('RCF') },
 				{ kind: 'OP', name: 'UC', nodes: ['0', 'csum', 'vout'] }
 			);
 		}
@@ -193,24 +221,36 @@ function sweepRange({ filterType, fp, fs, fsl, fsh }) {
 	return { low, high };
 }
 
-function specSummary({ filterType, response, amaxDb, aminDb, fp, fs, fl, fh, fsl, fsh, topology }) {
+/** The response in words: one name, or one per side when a band type mixes two. */
+function responseText({ filterType, response, responseHp, responseLp }) {
+	const name = (r) => RESPONSES[r]?.label ?? r;
+	if (isBand(filterType) && responseHp && responseLp && responseHp !== responseLp) return `${name(responseHp)} high-pass side, ${name(responseLp)} low-pass side`;
+	return name(response ?? responseLp ?? 'butterworth');
+}
+
+function specSummary(opts) {
+	const { filterType, amaxDb, aminDb, fp, fs, fl, fh, fsl, fsh, topology } = opts;
 	const edges = isBand(filterType) ? `fl = ${fl} Hz, fh = ${fh} Hz, fsl = ${fsl} Hz, fsh = ${fsh} Hz` : `fp = ${fp} Hz, fs = ${fs} Hz`;
-	return [`${TYPE_LABEL[filterType] ?? filterType}, ${response}`, `Amax = ${amaxDb} dB, Amin = ${aminDb} dB, ${edges}`, `topology: ${topology}`];
+	return [`${TYPE_LABEL[filterType] ?? filterType}, ${responseText(opts)}`, `Amax = ${amaxDb} dB, Amin = ${aminDb} dB, ${edges}`, `topology: ${topology}`];
 }
 
 /* ------------------------------------------------------------- output */
 
 function headerLines(opts) {
-	const { filterType } = opts;
+	const { filterType, opamp = 'ideal' } = opts;
 	return {
 		title: `Active ${TYPE_LABEL[filterType] ?? filterType} filter, generated by rbt56.com/tools/filter-design/`,
 		comments: [
 			...specSummary(opts),
 			'',
-			'The op-amp is a generic model: open-loop gain AOL with one dominant',
-			'pole set so the gain-bandwidth product equals GBW. Change GBW to the',
-			'part you will actually use (3meg = TL07x/TL08x, 8meg = OPA2134,',
-			'10meg = NE5532) and rerun to see whether the op-amp limits the design.'
+			...(opampModel(opamp).real
+				? [`The op-amps are ${opampPhrase(opamp)} (VPOS, VNEG), so the run shows`, 'what the part adds to the design: its gain-bandwidth, slew rate and', 'output limits. The ideal op-amp on the page gives the design itself.']
+				: [
+						'The op-amp is a generic model: open-loop gain AOL with one dominant',
+						'pole set so the gain-bandwidth product equals GBW. Change GBW to the',
+						'part you will actually use (3meg = TL07x/TL08x, 8meg = OPA2134,',
+						'10meg = NE5532) and rerun to see whether the op-amp limits the design.'
+					])
 		]
 	};
 }
@@ -225,7 +265,7 @@ function analysis(opts) {
  * no external library and the gain-bandwidth can be swept.
  */
 export function generateNetlist(opts) {
-	const { gbw = '3meg', ideal = false } = opts;
+	const { gbw = '3meg', ideal = false, opamp = 'ideal' } = opts;
 	const { title, comments } = headerLines(opts);
 	return renderNetlist({
 		elements: buildElements(opts),
@@ -233,17 +273,24 @@ export function generateNetlist(opts) {
 		comments: [...comments, '', 'Open in LTspice (File > Open, set the filter to All Files) and Run,', 'then plot V(vout). For a schematic instead, download the .asc.'],
 		params: [`.param AOL=1meg GBW=${gbw}`],
 		directives: [...analysis(opts), '', '* For a time-domain look instead, comment out the .ac line above and', '* uncomment the next one (1 kHz input, 5 ms):', '*.tran 0 5m 0 1u'],
-		ideal
+		ideal,
+		opamp
 	});
 }
 
 const TOPOLOGY_LABEL = { mfb: 'multiple feedback', sallenKey: 'Sallen-Key', towThomas: 'Tow-Thomas' };
 
 /** The note on the drawn schematic, in two lines (the .cir carries the longer explanation). */
+/** The stage circuits actually on the sheet: the chosen topology, the notch stages, or both. */
+function stagesText({ topology, realizedStages = [] }) {
+	const kinds = new Set(realizedStages.map((s) => (s.topology === 'towThomasNotch' ? 'Tow-Thomas notch' : /^firstOrder/.test(s.topology) ? null : TOPOLOGY_LABEL[s.topology.replace(/Hp$/, '')])).filter(Boolean));
+	return kinds.size ? [...kinds].join(' and ') : TOPOLOGY_LABEL[topology] ?? topology;
+}
+
 function schematicNotes(opts) {
-	const { filterType, response, topology, realizedStages = [] } = opts;
+	const { filterType, realizedStages = [] } = opts;
 	const order = realizedStages.reduce((n, s) => n + (s.order ?? (/^firstOrder/.test(s.topology) ? 1 : 2)), 0);
-	const kind = `${TYPE_LABEL[filterType] ?? filterType}, ${response}, order ${order}, ${TOPOLOGY_LABEL[topology] ?? topology}`;
+	const kind = `${TYPE_LABEL[filterType] ?? filterType}, ${responseText(opts)}, order ${order}, ${stagesText(opts)}`;
 	return [`Active ${kind} filter (rbt56.com/tools/filter-design)`, 'Run, then plot V(vout); the .meas lines give its gain at the band edges.'];
 }
 
@@ -252,9 +299,9 @@ function schematicNotes(opts) {
  * stage by stage (sheet.js), the AC analysis already set up.
  */
 export function generateSchematic(opts) {
-	const { gbw = '3Meg' } = opts;
+	const { gbw = '3Meg', opamp = 'ideal' } = opts;
 	return drawFilter(
 		{ ...opts, elements: buildElements(opts) },
-		{ comments: schematicNotes(opts), directives: ['.lib opamp.sub', ...analysis(opts)], gbw }
+		{ comments: schematicNotes(opts), directives: ['.lib opamp.sub', ...analysis(opts)], gbw, opamp }
 	);
 }

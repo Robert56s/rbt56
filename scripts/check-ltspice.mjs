@@ -2,7 +2,8 @@
 //
 //   node --import ./scripts/resolve-ext.mjs scripts/check-ltspice.mjs
 //
-// For each oscillator and modulator export: LTspice's own netlister is
+// For each oscillator and modulator export (the JFET modulator, the diode
+// + tank modulator and the demodulator): LTspice's own netlister is
 // run on the .asc and its result compared with the .cir (same elements,
 // same values, same partition of pins into nets); then the .cir is
 // simulated and the waveform measured: the frequency from zero
@@ -18,7 +19,8 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { combinerChoice, magnitudePhaseAt, magnitudePhaseAtParallelSum } from '../src/lib/filter/bode.js';
+import { branchDcGain, combinerChoice, combinerDesign, magnitudePhaseAt, magnitudePhaseAtParallelSum } from '../src/lib/filter/bode.js';
+import { nearestResistor } from '../src/lib/filter/eseries.js';
 import { designFirstOrderLowPass } from '../src/lib/filter/firstOrder.js';
 import { designFirstOrderHighPass } from '../src/lib/filter/firstOrderHighPass.js';
 import { designMfbLowPass } from '../src/lib/filter/mfb.js';
@@ -27,9 +29,20 @@ import { designSallenKeyLowPass } from '../src/lib/filter/sallenKey.js';
 import { designSallenKeyHighPass } from '../src/lib/filter/sallenKeyHighPass.js';
 import { generateNetlist as filterNetlist, generateSchematic as filterSchematic } from '../src/lib/filter/spice.js';
 import { designBandPass, designBandStop, designHighPass, designLowPass } from '../src/lib/filter/stages.js';
-import { designTowThomasHighPass, designTowThomasLowPass } from '../src/lib/filter/towThomas.js';
+import { designTowThomasHighPass, designTowThomasLowPass, designTowThomasNotch } from '../src/lib/filter/towThomas.js';
+import { designDiodeMixerModulator } from '../src/lib/modulation/diodeMixerModulator.js';
+import { designEnvelopeLowPass } from '../src/lib/modulation/envelopeFilter.js';
 import { designJfetModulator } from '../src/lib/modulation/jfetModulator.js';
-import { generateNetlist as modNetlist, generateSchematic as modSchematic } from '../src/lib/modulation/spice.js';
+import { designHalfWaveRectifier, designPrecisionRectifier } from '../src/lib/modulation/rectifier.js';
+import {
+	demodExpectation,
+	generateDemodNetlist as demodNetlist,
+	generateDemodSchematic as demodSchematic,
+	generateDiodeNetlist as diodeNetlist,
+	generateDiodeSchematic as diodeSchematic,
+	generateNetlist as modNetlist,
+	generateSchematic as modSchematic
+} from '../src/lib/modulation/spice.js';
 import { generateNetlist as oscNetlist, generateSchematic as oscSchematic, probeNode } from '../src/lib/oscillator/spice.js';
 import { designOscillator, TOPOLOGIES } from '../src/lib/oscillator/topologies.js';
 
@@ -61,12 +74,24 @@ function run(args, timeout = 300000) {
 const clean = (s) => s.replace(/µ/g, 'u').replace(/[^\x20-\x7e]/g, '').replace(/\s+;.*$/, '').trim();
 function parseNetlist(text, isLtspice) {
 	const out = [];
+	let inside = false;
 	for (const raw of text.split(/\r?\n/)) {
 		const l = clean(raw);
-		if (!/^[RCDJXBV]/i.test(l) || /^(E1|E2|R1 e f|C1 f 0)\b/.test(l)) continue;
+		// a subcircuit's own lines (the op-amp model) are not the circuit
+		if (/^\.subckt/i.test(l)) inside = true;
+		if (/^\.ends/i.test(l)) {
+			inside = false;
+			continue;
+		}
+		if (inside) continue;
+		if (!/^[RCDJXBVL]/i.test(l) || /^(E1|E2|R1 e f|C1 f 0)\b/.test(l)) continue;
 		const p = l.split(/\s+/);
 		const name = p[0].replace(/^X/i, '').toLowerCase();
-		if (p[0].toLowerCase().startsWith('x')) {
+		if (p[0].toLowerCase().startsWith('x') && /^(tl082|lm741)$/i.test(p[6] ?? '')) {
+			// a real part on the five-pin symbol, in the same order both ways:
+			// +in, -in, V+, V-, out, then the part name
+			out.push({ name, nodes: [p[1], p[2], p[5], p[3], p[4]].map((n) => n.toLowerCase()), value: p[6].toLowerCase() });
+		} else if (p[0].toLowerCase().startsWith('x')) {
 			// LTspice lists invin noninvin out; our subcircuit takes noninv inv out
 			const nodes = isLtspice ? [p[2], p[1], p[3]] : [p[1], p[2], p[3]];
 			out.push({ name, nodes: nodes.map((n) => n.toLowerCase()), value: 'opamp' });
@@ -257,6 +282,94 @@ for (const [stem, opts] of amCases) {
 	check(`${stem}: carrier at ${opts.oscillator ? 'the oscillator\'s' : 'the source\'s'} frequency`, rel(m.carrier, opts.oscillator ? opts.oscillator.f0 : 55000, opts.oscillator ? 0.02 : 0.002), `${m.carrier.toFixed(0)} Hz`);
 }
 
+/* ---------------------------------------------- diode + tank modulator */
+// The page works the diode out cycle by cycle with the same SPICE model:
+// the carrier and the index LTspice gives for a tone at f_m,max must be
+// the page's, read from the carrier line and the two sidebands.
+function toneOf(t, v, f, a, b, S = 40000) {
+	let re = 0;
+	let im = 0;
+	for (let s = 0; s < S; s++) {
+		const tt = a + ((s + 0.5) / S) * (b - a);
+		const x = interp(t, v, tt);
+		re += x * Math.cos(2 * Math.PI * f * tt);
+		im += x * Math.sin(2 * Math.PI * f * tt);
+	}
+	return (2 * Math.hypot(re, im)) / S;
+}
+const diodeCases = [
+	['diode-40k', { fp: 40000, fmMax: 1000 }],
+	['diode-55k', { fp: 55000, fmMax: 1000 }],
+	['diode-bat54', { fp: 40000, fmMax: 1000, diode: 'BAT54' }],
+	['diode-narrow', { fp: 40000, fmMax: 1000, sidebandMargin: 1.2 }]
+];
+for (const [stem, params] of diodeCases) {
+	const design = designDiodeMixerModulator(params);
+	const asc = join(dir, `${stem}.asc`);
+	const cir = join(dir, `${stem}.cir`);
+	writeFileSync(asc, diodeSchematic({ design }));
+	writeFileSync(cir, diodeNetlist({ design }));
+	run(['-netlist', asc], 60000);
+	const netFile = join(dir, `${stem}.net`);
+	const problems = existsSync(netFile) ? sameCircuit(readFileSync(cir, 'utf8'), readFileSync(netFile, 'latin1')) : ['LTspice wrote no netlist'];
+	check(`${stem}: LTspice netlists the drawn .asc into our .cir`, problems.length === 0, problems.slice(0, 3).join('; '));
+	run(['-b', '-ascii', cir]);
+	const rawFile = join(dir, `${stem}.raw`);
+	if (!existsSync(rawFile)) {
+		check(`${stem}: simulates`, false);
+		continue;
+	}
+	const { t, trace } = readRaw(rawFile);
+	const v = trace('V(vout)');
+	const b = t[t.length - 1];
+	const a = b - 2 / design.fmMax;
+	const carrier = toneOf(t, v, design.fp, a, b);
+	const index = (toneOf(t, v, design.fp - design.fmMax, a, b) + toneOf(t, v, design.fp + design.fmMax, a, b)) / carrier;
+	check(`${stem}: carrier near the page's ${design.carrierOut.toFixed(3)} V`, rel(carrier, design.carrierOut, 0.015), `${carrier.toFixed(4)} V`);
+	check(`${stem}: index for a ${design.fmMax} Hz tone near the page's ${design.indexAtFmMax.toFixed(3)}`, Math.abs(index - design.indexAtFmMax) < 0.015, index.toFixed(4));
+}
+
+/* --------------------------------------------------------- demodulator */
+// The test wave is set on a .param line; the .meas lines print the
+// output's mean and peak-to-peak, and the recovered tone is read from the
+// run. The precision rectifier is held to 2/pi of the wave (a percent or
+// two low with a TL08x's gain-bandwidth), the bare diode to the page's
+// diode-law figure.
+for (const rectifierType of ['full', 'half']) {
+	for (const response of ['butterworth', 'chebyshev']) {
+		const fp = 40000;
+		const fm = 1000;
+		const envelope = designEnvelopeLowPass({ response, amaxDb: 1, aminDb: 40, fp: fm, fs: rectifierType === 'full' ? 2 * fp : fp, order: null });
+		const rectifier = rectifierType === 'full' ? designPrecisionRectifier() : designHalfWaveRectifier();
+		const opts = { rectifierType, rectifier, envelope, fp, fm, index: 0.9 };
+		const stem = `demod-${rectifierType}-${response}`;
+		const asc = join(dir, `${stem}.asc`);
+		const cir = join(dir, `${stem}.cir`);
+		writeFileSync(asc, demodSchematic(opts));
+		writeFileSync(cir, demodNetlist(opts));
+		run(['-netlist', asc], 60000);
+		const netFile = join(dir, `${stem}.net`);
+		const problems = existsSync(netFile) ? sameCircuit(readFileSync(cir, 'utf8'), readFileSync(netFile, 'latin1')) : ['LTspice wrote no netlist'];
+		check(`${stem}: LTspice netlists the drawn .asc into our .cir`, problems.length === 0, problems.slice(0, 3).join('; '));
+		run(['-b', '-ascii', cir]);
+		const rawFile = join(dir, `${stem}.raw`);
+		const logText = existsSync(join(dir, `${stem}.log`)) ? readFileSync(join(dir, `${stem}.log`), 'latin1').replace(/\0/g, '') : '';
+		if (!existsSync(rawFile)) {
+			check(`${stem}: simulates`, false);
+			continue;
+		}
+		const { t, trace } = readRaw(rawFile);
+		const v = trace('V(vout)');
+		const tone = toneOf(t, v, fm, t[0], t[t.length - 1]);
+		const vavg = Number((/vavg: AVG\(V\(vout\)\)=([-+0-9.e]+)/i.exec(logText) ?? [])[1]);
+		const ex = demodExpectation(opts);
+		const tolMean = rectifierType === 'full' ? 0.015 : 0.03;
+		const tolTone = rectifierType === 'full' ? 0.01 : 0.04;
+		check(`${stem}: the log's mean near the page's ${ex.mean.toFixed(3)} V`, Number.isFinite(vavg) && rel(vavg, ex.mean, tolMean), Number.isFinite(vavg) ? `${vavg.toFixed(4)} V` : 'no .meas vavg in the log');
+		check(`${stem}: the recovered tone near the page's ${ex.tone.toFixed(3)} V`, rel(tone, ex.tone, tolTone), `${tone.toFixed(4)} V`);
+	}
+}
+
 /* ------------------------------------------------------------- filters */
 // The drawn filter must netlist into the .cir, and the .cir, run with an
 // op-amp too fast to matter, must give the response the page plots at
@@ -266,16 +379,31 @@ const secondOrder = {
 	sallenKey: (s) => (s.filterType === 'highpass' ? designSallenKeyHighPass(s.wn, s.q) : designSallenKeyLowPass(s.wn, s.q)),
 	towThomas: (s) => (s.filterType === 'highpass' ? designTowThomasHighPass(s.wn, s.q) : designTowThomasLowPass(s.wn, s.q))
 };
-const realize = (t) => (s) => (s.order === 1 ? (s.filterType === 'highpass' ? designFirstOrderHighPass(s.tau) : designFirstOrderLowPass(s.tau)) : secondOrder[t](s));
+// a stage with zeros (elliptic, inverse Chebyshev) is always a Tow-Thomas notch
+const realize = (t) => (s) =>
+	Number.isFinite(s.wz)
+		? designTowThomasNotch(s.wn, s.q, s.wz, { lowSide: s.filterType === 'lowpass' })
+		: s.order === 1
+			? s.filterType === 'highpass'
+				? designFirstOrderHighPass(s.tau)
+				: designFirstOrderLowPass(s.tau)
+			: secondOrder[t](s);
 const filterSpecs = [
 	{ filterType: 'lowpass', response: 'chebyshev', amaxDb: 3, aminDb: 40, fp: 10000, fs: 35000 },
 	{ filterType: 'highpass', response: 'butterworth', amaxDb: 3, aminDb: 40, fp: 10000, fs: 3000 },
 	{ filterType: 'bandpass', response: 'chebyshev', amaxDb: 3, aminDb: 40, fl: 1000, fh: 10000, fsl: 300, fsh: 30000 },
 	{ filterType: 'bandstop', response: 'butterworth', amaxDb: 3, aminDb: 40, fl: 1000, fh: 30000, fsl: 3000, fsh: 10000 },
-	{ filterType: 'bandstop', response: 'chebyshev', amaxDb: 3, aminDb: 40, fl: 1000, fh: 30000, fsl: 3000, fsh: 10000 }
+	{ filterType: 'bandstop', response: 'chebyshev', amaxDb: 3, aminDb: 40, fl: 1000, fh: 30000, fsl: 3000, fsh: 10000 },
+	// the newer responses, each on one topology (the notch stages ignore it anyway)
+	{ filterType: 'lowpass', response: 'elliptic', amaxDb: 1, aminDb: 40, fp: 10000, fs: 20000, only: ['mfb'] },
+	{ filterType: 'highpass', response: 'inverseChebyshev', amaxDb: 1, aminDb: 40, fp: 10000, fs: 4000, only: ['sallenKey'] },
+	{ filterType: 'lowpass', response: 'legendre', amaxDb: 3, aminDb: 40, fp: 10000, fs: 35000, only: ['sallenKey'] },
+	{ filterType: 'lowpass', response: 'bessel', amaxDb: 3, aminDb: 40, fp: 10000, fs: 35000, only: ['towThomas'] },
+	{ filterType: 'bandstop', response: 'elliptic', responseHp: 'butterworth', responseLp: 'elliptic', amaxDb: 3, aminDb: 40, fl: 1000, fh: 30000, fsl: 3000, fsh: 10000, only: ['mfb'] },
+	{ filterType: 'bandpass', response: 'inverseChebyshev', responseHp: 'legendre', responseLp: 'inverseChebyshev', amaxDb: 3, aminDb: 40, fl: 1000, fh: 10000, fsl: 300, fsh: 30000, only: ['mfb'] }
 ];
-for (const spec of filterSpecs) {
-	for (const topology of Object.keys(secondOrder)) {
+for (const { only, ...spec } of filterSpecs) {
+	for (const topology of only ?? Object.keys(secondOrder)) {
 		let design;
 		if (spec.filterType === 'bandpass') design = designBandPass({ ...spec, orderLow: null, orderHigh: null });
 		else if (spec.filterType === 'bandstop') design = designBandStop({ ...spec, orderLow: null, orderHigh: null });
@@ -284,15 +412,20 @@ for (const spec of filterSpecs) {
 		const realized = design.stages.map(realize(topology));
 		const lpCount = spec.filterType === 'bandstop' ? design.lp.stages.length : 0;
 		let combinerMode = 'sum';
+		let combinerResistors = null;
 		let predicted = (f) => magnitudePhaseAt(realized, f).db;
 		if (spec.filterType === 'bandstop') {
 			const branches = [realized.slice(0, lpCount), realized.slice(lpCount)];
 			const choice = combinerChoice(branches, spec.fsl, spec.fsh);
 			combinerMode = choice.mode;
-			predicted = (f) => magnitudePhaseAtParallelSum(branches, f, choice.signs).db;
+			// the combiner evens out a low-pass notch stage's DC gain, as on the page
+			const parts = combinerDesign(choice.mode, 10000, Math.abs(branchDcGain(branches[0])), (v) => nearestResistor(v, 'E24'));
+			combinerResistors = parts.resistors;
+			predicted = (f) => magnitudePhaseAtParallelSum(branches, f, parts.weights).db;
 		}
-		const opts = { realizedStages: realized, topology, lpCount, combinerMode, combinerR: 10000, ...spec };
-		const stem = `flt-${spec.filterType}-${spec.response}-${topology}`;
+		const opts = { realizedStages: realized, topology, lpCount, combinerMode, combinerR: 10000, combinerResistors, ...spec };
+		const responseTag = spec.responseHp && spec.responseHp !== spec.responseLp ? `${spec.responseHp}+${spec.responseLp}` : spec.response;
+		const stem = `flt-${spec.filterType}-${responseTag}-${topology}`;
 		const asc = join(dir, `${stem}.asc`);
 		const cir = join(dir, `${stem}.cir`);
 		writeFileSync(asc, filterSchematic(opts));
@@ -309,6 +442,116 @@ for (const spec of filterSpecs) {
 		const meas = [...log.matchAll(/^v_(\w+): V\(vout\)\s*=\(([-+0-9.e]+)dB,[^)]*\) at ([-+0-9.e]+)/gim)].map((m) => ({ name: m[1], db: Number(m[2]), f: Number(m[3]) }));
 		const worst = meas.reduce((w, m) => Math.max(w, Math.abs(m.db - predicted(m.f))), 0);
 		check(`${stem}: LTspice gives the page's response at the band edges`, meas.length >= 2 && worst < 0.05, meas.length ? `${meas.map((m) => `${m.name} ${m.db.toFixed(2)} dB`).join(', ')}; worst ${worst.toFixed(3)} dB off` : 'no .meas in the log');
+	}
+}
+
+/* ------------------------------------------- real op-amps: TL082, LM741 */
+// The same exports with a real part on +/-15 V rails. LTspice must
+// netlist the five-pin drawing into the .cir (rails included), and the
+// run must land near the page's figures: the part adds its own
+// gain-bandwidth, slew rate and output limits to the design, so the
+// tolerances are wider than for the ideal model. The LM741 runs only have
+// to simulate: at these frequencies it is expected to fall short.
+{
+	const parity = (stem, asc, cir) => {
+		writeFileSync(join(dir, `${stem}.asc`), asc);
+		writeFileSync(join(dir, `${stem}.cir`), cir);
+		run(['-netlist', join(dir, `${stem}.asc`)], 60000);
+		const netFile = join(dir, `${stem}.net`);
+		const problems = existsSync(netFile) ? sameCircuit(cir, readFileSync(netFile, 'latin1')) : ['LTspice wrote no netlist'];
+		const rails = [...cir.matchAll(/^X\S+ \S+ \S+ (\S+) (\S+) \S+ (TL082|LM741)$/gm)].every((m) => m[1] === 'v++' && m[2] === 'v--');
+		check(`${stem}: LTspice netlists the drawn .asc into our .cir, every op-amp on v++ and v--`, problems.length === 0 && rails && /^VPOS v\+\+ 0 15$/m.test(cir) && /^VNEG v-- 0 -15$/m.test(cir), problems.slice(0, 3).join('; '));
+	};
+	const simulate = (stem, text, ascii = true) => {
+		const cir = join(dir, `${stem}-run.cir`);
+		writeFileSync(cir, text);
+		run(ascii ? ['-b', '-ascii', cir] : ['-b', cir]);
+		const log = existsSync(join(dir, `${stem}-run.log`)) ? readFileSync(join(dir, `${stem}-run.log`), 'latin1').replace(/\0/g, '') : '';
+		const raw = join(dir, `${stem}-run.raw`);
+		return { log, raw: ascii && existsSync(raw) ? readRaw(raw) : null };
+	};
+	for (const opamp of ['TL082', 'LM741']) {
+		const tag = opamp.toLowerCase();
+		// filter: the low-pass Chebyshev of the list above, multiple feedback
+		{
+			const spec = { filterType: 'lowpass', response: 'chebyshev', amaxDb: 3, aminDb: 40, fp: 10000, fs: 35000 };
+			const design = designLowPass({ ...spec, order: null });
+			const realized = design.stages.map(realize('mfb'));
+			const opts = { realizedStages: realized, topology: 'mfb', lpCount: 0, combinerMode: 'sum', combinerR: 10000, combinerResistors: null, ...spec, opamp };
+			const stem = `real-${tag}-filter`;
+			const cir = filterNetlist(opts);
+			parity(stem, filterSchematic(opts), cir);
+			const { log } = simulate(stem, cir, false);
+			const meas = [...log.matchAll(/^v_(\w+): V\(vout\)\s*=\(([-+0-9.e]+)dB,[^)]*\) at ([-+0-9.e]+)/gim)].map((m) => ({ db: Number(m[2]), f: Number(m[3]) }));
+			const worst = meas.reduce((w, m) => Math.max(w, Math.abs(m.db - magnitudePhaseAt(realized, m.f).db)), 0);
+			// the page's response is the ideal op-amp's; a TL082's 3 MHz shows as a few tenths of a dB at the ripple peak
+			if (opamp === 'TL082') check(`${stem}: the band edges within 0.5 dB of the page with a TL082`, meas.length >= 2 && worst < 0.5, `worst ${worst.toFixed(3)} dB`);
+			else check(`${stem}: simulates`, meas.length >= 2, `band edges ${worst.toFixed(2)} dB off the ideal design`);
+		}
+		// oscillator: the Wien bridge with diode limiting, 1 kHz
+		{
+			const d = designOscillator({ topology: 'wien', stabilizer: 'diodes', frequency: 1000, amplitude: 3 });
+			const stem = `real-${tag}-wien`;
+			const cir = oscNetlist(d, { opamp });
+			parity(stem, oscSchematic(d, { opamp }), cir);
+			const { raw } = simulate(stem, cir);
+			if (!raw) check(`${stem}: simulates`, false);
+			else {
+				const m = measureOscillator(raw.t, raw.trace(`V(${probeNode(d)})`));
+				if (opamp === 'TL082') check(`${stem}: runs near the page's ${d.f0.toFixed(0)} Hz and ${(d.limiter.amplitudeActual ?? 3).toFixed(2)} V`, rel(m.f, d.f0, 0.02) && rel(m.last, d.limiter.amplitudeActual ?? 3, 0.15), `${m.f.toFixed(1)} Hz, ${m.last.toFixed(3)} V`);
+				else check(`${stem}: simulates`, Number.isFinite(m.f), `${m.f.toFixed(1)} Hz, ${m.last.toFixed(3)} V`);
+			}
+		}
+		// diode + tank modulator
+		{
+			const design = designDiodeMixerModulator({ fp: 40000, fmMax: 1000 });
+			const stem = `real-${tag}-diode`;
+			const cir = diodeNetlist({ design, opamp });
+			parity(stem, diodeSchematic({ design, opamp }), cir);
+			const { raw } = simulate(stem, cir);
+			if (!raw) check(`${stem}: simulates`, false);
+			else {
+				const v = raw.trace('V(vout)');
+				const b = raw.t[raw.t.length - 1];
+				const a = b - 2 / design.fmMax;
+				const carrier = toneOf(raw.t, v, design.fp, a, b);
+				const index = (toneOf(raw.t, v, design.fp - design.fmMax, a, b) + toneOf(raw.t, v, design.fp + design.fmMax, a, b)) / carrier;
+				if (opamp === 'TL082') check(`${stem}: carrier and index near the page's with a TL082`, rel(carrier, design.carrierOut, 0.03) && Math.abs(index - design.indexAtFmMax) < 0.02, `${carrier.toFixed(4)} V, n ${index.toFixed(4)}`);
+				else check(`${stem}: simulates`, carrier > 0, `${carrier.toFixed(4)} V, n ${index.toFixed(4)}`);
+			}
+		}
+		// demodulator, precision full-wave
+		{
+			const envelope = designEnvelopeLowPass({ response: 'butterworth', amaxDb: 1, aminDb: 40, fp: 1000, fs: 80000, order: null });
+			const opts = { rectifierType: 'full', rectifier: designPrecisionRectifier(), envelope, fp: 40000, fm: 1000, index: 0.9, opamp };
+			const stem = `real-${tag}-demod`;
+			const cir = demodNetlist(opts);
+			parity(stem, demodSchematic(opts), cir);
+			const { raw, log } = simulate(stem, cir);
+			if (!raw) check(`${stem}: simulates`, false);
+			else {
+				const tone = toneOf(raw.t, raw.trace('V(vout)'), 1000, raw.t[0], raw.t[raw.t.length - 1]);
+				const vavg = Number((/vavg: AVG\(V\(vout\)\)=([-+0-9.e]+)/i.exec(log) ?? [])[1]);
+				const ex = demodExpectation(opts);
+				if (opamp === 'TL082') check(`${stem}: mean and tone near the page's with a TL082`, rel(vavg, ex.mean, 0.03) && rel(tone, ex.tone, 0.02), `${vavg.toFixed(4)} V, tone ${tone.toFixed(4)} V`);
+				else check(`${stem}: simulates (a 741 is too slow for a 40 kHz carrier, and shows it)`, Number.isFinite(vavg), `${vavg.toFixed(4)} V, tone ${tone.toFixed(4)} V against ${ex.mean.toFixed(3)} and ${ex.tone.toFixed(3)}`);
+			}
+		}
+		// JFET modulator, non-inverting cell, external carrier
+		{
+			const d = designJfetModulator(base);
+			const opts = { design: d, fmPreview: 1000, oscillator: null, opamp };
+			const stem = `real-${tag}-jfet`;
+			const cir = modNetlist(opts);
+			parity(stem, modSchematic(opts), cir);
+			const { raw } = simulate(stem, cir);
+			if (!raw) check(`${stem}: simulates`, false);
+			else {
+				const m = measureAm(raw.t, raw.trace('V(vout)'), 55000, 1000);
+				if (opamp === 'TL082') check(`${stem}: index from the peaks near the page's ${d.opamp.peakModulationIndex.toFixed(3)} with a TL082`, Math.abs(m.index - d.opamp.peakModulationIndex) < 0.04, m.index.toFixed(3));
+				else check(`${stem}: simulates`, Number.isFinite(m.index), m.index.toFixed(3));
+			}
+		}
 	}
 }
 

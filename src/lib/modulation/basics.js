@@ -111,12 +111,12 @@ function present(props) {
 /* ------------------------------------------------- the common sections */
 
 // the carrier height and index the formulas of the common sections use, per mode
-const DIODE_N = 0.8; // the diode circuit's index is set on the bench, not by the tool
+const DIODE_N = 0.8; // stands in for the diode circuit's index until its design is complete
 const DEMOD_AP = 1; // the demodulator preview draws a 1 V carrier
 
 function waveFor(ctx) {
 	const { mode, design, targetN, carrierAmp, demoModIndex } = ctx;
-	if (mode === 'diode') return { ap: carrierAmp, n: DIODE_N };
+	if (mode === 'diode') return { ap: ctx.diodeDesign?.carrierOut ?? carrierAmp, n: ctx.diodeDesign?.modulationIndex ?? DIODE_N };
 	if (mode === 'demod') return { ap: DEMOD_AP, n: demoModIndex };
 	const ap = design?.postGain?.outputAmplitude ?? design?.carrier?.carrierOut;
 	return { ap, n: design ? design.modulationIndex : targetN };
@@ -157,9 +157,9 @@ function carrierCopies(ctx) {
 		fm: pos(fm) ? fm : undefined,
 		ap0: pos(ap) ? ap : 1
 	});
-	if (mode === 'diode' && pos(diodeDesign?.f0Actual, diodeDesign?.bwActual)) {
+	if (mode === 'diode' && pos(diodeDesign?.f0Actual, diodeDesign?.bwLoaded)) {
 		props.f0 = diodeDesign.f0Actual;
-		props.bw = diodeDesign.bwActual;
+		props.bw = diodeDesign.bwLoaded;
 	}
 	return [
 		h('The carrier copies the message'),
@@ -178,7 +178,7 @@ function formulaSection(ctx) {
 	const { ap, n } = waveFor(ctx);
 	const live = pos(ap, fp) && fin(n) && n >= 0;
 	let tail;
-	if (mode === 'diode') tail = live ? `On the second line A_p is the carrier amplitude entered on the page. The index n is set on the bench, not by the tool, and ${DIODE_N} stands in for it.` : 'In this circuit n is set on the bench, not by the tool.';
+	if (mode === 'diode') tail = live ? (ctx.diodeDesign ? 'On the second line A_p is the carrier this design delivers across the tank and n its index for a slow message, so the line matches the tables further down.' : `On the second line A_p is the carrier amplitude entered on the page, and ${DIODE_N} stands in for n until the design is complete.`) : 'Once the design on the page is complete, its own carrier and index fill in this formula.';
 	else if (mode === 'demod') tail = live ? `On the second line n is the preview index entered on the page, and the carrier is taken as ${volts(DEMOD_AP)}, as in the preview.` : 'In the demodulator n is whatever the incoming wave carries.';
 	else tail = live ? 'On the second line A_p is the carrier this design delivers at its output and n its modulation index, so the line matches the tables further down.' : 'Once the design on the page is complete, its own carrier and index fill in this formula.';
 	const sym = 'x(t) = A_p\\,\\big[1 + n\\,m(t)\\big]\\cos(2\\pi f_p t)';
@@ -446,14 +446,13 @@ function jfetRest({ design, topology, carrierFrom }) {
 
 function diodeBend({ fp, fm, diodeDesign: dd, carrierAmp, modAmp }) {
 	const known = pos(fp, fm) && fp > fm;
-	const vf = fin(dd?.diodeVf) ? dd.diodeVf : null;
 	const square = 'i &= a_1 v + a_2 v^2 + \\dots, \\qquad v = x_p + x_m \\\\ a_2 v^2 &= a_2 x_p^2 + 2 a_2\\,x_p\\,x_m + a_2 x_m^2';
 	const live = known && pos(carrierAmp, modAmp);
 	const props = present({
 		fp: known ? fp : undefined,
 		fm: known ? fm : undefined,
 		f0: pos(dd?.f0Actual) ? dd.f0Actual : undefined,
-		q0: pos(dd?.qActual) ? dd.qActual : undefined,
+		q0: pos(dd?.qLoaded) ? dd.qLoaded : undefined,
 		ap: pos(carrierAmp) ? carrierAmp : undefined,
 		am: pos(modAmp) ? modAmp : undefined
 	});
@@ -466,7 +465,7 @@ function diodeBend({ fp, fm, diodeDesign: dd, carrierAmp, modAmp }) {
 			`Squaring a sum of two cosines makes their product, and a product, as the section on where the message went showed, is two new cosines at the sum and the difference of the frequencies${known ? `, ${hz(fp + fm)} and ${hz(fp - fm)}` : ''}. The rest is unwanted. The plain term passes the message itself${known ? ` at ${hz(fm)}` : ''}, and the squared term adds twice the carrier${known ? ` at ${hz(2 * fp)}` : ''}, twice the message and a steady offset.`
 		),
 		p(
-			`The diode only bends near its knee, about ${vf !== null ? volts(vf) : '0.7 V'}, so the sum is lifted by a DC bias that keeps it there through the whole cycle. The figure below does the bending; the grey curve is the tank of the next section.`
+			'With signals of a volt or so the bend is extreme: the diode simply switches, on while the sum is above its knee and off below it, and a small DC bias puts that switching point on the zero crossings of the carrier. A switch is a very strong bend, so it makes the same product. The figure below bends the sum gently, which shows the idea; the grey curve is the tank of the next section.'
 		),
 		live
 			? eq(`\\begin{aligned} ${square} \\\\ 2 a_2\\,x_p\\,x_m &= 2 a_2 \\cdot ${texVolts(carrierAmp)} \\cdot ${texVolts(modAmp)}\\,\\cos(2\\pi \\cdot ${texInt(fp)}\\,t)\\cos(2\\pi \\cdot ${texInt(fm)}\\,t) \\end{aligned}`, "The diode's curve written as a series in v, the sum of the carrier x_p and the message x_m. The squared term holds their product, written out on the last line with this page's two amplitudes and frequencies:")
@@ -487,8 +486,8 @@ function tankSection({ fp, fm, diodeDesign: dd }) {
 		p(
 			'How narrowly it selects is Q, f_0 divided by the width of the band it passes. Q must be high enough to drop the unwanted parts, but not so high that the sidebands fall outside the band.' +
 				(live
-					? ` The page asks the band to be ${sig(dd.sidebandMargin)} times the ${hz(2 * fm)} the sidebands need, ${hz(dd.bandwidth)}, and a resistor across the tank sets Q.`
-					: ' The page asks the band to be a margin wider than the sidebands need, and a resistor across the tank sets Q.')
+					? ` The page asks the band to be ${sig(dd.sidebandMargin)} times the ${hz(2 * fm)} the sidebands need, ${hz(dd.bandwidth)}, and the resistors around the tank set Q.`
+					: ' The page asks the band to be a margin wider than the sidebands need, and the resistors around the tank set Q.')
 		),
 		p('It is the oldest modulator: one diode does the mixing, and nothing has to be fast. But it needs a real coil, bulky and hard to make accurate, which is why the JFET modulator on this page exists.'),
 		live
@@ -503,58 +502,46 @@ function tankSection({ fp, fm, diodeDesign: dd }) {
 // the tank's response at f, relative to its peak
 const tankGain = (f, f0, q) => 1 / Math.sqrt(1 + q * q * (f / f0 - f0 / f) ** 2);
 
-function diodeNumbers({ fp, fm, diodeDesign: dd, carrierAmp, modAmp }) {
+function diodeNumbers({ fp, fm, diodeDesign: dd }) {
 	const known = pos(fp, fm) && fp > fm;
-	const live = known && dd && pos(dd.capacitance, dd.inductance, dd.f0Actual, dd.resistance, dd.qActual, dd.bwActual);
+	const live = known && dd && pos(dd.capacitance, dd.inductance, dd.f0Actual, dd.rt, dd.qLoaded, dd.bwLoaded, dd.summer?.drive, dd.summer?.um);
+	const ideal = 'n \\approx \\dfrac{4\\,u_m}{\\pi A_d}';
 	if (!live) {
 		return [
 			h('What the numbers on the page mean'),
 			p(
-				'Resonant frequency f_0: the tank capacitor is made from stock values, so the tank lands close to the carrier, if not exactly on it. Q and bandwidth: the resistor across the tank sets how wide a band passes. Required DC bias: what keeps the diode conducting through the deepest trough of the sum. Sideband margin: the slack between the band the tank passes and the band the sidebands need.'
+				'Resonant frequency f_0: the tank capacitor is made from stock values, so the tank lands close to the carrier, if not exactly on it. Q and bandwidth: the resistors around the tank set how wide a band passes. Index: the two gains of the summer set it, the carrier reaching the diode at A_d and the message at u_m. Bias: a fraction of a volt that puts the switching point on the carrier\'s zero crossings.'
 			),
-			eq('V_{bias} = A_p + A_m + V_F + V_{margin}', 'The bias that keeps the diode past its knee at the bottom of the sum, with V_margin the bias margin field:')
+			eq(ideal, 'The index of an ideal switch, from the two amplitudes at the diode:')
 		];
 	}
 	const shift = Math.abs(dd.f0Actual - fp) / fp;
-	const lo = dd.f0Actual - dd.bwActual / 2;
-	const hi = dd.f0Actual + dd.bwActual / 2;
+	const lo = dd.f0Actual - dd.bwLoaded / 2;
+	const hi = dd.f0Actual + dd.bwLoaded / 2;
 	const lowOut = fp - fm < lo;
 	const highOut = fp + fm > hi;
 	let band = ' Both sidebands fall inside that band.';
 	if (lowOut && highOut) band = ' Even so, both sidebands sit outside it: the band is narrower than the sidebands need.';
 	else if (lowOut || highOut) {
-		const hLow = tankGain(fp - fm, dd.f0Actual, dd.qActual);
-		const hHigh = tankGain(fp + fm, dd.f0Actual, dd.qActual);
+		const hLow = tankGain(fp - fm, dd.f0Actual, dd.qLoaded);
+		const hHigh = tankGain(fp + fm, dd.f0Actual, dd.qLoaded);
 		const ratio = lowOut ? hLow / hHigh : hHigh / hLow;
 		band = ` The shift of f_0 is larger than the margin, though: the ${lowOut ? 'lower' : 'upper'} sideband, at ${hz(lowOut ? fp - fm : fp + fm)}, sits outside the band and comes out at ${pct(ratio)} % of the other one. A capacitor closer to the target, or a coil value that suits the stock ones, centres the band again.`;
 	}
-	const bias = dd.requiredBias;
-	const vf = dd.diodeVf;
-	const margin = all(bias, carrierAmp, modAmp, vf) ? bias - carrierAmp - modAmp - vf : NaN;
-	const biasLive = all(bias, carrierAmp, modAmp, vf, margin);
 	// the tank capacitor: one stock part, or a stock pair in parallel that lands closer
 	const pair = Array.isArray(dd.capacitors) && dd.capacitors.length === 2 && pos(...dd.capacitors) ? dd.capacitors : null;
 	const cText = pair
 		? `two stock capacitors in parallel, ${si(pair[0], 'F')} and ${si(pair[1], 'F')}, make ${si(dd.capacitance, 'F')} for a ${si(dd.inductance, 'H')} coil`
 		: `the capacitor is picked from stock values, ${si(dd.capacitance, 'F')} for a ${si(dd.inductance, 'H')} coil`;
-	// a stock resistor rounded down gives a lower Q and a wider band, the safe side
-	const qBand =
-		pos(dd.q) && dd.qActual < dd.q
-			? `Q = ${sig(dd.qActual)}, a little under the ${sig(dd.q)} asked for, so the band is a little wider: ${hz(dd.bwActual)}`
-			: `Q = ${sig(dd.qActual)}${pos(dd.q) ? ` where ${sig(dd.q)} was asked for` : ''}, and a band ${hz(dd.bwActual)} wide`;
+	const s = dd.summer;
 	return [
 		h('What the numbers on the page mean'),
 		p(`Resonant frequency f_0: ${cText}, so the tank lands at ${hz(dd.f0Actual)}${shift < 0.005 ? `, right on the ${hz(fp)} carrier.` : ` rather than ${hz(fp)}.`}`),
-		p(`Q and bandwidth: the ${ohms(dd.resistance)} stock resistor across the tank gives ${qBand}, against the ${hz(2 * fm)} the two sidebands span.` + band),
+		p(`Q and bandwidth: the ${ohms(dd.rt)} resistor across the tank, with the series resistor seen through the diode, gives Q = ${sig(dd.qLoaded)} and a band ${hz(dd.bwLoaded)} wide, against the ${hz(2 * fm)} the two sidebands span.` + band),
 		p(
-			(biasLive
-				? `Required DC bias: what keeps the diode conducting through the deepest trough of the sum, both amplitudes plus the knee plus the bias margin field, ${volts(bias)} here.`
-				: 'Required DC bias: what keeps the diode conducting through the deepest trough of the sum, both amplitudes plus the knee plus the bias margin field.') +
-				' Sideband margin: the slack between the band the tank passes and the band the sidebands need. The Q slider of the figure above shows what happens when Q takes it away.'
+			`Index: the summer brings the carrier to the diode at ${volts(s.drive)} and the message at ${volts(s.um)}. An ideal switch would turn that into the index below; the diode's soft knee moves it, and the page, working the diode out cycle by cycle, gets n = ${fix2(dd.modulationIndex)}. Bias: ${s.rb ? `${volts(s.vb)} from the negative supply, the value that bends the envelope least` : 'none, since this diode switches cleanly at zero'}. The Q slider of the figure above shows what a narrower band does to the sidebands.`
 		),
-		biasLive
-			? eq(`V_{bias} = A_p + A_m + V_F + V_{margin} = ${sig(carrierAmp)} + ${sig(modAmp)} + ${sig(vf)} + ${sig(margin)} = ${texVolts(bias)}`, "The bias that keeps the diode past its knee at the bottom of the sum, with this page's amplitudes, diode and bias margin:")
-			: eq('V_{bias} = A_p + A_m + V_F + V_{margin}', 'The bias that keeps the diode past its knee at the bottom of the sum, with V_margin the bias margin field:')
+		eq(`${ideal} = \\dfrac{4 \\times ${sig(s.um)}}{\\pi \\times ${sig(s.drive)}} = ${fix2(dd.idealIndex)}`, "The index of an ideal switch, with this page's two amplitudes at the diode:")
 	];
 }
 
@@ -562,7 +549,7 @@ function diodeRest() {
 	return [
 		h('Reading the rest of the page'),
 		p(
-			'The first panel holds the carrier, the message band, the sideband margin, the coil, the two amplitudes and the diode. The second draws the summer and the diode with its tank, lists the parts, and has a Show the math section that derives each one. The download hands back a script that holds the whole design, and the formula sheet collects every formula.'
+			'The first panel holds the carrier, the message band, the sideband margin, the coil, the two source amplitudes, the index wanted, the carrier level at the diode, the supply and the diode. The next panels draw the summer and the diode with its tank, list the parts and give what comes out, with a Show the math section that derives each number. The download hands back a script, an LTspice schematic and a netlist of the whole modulator, and the formula sheet collects every formula.'
 		)
 	];
 }
