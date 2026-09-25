@@ -31,7 +31,7 @@ const VT = 0.025852;
 export const DIODES = {
 	'1N4148': {
 		id: '1N4148',
-		label: '1N4148 / 1N914 (silicon, small signal)',
+		label: '1N4148 / 1N914 (silicon)',
 		Is: 2.52e-9,
 		N: 1.752,
 		cjo: 4e-12,
@@ -39,7 +39,7 @@ export const DIODES = {
 	},
 	BAT54: {
 		id: 'BAT54',
-		label: 'BAT54 (Schottky, about 0.3 V)',
+		label: 'BAT54 (Schottky, 0.3 V)',
 		Is: 1e-7,
 		N: 1,
 		cjo: 12e-12,
@@ -50,14 +50,14 @@ export const DIODES = {
 export const JFETS = {
 	generic: {
 		id: 'generic',
-		label: 'Generic small JFET (V_P = -2 V, I_DSS = 4 mA)',
+		label: 'Generic JFET (-2 V, 4 mA)',
 		vto: -2,
 		beta: 1e-3,
 		spice: '.model JX NJF(Vto=-2 Beta=1m Lambda=1m)'
 	},
 	J111: {
 		id: 'J111',
-		label: 'J111 (V_P about -6.5 V, r_DS(on) 30 ohm)',
+		label: 'J111 (-6.5 V, 30 Ω)',
 		vto: -6.5,
 		beta: 1 / (2 * 30 * 6.5),
 		spice: `.model JX NJF(Vto=-6.5 Beta=${(1 / (2 * 30 * 6.5)).toPrecision(4)} Lambda=1m)`

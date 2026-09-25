@@ -6,6 +6,7 @@
 	import RcPairDemo from '$lib/components/basics/RcPairDemo.svelte';
 	import DiagramView from '$lib/components/DiagramView.svelte';
 	import MathPanel from '$lib/components/MathPanel.svelte';
+	import OpampPicker from '$lib/components/OpampPicker.svelte';
 	import { formatFarads, formatHz, formatOhms, formatVolts } from '$lib/modulation/format';
 	import { oscillatorBasics } from '$lib/oscillator/basics';
 	import { buildAgcDiagram, buildClampDiagram, buildLimiterDiagram, buildOscillatorDiagram, hasLimiterDiagram } from '$lib/oscillator/circuits';
@@ -455,16 +456,7 @@
 				<span class="num">06</span>
 				<h2>Download</h2>
 			</div>
-			<div class="grid">
-				<div class="field">
-					<label for="spiceOpamp">Op-amp in the LTspice files</label>
-					<select id="spiceOpamp" bind:value={spiceOpamp}>
-						{#each Object.values(OPAMP_MODELS) as m (m.id)}
-							<option value={m.id}>{m.label}</option>
-						{/each}
-					</select>
-				</div>
-			</div>
+			<OpampPicker id="spiceOpamp" bind:value={spiceOpamp} />
 			<div class="row downloads">
 				<button type="button" disabled={!!exportError} onclick={() => save(generateSchematic(design, { opamp: spiceOpamp }), `${stem}.asc`)}>Download {stem}.asc (LTspice)</button>
 				<button type="button" disabled={!!exportError} onclick={() => save(generateNetlist(design, { opamp: spiceOpamp }), `${stem}.cir`)}>Download {stem}.cir (netlist)</button>
@@ -500,9 +492,27 @@
 </article>
 
 <style>
+	/* the fields side by side, as on the filter page; auto-fill so a lone
+	   field keeps a column's width instead of the whole row, columns no
+	   narrower than the longest choice in a select, and the inputs of a row
+	   in line at the bottom when a label runs to two lines */
+	.grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+		gap: 1.1rem;
+		align-items: end;
+	}
+
+	/* the last field keeps its margin too, so what follows the grid sits the
+	   same distance under it however full the last row is */
+	.grid > .field:last-child {
+		margin-bottom: 0.9rem;
+	}
+
 	.downloads {
 		gap: 0.7rem;
 		flex-wrap: wrap;
+		margin-bottom: 0.9rem;
 	}
 
 	.compare th {

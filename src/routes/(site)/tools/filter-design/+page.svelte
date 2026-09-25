@@ -10,6 +10,7 @@
 	import { filterBasics } from '$lib/filter/basics';
 	import Equation from '$lib/components/Equation.svelte';
 	import MathPanel from '$lib/components/MathPanel.svelte';
+	import OpampPicker from '$lib/components/OpampPicker.svelte';
 	import { generateScript, NEXT_STEPS } from '$lib/filter/codegen';
 	import { generateSchematic } from '$lib/filter/spice';
 	import { DEFAULT_OPAMP, OPAMP_MODELS } from '$lib/spice/opamps';
@@ -308,7 +309,7 @@
 	}
 
 	/** Every response in one list, with what it is best at. */
-	const responseOptions = RESPONSE_KEYS.map((key) => ({ key, label: RESPONSES[key].label, best: RESPONSES[key].best }));
+	const responseOptions = RESPONSE_KEYS.map((key) => ({ key, label: RESPONSES[key].short ?? RESPONSES[key].label, best: RESPONSES[key].best }));
 
 	const design = $derived.by(() => {
 		if (!valid) return null;
@@ -801,7 +802,7 @@
 				<select id="topology" bind:value={topology}>
 					<option value="mfb">Multiple feedback (MFB)</option>
 					<option value="sallenKey">Sallen-Key (unity gain)</option>
-					<option value="towThomas">Tow-Thomas biquad (3 op-amps)</option>
+					<option value="towThomas">Tow-Thomas (3 op-amps)</option>
 				</select>
 			</div>
 		</div>
@@ -1714,16 +1715,7 @@
 					report shown above, plus notes on simulating, building and testing the result.
 				</p>
 
-				<div class="grid">
-					<div class="field">
-						<label for="spiceOpamp">Op-amp in the LTspice file</label>
-						<select id="spiceOpamp" bind:value={spiceOpamp}>
-							{#each Object.values(OPAMP_MODELS) as m (m.id)}
-								<option value={m.id}>{m.label}</option>
-							{/each}
-						</select>
-					</div>
-				</div>
+				<OpampPicker id="spiceOpamp" label="Op-amp in the LTspice file" bind:value={spiceOpamp} />
 
 				<div class="row downloads">
 					<button type="button" onclick={downloadScript}>Download filter-design.js</button>
@@ -1782,10 +1774,18 @@
 		margin-bottom: 1.8rem;
 	}
 
+	/* the inputs of a row in line at the bottom when a label runs to two lines */
 	.grid {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
 		gap: 1.1rem;
+		align-items: end;
+	}
+
+	/* the last field keeps its margin too, so what follows the grid sits the
+	   same distance under it however full the last row is */
+	.grid > .field:last-child {
+		margin-bottom: 0.9rem;
 	}
 
 	.order-field {
@@ -1923,6 +1923,7 @@
 	.downloads {
 		gap: 0.7rem;
 		flex-wrap: wrap;
+		margin-bottom: 0.9rem;
 	}
 
 	.formula-link {

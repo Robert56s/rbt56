@@ -452,13 +452,13 @@ export function ellipticPrototype(n, amaxDb, aminDb, k) {
 
 /* ------------------------------------------------------------ catalog */
 
-/** What each response is, in the words the page uses. */
+/** What each response is, in the words the page uses (short: the name in a select, when the label is too long for one). */
 export const RESPONSES = {
 	butterworth: { label: 'Butterworth', zeros: false, best: 'the flattest passband' },
 	chebyshev: { label: 'Chebyshev I', zeros: false, best: 'a steeper drop for passband ripple' },
 	legendre: { label: 'Legendre (optimum L)', zeros: false, best: 'the steepest drop with no ripple' },
 	bessel: { label: 'Bessel (Thomson)', zeros: false, best: 'the flattest delay, pulses keep their shape' },
-	inverseChebyshev: { label: 'Inverse Chebyshev (Chebyshev II)', zeros: true, best: 'a flat passband, the ripple moved to the stopband' },
+	inverseChebyshev: { label: 'Inverse Chebyshev (Chebyshev II)', short: 'Inverse Chebyshev', zeros: true, best: 'a flat passband, the ripple moved to the stopband' },
 	elliptic: { label: 'Elliptic (Cauer)', zeros: true, best: 'the steepest transition of all, ripple in both bands' }
 };
 

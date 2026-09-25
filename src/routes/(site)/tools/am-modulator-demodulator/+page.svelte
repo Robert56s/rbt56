@@ -9,6 +9,7 @@
 	import { modulationBasics } from '$lib/modulation/basics';
 	import Equation from '$lib/components/Equation.svelte';
 	import MathPanel from '$lib/components/MathPanel.svelte';
+	import OpampPicker from '$lib/components/OpampPicker.svelte';
 	import TimePlot from '$lib/components/TimePlot.svelte';
 	import { modulationIndexFromEnvelope, modulationQuality, powerEfficiency } from '$lib/modulation/amMath';
 	import {
@@ -346,19 +347,6 @@
 	}
 </script>
 
-{#snippet opampPicker(id)}
-	<div class="grid">
-		<div class="field">
-			<label for={id}>Op-amp in the LTspice files</label>
-			<select {id} bind:value={spiceOpamp}>
-				{#each Object.values(OPAMP_MODELS) as m (m.id)}
-					<option value={m.id}>{m.label}</option>
-				{/each}
-			</select>
-		</div>
-	</div>
-{/snippet}
-
 <svelte:head>
 	<title>AM Modulator/Demodulator Design · rbt56</title>
 	<meta
@@ -558,7 +546,7 @@
 					<label for="cfrom">Carrier comes from</label>
 					<select id="cfrom" bind:value={carrierFrom}>
 						<option value="source">An external generator</option>
-						<option value="wien">A Wien bridge oscillator on the board</option>
+						<option value="wien">A Wien bridge on the board</option>
 					</select>
 				</div>
 				<div class="field">
@@ -588,8 +576,8 @@
 				<div class="field">
 					<label for="topo">Gain cell topology</label>
 					<select id="topo" bind:value={topology}>
-						<option value="noninverting">Non-inverting: JFET in the feedback (1 op-amp)</option>
-						<option value="inverting">Inverting: JFET as input resistor (follower + cell + post-gain)</option>
+						<option value="noninverting">Non-inverting (1 op-amp)</option>
+						<option value="inverting">Inverting (2 or 3 op-amps)</option>
 					</select>
 				</div>
 				{#if topology === 'inverting'}
@@ -601,7 +589,7 @@
 						<label for="buf">Carrier follower before the channel</label>
 						<select id="buf" bind:value={carrierBuffer}>
 							<option value={true}>Yes (recommended)</option>
-							<option value={false}>No, divider drives the channel</option>
+							<option value={false}>No, the divider drives it</option>
 						</select>
 					</div>
 				{/if}
@@ -856,7 +844,7 @@
 					<h2>Download</h2>
 				</div>
 				<p class="note">A standalone script with this exact design, parameterized at the top, runnable with <code>node jfet-am-modulator.js</code>.</p>
-				{@render opampPicker('spiceOpampJfet')}
+				<OpampPicker id="spiceOpampJfet" bind:value={spiceOpamp} />
 				<div class="row downloads">
 					<button type="button" onclick={downloadJfet}>Download jfet-am-modulator.js</button>
 					<button type="button" onclick={() => saveFile(generateModSchematic({ design: jfetDesign, fmPreview, oscillator: carrierOscillator, opamp: spiceOpamp }), 'jfet-am-modulator.asc')}>Download .asc (LTspice)</button>
@@ -1032,7 +1020,7 @@
 					<h2>Download</h2>
 				</div>
 				<p class="note">A standalone script with this exact design, runnable with <code>node diode-tank-am-modulator.js</code>.</p>
-				{@render opampPicker('spiceOpampDiode')}
+				<OpampPicker id="spiceOpampDiode" bind:value={spiceOpamp} />
 				<div class="row downloads">
 					<button type="button" onclick={downloadDiode}>Download diode-tank-am-modulator.js</button>
 					<button type="button" onclick={() => saveFile(generateDiodeSchematic({ design: diodeDesign, opamp: spiceOpamp }), 'diode-tank-am-modulator.asc')}>Download .asc (LTspice)</button>
@@ -1065,7 +1053,7 @@
 				<div class="field">
 					<label for="rtype">Rectifier</label>
 					<select id="rtype" bind:value={rectifierType}>
-						<option value="full">Precision full-wave (2 op-amps)</option>
+						<option value="full">Precision full-wave</option>
 						<option value="half">Half-wave (1 diode)</option>
 					</select>
 				</div>
@@ -1195,7 +1183,7 @@
 					<h2>Download</h2>
 				</div>
 				<p class="note">A standalone script with this exact design, runnable with <code>node am-demodulator.js</code>.</p>
-				{@render opampPicker('spiceOpampDemod')}
+				<OpampPicker id="spiceOpampDemod" bind:value={spiceOpamp} />
 				<div class="row downloads">
 					<button type="button" onclick={downloadDemod}>Download am-demodulator.js</button>
 					<button type="button" onclick={() => saveFile(generateDemodSchematic({ ...demodOptions, opamp: spiceOpamp }), 'am-demodulator.asc')}>Download .asc (LTspice)</button>
@@ -1277,9 +1265,12 @@
 		margin-bottom: 0.9rem;
 	}
 
+	/* as tall as an input, so the row lines up with the fields beside it */
 	.presets {
 		gap: 0.5rem;
 		flex-wrap: wrap;
+		min-height: 2.25rem;
+		align-items: center;
 	}
 
 	.measure {
@@ -1307,8 +1298,31 @@
 		border-color: var(--blue);
 	}
 
+	/* the fields side by side, as on the filter page; auto-fill so a lone
+	   field keeps a column's width instead of the whole row, columns no
+	   narrower than the longest choice in a select, and the inputs of a row
+	   in line at the bottom when a label runs to two lines */
+	.grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+		gap: 1.1rem;
+		align-items: end;
+	}
+
+	/* the last field keeps its margin too, so what follows the grid sits the
+	   same distance under it however full the last row is */
+	.grid > .field:last-child {
+		margin-bottom: 0.9rem;
+	}
+
+	/* the fit window beside the measurements: one field under the other */
 	.grid.narrow {
 		grid-template-columns: 1fr;
+		gap: 0;
+	}
+
+	.grid.narrow > .field:last-child {
+		margin-bottom: 0;
 	}
 
 	@media (max-width: 720px) {

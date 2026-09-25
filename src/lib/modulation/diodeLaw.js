@@ -12,7 +12,7 @@ export const DIODE_VT = 0.025852;
 export const DIODE_MODELS = {
 	'1N4148': {
 		id: '1N4148',
-		label: '1N4148 (silicon, small signal)',
+		label: '1N4148 (silicon)',
 		Is: 2.52e-9,
 		N: 1.752,
 		Rs: 0.568,
@@ -20,7 +20,7 @@ export const DIODE_MODELS = {
 	},
 	BAT54: {
 		id: 'BAT54',
-		label: 'BAT54 (Schottky, lower knee)',
+		label: 'BAT54 (Schottky, 0.3 V)',
 		Is: 1e-7,
 		N: 1,
 		Rs: 2.2,
