@@ -148,7 +148,13 @@ check('carrier: peak current is Ac times the largest conductance', near(d.carrie
 	const dR = designJfetModulator({ model: byRds, ...same });
 	check('design: identical from IDSS and from rDS(on)', dI.rb === dR.rb && dI.modulationIndex === dR.modulationIndex && near(dI.gDepth, 0.9, 0.02), `Rb ${dI.rb}, gDepth ${dI.gDepth}`);
 	const dM = designJfetModulator({ model: fit, ...same, targetModulationIndex: 0.6 });
-	check('design: measured window narrows the depth to swing/(VC - VP)', near(dM.gDepth, dM.vgsPeakSwing / (dM.vc - dM.vp), 1e-12) && near(dM.gDepth, 0.675, 0.02) && near(dM.modulationIndex, 0.6, 1e-9) && dM.vgsMin > dM.vp, `s = ${dM.gDepth.toFixed(4)}, VGS_min ${dM.vgsMin.toFixed(2)} > VP ${dM.vp.toFixed(2)}`);
+	// R_b is rounded to the stock, so n lands near the target rather than on it
+	check('design: measured window narrows the depth to swing/(VC - VP)', near(dM.gDepth, dM.vgsPeakSwing / (dM.vc - dM.vp), 1e-12) && near(dM.gDepth, 0.675, 0.02) && near(dM.modulationIndex, 0.6, 0.015) && dM.vgsMin > dM.vp, `s = ${dM.gDepth.toFixed(4)}, n = ${dM.modulationIndex.toFixed(4)}, VGS_min ${dM.vgsMin.toFixed(2)} > VP ${dM.vp.toFixed(2)}`);
+	{
+		const e24 = (v) => [1.0, 1.1, 1.2, 1.3, 1.5, 1.6, 1.8, 2.0, 2.2, 2.4, 2.7, 3.0, 3.3, 3.6, 3.9, 4.3, 4.7, 5.1, 5.6, 6.2, 6.8, 7.5, 8.2, 9.1].some((m) => near(v / 10 ** Math.floor(Math.log10(v)), m, 1e-9));
+		const n = (d) => (d.gDepth * d.x) / (1 + d.x);
+		check('design: R_b is a stock value and n follows from it', [dI, dM].every((d) => e24(d.rb) && near(d.x, d.rb / d.r1AtCenter, 1e-12) && near(d.modulationIndex, n(d), 1e-12) && Math.abs(d.feedbackTarget / d.rb - 1) < 0.05), `R_b ${dI.rb} (${dI.feedbackTarget.toFixed(1)} asked), ${dM.rb} (${dM.feedbackTarget.toFixed(1)} asked)`);
+	}
 	check('design: refuses a target above the depth, and says the ceiling', designJfetModulator({ model: fit, ...same }) === null && near(conductanceDepth(fit, 0.9), 0.675, 1e-3), `ceiling ${conductanceDepth(fit, 0.9).toFixed(3)}`);
 	check('presets: J111 limits as stated on the datasheet', JFET_PRESETS.J111.vpRange[0] === -10 && JFET_PRESETS.J111.vpRange[1] === -3 && JFET_PRESETS.J111.idssMin === 20e-3 && JFET_PRESETS.J111.rdsOnMax === 30);
 	const j111 = designJfetModulator({ model: modelFromRdsOn(-6.5, 30), ...same });
@@ -571,6 +577,85 @@ check('carrier: peak current is Ac times the largest conductance', near(d.carrie
 	check('guide: the datasheet table covers V_P, I_DSS and r_DS(on)', !!table && ['V_P', 'I_DSS', 'r_DS(on)'].every((f) => table.rows.some((r) => r[0] === f)));
 	const fig = guide.find((b) => b.type === 'figure');
 	check('guide: draws the bench circuit, a JFET and two voltmeters', !!fig && /data-symbol="njfet_transistor_horz"/.test(fig.diagram.svg) && (fig.diagram.svg.match(/data-symbol="voltmeter"/g) ?? []).length === 2);
+}
+
+/* ------------------------------------ parts from the stock the page picks */
+{
+	const { LAB_KIT } = await import('../src/lib/filter/eseries.js');
+	const { componentOptions } = await import('../src/lib/stock.js');
+	const custom = componentOptions('custom', '1k, 2.2k, 4.7k, 10k, 22k, 47k, 100k, 220k, 470k, 1M', '1n, 10n, 100n, 470n');
+	const stocks = { lab: { resistorSeries: LAB_KIT.resistors, capacitors: LAB_KIT.capacitors }, custom };
+	const inList = (v, list) => list.some((x) => Math.abs(x / v - 1) < 1e-9);
+	for (const [name, parts] of Object.entries(stocks)) {
+		const R = parts.resistorSeries;
+		const C = parts.capacitors;
+		const bad = [];
+		const rOk = (label, v) => {
+			if (v !== null && v !== undefined && v !== 0 && !inList(v, R)) bad.push(`${label} ${v}`);
+		};
+		const cOk = (label, v) => {
+			if (v && !inList(v, C)) bad.push(`${label} ${v}`);
+		};
+		for (const topology of ['noninverting', 'inverting']) {
+			const d = designJfetModulator({ ...base, topology, ...parts });
+			// a 1-2.2-4.7 list has no gate-drive gain near 1.8 that keeps the channel open:
+			// no design there, which the page says; the lab drawer has to build both cells
+			if (!d) {
+				if (name === 'lab') bad.push(`jfet ${topology}: no design`);
+				continue;
+			}
+			const sm = d.conditioning.summer;
+			for (const [k, v] of Object.entries({ rf: sm.rf, rac: sm.rac, rbias: sm.rbias, feedback: d.feedback, divTop: d.carrier.divider.top, divBottom: d.carrier.divider.bottom, rtop: d.postGain?.rtop, rbottom: d.postGain?.rbottom, rbLimit: d.opamp.rbLimit })) rOk(`jfet ${topology} ${k}`, v);
+			cOk(`jfet ${topology} c`, sm.c);
+		}
+		const dd = designDiodeMixerModulator({ fp: 40000, fmMax: 1000, resistorSeries: R, capacitors: C });
+		if (!dd) bad.push('diode: no design');
+		else {
+			for (const [k, v] of Object.entries({ rf: dd.summer.rf, rp: dd.summer.rp, rm: dd.summer.rm, rb: dd.summer.rb, rs: dd.rs, rt: dd.rt })) rOk(`diode ${k}`, v);
+			dd.capacitors.forEach((c, i) => cOk(`diode C${i + 1}`, c));
+		}
+		const env = designEnvelopeLowPass({ response: 'chebyshev', amaxDb: 1, aminDb: 40, fp: 1000, fs: 79000, order: null, resistorSeries: R, capacitors: C });
+		env.realized.forEach((s, i) => {
+			if (s.stockShortfall) return;
+			rOk(`envelope ${i + 1} R`, s.components.R1);
+			cOk(`envelope ${i + 1} Ctop`, s.components.Ctop);
+			cOk(`envelope ${i + 1} Cbottom`, s.components.Cbottom);
+		});
+		rOk('rectifier R', designPrecisionRectifier({ resistorSeries: R }).r1);
+		rOk('half-wave RL', designHalfWaveRectifier({ resistorSeries: R }).rl);
+		const osc = designOscillator({ topology: 'wien', stabilizer: 'diodes', frequency: 55000, amplitude: 1, resistorSeries: R, capacitors: C });
+		if (osc) {
+			for (const [k, v] of Object.entries({ r: osc.r, rg: osc.rg, rf1: osc.parts.rf1, rf2: osc.parts.rf2 })) rOk(`wien ${k}`, v);
+			cOk('wien c', osc.c);
+		}
+		check(`stock: every AM part comes from the ${name} list (JFET both cells, diode, envelope, rectifier, Wien)`, bad.length === 0, bad.length ? bad.slice(0, 4).join('; ') : `${name}${osc ? '' : ', no Wien bridge from it'}`);
+	}
+	// the default stock is E24 and the usual capacitors, exactly as before the option existed
+	const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+	const e24 = { resistorSeries: 'E24', capacitors: null };
+	check(
+		'stock: E24 by default, the same parts with the option spelled out',
+		same(designJfetModulator(base), designJfetModulator({ ...base, ...e24 })) &&
+			same(designDiodeMixerModulator({ fp: 40000, fmMax: 1000 }), designDiodeMixerModulator({ fp: 40000, fmMax: 1000, ...e24 })) &&
+			same(designEnvelopeLowPass({ response: 'butterworth', amaxDb: 1, aminDb: 40, fp: 1000, fs: 79000, order: null }), designEnvelopeLowPass({ response: 'butterworth', amaxDb: 1, aminDb: 40, fp: 1000, fs: 79000, order: null, ...e24 }))
+	);
+	const dLab = designDiodeMixerModulator({ fp: 40000, fmMax: 1000, capacitors: LAB_KIT.capacitors });
+	check('stock: the diode tank takes its capacitors from the list, under either name', same(dLab.capacitors, designDiodeMixerModulator({ fp: 40000, fmMax: 1000, capacitorStock: LAB_KIT.capacitors }).capacitors) && dLab.capacitors.every((c) => inList(c, LAB_KIT.capacitors)), dLab.capacitors.join(', '));
+}
+
+/* ---------------------------------------- the review's diode and filter cases */
+{
+	const hiZ = designDiodeMixerModulator({ fp: 40000, fmMax: 1000, inductance: 0.1, sidebandMargin: 0.7 });
+	check('diode: the source the tank sees is about 2 R_s even when R_s is large', hiZ && hiZ.rSource / hiZ.rs > 1.8 && hiZ.rSource / hiZ.rs < 2.4, hiZ && `${(hiZ.rSource / hiZ.rs).toFixed(2)} R_s`);
+	check('diode: a high R_s is flagged for the junction capacitance LTspice keeps', hiZ && hiZ.cjOk === false && designDiodeMixerModulator({ fp: 40000, fmMax: 1000 }).cjOk === true);
+	const round = designDiodeMixerModulator({ fp: 50000, fmMax: 10000 });
+	check('diode: a tone whose harmonic lands on 0 Hz gives a finite distortion', round && Number.isFinite(round.thdAtFmMax), round && String(round.thdAtFmMax));
+	check('diode: a message inside the tank band is refused (fp > (margin + 1) fmMax)', designDiodeMixerModulator({ fp: 40000, fmMax: 10000 }) === null && designDiodeMixerModulator({ fp: 40000, fmMax: 9000 }) !== null);
+	const tooMany = designEnvelopeLowPass({ response: 'butterworth', amaxDb: 1, aminDb: 40, fp: 39000, fs: 40000, order: null, maxOrder: 8 });
+	check('envelope: an order past the limit is reported, with no stages built', tooMany.tooHigh === true && tooMany.n > 8 && !tooMany.realized);
+	const cheb = designEnvelopeLowPass({ response: 'chebyshev', amaxDb: 3, aminDb: 40, fp: 1000, fs: 7200, order: null });
+	const { envelopeGainDb } = await import('../src/lib/modulation/envelopeFilter.js');
+	check('envelope: an even-order Chebyshev keeps the ripple Amin under DC, not just under its peak', -envelopeGainDb(cheb, 7200) >= 40 - 0.5, `${(-envelopeGainDb(cheb, 7200)).toFixed(1)} dB at fs, order ${cheb.n}`);
 }
 
 console.log(fails === 0 ? 'am checks clean' : `${fails} failure(s)`);

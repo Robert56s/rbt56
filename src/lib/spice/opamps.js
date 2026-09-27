@@ -110,8 +110,8 @@ const LM741 = `* LM741 OPERATIONAL AMPLIFIER, Boyle macromodel built by rbt56.co
 
 export const OPAMP_MODELS = {
 	ideal: { id: 'ideal', label: 'Ideal, single pole', real: false },
-	TL082: { id: 'TL082', label: 'TL082, ±15 V', real: true, part: "TI's TL082 model", note: '* TL082: Texas Instruments macromodel. Pins: +in, -in, V+, V-, out', subckt: TL082 },
-	LM741: { id: 'LM741', label: 'LM741, ±15 V', real: true, part: 'an LM741 model', note: '* LM741: Boyle macromodel from the TI datasheet figures. Pins: +in, -in, V+, V-, out', subckt: LM741 }
+	TL082: { id: 'TL082', label: 'TL082, ±15 V', real: true, swing: 13.5, part: "TI's TL082 model", note: '* TL082: Texas Instruments macromodel. Pins: +in, -in, V+, V-, out', subckt: TL082 },
+	LM741: { id: 'LM741', label: 'LM741, ±15 V', real: true, swing: 14, part: 'an LM741 model', note: '* LM741: Boyle macromodel from the TI datasheet figures. Pins: +in, -in, V+, V-, out', subckt: LM741 }
 };
 
 /** What the pages offer first: the usual lab part, on the usual rails. */

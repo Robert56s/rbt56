@@ -11,6 +11,7 @@
 	import Equation from '$lib/components/Equation.svelte';
 	import MathPanel from '$lib/components/MathPanel.svelte';
 	import OpampPicker from '$lib/components/OpampPicker.svelte';
+	import StockPicker from '$lib/components/StockPicker.svelte';
 	import { generateScript, NEXT_STEPS } from '$lib/filter/codegen';
 	import { generateSchematic } from '$lib/filter/spice';
 	import { DEFAULT_OPAMP, OPAMP_MODELS } from '$lib/spice/opamps';
@@ -64,7 +65,8 @@
 	import { designLowPass, designHighPass, designBandPass, designBandStop, minimumOrder } from '$lib/filter/stages';
 	import { branchDcGain, branchOrder, branchSign, combinerChoice, combinerDesign, magnitudePhaseAt, sweep, magnitudePhaseAtParallelSum, sweepParallelSum } from '$lib/filter/bode';
 	import { buildDifferenceAmpDiagram, buildSummingAmpDiagram } from '$lib/filter/circuits';
-	import { LAB_KIT, nearestResistor } from '$lib/filter/eseries';
+	import { nearestResistor } from '$lib/filter/eseries';
+	import { componentOptions, defaultStock, isRestricted, loadStock, saveStock } from '$lib/stock';
 
 	const SUMMING_R = 10_000; // ohms, the summing amplifier's three equal resistors
 
@@ -90,88 +92,34 @@
 	// Which values the component search is allowed to pick from: a preferred
 	// series, the lab drawer, or a list pasted in below. Restricting the
 	// stock does not change the design, only what it can round to, so the
-	// cost shows up in the f0/Q error columns rather than in the maths.
-	const STOCK_KEY = 'rbt56.filter.stock';
-	let stock = $state('E24'); // 'E24' | 'E96' | 'lab' | 'custom'
-	let resistorText = $state(formatStock(LAB_KIT.resistors, 'resistor'));
-	let capacitorText = $state(formatStock(LAB_KIT.capacitors, 'capacitor'));
+	// cost shows up in the f0/Q error columns rather than in the maths. The
+	// setting is the site's (src/lib/stock.js): the AM tool shares it, and it
+	// is kept in this browser.
+	const initialStock = defaultStock();
+	let stock = $state(initialStock.stock); // 'E24' | 'E96' | 'lab' | 'custom'
+	let resistorText = $state(initialStock.resistorText);
+	let capacitorText = $state(initialStock.capacitorText);
 	let stockLoaded = $state(false);
-
-	const UNIT = { p: 1e-12, n: 1e-9, u: 1e-6, m: 1e-3, k: 1e3, K: 1e3, M: 1e6, G: 1e9 };
-	function trimNum(x) {
-		return Number(x.toPrecision(4)).toString();
-	}
-
-	/** Reads "1k, 4.7k, 10k" or "10p 20p 1n" into absolute values. */
-	function parseStock(text, kind) {
-		const out = [];
-		for (const raw of String(text).split(/[\s,;]+/)) {
-			if (!raw) continue;
-			let token = raw.replace(/ohms?/gi, '').replace(/[ΩΩ]/g, '');
-			if (kind === 'capacitor') token = token.replace(/[fF]$/, '');
-			const m = /^([0-9]*\.?[0-9]+(?:e[-+]?[0-9]+)?)(meg|[pnumkKMG])?$/.exec(token);
-			if (!m) continue;
-			const mult = !m[2] ? 1 : m[2] === 'meg' ? 1e6 : (UNIT[m[2]] ?? 1);
-			const value = Number(m[1]) * mult;
-			if (Number.isFinite(value) && value > 0) out.push(value);
-		}
-		return [...new Set(out)].sort((a, b) => a - b);
-	}
-
-	/** The inverse, so the boxes can be prefilled and round-tripped. */
-	function formatStock(values, kind) {
-		return values
-			.map((v) => {
-				if (kind === 'capacitor') {
-					if (v >= 1e-6) return trimNum(v * 1e6) + 'u';
-					if (v >= 1e-9) return trimNum(v * 1e9) + 'n';
-					return trimNum(v * 1e12) + 'p';
-				}
-				if (v >= 1e6) return trimNum(v / 1e6) + 'M';
-				if (v >= 1e3) return trimNum(v / 1e3) + 'k';
-				return trimNum(v);
-			})
-			.join(', ');
-	}
-
-	const customResistors = $derived(parseStock(resistorText, 'resistor'));
-	const customCapacitors = $derived(parseStock(capacitorText, 'capacitor'));
-	const restrictedStock = $derived(stock === 'lab' || stock === 'custom');
-	const componentOpts = $derived.by(() => {
-		if (stock === 'lab') return { resistorSeries: LAB_KIT.resistors, capacitors: LAB_KIT.capacitors };
-		if (stock === 'custom')
-			return {
-				resistorSeries: customResistors.length ? customResistors : LAB_KIT.resistors,
-				capacitors: customCapacitors.length ? customCapacitors : LAB_KIT.capacitors
-			};
-		return { resistorSeries: stock, capacitors: null };
-	});
+	const restrictedStock = $derived(isRestricted(stock));
+	const stockPhrase = $derived(stock === 'E96' ? 'the E96 series' : stock === 'lab' ? 'the lab kit' : stock === 'custom' ? 'the list on hand' : 'the E24 series');
+	const componentOpts = $derived(componentOptions(stock, resistorText, capacitorText));
 	const combinerR = $derived(restrictedStock ? nearestResistor(SUMMING_R, componentOpts.resistorSeries) : SUMMING_R);
 
 	// the drawer is worth remembering between visits; blocked storage just
 	// means the defaults come back
 	onMount(() => {
-		try {
-			const saved = JSON.parse(localStorage.getItem(STOCK_KEY) ?? 'null');
-			if (saved && typeof saved === 'object') {
-				if (typeof saved.stock === 'string') stock = saved.stock;
-				if (typeof saved.resistorText === 'string') resistorText = saved.resistorText;
-				if (typeof saved.capacitorText === 'string') capacitorText = saved.capacitorText;
-			}
-		} catch {
-			// nothing saved, or storage unavailable
+		const saved = loadStock();
+		if (saved) {
+			if (saved.stock) stock = saved.stock;
+			if (saved.resistorText !== undefined) resistorText = saved.resistorText;
+			if (saved.capacitorText !== undefined) capacitorText = saved.capacitorText;
 		}
 		stockLoaded = true;
 	});
 
 	$effect(() => {
-		const payload = JSON.stringify({ stock, resistorText, capacitorText });
-		if (!stockLoaded) return;
-		try {
-			localStorage.setItem(STOCK_KEY, payload);
-		} catch {
-			// private window or storage blocked: the setting is simply not kept
-		}
+		const state = { stock, resistorText, capacitorText };
+		if (stockLoaded) saveStock(state);
 	});
 
 	let orderOverride = $state(null);
@@ -239,6 +187,20 @@
 	}
 
 	const isBandType = $derived(filterType === 'bandpass' || filterType === 'bandstop');
+	// Inverse Chebyshev and Elliptic put zeros in the stopband, and only the
+	// Tow-Thomas biquad builds a stage with zeros (its notch form), so with
+	// either one the whole filter is Tow-Thomas: nothing is designed until
+	// the Topology menu says so too
+	const zeroResponses = $derived([...new Set(isBandType ? [responseHp, responseLp] : [response])].filter((r) => RESPONSES[r]?.zeros));
+	const needsTowThomas = $derived(zeroResponses.length > 0);
+	const topologyBlocked = $derived(needsTowThomas && topology !== 'towThomas');
+	const zeroResponsesText = $derived(
+		zeroResponses.length > 1
+			? `${zeroResponses.map((r) => RESPONSES[r].short ?? RESPONSES[r].label).join(' and ')} responses put`
+			: zeroResponses.length === 1
+				? `An ${RESPONSES[zeroResponses[0]].short ?? RESPONSES[zeroResponses[0]].label} response puts`
+				: ''
+	);
 	const edgesOk = $derived(
 		filterType === 'highpass'
 			? fp > fs
@@ -312,7 +274,7 @@
 	const responseOptions = RESPONSE_KEYS.map((key) => ({ key, label: RESPONSES[key].short ?? RESPONSES[key].label, best: RESPONSES[key].best }));
 
 	const design = $derived.by(() => {
-		if (!valid) return null;
+		if (!valid || topologyBlocked) return null;
 		if (isBandType) {
 			if (orderHpTooHigh || orderLpTooHigh) return null;
 			const args = { responseHp, responseLp, amaxDb, aminDb, fl, fh, fsl, fsh, orderHigh: orderHp, orderLow: orderLp };
@@ -421,6 +383,14 @@
 	});
 
 	const shortfallStages = $derived(realizedStages.flatMap((r, i) => (r.stockShortfall ? [i + 1] : [])));
+	// what to look at when the passband misses by more than rounding
+	const missCause = $derived(
+		(Object.keys(capOverrides).length > 0
+			? 'check the capacitor overrides above'
+			: topology === 'sallenKey'
+				? "a Sallen-Key stage's capacitor ratio lands on the coarse E12 grid, which moves its Q"
+				: 'the rounding of a sharp stage adds up') + (stock === 'E24' ? ', and the E96 series narrows it' : '')
+	);
 	const hasZeros = $derived(!!design && design.stages.some((s) => Number.isFinite(s.wz)));
 
 	// Band-stop only: the two branches (low-pass, high-pass) that run in
@@ -704,6 +674,8 @@
 			<span class="hint">
 				{#if !valid}
 					fix the values below
+				{:else if topologyBlocked}
+					select Tow-Thomas in Topology
 				{:else if filterType === 'bandpass'}
 					high-pass side + low-pass side, see below
 				{:else if filterType === 'bandstop'}
@@ -800,8 +772,8 @@
 			<div class="field">
 				<label for="topology">Topology</label>
 				<select id="topology" bind:value={topology}>
-					<option value="mfb">Multiple feedback (MFB)</option>
-					<option value="sallenKey">Sallen-Key (unity gain)</option>
+					<option value="mfb" disabled={needsTowThomas}>Multiple feedback (MFB)</option>
+					<option value="sallenKey" disabled={needsTowThomas}>Sallen-Key (unity gain)</option>
 					<option value="towThomas">Tow-Thomas (3 op-amps)</option>
 				</select>
 			</div>
@@ -833,10 +805,19 @@
 			{:else}
 				{RESPONSES[response].label}: {RESPONSES[response].best}.
 			{/if}
-			{#if (isBandType ? RESPONSES[responseHp].zeros || RESPONSES[responseLp].zeros : RESPONSES[response].zeros)}
-				Stages with zeros are always built as Tow-Thomas notch stages; the topology below sets the others.
+			{#if needsTowThomas && !topologyBlocked}
+				{zeroResponsesText} zeros in the stopband, and the Tow-Thomas biquad is the only wiring here that can
+				build a stage with zeros (its notch form), so every second-order stage is a Tow-Thomas{isBandType ? ', on both sides' : ''};
+				an odd order adds one first-order RC stage.
 			{/if}
 		</p>
+
+		{#if topologyBlocked}
+			<p class="flag bad">
+				{zeroResponses.map((r) => RESPONSES[r].short ?? RESPONSES[r].label).join(' and ')} can only be built with
+				Tow-Thomas stages: select Tow-Thomas (3 op-amps) in Topology to continue.
+			</p>
+		{/if}
 
 		{#if !valid}
 			<p class="flag bad">
@@ -886,12 +867,13 @@
 			attenuationAtFsh,
 			attenuationAtFl,
 			attenuationAtFh,
-			stock
+			stock,
+			needsTowThomas
 		})}
 		widgets={{ 'two-tones': TwoTonesDemo, 'rc-on-spec': RcOnSpecDemo, 'order-on-spec': OrderOnSpecDemo, 'stages-multiply': StagesMultiplyDemo }}
 	/>
 
-	{#if valid}
+	{#if valid && !topologyBlocked}
 		{#if isBandType}
 			<section class="panel">
 				<div class="panel-head">
@@ -1207,37 +1189,7 @@
 					</span>
 				</div>
 
-				<div class="stock">
-					<div class="field">
-						<label for="stock">Values the search may use</label>
-						<select id="stock" bind:value={stock}>
-							<option value="E24">E24 series (standard, 5 %)</option>
-							<option value="E96">E96 series (1 %)</option>
-							<option value="lab">Lab kit ({LAB_KIT.resistors.length} R, {LAB_KIT.capacitors.length} C)</option>
-							<option value="custom">My own list</option>
-						</select>
-					</div>
-					{#if stock === 'custom'}
-						<div class="field grow">
-							<label for="stockR">Resistors on hand</label>
-							<textarea id="stockR" rows="2" bind:value={resistorText}></textarea>
-						</div>
-						<div class="field grow">
-							<label for="stockC">Capacitors on hand</label>
-							<textarea id="stockC" rows="2" bind:value={capacitorText}></textarea>
-						</div>
-					{/if}
-				</div>
-
-				{#if stock === 'custom'}
-					<p class="note">
-						Commas or spaces between values: <code>1k, 4.7k, 10k</code> for resistors,
-						<code>10p, 1n, 47n</code> for capacitors. The suffixes k, M, p, n and u are understood,
-						and the list is kept in this browser for next time. Reading
-						{customResistors.length} resistor{customResistors.length === 1 ? '' : 's'} and
-						{customCapacitors.length} capacitor{customCapacitors.length === 1 ? '' : 's'} right now.
-					</p>
-				{/if}
+				<StockPicker id="stock" bind:stock bind:resistorText bind:capacitorText />
 
 				{#if restrictedStock}
 					<p class="note">
@@ -1656,8 +1608,8 @@
 								<p class="flag warn">
 									Passband edges with rounded parts: {attenuationAtFl.toFixed(2)} dB at fl and
 									{attenuationAtFh.toFixed(2)} dB at fh, against Amax = {amaxDb} dB. The ideal design
-									sits exactly at Amax; the excess is E24 rounding, smaller than the shift the parts'
-									own 5% tolerance produces on a real board.
+									sits exactly at Amax; the excess is the rounding to {stockPhrase}, smaller than the
+									shift the parts' own tolerance produces on a real board.
 								</p>
 							{:else if restrictedStock}
 								<p class="flag warn">
@@ -1669,8 +1621,7 @@
 							{:else}
 								<p class="flag bad">
 									Passband edges miss: {attenuationAtFl.toFixed(2)} dB at fl, {attenuationAtFh.toFixed(2)}
-									dB at fh, against Amax = {amaxDb} dB. That is more than rounding explains: check
-									any capacitor override above, or switch to the E96 series.
+									dB at fh, against Amax = {amaxDb} dB. That is more than rounding explains: {missCause}.
 								</p>
 							{/if}
 						{/if}
@@ -1682,8 +1633,8 @@
 						{:else if attenuationAtFp <= amaxDb + PASSBAND_ROUNDING_DB}
 							<p class="flag warn">
 								Passband edge with rounded parts: {attenuationAtFp.toFixed(2)} dB at fp, against Amax =
-								{amaxDb} dB. The ideal design sits exactly at Amax; the excess is E24 rounding,
-								smaller than the shift the parts' own 5% tolerance produces on a real board.
+								{amaxDb} dB. The ideal design sits exactly at Amax; the excess is the rounding to
+								{stockPhrase}, smaller than the shift the parts' own tolerance produces on a real board.
 							</p>
 						{:else if restrictedStock}
 							<p class="flag warn">
@@ -1695,8 +1646,7 @@
 						{:else}
 							<p class="flag bad">
 								Passband edge misses: {attenuationAtFp.toFixed(2)} dB at fp, against Amax = {amaxDb}
-								dB. That is more than rounding explains: check any capacitor override above, or
-								switch to the E96 series.
+								dB. That is more than rounding explains: {missCause}.
 							</p>
 						{/if}
 					{/if}
@@ -1888,36 +1838,6 @@
 	.err {
 		color: var(--textFaint);
 		font-size: 0.85em;
-	}
-
-	.stock {
-		display: flex;
-		gap: 1rem;
-		align-items: flex-end;
-		flex-wrap: wrap;
-		margin-bottom: 0.9rem;
-	}
-
-	.stock .field {
-		margin-bottom: 0;
-		min-width: 190px;
-	}
-
-	.stock textarea {
-		width: 100%;
-		font-family: var(--mono);
-		font-size: 0.8rem;
-		padding: 0.45rem 0.6rem;
-		border: 1px solid var(--line);
-		border-radius: var(--radiusSmall);
-		background: var(--surface);
-		color: var(--text);
-		resize: vertical;
-	}
-
-	.stock textarea:focus {
-		outline: none;
-		border-color: var(--blue);
 	}
 
 	.downloads {

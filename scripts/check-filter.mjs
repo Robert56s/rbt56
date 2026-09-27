@@ -363,8 +363,10 @@ check('combiner never leaves depth on the table', worstLoss <= 1e-9, `${worstLos
 		{ filterType: 'bandstop', response: 'elliptic', responseHp: 'butterworth', responseLp: 'elliptic', amaxDb: 3, aminDb: 40, fl: 1000, fh: 30000, fsl: 3000, fsh: 10000 },
 		{ filterType: 'bandpass', response: 'legendre', responseHp: 'legendre', responseLp: 'inverseChebyshev', amaxDb: 3, aminDb: 40, fl: 1000, fh: 10000, fsl: 300, fsh: 30000 }
 	];
+	// zeros take the Tow-Thomas topology, as the page insists
+	const withZeros = (spec) => [spec.response, spec.responseHp, spec.responseLp].some((r) => r === 'elliptic' || r === 'inverseChebyshev');
 	for (const spec of scripts) {
-		const code = generateScript({ fp: 10000, fs: 35000, fl: 1000, fh: 10000, fsl: 300, fsh: 30000, topology: 'mfb', order: null, orderHp: null, orderLp: null, capOverrides: {}, ...spec });
+		const code = generateScript({ fp: 10000, fs: 35000, fl: 1000, fh: 10000, fsl: 300, fsh: 30000, topology: withZeros(spec) ? 'towThomas' : 'mfb', order: null, orderHp: null, orderLp: null, capOverrides: {}, ...spec });
 		const file = join(dir, `${spec.filterType}-${spec.response}.js`);
 		writeFileSync(file, code);
 		try {
@@ -379,6 +381,22 @@ check('combiner never leaves depth on the table', worstLoss <= 1e-9, `${worstLos
 		}
 	}
 	check(`downloadable script: runs for ${scripts.length} new-response designs and reports its spec met`, scriptBad === 0, `${scriptBad} failures`);
+
+	// and refuses a zeros response on any other topology, with the reason
+	let refused = 0;
+	const zeroSpecs = scripts.filter(withZeros);
+	for (const spec of zeroSpecs) {
+		for (const topology of ['mfb', 'sallenKey']) {
+			const file = join(dir, `${spec.filterType}-${spec.response}-${topology}.js`);
+			writeFileSync(file, generateScript({ fp: 10000, fs: 35000, fl: 1000, fh: 10000, fsl: 300, fsh: 30000, topology, order: null, orderHp: null, orderLp: null, capOverrides: {}, ...spec }));
+			try {
+				execFileSync(process.execPath, [file], { encoding: 'utf8', stdio: 'pipe' });
+			} catch (e) {
+				if (/can only be built with Tow-Thomas stages: set TOPOLOGY = 'towThomas'/.test(String(e.stderr))) refused++;
+			}
+		}
+	}
+	check('downloadable script: stops on an elliptic or inverse Chebyshev design with MFB or Sallen-Key, and says to use Tow-Thomas', refused === 2 * zeroSpecs.length, `${refused} of ${2 * zeroSpecs.length}`);
 }
 
 console.log(fails === 0 ? 'filter checks clean' : `${fails} failure(s)`);

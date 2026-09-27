@@ -530,7 +530,7 @@ function stageCorner(stage) {
 	return { f, tex: `${lhs} = ${numeric} = ${hzTex(f)}${where ? ` \\qquad ${where.replace('\\quad ', '')}` : ''}` };
 }
 
-function stagesToParts({ topology, stock, design, realizedStages }) {
+function stagesToParts({ topology, stock, design, realizedStages, needsTowThomas }) {
 	const known = TOPOLOGY_LINE[topology] ? topology : 'mfb';
 	const others = Object.keys(TOPOLOGY_LINE).filter((t) => t !== known);
 	// order 1: every stage is first order, which the Topology menu does not touch
@@ -542,9 +542,11 @@ function stagesToParts({ topology, stock, design, realizedStages }) {
 			: `The Topology menu sets how they are wired around the op-amp, and this page is set to ${TOPOLOGY_NAME[topology]}.`;
 	}
 	const rounding = ROUNDING[stock] ?? 'fixes the capacitors from the values in stock, solves for the resistors, rounds each to the nearest value in stock';
-	// stages with zeros ignore the menu
-	if (Array.isArray(realizedStages) && realizedStages.some((s) => s?.topology === 'towThomasNotch')) {
-		menu += ' Stages with zeros are the exception: they are always Tow-Thomas notch stages, the one wiring here that can place a zero.';
+	// zeros take the Tow-Thomas notch form, so the menu has to be on it
+	if (needsTowThomas && topology !== 'towThomas') {
+		menu += ' Elliptic and inverse Chebyshev put zeros in the stopband, which only the Tow-Thomas notch form can build, so the page designs nothing until the menu is on Tow-Thomas.';
+	} else if (needsTowThomas || (Array.isArray(realizedStages) && realizedStages.some((s) => s?.topology === 'towThomasNotch'))) {
+		menu += ' With zeros in the response the menu has to be on Tow-Thomas: its notch form is the one wiring here that can place a zero, and those stages use it.';
 	}
 
 	const stage = Array.isArray(realizedStages) ? realizedStages[0] : null;
@@ -653,7 +655,8 @@ export function filterBasics({
 	attenuationAtFsh,
 	attenuationAtFl,
 	attenuationAtFh,
-	stock
+	stock,
+	needsTowThomas
 } = {}) {
 	const type = TYPES.includes(filterType) ? filterType : 'lowpass';
 	const side = sideOf({ type, fp, fs, fl, fh, fsl, fsh, lpFp, lpFs, design });
@@ -664,7 +667,7 @@ export function filterBasics({
 		...oneRc({ type, side, amaxDb, aminDb, ok }),
 		...theOrder({ type, response, side, amaxDb, aminDb, ok, order }),
 		...opampAndQ({ type, response, side, amaxDb, aminDb, ok }),
-		...stagesToParts({ topology, stock, design, realizedStages }),
+		...stagesToParts({ topology, stock, design, realizedStages, needsTowThomas }),
 		...restOfPage({ type, amaxDb, aminDb, k, stages, attenuationAtFs, attenuationAtFp, attenuationAtFsl, attenuationAtFsh, attenuationAtFl, attenuationAtFh }),
 		h('Words used on this page'),
 		terms(GLOSSARY)

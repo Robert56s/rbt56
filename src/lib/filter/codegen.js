@@ -66,8 +66,10 @@ const FILTER_TYPE = ${JSON.stringify(filterType)}; // 'lowpass', 'highpass', 'ba
 const RESPONSE  = ${JSON.stringify(response)};  // used by 'lowpass' and 'highpass'
 const RESPONSE_HP = ${JSON.stringify(responseHp ?? response)};  // band-pass / band-stop: the high-pass side's
 const RESPONSE_LP = ${JSON.stringify(responseLp ?? response)};  // band-pass / band-stop: the low-pass side's
-// 'mfb', 'sallenKey' or 'towThomas'. Stages with zeros (elliptic, inverse
-// Chebyshev) are always Tow-Thomas notch stages, whatever this says.
+// 'mfb', 'sallenKey' or 'towThomas'. The elliptic and inverse Chebyshev
+// responses need 'towThomas': their stages with zeros are Tow-Thomas notch
+// stages, which no other wiring here can build, and the script stops on
+// any other topology with them, as the page does.
 const TOPOLOGY  = ${JSON.stringify(topology)};
 const RESISTOR_SERIES = ${JSON.stringify(resistorStock ?? 'E24')};
 // 'E24' or 'E96' for a full preferred series, or an explicit array of
@@ -105,6 +107,12 @@ function reportBlock() {
 	return `// =====================================================================
 // REPORT
 // =====================================================================
+
+// zeros in the stopband take a notch stage, and only the Tow-Thomas biquad has one
+const ZERO_RESPONSES = [...new Set(FILTER_TYPE === 'bandpass' || FILTER_TYPE === 'bandstop' ? [RESPONSE_HP, RESPONSE_LP] : [RESPONSE])].filter((r) => RESPONSES[r].zeros);
+if (ZERO_RESPONSES.length > 0 && TOPOLOGY !== 'towThomas') {
+	throw new Error(\`\${ZERO_RESPONSES.map((r) => RESPONSES[r].label).join(' and ')} can only be built with Tow-Thomas stages: set TOPOLOGY = 'towThomas'\`);
+}
 
 console.log('='.repeat(72));
 console.log('ORDER');
@@ -308,9 +316,9 @@ console.log(\`\\npassband top \${top.toFixed(2)} dB; least attenuation in the st
  */
 export const NEXT_STEPS = [
 	{
-		title: 'Simulate before you build',
+		title: 'Simulate before building',
 		detail:
-			'Every number above comes from an ideal op-amp: infinite gain-bandwidth, no slew rate limit. Drop the design into LTSpice (or any SPICE simulator) with the real op-amp model you plan to use (e.g. a TL082 .subckt) and rerun an AC sweep. Check that the model\'s gain-bandwidth is at least 10-20x your highest stage\'s f0 times that stage\'s gain - below that, the real op-amp starts rolling off before your filter does, and the passband/stopband numbers stop being accurate.'
+			"Every number above comes from an ideal op-amp: infinite gain-bandwidth, no slew rate limit. The LTspice download runs the design with the op-amp picked next to it (a TL082 or LM741 model, or the single-pole one), so run its AC sweep with the part that will be built. That part's gain-bandwidth should be at least 10 to 20 times the highest stage's f0 times that stage's gain: below that it rolls off before the filter does, and the passband and stopband figures stop holding."
 	},
 	{
 		title: 'Build and test one stage at a time',
@@ -330,14 +338,14 @@ export const NEXT_STEPS = [
 	{
 		title: 'If the measured response drifts, check sensitivity first',
 		detail:
-			'The sensitivity numbers above say how much a single component being off by 1% moves Q - that is usually the first place to look before assuming the design itself is wrong.'
+			'The sensitivity numbers above say how much a single component being off by 1% moves Q: that is usually the first place to look before assuming the design itself is wrong.'
 	}
 ];
 
 function nextStepsComment() {
 	const lines = [
 		'// =====================================================================',
-		'// NEXT STEPS - this script only gets you a paper design',
+		'// NEXT STEPS: this script only makes a paper design',
 		'// ====================================================================='
 	];
 	NEXT_STEPS.forEach((step, i) => {

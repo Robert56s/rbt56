@@ -394,13 +394,15 @@ const filterSpecs = [
 	{ filterType: 'bandpass', response: 'chebyshev', amaxDb: 3, aminDb: 40, fl: 1000, fh: 10000, fsl: 300, fsh: 30000 },
 	{ filterType: 'bandstop', response: 'butterworth', amaxDb: 3, aminDb: 40, fl: 1000, fh: 30000, fsl: 3000, fsh: 10000 },
 	{ filterType: 'bandstop', response: 'chebyshev', amaxDb: 3, aminDb: 40, fl: 1000, fh: 30000, fsl: 3000, fsh: 10000 },
-	// the newer responses, each on one topology (the notch stages ignore it anyway)
-	{ filterType: 'lowpass', response: 'elliptic', amaxDb: 1, aminDb: 40, fp: 10000, fs: 20000, only: ['mfb'] },
-	{ filterType: 'highpass', response: 'inverseChebyshev', amaxDb: 1, aminDb: 40, fp: 10000, fs: 4000, only: ['sallenKey'] },
+	// the newer responses, each on one topology; zeros take Tow-Thomas, the only topology the page allows with them
+	{ filterType: 'lowpass', response: 'elliptic', amaxDb: 1, aminDb: 40, fp: 10000, fs: 20000, only: ['towThomas'] },
+	{ filterType: 'highpass', response: 'inverseChebyshev', amaxDb: 1, aminDb: 40, fp: 10000, fs: 4000, only: ['towThomas'] },
 	{ filterType: 'lowpass', response: 'legendre', amaxDb: 3, aminDb: 40, fp: 10000, fs: 35000, only: ['sallenKey'] },
 	{ filterType: 'lowpass', response: 'bessel', amaxDb: 3, aminDb: 40, fp: 10000, fs: 35000, only: ['towThomas'] },
-	{ filterType: 'bandstop', response: 'elliptic', responseHp: 'butterworth', responseLp: 'elliptic', amaxDb: 3, aminDb: 40, fl: 1000, fh: 30000, fsl: 3000, fsh: 10000, only: ['mfb'] },
-	{ filterType: 'bandpass', response: 'inverseChebyshev', responseHp: 'legendre', responseLp: 'inverseChebyshev', amaxDb: 3, aminDb: 40, fl: 1000, fh: 10000, fsl: 300, fsh: 30000, only: ['mfb'] }
+	{ filterType: 'bandstop', response: 'elliptic', responseHp: 'butterworth', responseLp: 'elliptic', amaxDb: 3, aminDb: 40, fl: 1000, fh: 30000, fsl: 3000, fsh: 10000, only: ['towThomas'] },
+	{ filterType: 'bandpass', response: 'inverseChebyshev', responseHp: 'legendre', responseLp: 'inverseChebyshev', amaxDb: 3, aminDb: 40, fl: 1000, fh: 10000, fsl: 300, fsh: 30000, only: ['towThomas'] },
+	// zeros on the high-pass side only: the low-pass side's plain stages are Tow-Thomas too
+	{ filterType: 'bandpass', response: 'elliptic', responseHp: 'elliptic', responseLp: 'butterworth', amaxDb: 3, aminDb: 40, fl: 1000, fh: 10000, fsl: 300, fsh: 30000, only: ['towThomas'] }
 ];
 for (const { only, ...spec } of filterSpecs) {
 	for (const topology of only ?? Object.keys(secondOrder)) {

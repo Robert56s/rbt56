@@ -174,12 +174,14 @@ export function sizeFeedbackLimiter({ rt, rs, amplitude, fraction, diode, resist
 	// is therefore a 1 % (E96) value while Rf2 stays in the series asked
 	// for. Even so, try the neighbours of each rounded value and keep the
 	// pair closest to the wanted amplitude among those that keep the start
-	// gain above balance by at least a third of the excess asked for.
+	// gain above balance by at least a third of the excess asked for. With a
+	// list of the resistors on hand, Rf1 comes from that list like the rest.
+	const rf1Series = Array.isArray(resistorSeries) ? resistorSeries : 'E96';
 	const around = (target, series, steps) => [...new Set(steps.map((m) => nearestResistor(target * m, series)))];
 	const excessWanted = rs / rt - 1;
 	let best = null;
 	for (const rf2 of around(rf2Target, resistorSeries, [0.8, 0.9, 1, 1.12, 1.25])) {
-		for (const rf1 of rf1Target < 0.02 * rs ? [0] : around(rf1Target, 'E96', [0.95, 0.975, 0.99, 1, 1.01, 1.025, 1.05])) {
+		for (const rf1 of rf1Target < 0.02 * rs ? [0] : around(rf1Target, rf1Series, [0.95, 0.975, 0.99, 1, 1.01, 1.025, 1.05])) {
 			const excess = (rf1 + rf2) / rt - 1;
 			if (excess < excessWanted / 3 || excess > 2.5 * excessWanted) continue;
 			const a = feedbackLimiterAmplitude({ rf1, rf2, rt, fraction, diode });
@@ -190,7 +192,7 @@ export function sizeFeedbackLimiter({ rt, rs, amplitude, fraction, diode, resist
 			if (!best || score < best.score) best = { rf1, rf2, score };
 		}
 	}
-	if (!best) return { rf1: nearestResistor(rf1Target, 'E96'), rf2: nearestResistor(rf2Target, resistorSeries), rf1Target, rf2Target };
+	if (!best) return { rf1: nearestResistor(rf1Target, rf1Series), rf2: nearestResistor(rf2Target, resistorSeries), rf1Target, rf2Target };
 	return { rf1: best.rf1, rf2: best.rf2, rf1Target, rf2Target };
 }
 
@@ -436,10 +438,11 @@ export function sizeAgc({ rf, gBalance, amplitude, jfet, diode, resistorSeries =
 	}
 	// the divider sets the amplitude almost in proportion, so an E24 step
 	// can move it by a few percent: take E96 when that costs more than 1 %
-	// of the gate's distance from pinch-off
+	// of the gate's distance from pinch-off (a list of parts on hand has
+	// no E96 to reach for, so its nearest value stands)
 	const miss = (ra) => Math.abs((gateAt(ra) - vto) / (vgsNeeded - vto) - 1);
 	let ra = raTarget < 1e3 ? 0 : nearestResistor(raTarget, resistorSeries);
-	if (ra > 0 && miss(ra) > 0.01) ra = nearestResistor(raTarget, 'E96');
+	if (ra > 0 && miss(ra) > 0.01 && !Array.isArray(resistorSeries)) ra = nearestResistor(raTarget, 'E96');
 	return { ok: true, rdsOn, rChannelMin, legBalance, rBalance, rBalanceTarget, rSeries, rSeriesTarget, ra, rb, rx, ratio: rb / (ra + rb), vgsNeeded, vPeak: detectorPeak(amplitude, ra + rb, diode), minAmplitude };
 }
 

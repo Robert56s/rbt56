@@ -1,4 +1,5 @@
 <script>
+	import { onMount } from 'svelte';
 	import BasicsPanel from '$lib/components/BasicsPanel.svelte';
 	import AmWaveDemo from '$lib/components/basics/AmWaveDemo.svelte';
 	import DiodeBendDemo from '$lib/components/basics/DiodeBendDemo.svelte';
@@ -10,6 +11,7 @@
 	import Equation from '$lib/components/Equation.svelte';
 	import MathPanel from '$lib/components/MathPanel.svelte';
 	import OpampPicker from '$lib/components/OpampPicker.svelte';
+	import StockPicker from '$lib/components/StockPicker.svelte';
 	import TimePlot from '$lib/components/TimePlot.svelte';
 	import { modulationIndexFromEnvelope, modulationQuality, powerEfficiency } from '$lib/modulation/amMath';
 	import {
@@ -41,7 +43,7 @@
 	} from '$lib/modulation/explain';
 	import { designDiodeMixerModulator } from '$lib/modulation/diodeMixerModulator';
 	import { DIODE_MODELS } from '$lib/modulation/diodeLaw';
-	import { designEnvelopeLowPass } from '$lib/modulation/envelopeFilter';
+	import { designEnvelopeLowPass, envelopeGainDb } from '$lib/modulation/envelopeFilter';
 	import { formatFarads, formatHenries, formatHz, formatOhms, formatVolts } from '$lib/modulation/format';
 	import { compareTopologies, conductanceDepth, designJfetModulator } from '$lib/modulation/jfetModulator';
 	import {
@@ -55,18 +57,45 @@
 	} from '$lib/modulation/spice';
 	import { buildOscillatorDiagram } from '$lib/oscillator/circuits';
 	import { DEFAULT_OPAMP, OPAMP_MODELS } from '$lib/spice/opamps';
+	import { DIODES } from '$lib/oscillator/limiter';
 	import { designOscillator } from '$lib/oscillator/topologies';
 	import { fitModel, IDSS_WARNING, JFET_PRESETS, modelFromIdss, modelFromRdsOn, parseMeasurements } from '$lib/modulation/jfetModel';
 	import { designHalfWaveRectifier, designPrecisionRectifier, rectifiedEnvelopeStats } from '$lib/modulation/rectifier';
 	import { amSignal, envelope as envelopeWave, rectify } from '$lib/modulation/waveform';
+	import { componentOptions, defaultStock, isRestricted, loadStock, saveStock } from '$lib/stock';
 
 	let mode = $state('jfet'); // 'jfet' | 'diode' | 'demod'
 	// the op-amp the LTspice files use, shared by the three circuits: the
 	// ideal single-pole model, or a real part on +/-15 V rails
 	let spiceOpamp = $state(DEFAULT_OPAMP);
 	const spiceReal = $derived(OPAMP_MODELS[spiceOpamp]?.real ?? false);
-	// an LM741 (1 MHz, 0.5 V/us) cannot keep up with a carrier past a few kHz
-	const slowPart = (fp) => spiceOpamp === 'LM741' && fp > 5000;
+	// a real op-amp in the files runs on +/-15 V, whatever supply the page designs for
+	const railSwing = $derived(OPAMP_MODELS[spiceOpamp]?.swing ?? Infinity);
+
+	// Which values every part is rounded to, for the three circuits alike: a
+	// series, the lab drawer or the user's own list, shared with the filter
+	// tool and kept in this browser (src/lib/stock.js)
+	const initialStock = defaultStock();
+	let stock = $state(initialStock.stock);
+	let resistorText = $state(initialStock.resistorText);
+	let capacitorText = $state(initialStock.capacitorText);
+	let stockLoaded = $state(false);
+	const parts = $derived(componentOptions(stock, resistorText, capacitorText));
+	const E24_PARTS = { resistorSeries: 'E24', capacitors: null };
+	const restricted = $derived(isRestricted(stock));
+	onMount(() => {
+		const saved = loadStock();
+		if (saved) {
+			if (saved.stock) stock = saved.stock;
+			if (saved.resistorText !== undefined) resistorText = saved.resistorText;
+			if (saved.capacitorText !== undefined) capacitorText = saved.capacitorText;
+		}
+		stockLoaded = true;
+	});
+	$effect(() => {
+		const state = { stock, resistorText, capacitorText };
+		if (stockLoaded) saveStock(state);
+	});
 
 	// ------------------------------------------------------------------
 	// JFET modulator
@@ -81,6 +110,7 @@
 	let windowLow = $state(-3.5);
 	let windowHigh = $state(-0.5);
 	let presetNote = $state('');
+	let presetValues = $state(null);
 	// the guide to V_P, I_DSS and r_DS(on) is the same for every design
 	const jfetSourcing = explainJfetSourcing();
 	let swingFraction = $state(0.9);
@@ -126,6 +156,7 @@
 		jfetMode = 'rdson';
 		vp = (pr.vpRange[0] + pr.vpRange[1]) / 2;
 		rdsOn = pr.rdsOnMax;
+		presetValues = { vp, rdsOn };
 		presetNote = `${name} datasheet limits: V_P between ${pr.vpRange[0]} V and ${pr.vpRange[1]} V (set to the middle, ${vp} V), I_DSS at least ${pr.idssMin * 1000} mA, r_DS(on) at most ${pr.rdsOnMax} Ω (set to that maximum). A real part is usually better than these limits, and V_P in particular has to be measured.`;
 	}
 
@@ -142,31 +173,38 @@
 					fmMin,
 					vcc,
 					fp,
-					// an on-board oscillator delivers what its limiter settles at, not the target
-					carrierSourceAmplitude: carrierFrom === 'wien' && carrierOscillator?.limiter.amplitudeActual ? carrierOscillator.limiter.amplitudeActual : carrierSourceAmplitude,
+					carrierSourceAmplitude: carrierIn,
 					carrierMargin,
 					opampSwing,
 					gbw: gbwMhz * 1e6,
-					slewRate: slewRateVus * 1e6
+					slewRate: slewRateVus * 1e6,
+					...parts
 				})
 			: null
 	);
 
 	// when the carrier is generated on board, it is designed at the same
-	// frequency and amplitude the modulator expects to be fed
-	const carrierOscillator = $derived.by(() =>
-		carrierFrom === 'wien' && jfetValid
-			? designOscillator({
-					topology: 'wien',
-					stabilizer: 'diodes',
-					frequency: fp,
-					amplitude: carrierSourceAmplitude,
-					gbw: gbwMhz * 1e6,
-					slewRate: slewRateVus * 1e6,
-					opampSwing
-				})
+	// frequency and amplitude the modulator expects to be fed; a restricted
+	// stock that cannot build it falls back to E24 and E6, flagged
+	const carrierOscillator = $derived.by(() => {
+		if (!(carrierFrom === 'wien' && jfetValid)) return null;
+		const osc = (p) => designOscillator({ topology: 'wien', stabilizer: 'diodes', frequency: fp, amplitude: carrierSourceAmplitude, gbw: gbwMhz * 1e6, slewRate: slewRateVus * 1e6, opampSwing, ...p });
+		const own = osc(parts);
+		if (own || !restricted) return own;
+		const fallback = osc(E24_PARTS);
+		return fallback && { ...fallback, stockShortfall: true };
+	});
+	// the phase-shift oscillator at the same carrier, for the comparison the carrier panel makes
+	const phaseShiftAtFp = $derived(carrierOscillator ? designOscillator({ topology: 'phaseShift', frequency: fp, amplitude: carrierSourceAmplitude, gbw: gbwMhz * 1e6, slewRate: slewRateVus * 1e6, opampSwing }) : null);
+	// what an LM741 (1 MHz, 0.5 V/us) makes of this modulator, when it is the part picked
+	const jfetOn741 = $derived(
+		spiceOpamp === 'LM741' && jfetDesign
+			? designJfetModulator({ model: jfetModel, topology, targetOutputAmplitude, carrierBuffer, swingFraction, targetModulationIndex: targetN, sourceAmplitude, fmMin, vcc, fp, carrierSourceAmplitude: carrierIn, carrierMargin, opampSwing, gbw: 1e6, slewRate: 0.5e6, ...parts })
 			: null
 	);
+	// the carrier the divider gets: what the on-board oscillator's limiter
+	// settles at, which is not quite the amplitude asked of it, or the generator
+	const carrierIn = $derived(carrierFrom === 'wien' && carrierOscillator?.limiter.amplitudeActual ? carrierOscillator.limiter.amplitudeActual : carrierSourceAmplitude);
 
 	// both cells on the same JFET, carrier and op-amp, for the side-by-side table
 	const topologyRows = $derived.by(() =>
@@ -181,14 +219,18 @@
 					fmMin,
 					vcc,
 					fp,
-					// an on-board oscillator delivers what its limiter settles at, not the target
-					carrierSourceAmplitude: carrierFrom === 'wien' && carrierOscillator?.limiter.amplitudeActual ? carrierOscillator.limiter.amplitudeActual : carrierSourceAmplitude,
+					carrierSourceAmplitude: carrierIn,
 					carrierMargin,
 					opampSwing,
 					gbw: gbwMhz * 1e6,
-					slewRate: slewRateVus * 1e6
+					slewRate: slewRateVus * 1e6,
+					...parts
 				})
 			: []
+	);
+	// the largest voltage any of the modulator's op-amps puts out
+	const jfetPeakOut = $derived(
+		jfetDesign ? Math.max(jfetDesign.carrier.envelopeMax, jfetDesign.postGain?.envelopeMax ?? 0, Math.abs(jfetDesign.conditioning.summer.outMin), carrierOscillator?.limiter.amplitudeActual ?? 0) : 0
 	);
 
 	// the preview shows what the last op-amp actually delivers: the carrier
@@ -233,11 +275,15 @@
 				fmMin,
 				vcc,
 				fp,
-				carrierSourceAmplitude,
+				carrierSourceAmplitude: carrierIn,
 				carrierMargin,
 				opampSwing,
 				gbw: gbwMhz * 1e6,
-				slewRate: slewRateVus * 1e6
+				slewRate: slewRateVus * 1e6,
+				...parts,
+				carrierNote: carrierOscillator
+					? `the carrier comes from the page's Wien bridge (R ${formatOhms(carrierOscillator.r)}, C ${formatFarads(carrierOscillator.c)}, Rf1 ${formatOhms(carrierOscillator.parts.rf1)}, Rf2 ${formatOhms(carrierOscillator.parts.rf2)}, Rg ${formatOhms(carrierOscillator.rg)}), which settles at the CARRIER_SOURCE_AMPLITUDE below`
+					: null
 			}),
 			'jfet-am-modulator.js'
 		);
@@ -259,7 +305,7 @@
 
 	const inductance = $derived(inductanceMh / 1000);
 	const diodeValid = $derived(
-		fpDiode > 0 && fmMaxDiode > 0 && fmMaxDiode < fpDiode / 2 && inductance > 0 && sidebandMargin > 0 && carrierAmp > 0 && modAmp > 0 && targetNDiode > 0 && targetNDiode <= 1 && carrierDrive > 0 && vccDiode > 0
+		fpDiode > 0 && fmMaxDiode > 0 && fpDiode - sidebandMargin * fmMaxDiode > fmMaxDiode && inductance > 0 && sidebandMargin > 0 && carrierAmp > 0 && modAmp > 0 && targetNDiode > 0 && targetNDiode <= 1 && carrierDrive > 0 && vccDiode > 0
 	);
 	// the op-amp's reach on this supply, as for a TL08x
 	const diodeParams = $derived({
@@ -273,14 +319,23 @@
 		carrierDrive,
 		vcc: vccDiode,
 		opampSwing: Math.max(0.5, vccDiode - 1.5),
-		diode: diodePart
+		diode: diodePart,
+		resistorSeries: parts.resistorSeries,
+		capacitorStock: parts.capacitors
 	});
-	const diodeDesign = $derived.by(() => (diodeValid ? designDiodeMixerModulator(diodeParams) : null));
+	// a restricted stock that reaches no design falls back to E24 and E12, flagged
+	const diodeDesign = $derived.by(() => {
+		if (!diodeValid) return null;
+		const own = designDiodeMixerModulator(diodeParams);
+		if (own || !restricted) return own;
+		const fallback = designDiodeMixerModulator({ ...diodeParams, resistorSeries: 'E24', capacitorStock: null });
+		return fallback && { ...fallback, stockShortfall: true };
+	});
 	const diodePreview = $derived.by(() => (diodeDesign ? amSignal(fpDiode, fmMaxDiode, diodeDesign.carrierOut, diodeDesign.indexAtFmMax, 4 / fmMaxDiode) : null));
 
 	function downloadDiode() {
 		if (!diodeDesign) return;
-		download(generateDiodeScript(diodeParams), 'diode-tank-am-modulator.js');
+		download(generateDiodeScript({ ...diodeParams, capacitors: parts.capacitors }), 'diode-tank-am-modulator.js');
 	}
 
 	// ------------------------------------------------------------------
@@ -296,13 +351,28 @@
 	let demoModIndex = $state(0.9);
 
 	const rippleHz = $derived(rectifierType === 'full' ? 2 * fpCarrierDemod : fpCarrierDemod);
-	const demodValid = $derived(fmMaxDemod > 0 && rippleHz > fmMaxDemod && amaxDb > 0 && aminDb > amaxDb);
-	const envelopeDesign = $derived.by(() =>
+	// the ripple carries the message as sidebands, the nearest at the ripple
+	// frequency minus fmMax: that is where the filter's stopband starts, and
+	// it has to sit above the message
+	const demodValid = $derived(
+		fmMaxDemod > 0 && fmMaxDemod < fpCarrierDemod && rippleHz - fmMaxDemod > fmMaxDemod && amaxDb > 0 && aminDb > amaxDb && demoModIndex > 0 && demoModIndex <= 1
+	);
+	const ENVELOPE_MAX_ORDER = 8;
+	const envelopeRaw = $derived.by(() =>
 		demodValid
-			? designEnvelopeLowPass({ response, amaxDb, aminDb, fp: fmMaxDemod, fs: rippleHz, order: orderOverride })
+			? designEnvelopeLowPass({ response, amaxDb, aminDb, fp: fmMaxDemod, fs: rippleHz - fmMaxDemod, order: orderOverride, maxOrder: ENVELOPE_MAX_ORDER, ...parts })
 			: null
 	);
-	const rectifierInfo = $derived(rectifierType === 'full' ? designPrecisionRectifier({}) : designHalfWaveRectifier({}));
+	const envelopeDesign = $derived(envelopeRaw && !envelopeRaw.tooHigh ? envelopeRaw : null);
+	// what the rounded parts do at the tone and at the ripple's nearest sideband, and the sharpest stage
+	const envelopeCheck = $derived.by(() => {
+		if (!envelopeDesign) return null;
+		const atTone = envelopeGainDb(envelopeDesign, fmMaxDemod);
+		const atSideband = envelopeGainDb(envelopeDesign, rippleHz - fmMaxDemod);
+		const maxQ = Math.max(...envelopeDesign.realized.map((s) => s.actual.q));
+		return { atTone, atSideband, maxQ, toneOk: Math.abs(atTone) <= amaxDb + 0.1, stopOk: -atSideband >= aminDb - 0.1 };
+	});
+	const rectifierInfo = $derived(rectifierType === 'full' ? designPrecisionRectifier({ resistorSeries: parts.resistorSeries }) : designHalfWaveRectifier({ resistorSeries: parts.resistorSeries }));
 	const rectStats = $derived(rectifiedEnvelopeStats(1, fpCarrierDemod, rectifierType));
 	// the demodulator with a 1 V test wave at the preview index: what comes out, as the LTspice run gets it
 	const demodOptions = $derived(envelopeDesign ? { rectifierType, rectifier: rectifierInfo, envelope: envelopeDesign, fp: fpCarrierDemod, fm: fmMaxDemod, index: demoModIndex } : null);
@@ -313,8 +383,7 @@
 		const source = amSignal(fpCarrierDemod, fmMaxDemod, 1, demoModIndex, duration, 6000);
 		const rectified = rectify(source, rectifierType);
 		const env = envelopeWave(fmMaxDemod, rectStats.average, demoModIndex, duration, 6000);
-		const envNeg = envelopeWave(fmMaxDemod, rectStats.average, demoModIndex, duration, 6000, -1);
-		return { source, rectified, env, envNeg };
+		return { source, rectified, env };
 	});
 
 	function downloadDemod() {
@@ -328,7 +397,8 @@
 				aminDb,
 				order: orderOverride,
 				response,
-				index: demoModIndex
+				index: demoModIndex,
+				...parts
 			}),
 			'am-demodulator.js'
 		);
@@ -375,6 +445,7 @@
 			mode,
 			topology,
 			carrierFrom,
+			oscillatorOk: carrierFrom !== 'wien' || !jfetValid || !!carrierOscillator,
 			rectifierType,
 			design: jfetDesign,
 			jfetModel,
@@ -411,8 +482,8 @@
 						<option value="measured">Measured points (fit a line)</option>
 					</select>
 				</div>
-				<div class="field">
-					<label for="preset">Datasheet preset (limits, not typicals)</label>
+				<div class="field" role="group" aria-labelledby="presetLabel">
+					<span class="labelLike" id="presetLabel">Datasheet preset (limits, not typicals)</span>
 					<div class="row presets">
 						{#each Object.keys(JFET_PRESETS) as name (name)}
 							<button type="button" class="small" onclick={() => applyPreset(name)}>{name}</button>
@@ -448,7 +519,7 @@
 
 			<MathPanel blocks={jfetSourcing} summary="How to find V_P, I_DSS and r_DS(on): datasheet, calculation, lab" />
 
-			{#if presetNote}
+			{#if presetNote && presetValues && jfetMode === 'rdson' && vp === presetValues.vp && rdsOn === presetValues.rdsOn}
 				<p class="note">{presetNote}</p>
 			{/if}
 
@@ -577,7 +648,7 @@
 					<label for="topo">Gain cell topology</label>
 					<select id="topo" bind:value={topology}>
 						<option value="noninverting">Non-inverting (1 op-amp)</option>
-						<option value="inverting">Inverting (2 or 3 op-amps)</option>
+						<option value="inverting">Inverting (1 to 3 op-amps)</option>
 					</select>
 				</div>
 				{#if topology === 'inverting'}
@@ -594,13 +665,17 @@
 					</div>
 				{/if}
 			</div>
+			<StockPicker id="stockJfet" bind:stock bind:resistorText bind:capacitorText />
+			{#if restricted}
+				<p class="note">Every resistor and capacitor below is rounded to those values only, and the figures are worked out from the rounded parts.</p>
+			{/if}
 			<p class="note">
 				The output swing is what the op-amp reaches on this supply, about Vcc minus 1.5 V for a
 				TL08x. The carrier frequency is a design input here, not a preview setting: it is what the
 				op-amp has to keep up with, at the highest gain the message drives the cell to. The
 				non-inverting cell needs a large x to reach a deep modulation, which is what the op-amp
 				struggles with at a fast carrier; the inverting cell reaches n = s with a small x, at the
-				cost of two more op-amps. The comparison table below puts the two side by side.
+				cost of up to two more op-amps. The comparison table below puts the two side by side.
 			</p>
 		</section>
 
@@ -612,7 +687,10 @@
 					<span class="hint">{jfetDesign.topology === 'inverting' ? 'inverting, n = s' : 'non-inverting'}, n = {jfetDesign.modulationIndex.toFixed(3)}</span>
 				</div>
 				{#if jfetDesign.topology === 'inverting'}
-					<DiagramView diagram={buildJfetInvertingCellDiagram({ r2: jfetDesign.r2 })} label="JFET inverting gain cell with its carrier follower" />
+					<DiagramView
+						diagram={buildJfetInvertingCellDiagram({ r2: jfetDesign.r2, follower: jfetDesign.buffer.enabled })}
+						label={jfetDesign.buffer.enabled ? 'JFET inverting gain cell with its carrier follower' : 'JFET inverting gain cell, driven by the divider'}
+					/>
 				{:else}
 					<DiagramView diagram={buildJfetGainCellDiagram({ rb: jfetDesign.rb })} label="JFET gain cell" />
 				{/if}
@@ -674,7 +752,14 @@
 					<h2>Carrier path</h2>
 					<span class="hint">A_c = {formatVolts(jfetDesign.carrier.ac)}, set by the {jfetDesign.carrier.limit === 'triode' ? 'triode region' : 'op-amp swing'}</span>
 				</div>
-				<DiagramView diagram={buildCarrierDividerDiagram(jfetDesign.carrier.divider)} label="carrier attenuator" />
+				<DiagramView
+					diagram={buildCarrierDividerDiagram({
+						...jfetDesign.carrier.divider,
+						from: carrierOscillator ? 'from the Wien oscillator' : 'carrier source',
+						to: jfetDesign.topology === 'inverting' ? (jfetDesign.buffer.enabled ? 'to the follower' : 'to the drain') : 'to + input'
+					})}
+					label="carrier attenuator"
+				/>
 				<table>
 					<tbody>
 						<tr><td>Triode limit V_GS,min - V_P</td><td>{formatVolts(jfetDesign.carrier.vdsSat)} (carrier at most {formatVolts(jfetDesign.carrier.acTriode)} with margin k = {jfetDesign.carrier.margin})</td></tr>
@@ -705,7 +790,7 @@
 						<tr><td>Modulation index: designed / effective / read from the peaks</td><td>{jfetDesign.modulationIndex.toFixed(3)} / {jfetDesign.opamp.effectiveModulationIndex.toFixed(3)} / {jfetDesign.opamp.peakModulationIndex.toFixed(3)}</td></tr>
 						<tr><td>Audio distortion from the crest loss (THD)</td><td>{(100 * jfetDesign.opamp.thd).toFixed(2)} %</td></tr>
 						<tr><td>Slew needed / available</td><td>{(jfetDesign.opamp.slewNeeded / 1e6).toFixed(2)} V/us / {(jfetDesign.opamp.slewRate / 1e6).toFixed(0)} V/us</td></tr>
-						<tr><td>Op-amps in the modulator</td><td>{jfetDesign.opamp.opampCount} (gate-drive summer included)</td></tr>
+						<tr><td>Op-amps in the modulator</td><td>{jfetDesign.opamp.opampCount + (carrierOscillator ? 1 : 0)} (gate-drive summer{carrierOscillator ? ' and Wien oscillator' : ''} included)</td></tr>
 					</tbody>
 				</table>
 				{#if jfetDesign.opamp.gbwOk}
@@ -714,8 +799,10 @@
 					<p class="flag warn">
 						At {formatHz(fp)} this op-amp cannot follow a noise gain of {jfetDesign.opamp.kCrest.toFixed(1)}: the crest loses
 						{(100 * (1 - jfetDesign.opamp.factorCrest)).toFixed(0)} % and the recovered audio carries
-						{(100 * jfetDesign.opamp.thd).toFixed(1)} % THD. Set {jfetDesign.topology === 'inverting' ? 'R_2' : 'R_b'} to {formatOhms(jfetDesign.opamp.rbLimit)}
-						({jfetDesign.topology === 'inverting' ? 'n stays at' : 'n becomes'} {jfetDesign.opamp.nAtLimit.toFixed(3)}), or use a faster op-amp or a lower carrier.
+						{(100 * jfetDesign.opamp.thd).toFixed(1)} % THD.
+						{jfetDesign.topology === 'inverting'
+							? `Only an R_2 of ${formatOhms(jfetDesign.opamp.rbLimit)} or less would do (n stays at ${jfetDesign.opamp.nAtLimit.toFixed(3)}), below the x of 0.5 the tool keeps as a floor: a faster op-amp or a lower carrier fixes it.`
+							: `Lowering the target n to about ${jfetDesign.opamp.nAtLimit.toFixed(3)} brings R_b down to ${formatOhms(jfetDesign.opamp.rbLimit)}, inside the rule; a faster op-amp or a lower carrier also fixes it.`}
 					</p>
 				{:else}
 					<p class="flag bad">At {formatHz(fp)} no feedback resistor brings the noise gain under the gain-bandwidth limit with this op-amp: a faster op-amp or a lower carrier is needed.</p>
@@ -763,12 +850,16 @@
 						<h2>Carrier oscillator</h2>
 						<span class="hint">Wien bridge at {formatHz(carrierOscillator.f0)}</span>
 					</div>
-					<DiagramView diagram={buildOscillatorDiagram(carrierOscillator)} label="Wien bridge carrier oscillator" />
+					{#if carrierOscillator.stockShortfall}
+						<p class="flag warn">The parts on hand cannot build this oscillator, so it is shown with E24 resistors and E6 capacitors instead. Add values near the ones below.</p>
+					{/if}
+					<DiagramView diagram={buildOscillatorDiagram(carrierOscillator)} label="Wien bridge carrier oscillator with its diode limiter" />
 					<table>
 						<tbody>
 							<tr><td>Frequency: wanted / predicted with this op-amp</td><td>{formatHz(fp)} / {formatHz(carrierOscillator.f0)} ({(100 * carrierOscillator.f0Error).toFixed(2)} %)</td></tr>
 							<tr><td>R and C (two of each)</td><td>{formatOhms(carrierOscillator.r)}, {formatFarads(carrierOscillator.c)}</td></tr>
-							<tr><td>Feedback: Rf1 / Rf2 / Rg</td><td>{formatOhms(carrierOscillator.parts.rf1)} / {formatOhms(carrierOscillator.parts.rf2)} / {formatOhms(carrierOscillator.rg)}</td></tr>
+							<tr><td>Feedback: Rf1 / Rf2 (diodes across it) / Rg</td><td>{formatOhms(carrierOscillator.parts.rf1)} / {formatOhms(carrierOscillator.parts.rf2)} / {formatOhms(carrierOscillator.rg)}</td></tr>
+							<tr><td>Limiting diodes</td><td>2 x {DIODES[carrierOscillator.diode].label}, one each way</td></tr>
 							<tr><td>Output amplitude</td><td>about {formatVolts(carrierOscillator.limiter.amplitudeActual)} peak, into the divider above</td></tr>
 							<tr><td>Gain needed / set / limited</td><td>{carrierOscillator.requiredGain.toFixed(2)} / {carrierOscillator.startGain.toFixed(2)} / {carrierOscillator.limiter.gainLimited.toFixed(2)}</td></tr>
 							<tr><td>Distortion on the carrier</td><td>about {(100 * carrierOscillator.thd).toFixed(1)} %</td></tr>
@@ -779,7 +870,9 @@
 						<p class="flag ok">
 							The Wien bridge is the right choice here for one reason: it needs a gain of only 3, so at
 							{formatHz(fp)} this op-amp lags it by only {carrierOscillator.opamp.lagDeg.toFixed(1)} degrees, which the retuned RC absorbs.
-							A phase-shift oscillator would need a gain of 29 and would not start at this frequency at all.
+							{phaseShiftAtFp && phaseShiftAtFp.starts
+								? `A phase-shift oscillator would need a gain of 29, and this op-amp would lag it by ${phaseShiftAtFp.opamp.lagDeg.toFixed(0)} degrees at this frequency${phaseShiftAtFp.opamp.opampOk ? '' : ', too much to trust'}.`
+								: 'A phase-shift oscillator would need a gain of 29 and would not start at this frequency at all.'}
 						</p>
 					{:else}
 						<p class="flag warn">
@@ -793,6 +886,19 @@
 						A percent or so here is harmless, which is why diode limiting is enough and the oscillator
 						needs nothing more elaborate. The <a href="/tools/oscillator/">Sine Oscillator Design</a> tool
 						has the other topologies and the reasoning behind that choice.
+					</p>
+				</section>
+			{:else if carrierFrom === 'wien'}
+				<section class="panel">
+					<div class="panel-head">
+						<span class="num">05b</span>
+						<h2>Carrier oscillator</h2>
+						<span class="hint">none at this carrier</span>
+					</div>
+					<p class="flag bad">
+						No Wien bridge can be sized for a {formatHz(fp)} carrier with this op-amp: either its resistors would
+						fall outside 1 k to 1 M, or the op-amp's lag leaves the loop no way to balance. A faster op-amp, a lower
+						carrier or a generator fixes it; until then the LTspice files take the carrier from a generator.
 					</p>
 				</section>
 			{/if}
@@ -813,6 +919,12 @@
 						<tr><td>Most negative gate voltage delivered</td><td>{formatVolts(jfetDesign.conditioning.summer.outMin)} (op-amp swing ±{formatVolts(jfetDesign.conditioning.summer.opampSwing)})</td></tr>
 					</tbody>
 				</table>
+				{#if !jfetDesign.conditioning.summer.fcOk}
+					<p class="flag warn">
+						No capacitor on hand puts the coupling corner a decade under {formatHz(fmMin)}: at {formatHz(jfetDesign.conditioning.summer.fcActual)}
+						it takes {jfetDesign.conditioning.summer.fcLossDb.toFixed(1)} dB off the lowest message tone. A larger capacitor fixes it.
+					</p>
+				{/if}
 				{#if !jfetDesign.conditioning.summer.headroomOk}
 					<p class="flag bad">The summer cannot reach {formatVolts(jfetDesign.conditioning.summer.outMin)} on this supply: raise Vcc or use a JFET with a smaller |V_P|.</p>
 				{/if}
@@ -851,7 +963,7 @@
 					<button type="button" onclick={() => saveFile(generateModNetlist({ design: jfetDesign, fmPreview, oscillator: carrierOscillator, opamp: spiceOpamp }), 'jfet-am-modulator.cir')}>Download .cir (netlist)</button>
 				</div>
 				<p class="note">
-					The LTspice files carry the whole modulator: the gate-drive summer, the carrier path{carrierOscillator ? ' with its oscillator' : ''},
+					The LTspice files carry the whole modulator: the gate-drive summer, the carrier path{carrierOscillator ? ' with its oscillator' : carrierFrom === 'wien' ? ' (from a generator, since no Wien bridge holds this carrier)' : ''},
 					and the gain cell, with a transient run at {formatHz(fmPreview)} already set up. The JFET goes in as a
 					real SPICE device rather than the straight line this page designs against (Vto = V_P, Beta = I_DSS / V_P&sup2;
 					give the same curve), and {spiceReal ? `the op-amps are the ${spiceOpamp} with its supply pins on +15 V and -15 V rails, its model written into the file` : 'the op-amps carry the gain-bandwidth entered above'}. That is the point of
@@ -861,12 +973,26 @@
 					its steady-state charge so the gate bias is right from the first cycle, and, with the oscillator on board, starts
 					the carrier at full amplitude and saves the four message periods after it has settled. The index measured from
 					the carrier peaks in that run should read about {jfetDesign.opamp.peakModulationIndex.toFixed(3)}: the V_DS squared term lifts every
-					peak by the same amount, crest and trough alike, which is why it sits a little under the envelope's own figure.{slowPart(fp)
-						? ` An LM741 (1 MHz, 0.5 V/us) is far too slow for a ${formatHz(fp)} carrier: expect a much lower index from it.`
+					peak by the same amount, crest and trough alike, which is why it sits a little under the envelope's own figure.{jfetOn741 &&
+					(jfetOn741.opamp.effectiveModulationIndex < 0.97 * jfetDesign.opamp.effectiveModulationIndex || !jfetOn741.opamp.slewOk)
+						? ` An LM741 (1 MHz, 0.5 V/us) takes the index down to about ${jfetOn741.opamp.effectiveModulationIndex.toFixed(2)} at a ${formatHz(fp)} carrier${jfetOn741.opamp.slewOk ? '' : ', and cannot slew fast enough for it'}.`
 						: ''}
 				</p>
+				{#if spiceReal && jfetPeakOut > railSwing}
+					<p class="flag warn">
+						The files run the {spiceOpamp} on +15 V and -15 V, where it reaches about {railSwing} V: this modulator's largest
+						op-amp output, {formatVolts(jfetPeakOut)} peak, clips in the run. Lower the carrier or the target output.
+					</p>
+				{/if}
 				<p class="note formula-link">
 					Every formula this design used: <a href="/tools/am-modulator-demodulator/formulas/">Formula sheet</a>.
+				</p>
+			</section>
+		{:else if jfetValid}
+			<section class="panel">
+				<p class="flag bad">
+					With the parts rounded, the gate drive leaves the conductance depth below the target n: lower n or widen the
+					swing{restricted ? ', or add resistors near the ones the gate drive needs' : ''}.
 				</p>
 			</section>
 		{/if}
@@ -922,16 +1048,23 @@
 					</select>
 				</div>
 			</div>
+			<StockPicker id="stockDiode" bind:stock bind:resistorText bind:capacitorText />
 			{#if !diodeValid}
-				<p class="flag bad">fp and the modulating frequency must be positive, with fp &gt; 2 x fmMax; the amplitudes, the margin and the supply positive; n between 0 and 1.</p>
+				<p class="flag bad">
+					fp and the modulating frequency must be positive, with fp above (margin + 1) x fmMax so the tank's band stays clear of
+					the message itself; the amplitudes, the margin and the supply positive; n between 0 and 1.
+				</p>
 			{:else if !diodeDesign}
 				<p class="flag bad">No set of stock parts reaches this index with this carrier level: lower the target n or raise the carrier at the diode.</p>
+			{:else if diodeDesign.stockShortfall}
+				<p class="flag warn">No set of the parts on hand reaches this index, so the design below uses E24 resistors and E12 capacitors instead.</p>
 			{/if}
 			<p class="note">
 				At a volt or so the diode is not a gentle curve but a switch: the summer brings the carrier to it
 				with the message and a small bias on top, and the diode passes current for half of each carrier
 				cycle. The page works the diode out cycle by cycle with its real law, so the index, the carrier and
-				the distortion below are the figures LTspice gives, not a rule of thumb.
+				the distortion below are the figures LTspice gives, not a rule of thumb, as long as the diode's own
+				junction capacitance stays small next to R_s (the tank panel says when it does not).
 			</p>
 		</section>
 
@@ -977,13 +1110,35 @@
 						<tr><td>Resonant frequency f0</td><td>{formatHz(diodeDesign.f0Actual)} ({diodeDesign.detuning >= 0 ? '+' : ''}{((100 * diodeDesign.detuning) / diodeDesign.fp).toFixed(2)} % from the carrier)</td></tr>
 						<tr><td>Source seen through the diode, and R_t in parallel with it</td><td>{formatOhms(diodeDesign.rSource)}, {formatOhms(diodeDesign.rEff)}</td></tr>
 						<tr><td>Band: asked / with the source</td><td>{formatHz(diodeDesign.bandwidthNeeded)} / {formatHz(diodeDesign.bwLoaded)}</td></tr>
-						<tr><td>Band actually passed</td><td>{formatHz(diodeDesign.bandLow)} to {formatHz(diodeDesign.bandHigh)}</td></tr>
+						<tr><td>Band actually passed</td><td>{formatHz(Math.max(0, diodeDesign.bandLow))} to {formatHz(diodeDesign.bandHigh)}</td></tr>
 					</tbody>
 				</table>
 				{#if diodeDesign.sidebandsInBand}
 					<p class="flag ok">Both sidebands, {formatHz(diodeDesign.fp - diodeDesign.fmMax)} and {formatHz(diodeDesign.fp + diodeDesign.fmMax)}, sit inside the band the tank passes.</p>
 				{:else}
-					<p class="flag bad">The band the tank passes does not hold both sidebands at {formatHz(diodeDesign.fp - diodeDesign.fmMax)} and {formatHz(diodeDesign.fp + diodeDesign.fmMax)}. A larger sideband margin widens it.</p>
+					<p class="flag bad">
+						The band the tank passes does not hold both sidebands at {formatHz(diodeDesign.fp - diodeDesign.fmMax)} and {formatHz(diodeDesign.fp + diodeDesign.fmMax)}.
+						{diodeDesign.rangeOk ? 'A larger sideband margin widens it.' : 'A larger margin cannot help here: see below.'}
+					</p>
+				{/if}
+				{#if !diodeDesign.tuneOk}
+					<p class="flag warn">
+						No capacitor pair lands the tank within 3 % of the carrier: f0 is {((100 * diodeDesign.detuning) / diodeDesign.fp).toFixed(1)} % off.
+						A coil value that suits the capacitors available, or more capacitor values, centres it.
+					</p>
+				{/if}
+				{#if !diodeDesign.rangeOk}
+					<p class="flag warn">
+						R_s or R_t sits at the bottom of the search, 10 Ω: with this coil the tank's resistance cannot be made low
+						enough for the band asked. A larger L raises it.
+					</p>
+				{/if}
+				{#if !diodeDesign.cjOk}
+					<p class="flag warn">
+						At this R_s ({formatOhms(diodeDesign.rs)}) the diode's own junction capacitance passes the drive while the diode is off
+						(2 pi f_p C_jo R_s = {diodeDesign.cjRatio.toFixed(2)}): the figures here leave that capacitance out, and LTspice, which
+						keeps it, shows a larger carrier and a smaller index. A smaller L brings R_s down.
+					</p>
 				{/if}
 			</section>
 
@@ -1030,14 +1185,22 @@
 					The LTspice files carry the whole modulator: the carrier and message sources, the summer with its
 					{diodeDesign.summer.rb ? `bias from a -${diodeDesign.vcc} V supply` : 'two inputs'}, R_s, the diode and the tank, with a transient
 					run of a {formatHz(diodeDesign.fmMax)} tone already set up. The diode is the same SPICE model the page
-					works with, so the run should show a carrier of about {formatVolts(diodeDesign.carrierOut)} and an index of about
+					works with (apart from its junction capacitance, which the page leaves out), so the run should show a carrier of about {formatVolts(diodeDesign.carrierOut)} and an index of about
 					{diodeDesign.indexAtFmMax.toFixed(2)}, read off the envelope or from the sidebands in an FFT. Plot V(vout) for
 					the AM wave and V(vs) for the summed drive.
 					{spiceReal
 						? `The summer's op-amp is the ${spiceOpamp} with its supply pins on +15 V and -15 V rails, its model written into the file.`
 						: 'The op-amp is the same single-pole model as in the other exports, with the gain-bandwidth of a TL08x.'}
-					{slowPart(diodeDesign.fp) ? `An LM741 (1 MHz, 0.5 V/us) struggles with a ${formatHz(diodeDesign.fp)} carrier: expect the carrier to come out smaller.` : ''}
+					{spiceOpamp === 'LM741' && ((diodeDesign.fp * diodeDesign.summer.noiseGain) / 1e6 > 0.2 || 2 * Math.PI * diodeDesign.fp * diodeDesign.summer.peak > 0.25e6)
+						? `An LM741 (1 MHz, 0.5 V/us) cannot keep up with this summer at ${formatHz(diodeDesign.fp)}: expect the carrier to come out smaller.`
+						: ''}
 				</p>
+				{#if diodeDesign.summer.peak > railSwing}
+					<p class="flag warn">
+						The files run the {spiceOpamp} on +15 V and -15 V, where it reaches about {railSwing} V: the summer's
+						{formatVolts(diodeDesign.summer.peak)} peak clips in the run. Lower the carrier at the diode or the message.
+					</p>
+				{/if}
 				<p class="note formula-link">
 					Every formula this design used: <a href="/tools/am-modulator-demodulator/formulas/">Formula sheet</a>.
 				</p>
@@ -1085,9 +1248,21 @@
 					<input id="dn" type="number" step="0.05" min="0.05" max="1" bind:value={demoModIndex} />
 				</div>
 			</div>
-			<p class="note">Residual ripple sits at {formatHz(rippleHz)} ({rectifierType === 'full' ? '2 x fp, full-wave' : 'fp, half-wave'}).</p>
+			<StockPicker id="stockDemod" bind:stock bind:resistorText bind:capacitorText />
+			<p class="note">
+				Residual ripple sits at {formatHz(rippleHz)} ({rectifierType === 'full' ? '2 x fp, full-wave' : 'fp, half-wave'}), and the
+				message it carries puts its nearest sideband at {formatHz(rippleHz - fmMaxDemod)}: that is where the filter's stopband starts.
+			</p>
 			{#if !demodValid}
-				<p class="flag bad">Need fmMax &gt; 0, the ripple frequency above fmMax, and Amin &gt; Amax &gt; 0.</p>
+				<p class="flag bad">
+					Need 0 &lt; fmMax &lt; fp, the ripple's nearest sideband (the ripple minus fmMax) above fmMax, Amin &gt; Amax &gt; 0,
+					and a modulation index between 0 and 1.
+				</p>
+			{:else if envelopeRaw?.tooHigh}
+				<p class="flag bad">
+					That needs an order-{envelopeRaw.n} filter, past {ENVELOPE_MAX_ORDER}: more stages than a demodulator should carry.
+					Lower Amin, raise Amax, or move the carrier further from the message.
+				</p>
 			{/if}
 		</section>
 
@@ -1106,9 +1281,10 @@
 				</table>
 				<p class="note">
 					D1 points from U1A's - input into its output, D2 from that output into U1B's + input. Turned the
-					other way, D1 leaves the circuit with no full-wave output at all. R1 = R2 = R3 = 1 k is the value
-					TI used: at a fast carrier the diode that is switched off still couples a few pF, and 10 k would let
-					about 1 % of the swing through it.
+					other way, D1 leaves the circuit with no full-wave output at all. {rectifierInfo.r1 === 1000
+						? 'R1 = R2 = R3 = 1 k is the value TI used'
+						: `R1 = R2 = R3 = ${formatOhms(rectifierInfo.r1)} is the value on hand nearest the 1 k TI used`}: at a fast carrier the diode
+					that is switched off still couples a few pF, and 10 k would let about 1 % of the swing through it.
 				</p>
 			{:else}
 				<DiagramView diagram={buildHalfWaveDiagram(rectifierInfo)} label="half-wave rectifier" />
@@ -1144,6 +1320,31 @@
 						</tbody>
 					</table>
 				{/each}
+					{#if envelopeDesign.shortfallStages.length > 0}
+					<p class="flag warn">
+						Stage{envelopeDesign.shortfallStages.length > 1 ? 's' : ''} {envelopeDesign.shortfallStages.join(', ')} cannot be built from the
+						parts on hand, so {envelopeDesign.shortfallStages.length > 1 ? 'they are' : 'it is'} shown with E24 resistors and E6/E12 capacitors.
+					</p>
+				{/if}
+				{#if envelopeCheck && !envelopeCheck.toneOk}
+					<p class="flag warn">
+						With the rounded parts the filter is at {envelopeCheck.atTone.toFixed(2)} dB at {formatHz(fmMaxDemod)}, outside the
+						{amaxDb} dB asked: a finer stock (E96) or a looser Amax brings it back.
+					</p>
+				{/if}
+				{#if envelopeCheck && !envelopeCheck.stopOk}
+					<p class="flag warn">
+						With the rounded parts the ripple's nearest sideband, at {formatHz(rippleHz - fmMaxDemod)}, is only
+						{(-envelopeCheck.atSideband).toFixed(1)} dB down, short of the {aminDb} dB asked: a finer stock or one order more fixes it.
+					</p>
+				{/if}
+				{#if envelopeCheck && envelopeCheck.maxQ > 4}
+					<p class="flag warn">
+						One stage has a Q of {envelopeCheck.maxQ.toFixed(1)}: a unity-gain Sallen-Key that sharp leans on the op-amp's
+						gain-bandwidth and on exact part values, so a build, and LTspice with a 3 MHz op-amp, give a smaller tone than
+						the figures here. A lower Amin, a looser Amax or a carrier further from the message brings the Q down.
+					</p>
+				{/if}
 				<MathPanel blocks={explainEnvelopeFilter(envelopeDesign)} />
 			</section>
 
@@ -1157,8 +1358,7 @@
 						series={[
 							{ t: demodPreview.source.t, y: demodPreview.source.y, color: 'var(--textFaint)', width: 1 },
 							{ t: demodPreview.rectified.t, y: demodPreview.rectified.y, color: 'var(--blue)', width: 1 },
-							{ t: demodPreview.env.t, y: demodPreview.env.y, color: 'var(--amber)', width: 2 },
-							{ t: demodPreview.envNeg.t, y: demodPreview.envNeg.y, color: 'var(--amber)', width: 2, dash: [4, 3] }
+							{ t: demodPreview.env.t, y: demodPreview.env.y, color: 'var(--amber)', width: 2 }
 						]}
 						unit="ms"
 					/>
@@ -1196,11 +1396,11 @@
 					{envelopeDesign.realized.length === 1 ? 'Sallen-Key stage' : `${envelopeDesign.realized.length} Sallen-Key stages`} of the low-pass. Plot V(vam), V(vrect)
 					and V(vout); the .meas lines print the output's mean and peak-to-peak{demodOut ? `, which should read about ${formatVolts(demodOut.mean)} and ${formatVolts(2 * demodOut.tone)}` : ''}.
 					{spiceReal ? `The op-amps are the ${spiceOpamp} with its supply pins on +15 V and -15 V rails, its model written into the file.` : "The op-amps are the single-pole model with a TL08x's gain-bandwidth."}
-					{slowPart(fpCarrierDemod)
-						? `An LM741 (1 MHz, 0.5 V/us) is too slow for a ${formatHz(fpCarrierDemod)} carrier: it cannot swing through the diodes' drop at each zero crossing in time, and the recovered tone comes out well short.`
+					{rectifierType === 'full' && spiceOpamp === 'LM741' && 2.4e-6 * 2 * fpCarrierDemod > 0.1
+						? `An LM741 (0.5 V/us) needs about 2.4 us to swing through the two diode drops at each zero crossing, ${(100 * 2.4e-6 * 2 * fpCarrierDemod).toFixed(0)} % of each half cycle at ${formatHz(fpCarrierDemod)}: expect the tone to come out lower.`
 						: rectifierType === 'full'
 							? "The op-amp takes a moment to cross the diodes' drop at each zero crossing, so the mean reads a percent or so low."
-							: ''}
+							: 'The rectifier is the bare diode; the op-amps only filter.'}
 				</p>
 				<p class="note formula-link">
 					Every formula this design used: <a href="/tools/am-modulator-demodulator/formulas/">Formula sheet</a>.
@@ -1263,6 +1463,15 @@
 		gap: 0.7rem;
 		flex-wrap: wrap;
 		margin-bottom: 0.9rem;
+	}
+
+	/* a heading for a group of buttons, styled as the labels around it */
+	.labelLike {
+		display: block;
+		font-size: 0.82rem;
+		font-weight: 500;
+		color: var(--textDim);
+		margin-bottom: 0.35rem;
 	}
 
 	/* as tall as an input, so the row lines up with the fields beside it */

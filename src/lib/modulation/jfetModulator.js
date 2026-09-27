@@ -1,4 +1,4 @@
-import { nearestInSeries, seriesValues, SERIES } from './eseries';
+import { largestResistorNotAbove, nearestResistor, nearestValue, resistorValues, stockList, stockName } from './eseries';
 import { modelFromIdss } from './jfetModel';
 
 /**
@@ -27,16 +27,10 @@ export function channelConductance(vgs, vp, idss) {
 	return (2 * idss * (vgs - vp)) / (vp * vp);
 }
 
-/** Largest value of a series not above the target, for limits that must not be exceeded. */
-function largestNotAbove(target, series) {
-	const values = seriesValues(series, 0, 7).filter((v) => v <= target);
-	return values.length ? Math.max(...values) : null;
-}
-
-/** Stocked values for the summer's coupling capacitor. */
+/** Usual values for the summer's coupling capacitor, when no list of capacitors on hand is given. */
 const CAP_STOCK = [1e-5, 4.7e-6, 2.2e-6, 1e-6, 4.7e-7, 2.2e-7, 1e-7, 4.7e-8, 2.2e-8, 1e-8, 4.7e-9, 2.2e-9, 1e-9];
-function nearestCap(target) {
-	return CAP_STOCK.reduce((best, c) => (Math.abs(Math.log(c / target)) < Math.abs(Math.log(best / target)) ? c : best));
+function nearestCap(target, capacitors) {
+	return nearestValue(target, Array.isArray(capacitors) ? stockList(capacitors) : CAP_STOCK);
 }
 
 /**
@@ -136,7 +130,8 @@ export function designJfetModulator({
 	opampSwing = 10.5,
 	gbw = 3e6,
 	slewRate = 13e6,
-	resistorSeries = 'E24'
+	resistorSeries = 'E24', // a series name, or a list of the resistors on hand (ohms)
+	capacitors = null // null for the usual values, or a list of the capacitors on hand (farads)
 } = {}) {
 	const m = model ?? modelFromIdss(vp, idss);
 	if (!m) return null;
@@ -159,7 +154,7 @@ export function designJfetModulator({
 	// deliver a bias and a swing a few percent off the targets, and every
 	// number below (conductance depth, modulation index, triode margin) is
 	// worth stating for the gate drive the circuit actually gets.
-	const series = SERIES[resistorSeries];
+	const stock = resistorSeries;
 	const gainTarget = swingTarget / sourceAmplitude;
 	const biasTarget = Math.abs(vcTarget);
 	// Rf is free, so it is chosen from the series (4.7 k to 47 k) as the
@@ -168,26 +163,29 @@ export function designJfetModulator({
 	// value 62 k costs 3 % of bias, where 20 k wants 120 k, which exists
 	const pickRf = () => {
 		let best = null;
-		for (const cand of seriesValues(series, 3, 4)) {
+		for (const cand of resistorValues(stock, 3, 4)) {
 			if (cand < 4700 || cand > 47_000) continue;
-			const racC = nearestInSeries(cand / gainTarget, series);
-			const rbiasC = nearestInSeries((cand * vcc) / biasTarget, series);
+			const racC = nearestResistor(cand / gainTarget, stock);
+			const rbiasC = nearestResistor((cand * vcc) / biasTarget, stock);
 			const err = Math.abs(Math.log(cand / racC / gainTarget)) + Math.abs(Math.log((cand * vcc) / rbiasC / biasTarget));
 			if (!best || err < best.err - 1e-12) best = { rf: cand, err };
 		}
-		return best.rf;
+		// a stock with nothing between 4.7 k and 47 k: whatever sits nearest 10 k
+		return best ? best.rf : nearestResistor(10_000, stock);
 	};
 	const rf = pickRf();
 	const racTarget = rf / gainTarget;
-	const rac = nearestInSeries(racTarget, series);
+	const rac = nearestResistor(racTarget, stock);
 	const gainActual = rf / rac;
 	const rbiasTarget = (rf * vcc) / biasTarget;
-	const rbias = nearestInSeries(rbiasTarget, series);
+	const rbias = nearestResistor(rbiasTarget, stock);
 	const biasActual = -(rf * vcc) / rbias;
 	const fcTarget = fmMin / 10;
 	const cTarget = 1 / (2 * Math.PI * rac * fcTarget);
-	const c = nearestCap(cTarget);
+	const c = nearestCap(cTarget, capacitors);
 	const fcActual = 1 / (2 * Math.PI * rac * c);
+	// a capacitor list may not reach the corner: what the lowest tone loses then
+	const fcLossDb = 10 * Math.log10(1 + (fcActual / fmMin) ** 2);
 	const outMin = biasActual - gainActual * sourceAmplitude; // most negative gate voltage delivered
 	const headroomOk = Math.abs(outMin) <= opampSwing;
 
@@ -217,6 +215,8 @@ export function designJfetModulator({
 
 	// --- the cell: feedback resistor, gains, modulation index ---
 	let feedback; // the resistor that sets x
+	let feedbackTarget = null; // R_b before rounding, when it comes from the target index
+	let xTarget = null;
 	let x;
 	let modulationIndex;
 	let nominalGain; // K0, signal gain at the bias point
@@ -232,7 +232,7 @@ export function designJfetModulator({
 		if (!(r2Actual > 0)) {
 			const xRule = (kLimit - 1) / (1 + gDepth);
 			const xAuto = Math.min(10, xRule > 0.5 ? xRule : 0.5);
-			r2Actual = largestNotAbove(xAuto * r1AtCenter, series) ?? nearestInSeries(xAuto * r1AtCenter, series);
+			r2Actual = largestResistorNotAbove(xAuto * r1AtCenter, stock) ?? nearestResistor(xAuto * r1AtCenter, stock);
 		}
 		feedback = r2Actual;
 		x = r2Actual / r1AtCenter;
@@ -242,11 +242,14 @@ export function designJfetModulator({
 		gainMax = x * (1 + gDepth);
 		noiseGain = (mm) => 1 + x * (1 + gDepth * mm);
 	} else {
+		// R_b from the target index, rounded to the stock: n then follows
+		// from the rounded value, a little off the target
 		let rbActual = rb;
 		if (!(rbActual > 0)) {
 			if (!(targetModulationIndex > 0 && targetModulationIndex < gDepth)) return null;
-			const xt = targetModulationIndex / (gDepth - targetModulationIndex);
-			rbActual = xt * r1AtCenter;
+			xTarget = targetModulationIndex / (gDepth - targetModulationIndex);
+			feedbackTarget = xTarget * r1AtCenter;
+			rbActual = nearestResistor(feedbackTarget, stock);
 		}
 		feedback = rbActual;
 		x = rbActual / r1AtCenter;
@@ -271,10 +274,10 @@ export function designJfetModulator({
 	// resistive divider from the carrier source. Non-inverting: it drives
 	// the op-amp's + input, which draws no current, so no buffer is needed.
 	// Inverting: it would drive the channel itself, see the buffer below.
-	const divBottom = 1_000;
+	const divBottom = nearestResistor(1_000, stock);
 	const ratio = Math.min(1, acMax / carrierSourceAmplitude);
 	const divTopTarget = ratio >= 1 ? 0 : divBottom * (1 / ratio - 1);
-	const divTop = divTopTarget > 0 ? nearestInSeries(divTopTarget, series) : 0;
+	const divTop = divTopTarget > 0 ? nearestResistor(divTopTarget, stock) : 0;
 	const ac = (carrierSourceAmplitude * divBottom) / (divTop + divBottom);
 	const dividerImpedance = divTop > 0 ? (divTop * divBottom) / (divTop + divBottom) : 0;
 	const carrierOut = nominalGain * ac; // the cell's output carrier amplitude
@@ -310,8 +313,8 @@ export function designJfetModulator({
 		// the message, so it changes the level, not the envelope
 		const kTarget = targetOutputAmplitude / carrierOut;
 		if (kTarget > 1.05) {
-			const rbottom = 1_000;
-			const rtop = nearestInSeries((kTarget - 1) * rbottom, series);
+			const rbottom = nearestResistor(1_000, stock);
+			const rtop = nearestResistor((kTarget - 1) * rbottom, stock);
 			const kActual = 1 + rtop / rbottom;
 			const factor = bandwidthFactor(kActual);
 			const outMax = kActual * envelopeMax;
@@ -357,7 +360,7 @@ export function designJfetModulator({
 	// non-inverting: the largest Rb that lands on the rule, and the n it leaves.
 	// inverting: the largest R2, n unchanged.
 	const xLimit = (kLimit - 1) / (1 + gDepth);
-	const feedbackLimit = xLimit > 0 ? largestNotAbove(xLimit * r1AtCenter, series) : null;
+	const feedbackLimit = xLimit > 0 ? largestResistorNotAbove(xLimit * r1AtCenter, stock) : null;
 	const xAtLimit = feedbackLimit ? feedbackLimit / r1AtCenter : null;
 	const nAtLimit = xAtLimit === null ? null : inverting ? gDepth : (gDepth * xAtLimit) / (1 + xAtLimit);
 	// slew rate: the cell's output is a sine of amplitude up to K_max Ac
@@ -385,6 +388,9 @@ export function designJfetModulator({
 		rb: inverting ? null : feedback,
 		r2: inverting ? feedback : null,
 		feedback,
+		feedbackTarget,
+		xTarget,
+		stockName: stockName(stock),
 		x,
 		modulationIndex,
 		nominalGain,
@@ -394,7 +400,7 @@ export function designJfetModulator({
 			sourceAmplitude,
 			fmMin,
 			vcc,
-			summer: { rf, rac, racTarget, c, cTarget, rbias, rbiasTarget, gainTarget, gainActual, biasTarget, biasActual, fcTarget, fcActual, outMin, headroomOk, opampSwing }
+			summer: { rf, rac, racTarget, c, cTarget, rbias, rbiasTarget, gainTarget, gainActual, biasTarget, biasActual, fcTarget, fcActual, fcLossDb, fcOk: fcActual <= fmMin / 3, outMin, headroomOk, opampSwing }
 		},
 		carrier: {
 			fp,

@@ -409,7 +409,8 @@ function checkText(where, text) {
 	const eqs = (label) => texts[label].filter((b) => b.eq !== undefined).map((b) => b.eq).join(' ');
 	const words = (label) => texts[label].map((b) => b.p ?? '').join(' ');
 	const jfetDefault = 'jfet/idss/noninverting/source/follower/design';
-	check('modulation basics: the non-inverting defaults give K = 15.4, f_B = 105 kHz and n = 0.85', eqs(jfetDefault).includes('= 15.4') && eqs(jfetDefault).includes('105\\ \\text{kHz}') && eqs(jfetDefault).includes('= 0.85'));
+	// R_b is a stock value (12 k), so K and the band follow from it and n lands a hair over 0.85
+	check('modulation basics: the non-inverting defaults give K = 16, f_B = 101 kHz and n = 0.85', eqs(jfetDefault).includes('= 16') && eqs(jfetDefault).includes('101\\ \\text{kHz}') && eqs(jfetDefault).includes('= 0.85'), eqs(jfetDefault).slice(0, 300));
 	check('modulation basics: the inverting defaults give K = 4.88 and n = 0.91', eqs('jfet/idss/inverting/source/follower/design').includes('= 4.88') && words('jfet/idss/inverting/source/follower/design').includes('0.91 here'));
 	{
 		// f_0 is whatever the engine's stock capacitor (or pair) gives: taken from the engine, not typed here

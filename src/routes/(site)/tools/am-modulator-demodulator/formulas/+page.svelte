@@ -183,6 +183,11 @@
 				op-amp to follow. For a target n, invert:
 			</p>
 			<Equation tex={`x = \\dfrac{n}{s - n}, \\qquad R_b = r_{DS}(V_C)\\,x`} />
+			<p class="note">
+				<strong>How to use:</strong> round R_b to a part in stock, then take x back from the rounded
+				value, x = R_b / r_DS(V_C), and n = s x/(1 + x) from that x: it lands a little off the target,
+				and that is the n the circuit has.
+			</p>
 		</div>
 
 		<div class="formula">
@@ -258,8 +263,10 @@
 			<Equation tex={`\\dfrac{x_m}{R_{ac}} + \\dfrac{V_{cc}}{R_{bias}} = -\\dfrac{V_{out}}{R_f} \\ \\Rightarrow\\ V_{out} = -\\dfrac{R_f}{R_{ac}}\\,x_m - \\dfrac{R_f}{R_{bias}}\\,V_{cc}`} />
 			<Equation tex={`R_{ac} = \\dfrac{R_f\\,V_{source}}{V_{swing}}, \\qquad R_{bias} = \\dfrac{R_f\\,V_{cc}}{|V_C|}, \\qquad f_c = \\dfrac{1}{2\\pi R_{ac} C} = \\dfrac{f_{m,min}}{10}`} />
 			<p class="note">
-				<strong>How to use:</strong> R_f fixed at 10 k; R_ac and R_bias rounded to E24 and the
-				actual gain and bias recomputed; C from f_c and rounded to a stock value. Check that the
+				<strong>How to use:</strong> R_f is picked between 4.7 k and 47 k so that R_ac and R_bias
+				both round close to their targets; R_ac and R_bias are rounded to the parts in stock (E24
+				unless another stock is chosen) and the actual gain and bias recomputed; C from f_c and
+				rounded to a stock value. Check that the
 				most negative output, V_bias minus the full swing, fits the op-amp's swing on this supply:
 				with a J111 (|V_P| up to 10 V) that is the check that bites first.
 			</p>
@@ -449,9 +456,10 @@
 			/>
 			<Equation tex={`H(s) = \\dfrac{1}{s^2R^2C_{top}C_{bottom} + 2sRC_{bottom} + 1} \\ \\Rightarrow\\ \\omega_n = \\dfrac{1}{R\\sqrt{C_{top}C_{bottom}}}, \\qquad Q = \\dfrac{1}{2}\\sqrt{\\dfrac{C_{top}}{C_{bottom}}}`} />
 			<p class="note">
-				<strong>How to use:</strong> pick C_bottom from a preferred series, C_top = 4Q&sup2;
-				C_bottom rounded to E12, then solve R from omega_n with the two capacitor values actually
-				used, and round R to E24.
+				<strong>How to use:</strong> pick C_bottom from a preferred series or the capacitors on
+				hand, round C_top = 4Q&sup2; C_bottom to E12 or to the nearest capacitor on hand, then
+				solve R from omega_n with the two capacitor values actually used, and round R to the
+				resistors in stock (E24 unless another stock is chosen).
 			</p>
 		</div>
 	</section>

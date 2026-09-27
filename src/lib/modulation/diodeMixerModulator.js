@@ -1,5 +1,5 @@
 import { DIODE_MODELS, diodeCurrent } from './diodeLaw';
-import { nearestInSeries, SERIES, seriesValues } from './eseries';
+import { capacitorValues, largestResistorNotAbove, nearestResistor, resistorValues, stockName } from './eseries';
 
 /**
  * Diode + resonant tank AM modulator, built as a switching modulator.
@@ -77,7 +77,9 @@ function currentTable(r, d, vMin, vMax, N = 8192) {
 
 /** Impedance of the parallel tank at f, as { re, im }. */
 export function tankImpedance(f, { r, l, c }) {
-	const w = 2 * Math.PI * f;
+	// a component below 0 Hz (f_p - h f_m past the carrier) is at |f|; at DC the coil shorts the tank
+	const w = 2 * Math.PI * Math.abs(f);
+	if (w === 0) return { re: 0, im: 0 };
 	const g = 1 / r;
 	const b = w * c - 1 / (w * l);
 	const m2 = g * g + b * b;
@@ -204,12 +206,6 @@ function driveForIndex(current, base, vb, target, P, S) {
 	return (a + b) / 2;
 }
 
-/** The largest value of a series at or under `target`, or the nearest one when none is. */
-function roundDown(target, series, lo, hi) {
-	const below = seriesValues(series, lo, hi).filter((v) => v <= target * (1 + 1e-9));
-	return below.length ? below[below.length - 1] : nearestInSeries(target, series, lo, hi);
-}
-
 export function designDiodeMixerModulator({
 	fp,
 	fmMax,
@@ -223,30 +219,37 @@ export function designDiodeMixerModulator({
 	opampSwing = 10.5,
 	gbw = 3e6,
 	diode = '1N4148',
-	resistorSeries = 'E24'
+	resistorSeries = 'E24', // a series name, or a list of the resistors on hand (ohms)
+	capacitors = null, // null for E12 capacitors, or a list of the capacitors on hand (farads)
+	capacitorStock = capacitors // the same, under the name the downloaded script uses
 } = {}) {
-	if (!(fp > 0) || !(fmMax > 0) || !(fmMax < fp / 2) || !(inductance > 0) || !(sidebandMargin > 0)) return null;
+	if (!(fp > 0) || !(fmMax > 0) || !(inductance > 0) || !(sidebandMargin > 0)) return null;
+	// the band, sidebandMargin x fmMax either side of fp, has to stay clear of the message itself
+	if (!(fp - sidebandMargin * fmMax > fmMax)) return null;
 	if (!(carrierAmplitude > 0) || !(modAmplitude > 0) || !(carrierDrive > 0) || !(vcc > 0)) return null;
 	if (!(targetModulationIndex > 0 && targetModulationIndex <= 1)) return null;
 	const d = DIODE_MODELS[diode] ?? DIODE_MODELS['1N4148'];
-	const series = SERIES[resistorSeries] ?? SERIES.E24;
+	const stock = resistorSeries;
+	// the summer's feedback resistor: 10 k, or what the stock has nearest
+	const rf = nearestResistor(SUMMER_RF, stock);
 	const w0 = 2 * Math.PI * fp;
 
-	// the tank capacitor: a main E12 part with a smaller E12 one in
-	// parallel (or none), the pair closest to the target, preferring the
-	// single part on a tie
+	// the tank capacitor: a main part with a smaller one in parallel (or
+	// none), from E12 or the capacitors on hand, the pair closest to the
+	// target, preferring the single part on a tie
 	const cTarget = 1 / (w0 * w0 * inductance);
-	const mains = seriesValues(SERIES.E12, -12, -6).filter((v) => v <= cTarget * 1.0005);
-	const trims = [0, ...seriesValues(SERIES.E12, -12, -6)];
+	const capAll = capacitorValues(capacitorStock, 'E12', -12, -6);
+	const mains = capAll.filter((v) => v <= cTarget * 1.0005);
+	const trims = [0, ...capAll];
 	let best = null;
-	for (const c1 of mains.length ? mains : [1e-12]) {
+	for (const c1 of mains.length ? mains : capAll.slice(0, 1)) {
 		for (const c2 of trims) {
 			if (c2 > c1) break;
 			const err = Math.abs(Math.log((c1 + c2) / cTarget));
 			if (!best || err < best.err - 1e-9) best = { c1, c2, err };
 		}
 	}
-	const capacitors = best.c2 > 0 ? [best.c1, best.c2] : [best.c1];
+	const tankParts = best.c2 > 0 ? [best.c1, best.c2] : [best.c1];
 	const c = best.c1 + best.c2;
 	const f0Actual = 1 / (2 * Math.PI * Math.sqrt(inductance * c));
 	const detuning = f0Actual - fp;
@@ -262,9 +265,9 @@ export function designDiodeMixerModulator({
 	const bandwidth = 2 * sidebandMargin * fmMax;
 	const bandwidthNeeded = bandwidth + 2 * Math.abs(detuning);
 	const rEffTarget = 1 / (2 * Math.PI * bandwidthNeeded * c);
-	const rs = nearestInSeries(2 * rEffTarget, series, 1, 7);
+	const rs = nearestResistor(2 * rEffTarget, stock, 1, 7);
 	const rtTarget = 1 / (1 / rEffTarget - 1 / (2 * rs));
-	const rt = roundDown(rtTarget, series, 1, 7);
+	const rt = largestResistorNotAbove(rtTarget, stock, 1, 7) ?? nearestResistor(rtTarget, stock, 1, 7);
 	const tank = { r: rt, l: inductance, c };
 	const z = tankImpedance(fp, tank);
 
@@ -317,25 +320,28 @@ export function designDiodeMixerModulator({
 
 	// the bias resistor, from -Vcc; a diode whose best bias is next to
 	// nothing (a Schottky) gets none
-	const rb = bestVb.vb >= 0.02 ? nearestInSeries((SUMMER_RF * vcc) / bestVb.vb, series, 3, 8) : null;
-	const vb = rb ? (SUMMER_RF * vcc) / rb : 0;
+	const rb = bestVb.vb >= 0.02 ? nearestResistor((rf * vcc) / bestVb.vb, stock, 3, 8) : null;
+	const vb = rb ? (rf * vcc) / rb : 0;
 
 	// the carrier and message resistors: the index follows u_m / A_d, the
 	// ratio of R_p to R_m, so the stock pair that gives the target index
 	// best is picked among the neighbours of the ideal values
 	const umWanted = driveForIndex(current, base, vb, targetModulationIndex, P0, S0) ?? bestVb.um;
-	const rpIdeal = (SUMMER_RF * carrierAmplitude) / carrierDrive;
+	const rpIdeal = (rf * carrierAmplitude) / carrierDrive;
+	const stocked = resistorValues(stock, 1, 8);
 	const neighbours = (target) => {
-		const all = seriesValues(series, 1, 8);
-		const k = all.findIndex((v) => v >= target);
-		return all.slice(Math.max(0, k - 2), k + 2).filter((v) => v > 0);
+		const k = stocked.findIndex((v) => v >= target);
+		const at = k < 0 ? stocked.length : k;
+		return stocked.slice(Math.max(0, at - 2), at + 2);
 	};
+	// R_p within 12 % of its ideal value, or the nearest one a sparse stock has
+	const rpNear = neighbours(rpIdeal).filter((v) => Math.abs(Math.log(v / rpIdeal)) < 0.12);
 	let pick = null;
-	for (const rpC of neighbours(rpIdeal).filter((v) => Math.abs(Math.log(v / rpIdeal)) < 0.12)) {
-		const driveC = (SUMMER_RF / rpC) * carrierAmplitude;
-		const rmIdeal = (SUMMER_RF * modAmplitude) / (umWanted * (driveC / drive));
+	for (const rpC of rpNear.length ? rpNear : [nearestResistor(rpIdeal, stock, 1, 8)]) {
+		const driveC = (rf / rpC) * carrierAmplitude;
+		const rmIdeal = (rf * modAmplitude) / (umWanted * (driveC / drive));
 		for (const rmC of neighbours(rmIdeal)) {
-			const umC = (SUMMER_RF / rmC) * modAmplitude;
+			const umC = (rf / rmC) * modAmplitude;
 			const nC = envelopeOf(current, { ...base, a: driveC, um: umC, vb }, P0, S0).n;
 			const err = Math.abs(nC - targetModulationIndex) + 0.02 * Math.abs(Math.log(rpC / rpIdeal));
 			if (!pick || err < pick.err) pick = { rp: rpC, rm: rmC, err };
@@ -343,8 +349,8 @@ export function designDiodeMixerModulator({
 	}
 	const rp = pick.rp;
 	const rm = pick.rm;
-	const driveBuilt = (SUMMER_RF / rp) * carrierAmplitude;
-	const um = (SUMMER_RF / rm) * modAmplitude;
+	const driveBuilt = (rf / rp) * carrierAmplitude;
+	const um = (rf / rm) * modAmplitude;
 	const built = { ...base, a: driveBuilt };
 	const env = envelopeOf(current, { ...built, um, vb }, 32, 128);
 
@@ -354,7 +360,8 @@ export function designDiodeMixerModulator({
 	const dv = 1e-3 * Math.max(1e-3, Math.hypot(at.v1.re, at.v1.im));
 	const i1a = fundamentalWith(current, driveBuilt, vb, at.v1, 128);
 	const i1b = fundamentalWith(current, driveBuilt, vb, { re: at.v1.re + dv, im: at.v1.im }, 128);
-	const rSource = dv / Math.max(TOL, i1a.re - i1b.re);
+	const di = i1a.re - i1b.re;
+	const rSource = di > 0 ? dv / di : 2 * rs;
 	const rEff = 1 / (1 / rt + 1 / rSource);
 	const bwLoaded = 1 / (2 * Math.PI * rEff * c);
 	const qLoaded = f0Actual / bwLoaded;
@@ -377,7 +384,14 @@ export function designDiodeMixerModulator({
 
 	// the summer: its peak output and how hard its op-amp works at the carrier
 	const summerPeak = driveBuilt + um + vb;
-	const noiseGain = 1 + SUMMER_RF * (1 / rp + 1 / rm + (rb ? 1 / rb : 0));
+
+	// what the page cannot vouch for: the diode's junction capacitance passes
+	// the drive while the diode is off once 2 pi f_p Cjo R_s is not small (the
+	// cycle solve leaves Cjo out, LTspice does not); a tank tuned off the
+	// carrier because no capacitor pair reaches it; resistors at the bottom
+	// of the search, where the band can no longer be set
+	const cjRatio = 2 * Math.PI * fp * (d.cjo ?? 0) * rs;
+	const noiseGain = 1 + rf * (1 / rp + 1 / rm + (rb ? 1 / rb : 0));
 	const gbwRatio = (fp * noiseGain) / gbw;
 
 	return {
@@ -389,7 +403,7 @@ export function designDiodeMixerModulator({
 		q: fp / bandwidth,
 		inductance,
 		capacitance: c,
-		capacitors,
+		capacitors: tankParts,
 		cTarget,
 		f0Actual,
 		detuning,
@@ -399,8 +413,9 @@ export function designDiodeMixerModulator({
 		modAmplitude,
 		targetModulationIndex,
 		vcc,
+		stockName: stockName(stock),
 		summer: {
-			rf: SUMMER_RF,
+			rf,
 			rp,
 			rm,
 			rb,
@@ -439,6 +454,10 @@ export function designDiodeMixerModulator({
 		sidebandGain,
 		gainLow,
 		gainHigh,
-		indexAtFmMax: env.n * sidebandGain
+		indexAtFmMax: env.n * sidebandGain,
+		cjRatio,
+		cjOk: cjRatio <= 0.05,
+		tuneOk: Math.abs(f0Actual / fp - 1) <= 0.03,
+		rangeOk: rs > 10 && rt > 10
 	};
 }

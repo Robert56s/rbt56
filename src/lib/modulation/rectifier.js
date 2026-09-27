@@ -1,5 +1,6 @@
 import { DIODE_MODELS, diodeCurrent } from './diodeLaw';
 import { envelopeGainAt } from './envelopeFilter';
+import { nearestResistor } from './eseries';
 
 /**
  * Precision full-wave rectifier (absolute-value circuit): two op-amps, two
@@ -24,13 +25,14 @@ import { envelopeGainAt } from './envelopeFilter';
  * fast carrier: the diode that is switched off still couples a few pF, and
  * through 10 k at 40 kHz that lets about 1 % of the swing into U1B's +
  * input. 1 k, the value TI used, cuts that tenfold and is easy work for a
- * TL08x.
+ * TL08x. From a restricted stock, the value on hand nearest 1 k.
  */
-export function designPrecisionRectifier({ r = 1000, diode = '1N4148' } = {}) {
+export function designPrecisionRectifier({ r = null, diode = '1N4148', resistorSeries = 'E24' } = {}) {
+	const rr = r ?? nearestResistor(1000, resistorSeries);
 	return {
-		r1: r,
-		r2: r,
-		r3: r,
+		r1: rr,
+		r2: rr,
+		r3: rr,
 		r4: 49.9, // input termination, optional - matches the source impedance
 		diode,
 		compensationCapNote:
@@ -50,10 +52,11 @@ export function designPrecisionRectifier({ r = 1000, diode = '1N4148' } = {}) {
  * (average value of a half-wave rectified sine is Ap/pi) instead of 2*fp
  * for the full-wave case (average 2*Ap/pi), so the envelope low-pass filter
  * after it needs a lower stopband edge for the same attenuation - see
- * envelopeFilter.js. And every crest loses the diode's drop.
+ * envelopeFilter.js. And every crest loses the diode's drop. rl is 1 k, or
+ * the value on hand nearest it.
  */
-export function designHalfWaveRectifier({ diode = '1N4148', rl = 1000 } = {}) {
-	return { diode, rl };
+export function designHalfWaveRectifier({ diode = '1N4148', rl = null, resistorSeries = 'E24' } = {}) {
+	return { diode, rl: rl ?? nearestResistor(1000, resistorSeries) };
 }
 
 /** Average value and ripple fundamental of a rectified sinusoid of peak amplitude Ap. */

@@ -248,7 +248,7 @@ function headerLines(opts) {
 				: [
 						'The op-amp is a generic model: open-loop gain AOL with one dominant',
 						'pole set so the gain-bandwidth product equals GBW. Change GBW to the',
-						'part you will actually use (3meg = TL07x/TL08x, 8meg = OPA2134,',
+						'part that will be built (3meg = TL07x/TL08x, 8meg = OPA2134,',
 						'10meg = NE5532) and rerun to see whether the op-amp limits the design.'
 					])
 		]

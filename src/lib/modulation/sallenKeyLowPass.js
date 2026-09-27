@@ -1,4 +1,4 @@
-import { capacitorCandidates, nearestInSeries, SERIES } from './eseries';
+import { capacitorCandidates, nearestCapacitor, nearestResistor } from './eseries';
 
 /**
  * Sallen-Key low-pass, unity-gain simplified form: two equal resistors R, a
@@ -21,9 +21,9 @@ export function capRatio(q) {
 	return 4 * q * q;
 }
 
-export function designSallenKeyLowPass(wn, q, { resistorSeries = 'E24' } = {}) {
+export function designSallenKeyLowPass(wn, q, { resistorSeries = 'E24', capacitors = null } = {}) {
 	const ratio = capRatio(q);
-	const caps = capacitorCandidates();
+	const caps = capacitorCandidates(capacitors);
 
 	let best = null;
 	for (const Cbottom of caps) {
@@ -35,15 +35,15 @@ export function designSallenKeyLowPass(wn, q, { resistorSeries = 'E24' } = {}) {
 	}
 	if (!best) return null;
 
-	// C_top is a derived value rounded onto the coarse E12 grid (up to 10%
-	// off the ratio); R sits on the fine resistor grid, so it is solved
+	// C_top is a derived value rounded onto the coarse E12 grid, or onto the
+	// capacitors on hand when a list is given (up to 10% off the ratio on
+	// E12); R sits on the fine resistor grid, so it is solved
 	// AFTER that rounding, from the capacitor pair that will actually be
 	// used. Same fix as filter/sallenKey.js: solving R from the ideal C_top
 	// let the capacitor rounding land in f0 (1.40 kHz target -> 1.31 kHz).
-	const Ctop = nearestInSeries(best.Ctarget, SERIES.E12, -12, -3);
+	const Ctop = nearestCapacitor(best.Ctarget, capacitors);
 	const Rsolved = 1 / (wn * Math.sqrt(Ctop * best.Cbottom));
-	const series = SERIES[resistorSeries];
-	const R = nearestInSeries(Rsolved, series);
+	const R = nearestResistor(Rsolved, resistorSeries);
 	const wnActual = 1 / (R * Math.sqrt(Ctop * best.Cbottom));
 	const qActual = 0.5 * Math.sqrt(Ctop / best.Cbottom);
 

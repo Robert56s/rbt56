@@ -236,7 +236,8 @@ export function explainJfetPhysics(design) {
 }
 
 export function explainJfetGainCell(design) {
-	const { r1AtCenter, rb, x, swingFraction, gDepth, modulationIndex, nominalGain, gainMin, gainMax, vgsPeakSwing, vc, vp, model } = design;
+	const { r1AtCenter, rb, x, swingFraction, gDepth, modulationIndex, nominalGain, gainMin, gainMax, vgsPeakSwing, vc, vp, model, feedbackTarget, xTarget } = design;
+	const stock = design.stockName ?? 'E24';
 	const measured = model.mode === 'measured';
 	return [
 		p(
@@ -267,9 +268,15 @@ export function explainJfetGainCell(design) {
 			'Two things to read off. n can never reach s, because x/(1+x) is always below 1: the swing fraction is the ceiling of the modulation index. And a bigger R_b raises both the gain and the depth of modulation, which is what a scope shows when R_b is changed on the same JFET. To hit a target n, invert the relation:'
 		),
 		eq('x = \\dfrac{n}{s - n}, \\qquad R_b = r_{DS}(V_C)\\, x'),
-		eq(
-			`x = \\dfrac{${n3(modulationIndex)}}{${n3(gDepth)} - ${n3(modulationIndex)}} = ${n3(x)}, \\qquad R_b = ${formatOhms(r1AtCenter)} \\times ${n3(x)} = ${formatOhms(rb)}`
-		),
+		...(feedbackTarget > 0 && xTarget > 0
+			? [
+					eq(
+						`x = \\dfrac{${n3(design.targetModulationIndex ?? (gDepth * xTarget) / (1 + xTarget))}}{${n3(gDepth)} - ${n3(design.targetModulationIndex ?? (gDepth * xTarget) / (1 + xTarget))}} = ${n3(xTarget)}, \\qquad R_b = ${formatOhms(r1AtCenter)} \\times ${n3(xTarget)} = ${formatOhms(feedbackTarget)} \\rightarrow \\text{${stock}: } ${formatOhms(rb)}`
+					),
+					p('R_b has to be a part that exists, so the rounded value is the one that sets x, and n comes out a little off the target:'),
+					eq(`x = \\dfrac{R_b}{r_{DS}(V_C)} = \\dfrac{${formatOhms(rb)}}{${formatOhms(r1AtCenter)}} = ${n3(x)}`)
+				]
+			: [eq(`x = \\dfrac{R_b}{r_{DS}(V_C)} = \\dfrac{${formatOhms(rb)}}{${formatOhms(r1AtCenter)}} = ${n3(x)}`)]),
 		eq(`K_0 = 1 + ${n3(x)} = ${n3(nominalGain)}, \\qquad n = ${n3(gDepth)} \\times \\dfrac{${n3(x)}}{1 + ${n3(x)}} = ${n3(modulationIndex)}`),
 		p(
 			`Over one message cycle the gate swings by ±${formatVolts(vgsPeakSwing)} around V_C and the gain moves between ${n3(gainMin)} and ${n3(gainMax)}: the carrier comes out ${n2(gainMax / gainMin)} times larger at the crest of the message than in its trough, which is the ratio (1+n)/(1-n) of the envelope.`
@@ -292,10 +299,10 @@ export function explainConditioningChain(design) {
 			'The message term needs the gain V_swing / V_source, so R_ac follows from R_f; the DC term has to equal -|V_C|, so R_bias follows from R_f and V_cc. The minus signs are useful: they turn the positive supply into the negative bias an N-channel gate needs, and merely invert the message, a 180 degree phase shift that changes nothing in the AM envelope.'
 		),
 		eq(
-			`R_{ac} = \\dfrac{R_f}{\\text{gain}} = \\dfrac{${formatOhms(s.rf)}}{${n3(s.gainTarget)}} = ${formatOhms(s.racTarget)} \\rightarrow \\text{E24: } ${formatOhms(s.rac)}, \\qquad \\text{gain actual} = \\dfrac{R_f}{R_{ac}} = ${n3(s.gainActual)}`
+			`R_{ac} = \\dfrac{R_f}{\\text{gain}} = \\dfrac{${formatOhms(s.rf)}}{${n3(s.gainTarget)}} = ${formatOhms(s.racTarget)} \\rightarrow \\text{${design.stockName ?? 'E24'}: } ${formatOhms(s.rac)}, \\qquad \\text{gain actual} = \\dfrac{R_f}{R_{ac}} = ${n3(s.gainActual)}`
 		),
 		eq(
-			`R_{bias} = \\dfrac{R_f\\,V_{cc}}{|V_C|} = \\dfrac{${formatOhms(s.rf)} \\times ${n1(vcc)}}{${n3(s.biasTarget)}} = ${formatOhms(s.rbiasTarget)} \\rightarrow \\text{E24: } ${formatOhms(s.rbias)}, \\qquad V_{bias} = -\\dfrac{R_f}{R_{bias}}\\,V_{cc} = ${formatVolts(s.biasActual)}`
+			`R_{bias} = \\dfrac{R_f\\,V_{cc}}{|V_C|} = \\dfrac{${formatOhms(s.rf)} \\times ${n1(vcc)}}{${n3(s.biasTarget)}} = ${formatOhms(s.rbiasTarget)} \\rightarrow \\text{${design.stockName ?? 'E24'}: } ${formatOhms(s.rbias)}, \\qquad V_{bias} = -\\dfrac{R_f}{R_{bias}}\\,V_{cc} = ${formatVolts(s.biasActual)}`
 		),
 		p(
 			`The capacitor in series with R_ac blocks any DC the source might carry, so the bias is set by R_bias alone. Seen from the source, C and R_ac form a high-pass whose corner is 1/(2 pi R_ac C), and since R_ac ends on a virtual ground nothing sits in parallel with it to move that corner. Putting it a decade below the lowest message frequency (${formatHz(fmMin)}) costs the message almost nothing: at f = 10 f_c the loss is 10 log(1 + 0.01) = 0.04 dB.`
@@ -389,7 +396,7 @@ export function explainCarrierPath(design) {
 		),
 		eq(
 			c.divider.top > 0
-				? `\\dfrac{R_{bot}}{R_{top} + R_{bot}} = \\dfrac{A_c}{A_{src}} \\ \\Rightarrow\\ R_{top} = R_{bot}\\left(\\dfrac{A_{src}}{A_c} - 1\\right) = ${formatOhms(c.divider.topTarget)} \\rightarrow \\text{E24: } ${formatOhms(c.divider.top)}, \\quad A_c = ${formatVolts(c.sourceAmplitude)} \\times \\dfrac{${formatOhms(c.divider.bottom)}}{${formatOhms(c.divider.top + c.divider.bottom)}} = ${formatVolts(c.ac)}`
+				? `\\dfrac{R_{bot}}{R_{top} + R_{bot}} = \\dfrac{A_c}{A_{src}} \\ \\Rightarrow\\ R_{top} = R_{bot}\\left(\\dfrac{A_{src}}{A_c} - 1\\right) = ${formatOhms(c.divider.topTarget)} \\rightarrow \\text{${design.stockName ?? 'E24'}: } ${formatOhms(c.divider.top)}, \\quad A_c = ${formatVolts(c.sourceAmplitude)} \\times \\dfrac{${formatOhms(c.divider.bottom)}}{${formatOhms(c.divider.top + c.divider.bottom)}} = ${formatVolts(c.ac)}`
 				: `A_{src} \\le A_{c,max}: \\text{ no divider needed, } A_c = ${formatVolts(c.ac)}`
 		),
 		p('What comes out, from the gain at the bias point and at the two extremes of the message:'),
@@ -451,7 +458,7 @@ export function explainOpampLimits(design) {
 								`Over the limit. K_max = 1 + x(1+s) is set by R_2 through x = R_2 / r_DS(V_C), and here n does not depend on x at all, so R_2 can simply come down. The largest R_2 that lands on 0.2, rounded down to a stock value:`
 							),
 							eq(`K_{max} \\le \\dfrac{0.2\\,GBW}{f_p} \\ \\Rightarrow\\ x \\le \\dfrac{K_{max} - 1}{1 + s} \\ \\Rightarrow\\ R_2 \\le ${formatOhms(o.rbLimit)}, \\qquad n = s = ${n3(o.nAtLimit)} \\text{ unchanged}`),
-							p('The post-gain stage makes up the level. Set R_2 to that value (the "feedback resistor" field) or clear it to let the tool pick.')
+							p('The post-gain stage would make up the level, but the tool keeps x at 0.5 at least, so here the ways out are a faster op-amp or a lower carrier frequency.')
 						]
 					: [
 							p(
@@ -461,7 +468,7 @@ export function explainOpampLimits(design) {
 								`K_{max} \\le \\dfrac{0.2\\,GBW}{f_p} \\ \\Rightarrow\\ x \\le \\dfrac{K_{max} - 1}{1 + s} \\ \\Rightarrow\\ R_b \\le ${formatOhms(o.rbLimit)}, \\qquad n = ${n3(o.nAtLimit)}`
 							),
 							p(
-								'Set R_b to that value in the gain cell (the "feedback resistor" field) to trade a little modulation depth for a clean envelope. The other ways out are a faster op-amp, a lower carrier frequency, or the inverting cell topology, where n does not depend on x and a small x is enough.'
+								'Lowering the target n to that value brings R_b down to it, trading a little modulation depth for a clean envelope. The other ways out are a faster op-amp, a lower carrier frequency, or the inverting cell topology, where n does not depend on x and a small x is enough.'
 							)
 						]
 				: [p(`Over the limit, and no value of ${inverting ? 'R_2' : 'R_b'} brings K_max under it at this carrier frequency with this op-amp: a faster op-amp or a lower carrier is needed.`)]),
@@ -502,7 +509,7 @@ export function explainDiodeModulator(design) {
 		),
 		eq('i \\approx a\\,v + b\\,v^2, \\qquad v = A\\cos(\\omega_p t) + u\\cos(\\omega_m t) \\ \\Rightarrow\\ b\\,v^2 \\ni b\\,A\\,u\\,\\big[\\cos((\\omega_p-\\omega_m)t) + \\cos((\\omega_p+\\omega_m)t)\\big]'),
 		p(
-			"The signals here are a volt or so, many times the 45 mV or so that changes a diode's current by a factor of e. At that size the diode does not bend gently: it switches, conducting while its drive is above its knee and blocking below it. Driven mostly by the carrier, it conducts for half of every carrier cycle, so its current is the drive through R_s, turned on and off by a square wave at the carrier. A square wave that is on half the time is this sum of cosines:"
+			`The signals here are a volt or so, many times the ${Math.round(1000 * (dm.N ?? 1) * 0.025852)} mV or so that changes this diode's current by a factor of e. At that size the diode does not bend gently: it switches, conducting while its drive is above its knee and blocking below it. Driven mostly by the carrier, it conducts for half of every carrier cycle, so its current is the drive through R_s, turned on and off by a square wave at the carrier. A square wave that is on half the time is this sum of cosines:`
 		),
 		eq('s(t) = \\dfrac{1}{2} + \\dfrac{2}{\\pi}\\cos(\\omega_p t) - \\dfrac{2}{3\\pi}\\cos(3\\omega_p t) + \\cdots'),
 		head('The switching modulator'),
@@ -541,7 +548,7 @@ export function explainDiodeModulator(design) {
 		p('The capacitor comes from the resonance. One stock part can miss by a few percent, enough to push a sideband out of the band, so it is built as two stock capacitors in parallel:'),
 		eq(`C = \\dfrac{1}{\\omega_0^2 L} = \\dfrac{1}{(2\\pi \\times ${fp})^2 \\times ${formatHenries(inductance)}} = ${formatFarads(cTarget ?? 1 / (w0 * w0 * inductance))} \\rightarrow ${capPair} = ${formatFarads(capacitance)}, \\qquad f_0 = ${formatHz(f0Actual)}`),
 		p(
-			`R in those formulas is everything across the tank. Through the switching diode, R_s is connected for half of each cycle, so the tank sees it as a source of about 2 R_s, in parallel with its own R_t. The page measures that source on the computed cycle and sizes R_t so that the pair gives the band asked for, the sideband margin (${n2(sidebandMargin)}) times the two sidebands' span, widened by any detuning. R_s itself is taken at twice the band's resistance, so R_t stays in charge:`
+			`R in those formulas is everything across the tank. Through the switching diode, R_s is connected for half of each cycle, so the tank sees it as a source of about 2 R_s, in parallel with its own R_t. The page sizes R_t on that 2 R_s so that the pair gives the band asked for, the sideband margin (${n2(sidebandMargin)}) times the two sidebands' span, widened by any detuning, then measures the source on the computed cycle for the band the table reports. R_s itself is taken at twice the band's resistance, so R_t stays in charge:`
 		),
 		eq(`R_{eff} = R_t \\parallel R_{src} = ${formatOhms(rt)} \\parallel ${formatOhms(rSource)} = ${formatOhms(rEff)}, \\qquad BW = \\dfrac{1}{2\\pi R_{eff} C} = ${formatHz(bwLoaded)}\\ (\\text{asked } ${formatHz(bandwidthNeeded)})`),
 		p("An ideal switch would give the carrier below at the output, the carrier current of the switching modulator across R_eff; the diode's soft knee takes some off:"),
@@ -597,7 +604,7 @@ export function explainRectifier(type, fp = null) {
 			`The first group is the message (scaled by 2/π, with a constant added) and lives below f_m,max. The second group is centered on 2 f_p${rippleNote(2)} and above, far from the message. A low-pass filter that passes f_m,max and blocks 2 f_p separates them; that filter is designed in the next panel.`
 		),
 		p(
-			'A bare diode would subtract its forward drop (about 0.7 V) from every half cycle and distort small signals. The precision circuit puts the diodes inside op-amp feedback loops, so the op-amp supplies whatever voltage the diode needs and the output is the exact absolute value. Two op-amps (U1A, U1B), two diodes (D1, D2) and three equal resistors (R1 = R2 = R3; the value itself does not matter, only the ratio):'
+			'A bare diode would subtract its forward drop (about 0.7 V) from every half cycle and distort small signals. The precision circuit puts the diodes inside op-amp feedback loops, so the op-amp supplies whatever voltage the diode needs and the output is the exact absolute value. Two op-amps (U1A, U1B), two diodes (D1, D2) and three equal resistors (R1 = R2 = R3: their ratio sets the gain, and their value how much the capacitance of the switched-off diode leaks at the carrier, which is why they are 1 k):'
 		),
 		p(
 			'Positive input: U1A\'s output goes positive, D2 conducts and D1 is off. No current flows through R1 and R2, so U1B, fed on its + input through D2 and with no current in its feedback resistor, is a plain follower of U1A, and U1A itself is a follower of the input:'
@@ -615,13 +622,21 @@ export function explainRectifier(type, fp = null) {
 
 export function explainEnvelopeFilter(design) {
 	const { fp, fs, n, response, amaxDb, aminDb, minOrder, k, stages, realized } = design;
+	const aminSized = design.aminSized ?? aminDb;
 	return [
 		p(
-			'After the rectifier the message sits below f_m,max and the unwanted ripple starts at the ripple frequency (2 f_p for full-wave, f_p for half-wave), with nothing in between. Separating them is exactly the low-pass problem the Active Filter Design tool solves, so the same design is reused here, step by step. The spec: pass everything up to fp = f_m,max losing at most Amax dB, block everything from fs = the ripple frequency by at least Amin dB.'
+			'After the rectifier the message sits below f_m,max and the unwanted ripple sits at the ripple frequency (2 f_p for full-wave, f_p for half-wave). The ripple is modulated by the message too, so it carries the message as sidebands, and its lowest one sits at the ripple frequency minus f_m,max: that is where the stopband has to start. Separating them is exactly the low-pass problem the Active Filter Design tool solves, so the same design is reused here, step by step. The spec: pass everything up to fp = f_m,max losing at most Amax dB, block everything from fs = the ripple frequency by at least Amin dB.'
 		),
 		eq(`f_p = f_{m,max} = ${formatHz(fp)}, \\qquad f_s = ${formatHz(fs)}, \\qquad k = \\dfrac{f_p}{f_s} = ${n4(k)}`),
 		head('Order'),
-		...explainOrder({ response, amaxDb, aminDb, k, minOrder, filterType: 'lowpass', nUsed: n, evenOnly: true }),
+		...(aminSized !== aminDb
+			? [
+					p(
+						`Each Sallen-Key stage has unity gain at DC, so an even-order Chebyshev, whose DC sits in a ripple valley, peaks ${n2(amaxDb)} dB above it. For the ripple to end up ${n2(aminDb)} dB under every part of the message, the stopband is sized ${n2(aminDb)} dB under that peak, which is A = Amin + Amax = ${n2(aminSized)} dB in the order formula:`
+					)
+				]
+			: []),
+		...explainOrder({ response, amaxDb, aminDb: aminSized, k, minOrder, filterType: 'lowpass', nUsed: n, evenOnly: true }),
 		head('Where the response formula and the poles come from'),
 		...explainApproximation(design),
 		...stages.flatMap((s, i) => [

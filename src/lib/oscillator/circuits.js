@@ -1,4 +1,5 @@
 import { placeSymbol, label, createNet, portPoints } from '../filter/schematic';
+import { DIODES } from './limiter';
 import { formatFarads, formatOhms } from '../modulation/format';
 
 const SCALE = 48;
@@ -44,13 +45,65 @@ function shuntResistor(net, node, value, side = 'right') {
 }
 
 /**
+ * The diode limiter in place on a feedback rail that runs from `xLeft`
+ * (the end that drops to the - input) to `xRight` (the end that reaches
+ * the output), placed at height `y`: Rf1 on the output side, then Rf2 with
+ * the two diodes across it, one above the other over Rf2, as the LTspice
+ * file wires them. Everything between the two ends is wired here; the
+ * caller joins the ends to the op-amp. Needs 255 px between the ends.
+ */
+function limiterRail(net, xLeft, xRight, y, design) {
+	const { rf1, rf2 } = design.limiter;
+	const Rf2 = placeSymbol('resistor_right', xLeft + 92, y, SCALE);
+	const rail = Rf2.ports['1'].y;
+	const a = { x: Rf2.ports['1'].x - 40, y: rail };
+	const b = { x: Rf2.ports['2'].x + 40, y: rail };
+	const Rf1 = placeSymbol('resistor_right', Math.max(b.x + 48, (b.x + xRight) / 2), y, SCALE);
+	net.wire({ x: xLeft, y: rail }, a);
+	net.wire(a, Rf2.ports['1']);
+	net.wire(Rf2.ports['2'], b);
+	net.wire(b, Rf1.ports['1']);
+	net.wire(Rf1.ports['2'], { x: xRight, y: rail });
+	// one diode each way between a and b: the lower one conducts on one
+	// half-cycle, the upper one on the other
+	const cx = (a.x + b.x) / 2;
+	const lowY = rail - 45;
+	const highY = rail - 90;
+	const Dl = placeSymbol('diode_right', cx, lowY + 1.92, SCALE);
+	const Dh = placeSymbol('diode_left', cx, highY + 1.92, SCALE);
+	const dl = Dl.ports['1'].y;
+	const dh = Dh.ports['1'].y;
+	net.wire(a, { x: a.x, y: dl });
+	net.wire({ x: a.x, y: dl }, { x: a.x, y: dh });
+	net.wire(b, { x: b.x, y: dl });
+	net.wire({ x: b.x, y: dl }, { x: b.x, y: dh });
+	net.wire({ x: a.x, y: dl }, Dl.ports['1']);
+	net.wire(Dl.ports['2'], { x: b.x, y: dl });
+	net.wire({ x: a.x, y: dh }, Dh.ports['2']);
+	net.wire(Dh.ports['1'], { x: b.x, y: dh });
+	const diode = (DIODES[design.diode] ?? DIODES['1N4148']).label.split(' (')[0];
+	return {
+		rail,
+		svgs: [Rf1.svg, Rf2.svg, Dl.svg, Dh.svg],
+		symbols: [Rf1, Rf2, Dl, Dh],
+		labels: [
+			label(`Rf1 ${formatOhms(rf1)}`, Rf1.ports['1'].x, rail - 14, { anchor: 'start' }),
+			label(`Rf2 ${formatOhms(rf2)}`, Rf2.ports['1'].x, rail + 26, { anchor: 'start' }),
+			label(`${diode}, one each way`, cx, dh - 18, { anchor: 'middle' })
+		],
+		top: dh - 40
+	};
+}
+
+/**
  * Wien bridge. The op-amp sits on the right. Along the bottom, the Wien
  * network runs from the output back to the + input: a resistor and a
  * capacitor in series, then a resistor and a capacitor in parallel to
  * ground. Along the top, the negative feedback runs from the output back
- * to the - input through Rf, with the lower leg Rg to ground. What sits
- * in that lower leg is what holds the amplitude, and it is drawn on its
- * own by buildLimiterDiagram.
+ * to the - input through Rf, with the lower leg Rg to ground. With diode
+ * limiting, Rf is Rf1 and Rf2 with the diodes across Rf2, drawn in place
+ * (buildLimiterDiagram has the same part on its own, larger); a lamp or a
+ * JFET sits in the lower leg instead, and gets its own diagram.
  */
 export function buildWienDiagram(design) {
 	const { parts, limiter, stabilizer } = design;
@@ -92,13 +145,18 @@ export function buildWienDiagram(design) {
 	net.wire({ x: upX, y: rail }, { x: upX, y: plus.y });
 	net.wire({ x: upX, y: plus.y }, plus);
 
-	// --- negative feedback, top rail
-	const Rf = placeSymbol('resistor_right', minus.x - 130, y0 - 150, SCALE);
-	const fbRail = Rf.ports['1'].y;
-	const legTop = { x: Rf.ports['1'].x - 90, y: minus.y };
+	// --- negative feedback, top rail: one Rf, or Rf1 and Rf2 with the
+	// limiting diodes across Rf2 when the diodes hold the amplitude
+	const legTop = { x: minus.x - 243, y: minus.y };
+	const withDiodes = stabilizer === 'diodes';
+	const fb = withDiodes ? limiterRail(net, legTop.x, Vout.x, y0 - 150, design) : null;
+	const Rf = withDiodes ? null : placeSymbol('resistor_right', minus.x - 130, y0 - 150, SCALE);
+	const fbRail = withDiodes ? fb.rail : Rf.ports['1'].y;
 	net.wire(Vout, { x: Vout.x, y: fbRail });
-	net.wire({ x: Vout.x, y: fbRail }, Rf.ports['2']);
-	net.wire(Rf.ports['1'], { x: legTop.x, y: fbRail });
+	if (!withDiodes) {
+		net.wire({ x: Vout.x, y: fbRail }, Rf.ports['2']);
+		net.wire(Rf.ports['1'], { x: legTop.x, y: fbRail });
+	}
 	net.wire({ x: legTop.x, y: fbRail }, legTop);
 	net.wire(legTop, minus);
 
@@ -128,24 +186,19 @@ export function buildWienDiagram(design) {
 		...Rp.svgs,
 		Cp.svg,
 		gndCp.svg,
-		Rf.svg,
+		...(withDiodes ? fb.svgs : [Rf.svg]),
 		...legParts,
 		net.svg(),
-		net.dots(portPoints(opamp, Rs, Cs, ...Rp.symbols, Cp, gndCp, Rf, ...legSymbols)),
+		net.dots(portPoints(opamp, Rs, Cs, ...Rp.symbols, Cp, gndCp, ...(withDiodes ? fb.symbols : [Rf]), ...legSymbols)),
 		label('Vout', Vout.x + 46, Vout.y + 5, { anchor: 'start' }),
 		label(`R ${formatOhms(design.r)}`, Rs.ports['1'].x, rail - 16, { anchor: 'start' }),
 		label(`C ${formatFarads(design.c)}`, Cs.ports['1'].x, rail - 16, { anchor: 'start' }),
 		Rp.label,
 		label(`C ${formatFarads(design.c)}`, Cp.ports['1'].x + 14, (Cp.ports['1'].y + Cp.ports['2'].y) / 2, { anchor: 'start' }),
-		label(
-			stabilizer === 'diodes' ? `Rf1 + Rf2 = ${formatOhms(parts.rf1 + parts.rf2)}` : `Rf ${formatOhms(parts.rf)}`,
-			Rf.ports['1'].x,
-			fbRail - 14,
-			{ anchor: 'start' }
-		),
+		...(withDiodes ? fb.labels : [label(`Rf ${formatOhms(parts.rf)}`, Rf.ports['1'].x, fbRail - 14, { anchor: 'start' })]),
 		...legLabels
 	];
-	const top = fbRail - 60;
+	const top = withDiodes ? fb.top : fbRail - 60;
 	const width = Vout.x + 40 + 90;
 	return { svg: all.join(''), viewBox: `0 ${top} ${width} ${Math.max(gndCp.ports['1'].y + 140, legBottomY + 70) - top}` };
 }
@@ -216,7 +269,8 @@ export function buildLadderDiagram(design) {
 	const minus = opamp.ports.inp2;
 	const gndPlus = placeSymbol('ground_down', opamp.ports.inp1.x - 35 - 0.01 * SCALE, opamp.ports.inp1.y + 46 + 0.29 * SCALE, SCALE);
 	const Vout = { x: opamp.ports.out.x + 90, y: opamp.ports.out.y };
-	const fbX = minus.x - 100;
+	const withDiodes = design.limiter.kind === 'diodes';
+	const fbX = minus.x - (withDiodes ? 118 : 100);
 	const fbTee = { x: fbX, y: minus.y };
 	net.wire(Rg.ports['2'], fbTee);
 	net.wire(fbTee, minus);
@@ -226,16 +280,29 @@ export function buildLadderDiagram(design) {
 	svgs.push(opamp.svg, gndPlus.svg);
 	symbols.push(opamp, gndPlus);
 
-	// feedback resistor on a rail above
-	const Rf = placeSymbol('resistor_right', (minus.x + Vout.x) / 2, y0 - 150, SCALE);
-	const fbRail = Rf.ports['1'].y;
+	// feedback on a rail above: one Rf, or Rf1 and Rf2 with the limiting
+	// diodes across Rf2 when the diodes hold the amplitude
+	let fbRail;
+	let top;
+	if (withDiodes) {
+		const fb = limiterRail(net, fbX, Vout.x, y0 - 150, design);
+		fbRail = fb.rail;
+		top = fb.top;
+		svgs.push(...fb.svgs);
+		symbols.push(...fb.symbols);
+		labels.push(...fb.labels);
+	} else {
+		const Rf = placeSymbol('resistor_right', (minus.x + Vout.x) / 2, y0 - 150, SCALE);
+		fbRail = Rf.ports['1'].y;
+		top = fbRail - 50;
+		net.wire({ x: fbX, y: fbRail }, Rf.ports['1']);
+		net.wire(Rf.ports['2'], { x: Vout.x, y: fbRail });
+		svgs.push(Rf.svg);
+		symbols.push(Rf);
+		labels.push(label(`Rf ${formatOhms(design.limiter.rf)}`, Rf.ports['1'].x, fbRail - 14, { anchor: 'start' }));
+	}
 	net.wire(fbTee, { x: fbX, y: fbRail });
-	net.wire({ x: fbX, y: fbRail }, Rf.ports['1']);
-	net.wire(Rf.ports['2'], { x: Vout.x, y: fbRail });
 	net.wire({ x: Vout.x, y: fbRail }, Vout);
-	svgs.push(Rf.svg);
-	symbols.push(Rf);
-	labels.push(label(`Rf ${formatOhms(design.limiter.rf)}`, Rf.ports['1'].x, fbRail - 14, { anchor: 'start' }));
 
 	// the loop closes under the row
 	const backY = Math.max(...symbols.map((s) => Math.max(...Object.values(s.ports).map((p) => p.y)))) + 90;
@@ -245,7 +312,6 @@ export function buildLadderDiagram(design) {
 	labels.push(label('Vout', Vout.x + 46, Vout.y + 5, { anchor: 'start' }), label('the loop closes here', startX + 12, backY - 14, { anchor: 'start', cls: 'lbl note' }));
 
 	const all = [...svgs, net.svg(), net.dots(portPoints(...symbols)), ...labels];
-	const top = fbRail - 50;
 	return { svg: all.join(''), viewBox: `0 ${top} ${Vout.x + 40 + 90} ${backY + 60 - top}` };
 }
 

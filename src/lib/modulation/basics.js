@@ -369,7 +369,7 @@ function invertingCell({ design }) {
 	];
 }
 
-function feedingTheGate({ design, carrierFrom, fp }) {
+function feedingTheGate({ design, carrierFrom, oscillatorOk, fp }) {
 	const sm = design?.conditioning?.summer;
 	const drive =
 		design && all(design.conditioning?.sourceAmplitude, design.vgsPeakSwing, sm?.biasActual, design.conditioning?.fmMin)
@@ -378,7 +378,9 @@ function feedingTheGate({ design, carrierFrom, fp }) {
 	const c = design?.carrier;
 	const known = c && all(c.ac, c.sourceAmplitude, c.divider?.top, c.divider?.bottom);
 	let carrier;
-	if (carrierFrom === 'wien') {
+	if (carrierFrom === 'wien' && !oscillatorOk) {
+		carrier = `The on-board Wien oscillator is asked for, but no Wien bridge can be sized for ${pos(fp) ? `a ${hz(fp)}` : 'this'} carrier with this op-amp, so the carrier oscillator panel says what to change, and until then the carrier comes from a generator.`;
+	} else if (carrierFrom === 'wien') {
 		carrier = `With the carrier from the on-board Wien oscillator: the board makes its own ${pos(fp) ? hz(fp) : 'carrier'} with a small self-feeding loop that runs at one frequency, designed with the Sine Oscillator tool's method for this op-amp.`;
 		if (known) carrier += c.divider.top > 0 ? ` A divider brings its ${volts(c.sourceAmplitude)} down to the ${volts(c.ac)} the JFET can take.` : ` Its ${volts(c.sourceAmplitude)} is already small enough for the JFET.`;
 		else carrier += ' A divider brings its output down to the small size the JFET can take.';
@@ -712,6 +714,7 @@ export function modulationBasics({
 	mode = 'jfet',
 	topology = 'noninverting',
 	carrierFrom = 'source',
+	oscillatorOk = true,
 	rectifierType = 'full',
 	design = null,
 	jfetModel = null,
@@ -728,7 +731,7 @@ export function modulationBasics({
 	amaxDb,
 	aminDb
 } = {}) {
-	const ctx = { mode, topology, carrierFrom, rectifierType, design, jfetModel, swingFraction, targetN, fp, fm, diodeDesign, carrierAmp, modAmp, envelopeDesign, demoModIndex, rippleHz, amaxDb, aminDb };
+	const ctx = { mode, topology, carrierFrom, oscillatorOk, rectifierType, design, jfetModel, swingFraction, targetN, fp, fm, diodeDesign, carrierAmp, modAmp, envelopeDesign, demoModIndex, rippleHz, amaxDb, aminDb };
 	const common = [hook(ctx), ...noteOnAScope(ctx), ...carrierCopies(ctx), ...formulaSection(ctx), ...readingN(ctx), ...whereItWent(ctx)];
 	let circuit;
 	if (mode === 'diode') circuit = [...diodeBend(ctx), ...tankSection(ctx), ...diodeNumbers(ctx), ...diodeRest()];

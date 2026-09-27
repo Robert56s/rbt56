@@ -25,10 +25,10 @@ function voltmeter(cx, cy) {
 
 /**
  * JFET modulator gain cell: non-inverting amplifier where the carrier
- * xp(t) drives the + input, the JFET channel (drain at the - input node,
- * source grounded) is the bottom leg of the feedback divider, and Rb is
- * the top (feedback) leg. The gate is driven by the conditioned, biased
- * modulating signal from the signal-conditioning chain. Rb's feedback loop
+ * x_p(t) drives the + input, the JFET channel (drain at the - input node,
+ * source grounded) is the bottom leg of the feedback divider, and R_b is
+ * the top (feedback) leg. The gate, v_gate, is the output of the gate-drive
+ * summer: the bias V_C plus the scaled message. Rb's feedback loop
  * is routed below the triangle so it never crosses the carrier wire that
  * feeds the + input at a height between the JFET and any top rail.
  */
@@ -66,10 +66,10 @@ export function buildJfetGainCellDiagram({ rb }) {
 		Rb.svg,
 		net.svg(),
 		net.dots(portPoints(opamp, jfet, gndSource, Rb)),
-		label('xp(t)', Vin.x, Vin.y - 12, { anchor: 'start' }),
-		label('xm(t)', gateNode.x - 6, gateNode.y - 10, { anchor: 'start' }),
+		label('x_p(t)', Vin.x, Vin.y - 12, { anchor: 'start' }),
+		label('v_gate', gateNode.x - 6, gateNode.y - 10, { anchor: 'start' }),
 		label('Vout', Vout.x + 48, Vout.y + 5, { anchor: 'start' }),
-		label(`Rb ${formatOhms(rb)}`, Rb.ports['1'].x, loopY - 12, { anchor: 'start' }),
+		label(`R_b ${formatOhms(rb)}`, Rb.ports['1'].x, loopY - 12, { anchor: 'start' }),
 		label('S', jfet.ports.source.x + 8, jfet.ports.source.y + 4, { anchor: 'start' }),
 		label('D', jfet.ports.drain.x + 8, jfet.ports.drain.y - 4, { anchor: 'start' }),
 		label('G', jfet.ports.gate.x - 8, jfet.ports.gate.y - 6, { anchor: 'end' })
@@ -629,11 +629,25 @@ export function buildBiasSummerDiagram({ c, rac, rbias, rf }) {
 /**
  * Carrier attenuator: a plain divider from the carrier source down to the
  * amplitude the JFET can take. It drives the gain cell's + input, which
- * draws no current, so the ratio is exact and no buffer is needed.
+ * draws no current, so the ratio is exact and no buffer is needed (the
+ * inverting cell's follower, likewise). With no divider needed (top 0) it
+ * is a plain wire. `from` and `to` name the two ends.
  */
-export function buildCarrierDividerDiagram({ top, bottom }) {
+export function buildCarrierDividerDiagram({ top, bottom, from = 'carrier source', to = 'to + input' }) {
 	const y0 = 90;
 	const Vin = { x: MARGIN, y: y0 };
+	if (!(top > 0)) {
+		const net = createNet();
+		const out = { x: Vin.x + 270, y: y0 };
+		net.wire(Vin, out);
+		const parts = [
+			net.svg(),
+			label(from, Vin.x, Vin.y + 22, { anchor: 'start' }),
+			label(to, out.x + 6, out.y - 8, { anchor: 'start' }),
+			label('no divider needed', Vin.x + 90, y0 - 14, { anchor: 'start', cls: 'lbl note' })
+		];
+		return { svg: parts.join(''), viewBox: `0 50 ${out.x + 110} 80` };
+	}
 	const Rtop = placeSymbol('resistor_right', Vin.x + 90, y0, SCALE);
 	const node = Rtop.ports['2'];
 	const Rbot = placeSymbol('resistor_down', node.x, node.y + 0.51 * SCALE, SCALE);
@@ -651,8 +665,8 @@ export function buildCarrierDividerDiagram({ top, bottom }) {
 		gnd.svg,
 		net.svg(),
 		net.dots(portPoints(Rtop, Rbot, gnd)),
-		label('carrier source', Vin.x, Vin.y + 22, { anchor: 'start' }),
-		label('to + input', out.x + 6, out.y - 8, { anchor: 'start' }),
+		label(from, Vin.x, Vin.y + 22, { anchor: 'start' }),
+		label(to, out.x + 6, out.y - 8, { anchor: 'start' }),
 		label(`${formatOhms(top)}`, Rtop.ports['1'].x, y0 - 24, { anchor: 'start' }),
 		label(`${formatOhms(bottom)}`, Rbot.ports['1'].x + 12, (Rbot.ports['1'].y + Rbot.ports['2'].y) / 2, { anchor: 'start' })
 	];
@@ -725,11 +739,12 @@ export function buildJfetTestDiagram() {
  * JFET modulator, inverting cell: the channel is the input resistor. A
  * follower copies the (attenuated) carrier onto the drain, the source sits
  * on the virtual ground of the second op-amp, and R2 feeds its output back
- * to that node, so Vout = -R2 G(VGS) xp. The follower is part of the cell:
+ * to that node, so Vout = -R2 G(VGS) x_p. The follower is part of the cell:
  * without it the divider's impedance adds to the channel and bends the
- * envelope, which is why it is drawn rather than assumed.
+ * envelope, which is why it is drawn rather than assumed. With follower
+ * false the divider drives the drain directly, as the page allows.
  */
-export function buildJfetInvertingCellDiagram({ r2 }) {
+export function buildJfetInvertingCellDiagram({ r2, follower: withFollower = true }) {
 	const y0 = 150;
 	const follower = placeSymbol('opamp_no_power_right', MARGIN + 150, y0, SCALE);
 	const Vin = { x: MARGIN, y: follower.ports.inp1.y };
@@ -750,13 +765,18 @@ export function buildJfetInvertingCellDiagram({ r2 }) {
 	const R2 = placeSymbol('resistor_right', (N.x + Vout.x) / 2, loopB, SCALE);
 
 	const net = createNet();
-	net.wire(Vin, follower.ports.inp1);
-	net.wire(follower.ports.out, { x: follower.ports.out.x, y: loopA });
-	net.wire({ x: follower.ports.out.x, y: loopA }, { x: loopAx, y: loopA });
-	net.wire({ x: loopAx, y: loopA }, { x: loopAx, y: follower.ports.inp2.y });
-	net.wire({ x: loopAx, y: follower.ports.inp2.y }, follower.ports.inp2);
-	net.wire(follower.ports.out, { x: drainX, y: follower.ports.out.y });
-	net.wire({ x: drainX, y: follower.ports.out.y }, jfet.ports.drain);
+	if (withFollower) {
+		net.wire(Vin, follower.ports.inp1);
+		net.wire(follower.ports.out, { x: follower.ports.out.x, y: loopA });
+		net.wire({ x: follower.ports.out.x, y: loopA }, { x: loopAx, y: loopA });
+		net.wire({ x: loopAx, y: loopA }, { x: loopAx, y: follower.ports.inp2.y });
+		net.wire({ x: loopAx, y: follower.ports.inp2.y }, follower.ports.inp2);
+		net.wire(follower.ports.out, { x: drainX, y: follower.ports.out.y });
+		net.wire({ x: drainX, y: follower.ports.out.y }, jfet.ports.drain);
+	} else {
+		net.wire(Vin, { x: drainX, y: Vin.y });
+		net.wire({ x: drainX, y: Vin.y }, jfet.ports.drain);
+	}
 	net.wire(gateNode, jfet.ports.gate);
 	net.wire(jfet.ports.source, N);
 	net.wire(N, cell.ports.inp2);
@@ -769,16 +789,16 @@ export function buildJfetInvertingCellDiagram({ r2 }) {
 	net.wire(Vout, { x: Vout.x + 40, y: Vout.y });
 
 	const parts = [
-		follower.svg,
+		...(withFollower ? [follower.svg] : []),
 		jfet.svg,
 		cell.svg,
 		gndPlus.svg,
 		R2.svg,
 		net.svg(),
-		net.dots(portPoints(follower, jfet, cell, gndPlus, R2)),
-		label('xp(t)', Vin.x, Vin.y - 12, { anchor: 'start' }),
-		label('follower', follower.ports.out.x - 24, y0 - 32, { anchor: 'middle', cls: 'lbl note' }),
-		label('xm(t)', gateNode.x - 6, gateNode.y - 10, { anchor: 'start' }),
+		net.dots(portPoints(...(withFollower ? [follower] : []), jfet, cell, gndPlus, R2)),
+		label(withFollower ? 'x_p(t)' : 'x_p(t), from the divider', Vin.x, Vin.y - 12, { anchor: 'start' }),
+		...(withFollower ? [label('follower', follower.ports.out.x - 24, y0 - 32, { anchor: 'middle', cls: 'lbl note' })] : []),
+		label('v_gate', gateNode.x - 6, gateNode.y - 10, { anchor: 'start' }),
 		label('Vout', Vout.x + 48, Vout.y + 5, { anchor: 'start' }),
 		label(`R2 ${formatOhms(r2)}`, R2.ports['1'].x, loopB - 12, { anchor: 'start' }),
 		label('S', jfet.ports.source.x + 8, jfet.ports.source.y + 4, { anchor: 'start' }),

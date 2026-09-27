@@ -16,6 +16,7 @@ export const DIODE_MODELS = {
 		Is: 2.52e-9,
 		N: 1.752,
 		Rs: 0.568,
+		cjo: 4e-12, // junction capacitance, in the .model line only: the cycle solve leaves it out
 		spice: '.model DX D(Is=2.52n Rs=.568 N=1.752 Cjo=4p M=.4 tt=20n)'
 	},
 	BAT54: {
@@ -24,6 +25,7 @@ export const DIODE_MODELS = {
 		Is: 1e-7,
 		N: 1,
 		Rs: 2.2,
+		cjo: 12e-12,
 		spice: '.model DX D(Is=.1u Rs=2.2 N=1 Cjo=12p M=.3 Eg=.69 Xti=2)'
 	}
 };

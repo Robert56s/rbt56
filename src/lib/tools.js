@@ -38,7 +38,7 @@ export const tools = [
 		href: '/tools/filter-design/',
 		category: 'analog',
 		summary:
-			'Low-pass, high-pass, band-pass or band-stop: order, transfer function, real components from the values you actually stock, a Bode plot and an LTspice schematic.',
+			'Low-pass, high-pass, band-pass or band-stop: order, transfer function, real components from the values actually in stock, a Bode plot and an LTspice schematic.',
 		tags: ['electronics', 'filters', 'ltspice'],
 		state: 'live'
 	},

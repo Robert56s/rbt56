@@ -175,7 +175,8 @@ function pickRC(rcTarget, capacitors, resistorSeries) {
 
 /** Nearest stocked capacitor to a target. */
 function pickCapacitor(target, capacitors) {
-	return capacitorCandidates(capacitors).reduce((best, cc) => (Math.abs(Math.log(cc / target)) < Math.abs(Math.log(best / target)) ? cc : best), 1e-7);
+	const all = capacitorCandidates(capacitors);
+	return all.reduce((best, cc) => (Math.abs(Math.log(cc / target)) < Math.abs(Math.log(best / target)) ? cc : best), all[0]);
 }
 
 /**
@@ -395,7 +396,7 @@ export function designOscillator({
 		if (!pick) return null;
 		const { c, r } = pick;
 		const rc = r * c;
-		rg = 10_000;
+		rg = nearestResistor(10_000, resistorSeries);
 		const rn = nearestResistor(r / rho0, resistorSeries);
 		const rho = r / rn;
 		const pole = solvePole('quadrature', { ...base, rc, rho }, { omega0: 1 / rc });
@@ -446,7 +447,7 @@ export function designOscillator({
 			if (!pick) return null;
 			// a ladder's last resistor IS the amplifier's input resistor, so
 			// Rg is not free there: it is R
-			rg = topo.ladder ? pick.r : 10_000;
+			rg = topo.ladder ? pick.r : nearestResistor(10_000, resistorSeries);
 			const bal = solveBalance(kind, { ...loopParams, rc: pick.r * pick.c }, { omega0: TWO_PI * frequency, gain0: topo.gain });
 			if (!bal.converged) return null;
 			requiredGain = bal.gain;

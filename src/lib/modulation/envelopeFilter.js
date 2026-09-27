@@ -15,11 +15,21 @@ import { designSallenKeyLowPass } from './sallenKeyLowPass';
  * dB is lost at fp. Without that factor the filter would always lose
  * 3.01 dB at fp no matter what Amax was asked for. Chebyshev's prototype is
  * already normalized to the ripple edge, so its factor is 1.
+ *
+ * The stages have unity gain at DC, so an even-order Chebyshev, whose DC
+ * sits in a ripple valley, peaks at +Amax: its stopband is sized Amin
+ * below that peak, which is Amin + Amax below DC (aminSized), so the ripple
+ * ends up at least Amin under every part of the message. An order past
+ * maxOrder is only reported (tooHigh), with no stages built.
  */
-export function designEnvelopeLowPass({ response, amaxDb, aminDb, fp, fs, order, resistorSeries = 'E24' }) {
+export function designEnvelopeLowPass({ response, amaxDb, aminDb, fp, fs, order, resistorSeries = 'E24', capacitors = null, maxOrder = Infinity }) {
 	const k = transitionRatio(fp, fs);
-	const minOrder = response === 'chebyshev' ? chebyshevOrder(amaxDb, aminDb, k) : butterworthOrder(amaxDb, aminDb, k);
-	const n = order ?? Math.max(2, 2 * Math.ceil(minOrder / 2)); // even order: only 2nd-order Sallen-Key stages, no leftover 1st-order stage
+	const aminSized = response === 'chebyshev' ? aminDb + amaxDb : aminDb;
+	const minOrder = response === 'chebyshev' ? chebyshevOrder(amaxDb, aminSized, k) : butterworthOrder(amaxDb, aminDb, k);
+	// even order: only 2nd-order Sallen-Key stages, no leftover 1st-order
+	// stage, so an odd order asked for is rounded up rather than losing a pole
+	const n = Math.max(2, 2 * Math.ceil((order ?? minOrder) / 2));
+	if (n > maxOrder) return { k, minOrder, n, tooHigh: true, response, amaxDb, aminDb, aminSized, fp, fs };
 
 	const proto = response === 'chebyshev' ? chebyshevStages(n, amaxDb) : butterworthStages(n);
 	const eps = Math.sqrt(10 ** (amaxDb / 10) - 1);
@@ -37,15 +47,28 @@ export function designEnvelopeLowPass({ response, amaxDb, aminDb, fp, fs, order,
 		normalized: s
 	}));
 
-	const realized = stages.map((stage) => designSallenKeyLowPass(stage.wn, stage.q, { resistorSeries }));
+	// a stage the parts on hand cannot build is built from E24 and the E6/E12
+	// capacitors instead, and flagged, rather than dropped
+	const realized = stages.map((stage) => {
+		const r = designSallenKeyLowPass(stage.wn, stage.q, { resistorSeries, capacitors });
+		if (r) return r;
+		const fallback = designSallenKeyLowPass(stage.wn, stage.q);
+		return fallback && { ...fallback, stockShortfall: true };
+	});
+	const shortfallStages = realized.flatMap((r, i) => (r?.stockShortfall ? [i + 1] : []));
 
-	return { k, minOrder, n, wc, wcScale, eps, beta: proto.beta, filterType: 'lowpass', stages, realized, response, amaxDb, aminDb, fp, fs };
+	return { k, minOrder, n, wc, wcScale, eps, beta: proto.beta, filterType: 'lowpass', stages, realized, shortfallStages, response, amaxDb, aminDb, aminSized, fp, fs };
 }
 
 /**
  * |H(j 2 pi f)| of the realized filter: each unity-gain Sallen-Key stage is
  * 1 / (1 - x^2 + j x / Q) with x = f / f0, all with their rounded parts.
  */
+/** The same in dB (0 dB at DC). */
+export function envelopeGainDb(design, f) {
+	return 20 * Math.log10(envelopeGainAt(design, f));
+}
+
 export function envelopeGainAt(design, f) {
 	const w = 2 * Math.PI * f;
 	return design.realized.reduce((g, s) => {
