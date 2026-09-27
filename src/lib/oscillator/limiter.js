@@ -261,13 +261,14 @@ export function dividerClampConductance(V, rd1, rd2, d) {
 }
 
 /**
- * Sizes the clamp for a wanted amplitude: Rd2 is a round 1 k so the slope
+ * Sizes the clamp for a wanted amplitude: Rd2 is a round 1 k (or the value
+ * on hand nearest it) so the slope
  * above threshold is steep, and Rd1 is solved so the describing function
  * meets the target conductance exactly at the wanted amplitude, before
  * rounding.
  */
 export function sizeDividerClamp({ gTarget, amplitude, diode, resistorSeries = 'E24' }) {
-	const rd2 = 1000;
+	const rd2 = nearestResistor(1000, resistorSeries);
 	// conductance at the wanted amplitude falls as Rd1 grows: bisect on log Rd1
 	let lo = 100;
 	let hi = 1e8;
@@ -370,9 +371,9 @@ function gateFromPeak(vPeak, ra, rb, rx) {
 const AGC_RB = 1e6;
 const AGC_RX = 1e6;
 
-function agcSeries({ amplitude, legBalance, rdsOn, rChannelMin, vto, beta, diode, resistorSeries }) {
+function agcSeries({ amplitude, legBalance, rdsOn, rChannelMin, vto, beta, diode, resistorSeries, rb }) {
 	// with Ra = 0 the detector gives its most: the whole peak, less the drop
-	const vPeak = detectorPeak(amplitude, AGC_RB, diode);
+	const vPeak = detectorPeak(amplitude, rb, diode);
 	const drop = amplitude - vPeak;
 	// the most negative gate the detector can give is -vPeak/2; the channel
 	// needed then must be reachable: |Vgs| = |Vto| - 1/(2 beta r) <= vPeak/2
@@ -381,7 +382,8 @@ function agcSeries({ amplitude, legBalance, rdsOn, rChannelMin, vto, beta, diode
 	const rBalanceTarget = Math.max(rChannelMin, Math.min(0.1 * legBalance, 0.9 * rMax));
 	const rSeriesTarget = legBalance - rBalanceTarget;
 	const fits = (v) => legBalance - v >= rChannelMin && legBalance - v <= 0.95 * rMax;
-	for (const series of [resistorSeries, 'E96']) {
+	// a list of parts on hand has no E96 to fall back on
+	for (const series of Array.isArray(resistorSeries) ? [resistorSeries] : [resistorSeries, 'E96']) {
 		const around = [0.8, 0.85, 0.9, 0.93, 0.95, 0.97, 1, 1.03, 1.05, 1.1].map((f) => nearestResistor(rSeriesTarget * f, series));
 		const usable = [...new Set(around)].filter(fits).sort((a, b) => Math.abs(a - rSeriesTarget) - Math.abs(b - rSeriesTarget));
 		if (usable.length) return { rSeries: usable[0], rSeriesTarget, rBalanceTarget, vPeak, drop, rMax };
@@ -398,7 +400,10 @@ export function sizeAgc({ rf, gBalance, amplitude, jfet, diode, resistorSeries =
 	// 3 % of the leg. The smallest output whose detector can squeeze the
 	// channel that far is the least amplitude this JFET can hold.
 	const rChannelMin = rdsOn + 0.03 * legBalance;
-	const common = { legBalance, rdsOn, rChannelMin, vto, beta, diode, resistorSeries };
+	// the detector's bleed and the gate's averaging resistors: 1 M, or what the stock has nearest
+	const rb = nearestResistor(AGC_RB, resistorSeries);
+	const rx = nearestResistor(AGC_RX, resistorSeries);
+	const common = { legBalance, rdsOn, rChannelMin, vto, beta, diode, resistorSeries, rb };
 	const pick = agcSeries({ amplitude, ...common });
 	if (pick.rSeries === null) {
 		// just above the bare minimum no standard resistor may fit yet: the
@@ -419,8 +424,6 @@ export function sizeAgc({ rf, gBalance, amplitude, jfet, diode, resistorSeries =
 	// resistor: the divider is sized for this one, not for the target
 	const rBalance = legBalance - rSeries;
 	const vgsNeeded = vto + 1 / (2 * beta * rBalance);
-	const rb = AGC_RB;
-	const rx = AGC_RX;
 	// Ra from the detector model: the gate this amplitude produces through
 	// Ra, Rb and the averaging resistors must be the gate needed. The gate
 	// shrinks as Ra grows, so a bisection finds it.

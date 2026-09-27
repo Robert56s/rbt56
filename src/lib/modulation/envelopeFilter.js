@@ -4,10 +4,11 @@ import { designSallenKeyLowPass } from './sallenKeyLowPass';
 /**
  * Envelope-recovery low-pass filter after the rectifier: same Butterworth /
  * Chebyshev order search as the active-filter-design tool, low-pass only,
- * cascaded unity-gain Sallen-Key stages. fp is the passband edge (just
- * above the highest modulating frequency to recover) and fs is the
- * stopband edge (the residual carrier ripple frequency - fp_carrier for a
- * half-wave rectifier, 2*fp_carrier for a full-wave one).
+ * cascaded unity-gain Sallen-Key stages. fp is the passband edge (the
+ * highest modulating frequency to recover) and fs is the stopband edge: the
+ * ripple frequency (fp_carrier for a half-wave rectifier, 2 fp_carrier for a
+ * full-wave one) minus fp, since the ripple carries the message as
+ * sidebands and the nearest one sits there.
  *
  * omega_c is 2*pi*fp scaled by the same Butterworth factor as the filter
  * tool (see cutoffScale in filter/stages.js): the pole circle sits at
@@ -17,9 +18,9 @@ import { designSallenKeyLowPass } from './sallenKeyLowPass';
  * already normalized to the ripple edge, so its factor is 1.
  *
  * The stages have unity gain at DC, so an even-order Chebyshev, whose DC
- * sits in a ripple valley, peaks at +Amax: its stopband is sized Amin
- * below that peak, which is Amin + Amax below DC (aminSized), so the ripple
- * ends up at least Amin under every part of the message. An order past
+ * sits in a ripple valley, peaks at +Amax. Its order is sized for
+ * Amin + Amax under that peak (aminSized), which is Amin under DC, so the
+ * ripple ends up at least Amin under every part of the message. An order past
  * maxOrder is only reported (tooHigh), with no stages built.
  */
 export function designEnvelopeLowPass({ response, amaxDb, aminDb, fp, fs, order, resistorSeries = 'E24', capacitors = null, maxOrder = Infinity }) {

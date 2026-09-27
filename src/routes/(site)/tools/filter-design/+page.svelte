@@ -87,6 +87,10 @@
 	let responseHp = $state('butterworth');
 	let responseLp = $state('butterworth');
 	let topology = $state('mfb');
+	// a band-pass or band-stop has one topology per side too, so a side with
+	// zeros can be Tow-Thomas while the other stays MFB or Sallen-Key
+	let topologyHp = $state('mfb');
+	let topologyLp = $state('mfb');
 	const RESPONSE_KEYS = ['butterworth', 'chebyshev', 'legendre', 'bessel', 'inverseChebyshev', 'elliptic'];
 
 	// Which values the component search is allowed to pick from: a preferred
@@ -96,12 +100,12 @@
 	// setting is the site's (src/lib/stock.js): the AM tool shares it, and it
 	// is kept in this browser.
 	const initialStock = defaultStock();
-	let stock = $state(initialStock.stock); // 'E24' | 'E96' | 'lab' | 'custom'
+	let stock = $state(initialStock.stock); // 'E24' | 'E96' | 'lab' | 'labR' | 'custom'
 	let resistorText = $state(initialStock.resistorText);
 	let capacitorText = $state(initialStock.capacitorText);
 	let stockLoaded = $state(false);
 	const restrictedStock = $derived(isRestricted(stock));
-	const stockPhrase = $derived(stock === 'E96' ? 'the E96 series' : stock === 'lab' ? 'the lab kit' : stock === 'custom' ? 'the list on hand' : 'the E24 series');
+	const stockPhrase = $derived(stock === 'E96' ? 'the E96 series' : stock === 'lab' ? 'the lab kit' : stock === 'labR' ? 'the lab resistors' : stock === 'custom' ? 'the list on hand' : 'the E24 series');
 	const componentOpts = $derived(componentOptions(stock, resistorText, capacitorText));
 	const combinerR = $derived(restrictedStock ? nearestResistor(SUMMING_R, componentOpts.resistorSeries) : SUMMING_R);
 
@@ -150,11 +154,15 @@
 			fsl = 3000;
 			fsh = 10000;
 		}
-		// entering a band type starts both sides on the response already chosen
+		// entering a band type starts both sides on the response and the
+		// topology already chosen
 		if (filterType === 'bandpass' || filterType === 'bandstop') {
 			const single = untrack(() => response);
 			responseHp = single;
 			responseLp = single;
+			const wiring = untrack(() => topology);
+			topologyHp = wiring;
+			topologyLp = wiring;
 		}
 	});
 
@@ -188,12 +196,26 @@
 
 	const isBandType = $derived(filterType === 'bandpass' || filterType === 'bandstop');
 	// Inverse Chebyshev and Elliptic put zeros in the stopband, and only the
-	// Tow-Thomas biquad builds a stage with zeros (its notch form), so with
-	// either one the whole filter is Tow-Thomas: nothing is designed until
-	// the Topology menu says so too
+	// Tow-Thomas biquad builds a stage with zeros (its notch form), so a
+	// filter, or a side of a band filter, with either one is Tow-Thomas:
+	// nothing is designed until its Topology menu says so too
 	const zeroResponses = $derived([...new Set(isBandType ? [responseHp, responseLp] : [response])].filter((r) => RESPONSES[r]?.zeros));
 	const needsTowThomas = $derived(zeroResponses.length > 0);
-	const topologyBlocked = $derived(needsTowThomas && topology !== 'towThomas');
+	const zerosHp = $derived(isBandType && !!RESPONSES[responseHp]?.zeros);
+	const zerosLp = $derived(isBandType && !!RESPONSES[responseLp]?.zeros);
+	/** The topology a stage of this side uses: 'highpass' or 'lowpass' side of a band filter, or the one menu. */
+	const topologyFor = (side) => (isBandType ? (side === 'highpass' ? topologyHp : topologyLp) : topology);
+	// the sides still waiting for Tow-Thomas, by name
+	const blockedSides = $derived(
+		isBandType
+			? [zerosHp && topologyHp !== 'towThomas' ? 'high-pass' : null, zerosLp && topologyLp !== 'towThomas' ? 'low-pass' : null].filter(Boolean)
+			: needsTowThomas && topology !== 'towThomas'
+				? ['filter']
+				: []
+	);
+	const topologyBlocked = $derived(blockedSides.length > 0);
+	const usesTopology = (t) => (isBandType ? topologyHp === t || topologyLp === t : topology === t);
+	const TOPOLOGY_WORD = { mfb: 'multiple feedback', sallenKey: 'Sallen-Key', towThomas: 'Tow-Thomas biquad' };
 	const zeroResponsesText = $derived(
 		zeroResponses.length > 1
 			? `${zeroResponses.map((r) => RESPONSES[r].short ?? RESPONSES[r].label).join(' and ')} responses put`
@@ -299,6 +321,7 @@
 			return designTowThomasNotch(stage.wn, stage.q, stage.wz, notchOpts);
 		}
 
+		const wiring = topologyFor(stage.filterType);
 		if (stage.filterType === 'highpass') {
 			if (stage.order === 1) {
 				if (ov?.C > 0) {
@@ -307,14 +330,14 @@
 				}
 				return designFirstOrderHighPass(stage.tau, opts);
 			}
-			if (topology === 'towThomas') {
+			if (wiring === 'towThomas') {
 				if (ov?.C > 0) {
 					const r = designTowThomasHighPassFromCap(stage.wn, stage.q, ov.C * 1e-9, opts);
 					if (r.ok) return r;
 				}
 				return designTowThomasHighPass(stage.wn, stage.q, opts);
 			}
-			if (topology === 'sallenKey') {
+			if (wiring === 'sallenKey') {
 				if (ov?.C > 0) {
 					const r = designSallenKeyHighPassFromCap(stage.wn, stage.q, ov.C * 1e-9, opts);
 					if (r.ok) return r;
@@ -336,14 +359,14 @@
 			return designFirstOrderLowPass(stage.tau, opts);
 		}
 
-		if (topology === 'towThomas') {
+		if (wiring === 'towThomas') {
 			if (ov?.C > 0) {
 				const r = designTowThomasLowPassFromCap(stage.wn, stage.q, ov.C * 1e-9, opts);
 				if (r.ok) return r;
 			}
 			return designTowThomasLowPass(stage.wn, stage.q, opts);
 		}
-		if (topology === 'sallenKey') {
+		if (wiring === 'sallenKey') {
 			const auto = designSallenKeyLowPass(stage.wn, stage.q, opts);
 			if (ov?.Ctop > 0 || ov?.Cbottom > 0) {
 				const Ctop = ov?.Ctop > 0 ? ov.Ctop * 1e-9 : auto.components.Ctop;
@@ -387,7 +410,7 @@
 	const missCause = $derived(
 		(Object.keys(capOverrides).length > 0
 			? 'check the capacitor overrides above'
-			: topology === 'sallenKey'
+			: usesTopology('sallenKey')
 				? "a Sallen-Key stage's capacitor ratio lands on the coarse E12 grid, which moves its Q"
 				: 'the rounding of a sharp stage adds up') + (stock === 'E24' ? ', and the E96 series narrows it' : '')
 	);
@@ -597,6 +620,8 @@
 			responseHp,
 			responseLp,
 			topology,
+			topologyHp,
+			topologyLp,
 			order,
 			orderHp,
 			orderLp,
@@ -628,7 +653,9 @@
 			fh,
 			fsl,
 			fsh,
-			topology,
+			topology: isBandType ? (topologyHp === topologyLp ? topologyHp : null) : topology,
+			topologyHp: isBandType ? topologyHp : null,
+			topologyLp: isBandType ? topologyLp : null,
 			lpCount: filterType === 'bandstop' ? design.lp.stages.length : 0,
 			combinerMode,
 			combinerR: combinerR,
@@ -769,14 +796,33 @@
 					</select>
 				</div>
 			{/if}
-			<div class="field">
-				<label for="topology">Topology</label>
-				<select id="topology" bind:value={topology}>
-					<option value="mfb" disabled={needsTowThomas}>Multiple feedback (MFB)</option>
-					<option value="sallenKey" disabled={needsTowThomas}>Sallen-Key (unity gain)</option>
-					<option value="towThomas">Tow-Thomas (3 op-amps)</option>
-				</select>
-			</div>
+			{#if isBandType}
+				<div class="field">
+					<label for="topologyHp">Topology, high-pass {filterType === 'bandstop' ? 'branch' : 'side'}</label>
+					<select id="topologyHp" bind:value={topologyHp}>
+						<option value="mfb" disabled={zerosHp}>Multiple feedback (MFB)</option>
+						<option value="sallenKey" disabled={zerosHp}>Sallen-Key (unity gain)</option>
+						<option value="towThomas">Tow-Thomas (3 op-amps)</option>
+					</select>
+				</div>
+				<div class="field">
+					<label for="topologyLp">Topology, low-pass {filterType === 'bandstop' ? 'branch' : 'side'}</label>
+					<select id="topologyLp" bind:value={topologyLp}>
+						<option value="mfb" disabled={zerosLp}>Multiple feedback (MFB)</option>
+						<option value="sallenKey" disabled={zerosLp}>Sallen-Key (unity gain)</option>
+						<option value="towThomas">Tow-Thomas (3 op-amps)</option>
+					</select>
+				</div>
+			{:else}
+				<div class="field">
+					<label for="topology">Topology</label>
+					<select id="topology" bind:value={topology}>
+						<option value="mfb" disabled={needsTowThomas}>Multiple feedback (MFB)</option>
+						<option value="sallenKey" disabled={needsTowThomas}>Sallen-Key (unity gain)</option>
+						<option value="towThomas">Tow-Thomas (3 op-amps)</option>
+					</select>
+				</div>
+			{/if}
 		</div>
 
 		<p class="note">
@@ -807,15 +853,26 @@
 			{/if}
 			{#if needsTowThomas && !topologyBlocked}
 				{zeroResponsesText} zeros in the stopband, and the Tow-Thomas biquad is the only wiring here that can
-				build a stage with zeros (its notch form), so every second-order stage is a Tow-Thomas{isBandType ? ', on both sides' : ''};
-				an odd order adds one first-order RC stage.
+				build a stage with zeros (its notch form), so every second-order stage {isBandType
+					? zerosHp && zerosLp
+						? 'is a Tow-Thomas, on both sides'
+						: `of the ${zerosHp ? 'high' : 'low'}-pass ${filterType === 'bandstop' ? 'branch' : 'side'} is a Tow-Thomas, while the other ${filterType === 'bandstop' ? 'branch' : 'side'} keeps its own topology`
+					: 'is a Tow-Thomas'}; an odd order adds one first-order RC stage.
 			{/if}
 		</p>
 
 		{#if topologyBlocked}
 			<p class="flag bad">
-				{zeroResponses.map((r) => RESPONSES[r].short ?? RESPONSES[r].label).join(' and ')} can only be built with
-				Tow-Thomas stages: select Tow-Thomas (3 op-amps) in Topology to continue.
+				{#if isBandType}
+					{#each blockedSides as side (side)}
+						The {side} {filterType === 'bandstop' ? 'branch' : 'side'} is {RESPONSES[side === 'high-pass' ? responseHp : responseLp].short ??
+							RESPONSES[side === 'high-pass' ? responseHp : responseLp].label}, which can only be built with Tow-Thomas stages: select Tow-Thomas
+						(3 op-amps) in its Topology menu to continue.
+					{/each}
+				{:else}
+					{zeroResponses.map((r) => RESPONSES[r].short ?? RESPONSES[r].label).join(' and ')} can only be built with
+					Tow-Thomas stages: select Tow-Thomas (3 op-amps) in Topology to continue.
+				{/if}
 			</p>
 		{/if}
 
@@ -843,7 +900,7 @@
 		blocks={filterBasics({
 			filterType,
 			response: isBandType ? responseLp : response,
-			topology,
+			topology: isBandType ? topologyLp : topology,
 			order: isBandType ? (orderLp ?? 0) + (orderHp ?? 0) : order,
 			stages: realizedStages.length,
 			fp,
@@ -1179,7 +1236,9 @@
 					<span class="num">04</span>
 					<h2>Components</h2>
 					<span class="hint">
-						{topology === 'mfb' ? 'multiple feedback' : topology === 'sallenKey' ? 'Sallen-Key' : 'Tow-Thomas biquad'}{filterType === 'highpass'
+						{isBandType && topologyHp !== topologyLp
+							? `${TOPOLOGY_WORD[topologyHp]} high-pass, ${TOPOLOGY_WORD[topologyLp]} low-pass`
+							: TOPOLOGY_WORD[isBandType ? topologyLp : topology]}{filterType === 'highpass'
 							? ', high-pass'
 							: filterType === 'bandpass'
 								? ', band-pass'
@@ -1193,7 +1252,7 @@
 
 				{#if restrictedStock}
 					<p class="note">
-						The search now rounds to those values only, so the f0 and Q error columns below grow.
+						The search now rounds {stock === 'labR' ? 'every resistor to the lab resistors, the capacitors staying on the usual series,' : 'to those values only,'} so the f0 and Q error columns below grow.
 						Everything downstream is computed from the rounded values, so the Bode plot and the
 						spec check at the end already show whether the result still meets the spec.
 					</p>
@@ -1208,11 +1267,14 @@
 					</p>
 				{/if}
 
-				{#if topology === 'sallenKey'}
+				{#if usesTopology('sallenKey')}
 					<p class="flag warn">
 						{#if isBandType}
-							Sallen-Key needs a component ratio of 4·Q² on each stage: a capacitor ratio on the
-							low-pass side, a resistor ratio on the high-pass side. Either way, component
+							Sallen-Key needs a component ratio of 4·Q² on each of its stages: {topologyHp === 'sallenKey' && topologyLp === 'sallenKey'
+								? 'a capacitor ratio on the low-pass side, a resistor ratio on the high-pass side'
+								: topologyHp === 'sallenKey'
+									? 'a resistor ratio, on the high-pass side'
+									: 'a capacitor ratio, on the low-pass side'}. Either way, component
 							tolerance barely moves Q for this topology (S^Q ≈ 0 at the equal-R or equal-C design
 							point) - the real limit is the ratio itself getting impractically large. Past a Q of
 							about 5 this gets impractical. MFB is the safer default for higher orders.
@@ -1229,7 +1291,8 @@
 							5 this gets impractical. MFB is the safer default for higher orders.
 						{/if}
 					</p>
-				{:else if topology === 'towThomas'}
+				{/if}
+				{#if usesTopology('towThomas')}
 					<p class="note">
 						Tow-Thomas: three op-amps per second-order stage (a damped integrator, an integrator and an
 						inverter in a loop). f0, Q and gain are each set by one part, any Q is buildable with equal

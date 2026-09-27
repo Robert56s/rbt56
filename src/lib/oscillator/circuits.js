@@ -557,13 +557,14 @@ export function buildLimiterDiagram(design) {
 		D2.svg,
 		net.svg(),
 		net.dots(portPoints(R1, R2, D1, D2)),
-		label(design.topology === 'wien' ? 'from Vout' : 'from the - input', left.x, rail - 16, { anchor: 'start' }),
-		label(design.topology === 'wien' ? 'to the - input' : 'to Vout', right.x + 8, rail + 4, { anchor: 'start' }),
+		label('from Vout', left.x, rail - 16, { anchor: 'start' }),
+		label('to the - input', right.x + 8, rail + 4, { anchor: 'start' }),
 		label(`Rf1 ${formatOhms(rf1)}`, R1.ports['1'].x, rail + 26, { anchor: 'start' }),
 		label(`Rf2 ${formatOhms(rf2)}`, R2.ports['1'].x, rail + 26, { anchor: 'start' }),
 		label(limiter.amplitudeActual === null ? 'cannot regulate with these parts' : `settles at about ${limiter.amplitudeActual.toFixed(2)} V peak`, D2.ports['2'].x - 30, dnY + 34, { anchor: 'start', cls: 'lbl note' })
 	];
-	return { svg: all.join(''), viewBox: `0 ${upY - 60} ${right.x + 60} ${dnY + 80 - (upY - 60)}` };
+	// wide enough for the right-hand label, 'to the - input'
+	return { svg: all.join(''), viewBox: `0 ${upY - 60} ${right.x + 8 + Math.ceil(6.6 * 'to the - input'.length) + 20} ${dnY + 80 - (upY - 60)}` };
 }
 
 /** Picks the right drawing for a design. */

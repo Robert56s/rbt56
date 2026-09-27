@@ -373,7 +373,7 @@ function feedingTheGate({ design, carrierFrom, oscillatorOk, fp }) {
 	const sm = design?.conditioning?.summer;
 	const drive =
 		design && all(design.conditioning?.sourceAmplitude, design.vgsPeakSwing, sm?.biasActual, design.conditioning?.fmMin)
-			? `It scales the message from its ${volts(design.conditioning.sourceAmplitude)} source to a ${volts(design.vgsPeakSwing)} swing, adds the ${volts(sm.biasActual)} bias from the supply, and blocks any offset the source might carry with a capacitor sized so that the lowest message frequency, ${hz(design.conditioning.fmMin)}, still passes.`
+			? `It scales the message from its ${volts(design.conditioning.sourceAmplitude)} source to a ${volts(design.vgsPeakSwing)} swing, adds the ${volts(sm.biasActual)} bias from the supply, and blocks any offset the source might carry ${sm.fcOk === false ? `with a capacitor; the one on hand still takes ${sm.fcLossDb.toFixed(1)} dB off the lowest message frequency, ${hz(design.conditioning.fmMin)}.` : `with a capacitor sized so that the lowest message frequency, ${hz(design.conditioning.fmMin)}, still passes.`}`
 			: 'It scales the message, adds a negative bias from the supply, and blocks any offset the source might carry with a capacitor sized so that the lowest message frequency still passes.';
 	const c = design?.carrier;
 	const known = c && all(c.ac, c.sourceAmplitude, c.divider?.top, c.divider?.bottom);
@@ -645,7 +645,7 @@ function realDetector(ctx) {
 	const { fp, fm, rectifierType, envelopeDesign: ed, amaxDb, aminDb } = ctx;
 	const full = rectifierType !== 'half';
 	const ripple = rippleOf(ctx);
-	const r = designPrecisionRectifier().r1;
+	const r = ctx.rectifierR ?? designPrecisionRectifier().r1;
 	const first = full
 		? `Two upgrades turn the sketch into the circuit on the page. A plain diode loses the first 0.7 V or so of every crest and mangles small signals. Putting the diodes inside an op-amp's feedback makes the amplifier correct for their drop: the precision full-wave rectifier of the rectifier panel, two op-amps and three equal ${ohms(r)} resistors.`
 		: "One upgrade turns the sketch into the circuit on the page, and it is in the filter. A plain diode loses the first 0.7 V or so of every crest and mangles small signals. The half-wave choice keeps that single diode anyway: cheaper, and good enough while the signal stays large next to its drop. The full-wave choice would put the diodes inside an op-amp's feedback, where the amplifier corrects for their drop.";
@@ -654,7 +654,7 @@ function realDetector(ctx) {
 		'The smoothing RC becomes a designed low-pass, built with the same method as the Active Filter Design tool. ' +
 		(specKnown(ctx, ripple) ? '' : 'A decibel is a ratio: 20 dB for each factor of ten in voltage. ') +
 		(spec
-			? `The message band up to ${hz(fm)} is the passband, allowed to vary by Amax = ${sig(amaxDb)} dB. The ripple at ${hz(ripple)} is the stopband, to be cut by at least Amin = ${sig(aminDb)} dB.`
+			? `The message band up to ${hz(fm)} is the passband, allowed to vary by Amax = ${sig(amaxDb)} dB. The ripple at ${hz(ripple)} carries the message too, so its nearest sideband, at ${hz(ripple - fm)}, is where the stopband starts, to be cut by at least Amin = ${sig(aminDb)} dB.`
 			: 'The message band is the passband, allowed to vary by Amax. The ripple is the stopband, to be cut by at least Amin.');
 	let third = 'The tool finds the smallest order that meets both, and the preview draws the recovered message at the index set on the page.';
 	if (ed && fin(ed.n) && Array.isArray(ed.realized)) {
@@ -716,6 +716,7 @@ export function modulationBasics({
 	carrierFrom = 'source',
 	oscillatorOk = true,
 	rectifierType = 'full',
+	rectifierR = null,
 	design = null,
 	jfetModel = null,
 	swingFraction,
@@ -731,7 +732,7 @@ export function modulationBasics({
 	amaxDb,
 	aminDb
 } = {}) {
-	const ctx = { mode, topology, carrierFrom, oscillatorOk, rectifierType, design, jfetModel, swingFraction, targetN, fp, fm, diodeDesign, carrierAmp, modAmp, envelopeDesign, demoModIndex, rippleHz, amaxDb, aminDb };
+	const ctx = { mode, topology, carrierFrom, oscillatorOk, rectifierType, rectifierR, design, jfetModel, swingFraction, targetN, fp, fm, diodeDesign, carrierAmp, modAmp, envelopeDesign, demoModIndex, rippleHz, amaxDb, aminDb };
 	const common = [hook(ctx), ...noteOnAScope(ctx), ...carrierCopies(ctx), ...formulaSection(ctx), ...readingN(ctx), ...whereItWent(ctx)];
 	let circuit;
 	if (mode === 'diode') circuit = [...diodeBend(ctx), ...tankSection(ctx), ...diodeNumbers(ctx), ...diodeRest()];

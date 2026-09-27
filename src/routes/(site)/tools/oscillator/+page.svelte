@@ -1,4 +1,5 @@
 <script>
+	import { onMount } from 'svelte';
 	import BasicsPanel from '$lib/components/BasicsPanel.svelte';
 	import LoopDemo from '$lib/components/basics/LoopDemo.svelte';
 	import NetworkDemo from '$lib/components/basics/NetworkDemo.svelte';
@@ -7,6 +8,7 @@
 	import DiagramView from '$lib/components/DiagramView.svelte';
 	import MathPanel from '$lib/components/MathPanel.svelte';
 	import OpampPicker from '$lib/components/OpampPicker.svelte';
+	import StockPicker from '$lib/components/StockPicker.svelte';
 	import { formatFarads, formatHz, formatOhms, formatVolts } from '$lib/modulation/format';
 	import { oscillatorBasics } from '$lib/oscillator/basics';
 	import { buildAgcDiagram, buildClampDiagram, buildLimiterDiagram, buildOscillatorDiagram, hasLimiterDiagram } from '$lib/oscillator/circuits';
@@ -15,6 +17,7 @@
 	import { generateNetlist, generateSchematic } from '$lib/oscillator/spice';
 	import { DEFAULT_OPAMP, OPAMP_MODELS } from '$lib/spice/opamps';
 	import { compareOscillators, designOscillator, STABILIZERS, TOPOLOGIES } from '$lib/oscillator/topologies';
+	import { componentOptions, defaultStock, isRestricted, loadStock, saveStock } from '$lib/stock';
 
 	let topology = $state('wien');
 	// the op-amp the LTspice files use: the ideal single-pole model, or a
@@ -31,6 +34,30 @@
 	let slewRateVus = $state(13);
 	let opampSwing = $state(10.5);
 
+	// Which values every resistor and capacitor is rounded to: a series, the
+	// lab drawer or the user's own list, the same setting as the filter and
+	// AM tools (src/lib/stock.js), kept in this browser
+	const initialStock = defaultStock();
+	let stock = $state(initialStock.stock);
+	let resistorText = $state(initialStock.resistorText);
+	let capacitorText = $state(initialStock.capacitorText);
+	let stockLoaded = $state(false);
+	const parts = $derived(componentOptions(stock, resistorText, capacitorText));
+	const restricted = $derived(isRestricted(stock));
+	onMount(() => {
+		const saved = loadStock();
+		if (saved) {
+			if (saved.stock) stock = saved.stock;
+			if (saved.resistorText !== undefined) resistorText = saved.resistorText;
+			if (saved.capacitorText !== undefined) capacitorText = saved.capacitorText;
+		}
+		stockLoaded = true;
+	});
+	$effect(() => {
+		const state = { stock, resistorText, capacitorText };
+		if (stockLoaded) saveStock(state);
+	});
+
 	const valid = $derived(frequency > 0 && amplitude > 0 && gbwMhz > 0 && slewRateVus > 0 && opampSwing > 0 && excessPercent > 0 && quadGrowthPercent > 0);
 	const params = $derived({
 		frequency,
@@ -42,9 +69,21 @@
 		quadGrowth: quadGrowthPercent / 100,
 		gbw: gbwMhz * 1e6,
 		slewRate: slewRateVus * 1e6,
-		opampSwing
+		opampSwing,
+		...parts
 	});
-	const design = $derived(valid ? designOscillator({ ...params, topology }) : null);
+	// a restricted stock that cannot build this oscillator, or builds one
+	// that does not start or hold its amplitude, falls back to E24 and the
+	// usual capacitors, flagged, rather than showing nothing
+	const design = $derived.by(() => {
+		if (!valid) return null;
+		const own = designOscillator({ ...params, topology });
+		if (!restricted || (own && own.starts && own.limiter.regulates !== false)) return own;
+		const fallback = designOscillator({ ...params, topology, resistorSeries: 'E24', capacitors: null });
+		if (!fallback) return own;
+		if (own && !(fallback.starts && fallback.limiter.regulates !== false)) return own;
+		return { ...fallback, stockShortfall: true };
+	});
 	const rows = $derived(valid ? compareOscillators(params) : []);
 	const wienRow = $derived(rows.find((r) => r.id === 'wien'));
 	const currentRow = $derived(rows.find((r) => r.id === topology));
@@ -174,6 +213,19 @@
 				<input id="swing" type="number" min="0.5" step="0.5" bind:value={opampSwing} />
 			</div>
 		</div>
+		<StockPicker id="stock" bind:stock bind:resistorText bind:capacitorText />
+		{#if restricted}
+			<p class="note">
+				{stock === 'labR' ? 'Every resistor below is rounded to the lab resistors, the capacitors to the usual values,' : 'Every resistor and capacitor below is rounded to those values only,'} and the loop is
+				solved again with the rounded parts, so the frequency and amplitude shown are what they give.
+			</p>
+		{/if}
+		{#if design?.stockShortfall}
+			<p class="flag warn">
+				The parts on hand cannot build this oscillator so that it starts and holds its amplitude, so it is shown with E24
+				resistors and E6 capacitors instead. Add values near the ones below, or pick another topology.
+			</p>
+		{/if}
 		<p class="note">{TOPOLOGIES.find((t) => t.id === topology)?.summary}</p>
 		{#if !valid}
 			<p class="flag bad">Frequency, amplitude, the excess gain and the op-amp figures all have to be positive.</p>
@@ -444,7 +496,7 @@
 					With JFET control the Wien bridge needs at least {formatVolts(currentRow.jfetMinAmplitude)} peak; at this amplitude diode limiting or
 					the lamp holds it.
 				</p>
-			{:else if currentRow && !currentRow.starts}
+			{:else if currentRow && !currentRow.starts && !design?.stockShortfall}
 				<p class="flag warn">
 					The topology selected above does not start with this op-amp at this frequency. The table shows which ones do.
 				</p>

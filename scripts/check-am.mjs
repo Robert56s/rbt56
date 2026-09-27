@@ -584,7 +584,7 @@ check('carrier: peak current is Ac times the largest conductance', near(d.carrie
 	const { LAB_KIT } = await import('../src/lib/filter/eseries.js');
 	const { componentOptions } = await import('../src/lib/stock.js');
 	const custom = componentOptions('custom', '1k, 2.2k, 4.7k, 10k, 22k, 47k, 100k, 220k, 470k, 1M', '1n, 10n, 100n, 470n');
-	const stocks = { lab: { resistorSeries: LAB_KIT.resistors, capacitors: LAB_KIT.capacitors }, custom };
+	const stocks = { lab: componentOptions('lab'), labR: componentOptions('labR'), custom };
 	const inList = (v, list) => list.some((x) => Math.abs(x / v - 1) < 1e-9);
 	for (const [name, parts] of Object.entries(stocks)) {
 		const R = parts.resistorSeries;
@@ -593,15 +593,16 @@ check('carrier: peak current is Ac times the largest conductance', near(d.carrie
 		const rOk = (label, v) => {
 			if (v !== null && v !== undefined && v !== 0 && !inList(v, R)) bad.push(`${label} ${v}`);
 		};
+		// the lab resistors come with every standard capacitor: only the resistors are checked then
 		const cOk = (label, v) => {
-			if (v && !inList(v, C)) bad.push(`${label} ${v}`);
+			if (v && C && !inList(v, C)) bad.push(`${label} ${v}`);
 		};
 		for (const topology of ['noninverting', 'inverting']) {
 			const d = designJfetModulator({ ...base, topology, ...parts });
 			// a 1-2.2-4.7 list has no gate-drive gain near 1.8 that keeps the channel open:
 			// no design there, which the page says; the lab drawer has to build both cells
 			if (!d) {
-				if (name === 'lab') bad.push(`jfet ${topology}: no design`);
+				if (name !== 'custom') bad.push(`jfet ${topology}: no design`);
 				continue;
 			}
 			const sm = d.conditioning.summer;
@@ -656,6 +657,25 @@ check('carrier: peak current is Ac times the largest conductance', near(d.carrie
 	const cheb = designEnvelopeLowPass({ response: 'chebyshev', amaxDb: 3, aminDb: 40, fp: 1000, fs: 7200, order: null });
 	const { envelopeGainDb } = await import('../src/lib/modulation/envelopeFilter.js');
 	check('envelope: an even-order Chebyshev keeps the ripple Amin under DC, not just under its peak', -envelopeGainDb(cheb, 7200) >= 40 - 0.5, `${(-envelopeGainDb(cheb, 7200)).toFixed(1)} dB at fs, order ${cheb.n}`);
+}
+
+/* ------------------------ odd lists never crash the diode design, and misses are flagged */
+{
+	const { componentOptions } = await import('../src/lib/stock.js');
+	const results = [];
+	let threw = 0;
+	for (const r of ['1, 2.2, 4.7', '5', '8.2', '1k 10k 100k 1M', '10k', '330 3.3k 33k 330k']) {
+		const parts = componentOptions('custom', r, '1n 10n 100n');
+		try {
+			const d = designDiodeMixerModulator({ fp: 40000, fmMax: 1000, resistorSeries: parts.resistorSeries, capacitors: parts.capacitors });
+			results.push(d === null || (Number.isFinite(d.modulationIndex) && typeof d.indexOk === 'boolean'));
+		} catch {
+			threw++;
+		}
+	}
+	check('stock: sparse or tiny resistor lists give a diode design or none, never a crash or NaN, with indexOk set', threw === 0 && results.every(Boolean), `${threw} crashes`);
+	const off = designDiodeMixerModulator({ fp: 40000, fmMax: 1000, ...componentOptions('custom', '1k 10k 100k 1M', '1n 10n 100n') });
+	check('stock: an index the parts cannot reach is flagged (indexOk false)', off && off.indexOk === false && designDiodeMixerModulator({ fp: 40000, fmMax: 1000 }).indexOk === true, off && off.modulationIndex.toFixed(3));
 }
 
 console.log(fails === 0 ? 'am checks clean' : `${fails} failure(s)`);

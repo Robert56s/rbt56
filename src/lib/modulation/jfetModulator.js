@@ -27,10 +27,16 @@ export function channelConductance(vgs, vp, idss) {
 	return (2 * idss * (vgs - vp)) / (vp * vp);
 }
 
-/** Usual values for the summer's coupling capacitor, when no list of capacitors on hand is given. */
+/**
+ * The summer's coupling capacitor: the nearest usual value, or from a list
+ * of capacitors on hand the smallest that reaches the corner (a larger C
+ * only lowers it), the largest when none does.
+ */
 const CAP_STOCK = [1e-5, 4.7e-6, 2.2e-6, 1e-6, 4.7e-7, 2.2e-7, 1e-7, 4.7e-8, 2.2e-8, 1e-8, 4.7e-9, 2.2e-9, 1e-9];
 function nearestCap(target, capacitors) {
-	return nearestValue(target, Array.isArray(capacitors) ? stockList(capacitors) : CAP_STOCK);
+	if (!Array.isArray(capacitors)) return nearestValue(target, CAP_STOCK);
+	const list = stockList(capacitors);
+	return list.find((v) => v >= target * (1 - 1e-9)) ?? list[list.length - 1];
 }
 
 /**
@@ -131,7 +137,8 @@ export function designJfetModulator({
 	gbw = 3e6,
 	slewRate = 13e6,
 	resistorSeries = 'E24', // a series name, or a list of the resistors on hand (ohms)
-	capacitors = null // null for the usual values, or a list of the capacitors on hand (farads)
+	capacitors = null, // null for the usual values, or a list of the capacitors on hand (farads)
+	onFail = null // told why when no design comes back: 'pinchoff' or 'depth'
 } = {}) {
 	const m = model ?? modelFromIdss(vp, idss);
 	if (!m) return null;
@@ -194,7 +201,11 @@ export function designJfetModulator({
 	const vgsPeakSwing = gainActual * sourceAmplitude;
 	const vgsMin = vc - vgsPeakSwing; // closest to VP (largest R1)
 	const vgsMax = vc + vgsPeakSwing; // closest to 0 (smallest R1)
-	if (!(vgsMin > vp)) return null; // the swing would pinch the channel off
+	if (!(vgsMin > vp)) {
+		// the swing would pinch the channel off
+		onFail?.('pinchoff');
+		return null;
+	}
 
 	const r1AtCenter = 1 / G(vc); // = |VP| / IDSS when vc = VP/2
 	const r1Min = 1 / G(vgsMax);
@@ -246,7 +257,10 @@ export function designJfetModulator({
 		// from the rounded value, a little off the target
 		let rbActual = rb;
 		if (!(rbActual > 0)) {
-			if (!(targetModulationIndex > 0 && targetModulationIndex < gDepth)) return null;
+			if (!(targetModulationIndex > 0 && targetModulationIndex < gDepth)) {
+				onFail?.('depth');
+				return null;
+			}
 			xTarget = targetModulationIndex / (gDepth - targetModulationIndex);
 			feedbackTarget = xTarget * r1AtCenter;
 			rbActual = nearestResistor(feedbackTarget, stock);

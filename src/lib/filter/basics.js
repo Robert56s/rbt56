@@ -24,7 +24,7 @@
  *   bandStopBranches, combineSigns   band-stop only: the two branches and the combiner's signs
  *   attenuationAtFs, attenuationAtFp                  the flags under panel 05, low-pass and high-pass
  *   attenuationAtFsl, attenuationAtFsh, attenuationAtFl, attenuationAtFh   the same for the band types
- *   stock           'E24' | 'E96' | 'lab' | 'custom'
+ *   stock           'E24' | 'E96' | 'lab' | 'labR' | 'custom'
  */
 
 import { RESPONSES } from './approximations';
@@ -498,6 +498,7 @@ const ROUNDING = {
 	E24: 'fixes the capacitors from a short standard series, solves for the resistors, rounds each to the nearest E24 value',
 	E96: 'fixes the capacitors from a short standard series, solves for the resistors, rounds each to the nearest E96 value',
 	lab: 'fixes the capacitors from the lab kit, solves for the resistors, rounds each to the nearest value in the kit',
+	labR: 'fixes the capacitors from a short standard series, solves for the resistors, rounds each to the nearest lab resistor',
 	custom: 'fixes the capacitors from the pasted list, solves for the resistors, rounds each to the nearest value in that list'
 };
 

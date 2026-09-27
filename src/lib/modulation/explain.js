@@ -305,7 +305,11 @@ export function explainConditioningChain(design) {
 			`R_{bias} = \\dfrac{R_f\\,V_{cc}}{|V_C|} = \\dfrac{${formatOhms(s.rf)} \\times ${n1(vcc)}}{${n3(s.biasTarget)}} = ${formatOhms(s.rbiasTarget)} \\rightarrow \\text{${design.stockName ?? 'E24'}: } ${formatOhms(s.rbias)}, \\qquad V_{bias} = -\\dfrac{R_f}{R_{bias}}\\,V_{cc} = ${formatVolts(s.biasActual)}`
 		),
 		p(
-			`The capacitor in series with R_ac blocks any DC the source might carry, so the bias is set by R_bias alone. Seen from the source, C and R_ac form a high-pass whose corner is 1/(2 pi R_ac C), and since R_ac ends on a virtual ground nothing sits in parallel with it to move that corner. Putting it a decade below the lowest message frequency (${formatHz(fmMin)}) costs the message almost nothing: at f = 10 f_c the loss is 10 log(1 + 0.01) = 0.04 dB.`
+			`The capacitor in series with R_ac blocks any DC the source might carry, so the bias is set by R_bias alone. Seen from the source, C and R_ac form a high-pass whose corner is 1/(2 pi R_ac C), and since R_ac ends on a virtual ground nothing sits in parallel with it to move that corner. ${
+				s.fcOk === false
+					? `The target puts it a decade below the lowest message frequency (${formatHz(fmMin)}), where it would cost the message 0.04 dB; no capacitor on hand gets there, and at the ${formatHz(s.fcActual)} the one used gives, the lowest tone loses ${s.fcLossDb.toFixed(1)} dB.`
+					: `Putting it a decade below the lowest message frequency (${formatHz(fmMin)}) costs the message almost nothing: at f = 10 f_c the loss is 10 log(1 + 0.01) = 0.04 dB.`
+			}`
 		),
 		eq(
 			`f_c = \\dfrac{f_{m,min}}{10} = ${formatHz(s.fcTarget)} \\ \\Rightarrow\\ C = \\dfrac{1}{2\\pi R_{ac} f_c} = ${formatFarads(s.cTarget)} \\rightarrow ${formatFarads(s.c)}, \\qquad f_c\\text{ actual} = \\dfrac{1}{2\\pi R_{ac} C} = ${formatHz(s.fcActual)}`
@@ -533,7 +537,7 @@ export function explainDiodeModulator(design) {
 		),
 		eq(`A_{out} = ${formatVolts(carrierOut)}, \\qquad n = ${n3(modulationIndex)}\\ (\\text{target } ${n2(targetModulationIndex)}), \\qquad \\text{THD} = ${n2(100 * thd)}\\,\\%, \\qquad i_{max} = ${texCurrent(peakCurrent)}`),
 		p(
-			`The bias decides where the switch flips. Too little and the diode conducts for less than half a cycle, too much and for more; either bends the envelope. The page takes the bias with the least distortion at the target index, then the stock resistors: R_p and R_m set the two gains${s.rb ? ' and R_b, from -V_cc, sets the bias' : ', and no R_b: the best bias is next to nothing here, as it is for a Schottky diode'}.${Math.abs(modulationIndex - targetModulationIndex) > 0.005 ? ' The index lands a little off the target because the resistors are stock values.' : ''}`
+			`The bias decides where the switch flips. Too little and the diode conducts for less than half a cycle, too much and for more; either bends the envelope. The page takes the bias with the least distortion at the target index, then the stock resistors: R_p and R_m set the two gains${s.rb ? ' and R_b, from -V_cc, sets the bias' : ', and no R_b: the best bias is next to nothing here, as it is for a Schottky diode'}.${Math.abs(modulationIndex - targetModulationIndex) > 0.005 ? ` The index lands at ${n3(modulationIndex)} rather than the ${n3(targetModulationIndex)} asked, because the resistors are stock values.` : ''}`
 		),
 		...gains.map((tex) => eq(tex)),
 		head('The tank'),
@@ -570,7 +574,7 @@ export function explainDiodeModulator(design) {
 /* Demodulator: rectifier, then the envelope low-pass filter                 */
 /* ------------------------------------------------------------------------ */
 
-export function explainRectifier(type, fp = null) {
+export function explainRectifier(type, fp = null, r = 1000) {
 	const rippleNote = (mult) => (Number.isFinite(fp) ? ` = ${formatHz(mult * fp)}` : '');
 	if (type === 'half') {
 		return [
@@ -604,7 +608,7 @@ export function explainRectifier(type, fp = null) {
 			`The first group is the message (scaled by 2/π, with a constant added) and lives below f_m,max. The second group is centered on 2 f_p${rippleNote(2)} and above, far from the message. A low-pass filter that passes f_m,max and blocks 2 f_p separates them; that filter is designed in the next panel.`
 		),
 		p(
-			'A bare diode would subtract its forward drop (about 0.7 V) from every half cycle and distort small signals. The precision circuit puts the diodes inside op-amp feedback loops, so the op-amp supplies whatever voltage the diode needs and the output is the exact absolute value. Two op-amps (U1A, U1B), two diodes (D1, D2) and three equal resistors (R1 = R2 = R3: their ratio sets the gain, and their value how much the capacitance of the switched-off diode leaks at the carrier, which is why they are 1 k):'
+			`A bare diode would subtract its forward drop (about 0.7 V) from every half cycle and distort small signals. The precision circuit puts the diodes inside op-amp feedback loops, so the op-amp supplies whatever voltage the diode needs and the output is the exact absolute value. Two op-amps (U1A, U1B), two diodes (D1, D2) and three equal resistors (R1 = R2 = R3: their ratio sets the gain, and their value how much the capacitance of the switched-off diode leaks at the carrier, which is why they are ${r >= 1000 && r < 1001 ? '1 k' : `${formatOhms(r)}, the value on hand nearest the 1 k TI used`}):`
 		),
 		p(
 			'Positive input: U1A\'s output goes positive, D2 conducts and D1 is off. No current flows through R1 and R2, so U1B, fed on its + input through D2 and with no current in its feedback resistor, is a plain follower of U1A, and U1A itself is a follower of the input:'
@@ -625,14 +629,14 @@ export function explainEnvelopeFilter(design) {
 	const aminSized = design.aminSized ?? aminDb;
 	return [
 		p(
-			'After the rectifier the message sits below f_m,max and the unwanted ripple sits at the ripple frequency (2 f_p for full-wave, f_p for half-wave). The ripple is modulated by the message too, so it carries the message as sidebands, and its lowest one sits at the ripple frequency minus f_m,max: that is where the stopband has to start. Separating them is exactly the low-pass problem the Active Filter Design tool solves, so the same design is reused here, step by step. The spec: pass everything up to fp = f_m,max losing at most Amax dB, block everything from fs = the ripple frequency by at least Amin dB.'
+			'After the rectifier the message sits below f_m,max and the unwanted ripple sits at the ripple frequency (2 f_p for full-wave, f_p for half-wave). The ripple is modulated by the message too, so it carries the message as sidebands, and its lowest one sits at the ripple frequency minus f_m,max: that is where the stopband has to start. Separating them is exactly the low-pass problem the Active Filter Design tool solves, so the same design is reused here, step by step. The spec: pass everything up to fp = f_m,max losing at most Amax dB, block everything from fs = the ripple frequency minus f_m,max (its nearest sideband) by at least Amin dB.'
 		),
 		eq(`f_p = f_{m,max} = ${formatHz(fp)}, \\qquad f_s = ${formatHz(fs)}, \\qquad k = \\dfrac{f_p}{f_s} = ${n4(k)}`),
 		head('Order'),
 		...(aminSized !== aminDb
 			? [
 					p(
-						`Each Sallen-Key stage has unity gain at DC, so an even-order Chebyshev, whose DC sits in a ripple valley, peaks ${n2(amaxDb)} dB above it. For the ripple to end up ${n2(aminDb)} dB under every part of the message, the stopband is sized ${n2(aminDb)} dB under that peak, which is A = Amin + Amax = ${n2(aminSized)} dB in the order formula:`
+						`Each Sallen-Key stage has unity gain at DC, so an even-order Chebyshev, whose DC sits in a ripple valley, peaks ${n2(amaxDb)} dB above it. For the ripple to end up ${n2(aminDb)} dB under every part of the message, DC included, the stopband has to sit Amin + Amax under that peak, which is where the order formula measures from: A = Amin + Amax = ${n2(aminSized)} dB:`
 					)
 				]
 			: []),

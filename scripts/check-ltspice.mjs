@@ -399,19 +399,19 @@ const filterSpecs = [
 	{ filterType: 'highpass', response: 'inverseChebyshev', amaxDb: 1, aminDb: 40, fp: 10000, fs: 4000, only: ['towThomas'] },
 	{ filterType: 'lowpass', response: 'legendre', amaxDb: 3, aminDb: 40, fp: 10000, fs: 35000, only: ['sallenKey'] },
 	{ filterType: 'lowpass', response: 'bessel', amaxDb: 3, aminDb: 40, fp: 10000, fs: 35000, only: ['towThomas'] },
-	{ filterType: 'bandstop', response: 'elliptic', responseHp: 'butterworth', responseLp: 'elliptic', amaxDb: 3, aminDb: 40, fl: 1000, fh: 30000, fsl: 3000, fsh: 10000, only: ['towThomas'] },
-	{ filterType: 'bandpass', response: 'inverseChebyshev', responseHp: 'legendre', responseLp: 'inverseChebyshev', amaxDb: 3, aminDb: 40, fl: 1000, fh: 10000, fsl: 300, fsh: 30000, only: ['towThomas'] },
-	// zeros on the high-pass side only: the low-pass side's plain stages are Tow-Thomas too
-	{ filterType: 'bandpass', response: 'elliptic', responseHp: 'elliptic', responseLp: 'butterworth', amaxDb: 3, aminDb: 40, fl: 1000, fh: 10000, fsl: 300, fsh: 30000, only: ['towThomas'] }
+	// a band filter has a topology per side: the side with zeros is Tow-Thomas, the other keeps its own
+	{ filterType: 'bandstop', response: 'elliptic', responseHp: 'butterworth', responseLp: 'elliptic', amaxDb: 3, aminDb: 40, fl: 1000, fh: 30000, fsl: 3000, fsh: 10000, sides: { hp: 'mfb', lp: 'towThomas' } },
+	{ filterType: 'bandpass', response: 'inverseChebyshev', responseHp: 'legendre', responseLp: 'inverseChebyshev', amaxDb: 3, aminDb: 40, fl: 1000, fh: 10000, fsl: 300, fsh: 30000, sides: { hp: 'mfb', lp: 'towThomas' } },
+	{ filterType: 'bandpass', response: 'elliptic', responseHp: 'elliptic', responseLp: 'butterworth', amaxDb: 3, aminDb: 40, fl: 1000, fh: 10000, fsl: 300, fsh: 30000, sides: { hp: 'towThomas', lp: 'sallenKey' } }
 ];
-for (const { only, ...spec } of filterSpecs) {
-	for (const topology of only ?? Object.keys(secondOrder)) {
+for (const { only, sides, ...spec } of filterSpecs) {
+	for (const topology of sides ? [`${sides.hp}+${sides.lp}`] : (only ?? Object.keys(secondOrder))) {
 		let design;
 		if (spec.filterType === 'bandpass') design = designBandPass({ ...spec, orderLow: null, orderHigh: null });
 		else if (spec.filterType === 'bandstop') design = designBandStop({ ...spec, orderLow: null, orderHigh: null });
 		else if (spec.filterType === 'highpass') design = designHighPass({ ...spec, order: null });
 		else design = designLowPass({ ...spec, order: null });
-		const realized = design.stages.map(realize(topology));
+		const realized = design.stages.map((s) => realize(sides ? (s.filterType === 'highpass' ? sides.hp : sides.lp) : topology)(s));
 		const lpCount = spec.filterType === 'bandstop' ? design.lp.stages.length : 0;
 		let combinerMode = 'sum';
 		let combinerResistors = null;
@@ -425,7 +425,7 @@ for (const { only, ...spec } of filterSpecs) {
 			combinerResistors = parts.resistors;
 			predicted = (f) => magnitudePhaseAtParallelSum(branches, f, parts.weights).db;
 		}
-		const opts = { realizedStages: realized, topology, lpCount, combinerMode, combinerR: 10000, combinerResistors, ...spec };
+		const opts = { realizedStages: realized, topology: sides ? null : topology, topologyHp: sides?.hp ?? null, topologyLp: sides?.lp ?? null, lpCount, combinerMode, combinerR: 10000, combinerResistors, ...spec };
 		const responseTag = spec.responseHp && spec.responseHp !== spec.responseLp ? `${spec.responseHp}+${spec.responseLp}` : spec.response;
 		const stem = `flt-${spec.filterType}-${responseTag}-${topology}`;
 		const asc = join(dir, `${stem}.asc`);
@@ -467,7 +467,8 @@ for (const { only, ...spec } of filterSpecs) {
 	const simulate = (stem, text, ascii = true) => {
 		const cir = join(dir, `${stem}-run.cir`);
 		writeFileSync(cir, text);
-		run(ascii ? ['-b', '-ascii', cir] : ['-b', cir]);
+		// the LM741 demodulator alone takes about five minutes
+		run(ascii ? ['-b', '-ascii', cir] : ['-b', cir], 900000);
 		const log = existsSync(join(dir, `${stem}-run.log`)) ? readFileSync(join(dir, `${stem}-run.log`), 'latin1').replace(/\0/g, '') : '';
 		const raw = join(dir, `${stem}-run.raw`);
 		return { log, raw: ascii && existsSync(raw) ? readRaw(raw) : null };

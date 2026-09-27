@@ -229,9 +229,9 @@ function responseText({ filterType, response, responseHp, responseLp }) {
 }
 
 function specSummary(opts) {
-	const { filterType, amaxDb, aminDb, fp, fs, fl, fh, fsl, fsh, topology } = opts;
+	const { filterType, amaxDb, aminDb, fp, fs, fl, fh, fsl, fsh, topology, topologyHp, topologyLp } = opts;
 	const edges = isBand(filterType) ? `fl = ${fl} Hz, fh = ${fh} Hz, fsl = ${fsl} Hz, fsh = ${fsh} Hz` : `fp = ${fp} Hz, fs = ${fs} Hz`;
-	return [`${TYPE_LABEL[filterType] ?? filterType}, ${responseText(opts)}`, `Amax = ${amaxDb} dB, Amin = ${aminDb} dB, ${edges}`, `topology: ${topology}`];
+	return [`${TYPE_LABEL[filterType] ?? filterType}, ${responseText(opts)}`, `Amax = ${amaxDb} dB, Amin = ${aminDb} dB, ${edges}`, topologyHp && topologyLp && topologyHp !== topologyLp ? `topology: ${topologyHp} (high-pass side), ${topologyLp} (low-pass side)` : `topology: ${topology ?? topologyLp}`];
 }
 
 /* ------------------------------------------------------------- output */

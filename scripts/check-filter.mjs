@@ -363,10 +363,18 @@ check('combiner never leaves depth on the table', worstLoss <= 1e-9, `${worstLos
 		{ filterType: 'bandstop', response: 'elliptic', responseHp: 'butterworth', responseLp: 'elliptic', amaxDb: 3, aminDb: 40, fl: 1000, fh: 30000, fsl: 3000, fsh: 10000 },
 		{ filterType: 'bandpass', response: 'legendre', responseHp: 'legendre', responseLp: 'inverseChebyshev', amaxDb: 3, aminDb: 40, fl: 1000, fh: 10000, fsl: 300, fsh: 30000 }
 	];
-	// zeros take the Tow-Thomas topology, as the page insists
-	const withZeros = (spec) => [spec.response, spec.responseHp, spec.responseLp].some((r) => r === 'elliptic' || r === 'inverseChebyshev');
+	// zeros take the Tow-Thomas topology, as the page insists, on their own
+	// side only: the other side of a band filter keeps MFB
+	const zeros = (r) => r === 'elliptic' || r === 'inverseChebyshev';
+	const band = (spec) => spec.filterType === 'bandpass' || spec.filterType === 'bandstop';
+	const wiring = (spec, other = 'mfb') =>
+		band(spec)
+			? { topology: 'mfb', topologyHp: zeros(spec.responseHp) ? 'towThomas' : other, topologyLp: zeros(spec.responseLp) ? 'towThomas' : other }
+			: { topology: zeros(spec.response) ? 'towThomas' : other };
+	const withZeros = (spec) => (band(spec) ? zeros(spec.responseHp) || zeros(spec.responseLp) : zeros(spec.response));
+	const base = { fp: 10000, fs: 35000, fl: 1000, fh: 10000, fsl: 300, fsh: 30000, order: null, orderHp: null, orderLp: null, capOverrides: {} };
 	for (const spec of scripts) {
-		const code = generateScript({ fp: 10000, fs: 35000, fl: 1000, fh: 10000, fsl: 300, fsh: 30000, topology: withZeros(spec) ? 'towThomas' : 'mfb', order: null, orderHp: null, orderLp: null, capOverrides: {}, ...spec });
+		const code = generateScript({ ...base, ...spec, ...wiring(spec) });
 		const file = join(dir, `${spec.filterType}-${spec.response}.js`);
 		writeFileSync(file, code);
 		try {
@@ -380,23 +388,41 @@ check('combiner never leaves depth on the table', worstLoss <= 1e-9, `${worstLos
 			console.log('   SCRIPT', spec.filterType, spec.response, String(e.stderr || e.message).split('\n').slice(0, 3).join(' / '));
 		}
 	}
-	check(`downloadable script: runs for ${scripts.length} new-response designs and reports its spec met`, scriptBad === 0, `${scriptBad} failures`);
+	check(`downloadable script: runs for ${scripts.length} new-response designs, a band filter's plain side on MFB, and reports its spec met`, scriptBad === 0, `${scriptBad} failures`);
 
-	// and refuses a zeros response on any other topology, with the reason
+	// the other side of a band filter may be Sallen-Key as well
+	{
+		const spec = scripts.find((s) => s.filterType === 'bandpass');
+		const file = join(dir, 'bandpass-sallenkey-side.js');
+		writeFileSync(file, generateScript({ ...base, ...spec, ...wiring(spec, 'sallenKey') }));
+		let ok = false;
+		try {
+			ok = /least attenuation in the stopband .*: OK/.test(execFileSync(process.execPath, [file], { encoding: 'utf8' }));
+		} catch {
+			ok = false;
+		}
+		check('downloadable script: a band-pass with Legendre on Sallen-Key and inverse Chebyshev on Tow-Thomas runs and meets its spec', ok);
+	}
+
+	// and refuses a zeros response on any other topology, with the reason and the menu to change
 	let refused = 0;
 	const zeroSpecs = scripts.filter(withZeros);
 	for (const spec of zeroSpecs) {
 		for (const topology of ['mfb', 'sallenKey']) {
+			const w = band(spec)
+				? { topology: 'mfb', topologyHp: zeros(spec.responseHp) ? topology : 'mfb', topologyLp: zeros(spec.responseLp) ? topology : 'mfb' }
+				: { topology };
+			const name = band(spec) ? (zeros(spec.responseHp) ? 'TOPOLOGY_HP' : 'TOPOLOGY_LP') : 'TOPOLOGY';
 			const file = join(dir, `${spec.filterType}-${spec.response}-${topology}.js`);
-			writeFileSync(file, generateScript({ fp: 10000, fs: 35000, fl: 1000, fh: 10000, fsl: 300, fsh: 30000, topology, order: null, orderHp: null, orderLp: null, capOverrides: {}, ...spec }));
+			writeFileSync(file, generateScript({ ...base, ...spec, ...w }));
 			try {
 				execFileSync(process.execPath, [file], { encoding: 'utf8', stdio: 'pipe' });
 			} catch (e) {
-				if (/can only be built with Tow-Thomas stages: set TOPOLOGY = 'towThomas'/.test(String(e.stderr))) refused++;
+				if (new RegExp(`can only be built with Tow-Thomas stages: set ${name} = 'towThomas'`).test(String(e.stderr))) refused++;
 			}
 		}
 	}
-	check('downloadable script: stops on an elliptic or inverse Chebyshev design with MFB or Sallen-Key, and says to use Tow-Thomas', refused === 2 * zeroSpecs.length, `${refused} of ${2 * zeroSpecs.length}`);
+	check("downloadable script: stops on an elliptic or inverse Chebyshev side on MFB or Sallen-Key, and names the menu to set to Tow-Thomas", refused === 2 * zeroSpecs.length, `${refused} of ${2 * zeroSpecs.length}`);
 }
 
 console.log(fails === 0 ? 'filter checks clean' : `${fails} failure(s)`);

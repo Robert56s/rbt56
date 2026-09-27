@@ -341,5 +341,38 @@ const WT = 2 * Math.PI * 3e6;
 	check('comparison: quadrature gives two outputs and starts', quad.outputs === 'quadrature' && quad.starts);
 }
 
+/* ------------------------------------------ parts from the stock the page picks */
+{
+	const { componentOptions } = await import('../src/lib/stock.js');
+	const onList = (v, list) => list.some((x) => Math.abs(x / v - 1) < 1e-9);
+	for (const stock of ['lab', 'labR']) {
+		const parts = componentOptions(stock);
+		const bad = [];
+		let built = 0;
+		for (const t of TOPOLOGIES) {
+			for (const stabilizer of t.id === 'wien' ? ['diodes', 'lamp', 'jfet'] : ['diodes']) {
+				for (const [frequency, amplitude] of [[1000, 3], [55000, 1], [200, 5]]) {
+					const d = designOscillator({ topology: t.id, stabilizer, frequency, amplitude, ...parts });
+					if (!d) continue;
+					built++;
+					const p = d.parts ?? {};
+					// with diodes, rf is Rf1 + Rf2, not a part of its own
+					const resistors = { r: d.r, rg: d.rg, rf1: p.rf1, rf2: p.rf2, rf: p.rf1 ? null : p.rf, rSeries: p.rSeries, ra: p.ra, rb: p.rb, rx: p.rx, rn: p.rn, rd1: p.rd1, rd2: p.rd2 };
+					for (const [k, v] of Object.entries(resistors)) {
+						if (v && !onList(v, parts.resistorSeries)) bad.push(`${t.id}/${stabilizer} ${frequency} Hz ${k} ${v}`);
+					}
+					if (parts.capacitors) {
+						for (const [k, v] of Object.entries({ c: d.c, cDet: p.cDet })) if (v && !onList(v, parts.capacitors)) bad.push(`${t.id}/${stabilizer} ${frequency} Hz ${k} ${v}`);
+					}
+				}
+			}
+		}
+		check(`stock: every oscillator part comes from the ${stock} list, every topology and control`, bad.length === 0 && built > 10, bad.length ? bad.slice(0, 4).join('; ') : `${built} designs`);
+	}
+	// the default is E24 and the usual capacitors, the same parts as with the option spelled out
+	const same = JSON.stringify(designOscillator({ topology: 'wien', frequency: 1000, amplitude: 3 })) === JSON.stringify(designOscillator({ topology: 'wien', frequency: 1000, amplitude: 3, resistorSeries: 'E24', capacitors: null }));
+	check('stock: E24 by default, the same oscillator with the option spelled out', same);
+}
+
 console.log(fails === 0 ? 'oscillator checks clean' : `${fails} failure(s)`);
 process.exit(fails === 0 ? 0 : 1);

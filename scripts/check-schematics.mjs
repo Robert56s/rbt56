@@ -439,7 +439,10 @@ const CASES = [
 	['modulation/buildJfetTestDiagram', () => modulation.buildJfetTestDiagram()],
 	['modulation/buildBiasSummerDiagram', () => modulation.buildBiasSummerDiagram({ c: 2.2e-6, rac: 5600, rbias: 62000, rf: 10000 })],
 	['modulation/buildCarrierDividerDiagram', () => modulation.buildCarrierDividerDiagram({ top: 9100, bottom: 1000 })],
-	['modulation/buildCarrierDividerDiagram(no divider)', () => modulation.buildCarrierDividerDiagram({ top: 0, bottom: 1000, from: 'from the Wien oscillator', to: 'to the drain' })],
+	// the names the AM page gives the two ends, the longest ones included
+	['modulation/buildCarrierDividerDiagram(from the oscillator)', () => modulation.buildCarrierDividerDiagram({ top: 5100, bottom: 1000, from: 'from the Wien oscillator', to: 'to + input' })],
+	['modulation/buildCarrierDividerDiagram(to the follower)', () => modulation.buildCarrierDividerDiagram({ top: 1.2e6, bottom: 1000, from: 'carrier source', to: 'to the follower' })],
+	['modulation/buildCarrierDividerDiagram(no divider)',() => modulation.buildCarrierDividerDiagram({ top: 0, bottom: 1000, from: 'from the Wien oscillator', to: 'to the drain' })],
 	['modulation/buildSummerDiagram(n=3)', () => modulation.buildSummerDiagram({ inputs: ['x_p(t)', 'x_m(t)', 'V_DC (bias)'], r: 10000 })],
 	['modulation/buildDividerDiagram', () => modulation.buildDividerDiagram({ top: 51000, bottom: 10000, vcc: 12 })],
 	['modulation/buildDiodeTankDiagram(pair)', () => modulation.buildDiodeTankDiagram({ rs: 3300, l: 1e-3, capacitors: [15e-9, 820e-12], r: 2200 })],
@@ -472,5 +475,117 @@ for (const [name, build] of CASES) {
 	for (const i of result.issues) console.log(`      ${i.level === 'bug' ? '!' : '-'} [${i.kind}] ${i.msg}`);
 }
 console.log();
+
+// Every diagram the AM and oscillator pages draw, built the way the pages
+// build them, with the page's own end labels and each stock: a label that
+// only collides for one configuration (a long 'from the Wien oscillator'
+// under a short lead) is caught here, not by the fixed cases above.
+{
+	const { designJfetModulator } = await import('../src/lib/modulation/jfetModulator.js');
+	const { modelFromIdss, modelFromRdsOn } = await import('../src/lib/modulation/jfetModel.js');
+	const { designDiodeMixerModulator } = await import('../src/lib/modulation/diodeMixerModulator.js');
+	const { designEnvelopeLowPass } = await import('../src/lib/modulation/envelopeFilter.js');
+	const { designPrecisionRectifier, designHalfWaveRectifier } = await import('../src/lib/modulation/rectifier.js');
+	const { componentOptions } = await import('../src/lib/stock.js');
+	const { hasLimiterDiagram } = await import('../src/lib/oscillator/circuits.js');
+	const STOCKS = ['E24', 'E96', 'lab', 'labR'].map((s) => [s, componentOptions(s)]);
+	const seen = new Set();
+	const SWEEP = [];
+	const add = (name, build) => {
+		let d;
+		try {
+			d = build();
+		} catch (e) {
+			SWEEP.push([name + ' THROWS ' + e.message, () => ({ svg: '', viewBox: '0 0 1 1' })]);
+			return;
+		}
+		if (!d || seen.has(d.svg)) return;
+		seen.add(d.svg);
+		SWEEP.push([name, () => d]);
+	};
+	for (const [sn, parts] of STOCKS) {
+		for (const model of [modelFromIdss(-4, 5e-3), modelFromRdsOn(-6.5, 30), modelFromIdss(-1.5, 2e-3)]) {
+			for (const topology of ['noninverting', 'inverting']) {
+				for (const carrierBuffer of [true, false]) {
+					for (const fp of [10000, 55000, 200000]) {
+						for (const wien of [false, true]) {
+							for (const amp of [0.05, 1, 5]) {
+								const osc = wien ? designOscillator({ topology: 'wien', stabilizer: 'diodes', frequency: fp, amplitude: amp, ...parts }) : null;
+								const cin = osc?.limiter.amplitudeActual ?? amp;
+								const d = designJfetModulator({ model, topology, carrierBuffer, targetModulationIndex: 0.6, swingFraction: 0.9, sourceAmplitude: 1, fmMin: 100, vcc: 12, fp, carrierSourceAmplitude: cin, targetOutputAmplitude: 1, ...parts });
+								if (!d) continue;
+								const tag = `${sn} ${topology} buf=${carrierBuffer} ${fp} ${wien ? 'wien' : 'gen'} ${amp}V`;
+								if (topology === 'inverting') add(`am/inverting cell ${tag}`, () => modulation.buildJfetInvertingCellDiagram({ r2: d.r2, follower: d.buffer.enabled }));
+								else add(`am/gain cell ${tag}`, () => modulation.buildJfetGainCellDiagram({ rb: d.rb }));
+								if (d.postGain?.needed) add(`am/post-gain ${tag}`, () => modulation.buildGainStageDiagram({ rtop: d.postGain.rtop, rbottom: d.postGain.rbottom }));
+								add(`am/divider ${tag}`, () =>
+									modulation.buildCarrierDividerDiagram({ ...d.carrier.divider, from: osc ? 'from the Wien oscillator' : 'carrier source', to: topology === 'inverting' ? (d.buffer.enabled ? 'to the follower' : 'to the drain') : 'to + input' })
+								);
+								add(`am/gate summer ${tag}`, () => modulation.buildBiasSummerDiagram(d.conditioning.summer));
+								if (osc) add(`am/wien ${tag}`, () => buildOscillatorDiagram(osc));
+							}
+						}
+					}
+				}
+			}
+		}
+		for (const [fp, fmMax, L] of [[40000, 1000, 1e-3], [455000, 5000, 100e-6], [10000, 500, 10e-3], [40000, 1000, 0.1], [100000, 2000, 1e-3]]) {
+			for (const diode of ['1N4148', 'BAT54']) {
+				const dd = designDiodeMixerModulator({ fp, fmMax, inductance: L, diode, ...parts });
+				if (!dd) continue;
+				const tag = `${sn} ${fp}/${fmMax}/${L} ${diode}`;
+				add(`am/diode summer ${tag}`, () => modulation.buildDiodeSummerDiagram(dd.summer));
+				add(`am/diode tank ${tag}`, () => modulation.buildDiodeTankDiagram({ rs: dd.rs, l: dd.inductance, capacitors: dd.capacitors, r: dd.rt }));
+			}
+		}
+		add(`am/precision rectifier ${sn}`, () => modulation.buildPrecisionRectifierDiagram(designPrecisionRectifier({ resistorSeries: parts.resistorSeries })));
+		add(`am/half-wave ${sn}`, () => modulation.buildHalfWaveDiagram(designHalfWaveRectifier({ resistorSeries: parts.resistorSeries })));
+		for (const response of ['butterworth', 'chebyshev']) {
+			for (const [fm, fs] of [[1000, 79000], [5000, 35000], [300, 9700]]) {
+				const env = designEnvelopeLowPass({ response, amaxDb: 1, aminDb: 40, fp: fm, fs, order: null, maxOrder: 8, ...parts });
+				if (env.tooHigh) continue;
+				env.realized.forEach((s, i) => add(`am/envelope ${sn} ${response} ${fm} stage ${i + 1}`, () => modulation.buildEnvelopeLowPassDiagram(s.components)));
+			}
+		}
+		for (const t of TOPOLOGIES) {
+			for (const stabilizer of t.id === 'wien' ? ['diodes', 'lamp', 'jfet'] : ['diodes']) {
+				for (const f of [50, 1000, 55000, 350000]) {
+					for (const amplitude of [0.2, 3, 5]) {
+						let od;
+						try {
+							od = designOscillator({ topology: t.id, stabilizer, frequency: f, amplitude, ...parts });
+						} catch {
+							continue;
+						}
+						if (!od) continue;
+						const tag = `${sn} ${t.id}/${stabilizer} ${f} Hz ${amplitude} V`;
+						add(`osc/${tag}`, () => buildOscillatorDiagram(od));
+						if (hasLimiterDiagram(od)) add(`osc/limiter ${tag}`, () => buildLimiterDiagram(od));
+						if (od.limiter.kind === 'jfet' && od.limiter.regulates) add(`osc/agc ${tag}`, () => buildAgcDiagram(od));
+						if (od.limiter.kind === 'clamp') add(`osc/clamp ${tag}`, () => buildClampDiagram(od));
+					}
+				}
+			}
+		}
+	}
+	// the named cases above print one line each; the sweep prints its failures and a count
+	let sweepBugs = 0;
+	for (const [name, build] of SWEEP) {
+		const result = checkDiagram(name, build());
+		const bad = result.issues.filter((i) => i.level === 'bug');
+		if (/ THROWS /.test(name)) {
+			sweepBugs++;
+			console.log(`FAIL  ${name}`);
+			continue;
+		}
+		if (!bad.length) continue;
+		sweepBugs += bad.length;
+		console.log(`FAIL  ${name}`);
+		for (const i of bad) console.log(`      ! [${i.kind}] ${i.msg}`);
+	}
+	console.log(`${sweepBugs === 0 ? 'PASS' : 'FAIL'}  sweep: ${SWEEP.length} distinct diagrams the AM and oscillator pages draw, with their own labels and every stock`);
+	bugs += sweepBugs;
+}
+
 console.log(bugs === 0 ? 'all schematics clean' : `${bugs} issue(s) found`);
 process.exit(bugs === 0 ? 0 : 1);

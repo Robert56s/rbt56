@@ -17,6 +17,8 @@ export const STOCK_CHOICES = [
 	{ id: 'E24', label: 'E24 series (standard, 5 %)' },
 	{ id: 'E96', label: 'E96 series (1 %)' },
 	{ id: 'lab', label: `Lab kit (${LAB_KIT.resistors.length} R, ${LAB_KIT.capacitors.length} C)` },
+	// the drawer's resistors, with every standard capacitor as E24 and E96 have
+	{ id: 'labR', label: `Lab resistors (${LAB_KIT.resistors.length}), all capacitors` },
 	{ id: 'custom', label: 'My own list' }
 ];
 
@@ -74,6 +76,7 @@ export function defaultStock() {
  */
 export function componentOptions(stock, resistorText, capacitorText) {
 	if (stock === 'lab') return { resistorSeries: LAB_KIT.resistors, capacitors: LAB_KIT.capacitors };
+	if (stock === 'labR') return { resistorSeries: LAB_KIT.resistors, capacitors: null };
 	if (stock === 'custom') {
 		const resistors = parseStock(resistorText, 'resistor');
 		const capacitors = parseStock(capacitorText, 'capacitor');
@@ -84,7 +87,12 @@ export function componentOptions(stock, resistorText, capacitorText) {
 
 /** Whether the setting narrows the search to a list rather than a full series. */
 export function isRestricted(stock) {
-	return stock === 'lab' || stock === 'custom';
+	return stock === 'lab' || stock === 'labR' || stock === 'custom';
+}
+
+/** Which parts a restricted setting narrows: 'resistors' for the lab resistors with every capacitor, 'all' otherwise. */
+export function restrictedParts(stock) {
+	return stock === 'labR' ? 'resistors' : 'all';
 }
 
 /** The saved setting, or null when there is none or storage is blocked. */

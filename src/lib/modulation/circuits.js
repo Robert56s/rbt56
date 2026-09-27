@@ -635,10 +635,12 @@ export function buildBiasSummerDiagram({ c, rac, rbias, rf }) {
  */
 export function buildCarrierDividerDiagram({ top, bottom, from = 'carrier source', to = 'to + input' }) {
 	const y0 = 90;
-	const Vin = { x: MARGIN, y: y0 };
+	// the lead-in is long enough for the name under it to clear the node
+	const fromWidth = Math.ceil(6.6 * from.length);
 	if (!(top > 0)) {
 		const net = createNet();
-		const out = { x: Vin.x + 270, y: y0 };
+		const Vin = { x: MARGIN, y: y0 };
+		const out = { x: Vin.x + Math.max(270, fromWidth + 120), y: y0 };
 		net.wire(Vin, out);
 		const parts = [
 			net.svg(),
@@ -648,14 +650,19 @@ export function buildCarrierDividerDiagram({ top, bottom, from = 'carrier source
 		];
 		return { svg: parts.join(''), viewBox: `0 50 ${out.x + 110} 80` };
 	}
-	const Rtop = placeSymbol('resistor_right', Vin.x + 90, y0, SCALE);
+	const Rtop = placeSymbol('resistor_right', MARGIN + Math.max(90, fromWidth + 40), y0, SCALE);
+	// the rail sits at the resistor's own pin height, so the lead-in is level
+	const rail = Rtop.ports['1'].y;
+	const Vin = { x: MARGIN, y: rail };
 	const node = Rtop.ports['2'];
-	const Rbot = placeSymbol('resistor_down', node.x, node.y + 0.51 * SCALE, SCALE);
+	// R_bot hangs a short wire below the rail, so the tee reads as one, dot and all
+	const Rbot = placeSymbol('resistor_down', node.x, node.y + 0.51 * SCALE + 14, SCALE);
 	const gnd = placeSymbol('ground_down', Rbot.ports['2'].x - 0.01 * SCALE, Rbot.ports['2'].y + 0.29 * SCALE, SCALE);
 	const out = { x: node.x + 90, y: node.y };
 
 	const net = createNet();
 	net.wire(Vin, Rtop.ports['1']);
+	net.wire(node, Rbot.ports['1']);
 	net.wire(Rbot.ports['2'], gnd.ports['1']);
 	net.wire(node, out);
 
@@ -665,13 +672,13 @@ export function buildCarrierDividerDiagram({ top, bottom, from = 'carrier source
 		gnd.svg,
 		net.svg(),
 		net.dots(portPoints(Rtop, Rbot, gnd)),
-		label(from, Vin.x, Vin.y + 22, { anchor: 'start' }),
+		label(from, Vin.x, rail + 22, { anchor: 'start' }),
 		label(to, out.x + 6, out.y - 8, { anchor: 'start' }),
-		label(`${formatOhms(top)}`, Rtop.ports['1'].x, y0 - 24, { anchor: 'start' }),
+		label(`${formatOhms(top)}`, Rtop.ports['1'].x, rail - 22, { anchor: 'start' }),
 		label(`${formatOhms(bottom)}`, Rbot.ports['1'].x + 12, (Rbot.ports['1'].y + Rbot.ports['2'].y) / 2, { anchor: 'start' })
 	];
 
-	const width = out.x + 90;
+	const width = out.x + 6 + Math.ceil(6.6 * to.length) + 30;
 	return { svg: parts.join(''), viewBox: `0 30 ${width} 190` };
 }
 
@@ -744,7 +751,7 @@ export function buildJfetTestDiagram() {
  * envelope, which is why it is drawn rather than assumed. With follower
  * false the divider drives the drain directly, as the page allows.
  */
-export function buildJfetInvertingCellDiagram({ r2, follower: withFollower = true }) {
+export function buildJfetInvertingCellDiagram({ r2, follower: withFollower = true, divided = true }) {
 	const y0 = 150;
 	const follower = placeSymbol('opamp_no_power_right', MARGIN + 150, y0, SCALE);
 	const Vin = { x: MARGIN, y: follower.ports.inp1.y };
@@ -754,7 +761,7 @@ export function buildJfetInvertingCellDiagram({ r2, follower: withFollower = tru
 	const drainY = y0 + 80;
 	const drainX = follower.ports.out.x + 70;
 	const jfet = placeSymbol('njfet_transistor_horz', drainX - 0.28 * SCALE, drainY + 0.55 * SCALE, SCALE);
-	const gateNode = { x: jfet.ports.gate.x - 50, y: jfet.ports.gate.y };
+	const gateNode = { x: jfet.ports.gate.x - 70, y: jfet.ports.gate.y };
 
 	const cell = placeSymbol('opamp_no_power_right', jfet.ports.source.x + 170, jfet.ports.source.y + 40 - 0.09 * SCALE, SCALE);
 	const N = { x: jfet.ports.source.x, y: cell.ports.inp2.y };
@@ -796,7 +803,7 @@ export function buildJfetInvertingCellDiagram({ r2, follower: withFollower = tru
 		R2.svg,
 		net.svg(),
 		net.dots(portPoints(...(withFollower ? [follower] : []), jfet, cell, gndPlus, R2)),
-		label(withFollower ? 'x_p(t)' : 'x_p(t), from the divider', Vin.x, Vin.y - 12, { anchor: 'start' }),
+		label(withFollower || !divided ? 'x_p(t)' : 'x_p(t), from the divider', Vin.x, Vin.y - 12, { anchor: 'start' }),
 		...(withFollower ? [label('follower', follower.ports.out.x - 24, y0 - 32, { anchor: 'middle', cls: 'lbl note' })] : []),
 		label('v_gate', gateNode.x - 6, gateNode.y - 10, { anchor: 'start' }),
 		label('Vout', Vout.x + 48, Vout.y + 5, { anchor: 'start' }),

@@ -1,5 +1,5 @@
 import { DIODE_MODELS, diodeCurrent } from './diodeLaw';
-import { capacitorValues, largestResistorNotAbove, nearestResistor, resistorValues, stockName } from './eseries';
+import { capacitorValues, largestResistorNotAbove, nearestResistor, nearestValue, resistorValues, stockName } from './eseries';
 
 /**
  * Diode + resonant tank AM modulator, built as a switching modulator.
@@ -265,9 +265,13 @@ export function designDiodeMixerModulator({
 	const bandwidth = 2 * sidebandMargin * fmMax;
 	const bandwidthNeeded = bandwidth + 2 * Math.abs(detuning);
 	const rEffTarget = 1 / (2 * Math.PI * bandwidthNeeded * c);
-	const rs = nearestResistor(2 * rEffTarget, stock, 1, 7);
+	// both from 10 ohm up, the series or the list alike; the smallest one
+	// there is the floor under which the band can no longer be set
+	const tankRange = resistorValues(stock, 1, 7);
+	const floor = tankRange[0];
+	const rs = nearestValue(2 * rEffTarget, tankRange);
 	const rtTarget = 1 / (1 / rEffTarget - 1 / (2 * rs));
-	const rt = largestResistorNotAbove(rtTarget, stock, 1, 7) ?? nearestResistor(rtTarget, stock, 1, 7);
+	const rt = largestResistorNotAbove(rtTarget, stock, 1, 7) ?? floor;
 	const tank = { r: rt, l: inductance, c };
 	const z = tankImpedance(fp, tank);
 
@@ -334,25 +338,31 @@ export function designDiodeMixerModulator({
 		const at = k < 0 ? stocked.length : k;
 		return stocked.slice(Math.max(0, at - 2), at + 2);
 	};
-	// R_p within 12 % of its ideal value, or the nearest one a sparse stock has
+	// R_p within 12 % of its ideal value, or the stock values either side of
+	// it when a sparse stock has none that close (the nearest one otherwise)
 	const rpNear = neighbours(rpIdeal).filter((v) => Math.abs(Math.log(v / rpIdeal)) < 0.12);
+	const rpAround = neighbours(rpIdeal);
 	let pick = null;
-	for (const rpC of rpNear.length ? rpNear : [nearestResistor(rpIdeal, stock, 1, 8)]) {
+	for (const rpC of rpNear.length ? rpNear : rpAround.length ? rpAround : [nearestResistor(rpIdeal, stock)]) {
 		const driveC = (rf / rpC) * carrierAmplitude;
 		const rmIdeal = (rf * modAmplitude) / (umWanted * (driveC / drive));
-		for (const rmC of neighbours(rmIdeal)) {
+		const rmAround = neighbours(rmIdeal);
+		for (const rmC of rmAround.length ? rmAround : [nearestResistor(rmIdeal, stock)]) {
 			const umC = (rf / rmC) * modAmplitude;
 			const nC = envelopeOf(current, { ...base, a: driveC, um: umC, vb }, P0, S0).n;
 			const err = Math.abs(nC - targetModulationIndex) + 0.02 * Math.abs(Math.log(rpC / rpIdeal));
 			if (!pick || err < pick.err) pick = { rp: rpC, rm: rmC, err };
 		}
 	}
+	if (!pick) return null;
 	const rp = pick.rp;
 	const rm = pick.rm;
 	const driveBuilt = (rf / rp) * carrierAmplitude;
 	const um = (rf / rm) * modAmplitude;
 	const built = { ...base, a: driveBuilt };
 	const env = envelopeOf(current, { ...built, um, vb }, 32, 128);
+	// parts so far off (a list with nothing near the ohms needed) that the cycle solve breaks down: no design
+	if (!Number.isFinite(env.n) || !Number.isFinite(env.mean)) return null;
 
 	// the source the tank sees at the carrier, from how the carrier current
 	// gives way when the tank's voltage rises (at the message's zero)
@@ -391,6 +401,12 @@ export function designDiodeMixerModulator({
 	// carrier because no capacitor pair reaches it; resistors at the bottom
 	// of the search, where the band can no longer be set
 	const cjRatio = 2 * Math.PI * fp * (d.cjo ?? 0) * rs;
+	// the summer's output current at the crest: the diode's peak through R_s
+	// and the feedback current through R_f, which a TL08x keeps to about 20 mA
+	const summerCurrent = env.peak + summerPeak / rf;
+	// the message itself in the diode current (about u_m / 2 R_s, on half the
+	// time), across the loaded tank at f_m: what of it reaches the output
+	const messageLeak = (mag(tankImpedance(fmMax, loaded)) * (um / (2 * rs))) / Math.max(1e-12, env.mean);
 	const noiseGain = 1 + rf * (1 / rp + 1 / rm + (rb ? 1 / rb : 0));
 	const gbwRatio = (fp * noiseGain) / gbw;
 
@@ -458,6 +474,13 @@ export function designDiodeMixerModulator({
 		cjRatio,
 		cjOk: cjRatio <= 0.05,
 		tuneOk: Math.abs(f0Actual / fp - 1) <= 0.03,
-		rangeOk: rs > 10 && rt > 10
+		resistorFloor: floor,
+		rangeOk: rtTarget >= floor * (1 - 1e-9) && 2 * rEffTarget >= floor * 0.95,
+		// how far the stock parts leave the index from the target
+		indexOk: Math.abs(env.n - targetModulationIndex) <= 0.05 && env.n <= 1,
+		summerCurrent,
+		currentOk: summerCurrent <= 0.02,
+		messageLeak,
+		leakOk: messageLeak <= 0.03
 	};
 }

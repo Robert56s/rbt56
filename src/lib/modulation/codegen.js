@@ -99,7 +99,9 @@ if (jfetModel.fit) console.log(\`fit over ${'$'}{jfetModel.fit.count} points in 
 console.log(\`bias point VC = ${'$'}{jfetModel.vc.toFixed(3)} V, half-range ${'$'}{jfetModel.halfRange.toFixed(3)} V\`);
 console.log();
 
+let failure = null;
 const design = designJfetModulator({
+	onFail: (reason) => (failure = reason),
 	model: jfetModel, topology: TOPOLOGY, targetOutputAmplitude: TARGET_OUTPUT_AMPLITUDE, carrierBuffer: CARRIER_BUFFER, swingFraction: SWING_FRACTION,
 	targetModulationIndex: TARGET_MODULATION_INDEX, rb: RB,
 	sourceAmplitude: SOURCE_AMPLITUDE, fmMin: FM_MIN, vcc: VCC,
@@ -108,7 +110,12 @@ const design = designJfetModulator({
 });
 if (!design) {
 	const ceiling = conductanceDepth(jfetModel, SWING_FRACTION);
-	console.log(ceiling === null ? 'The swing pinches the channel off: lower SWING_FRACTION or narrow the window.' : 'The target modulation index cannot exceed the conductance depth s = ' + ceiling.toFixed(3) + ' for this swing: lower TARGET_MODULATION_INDEX or widen the swing.');
+	const onList = Array.isArray(RESISTOR_SERIES) ? ', or add resistors near the ones the gate drive needs' : '';
+	console.log(
+		ceiling === null || failure === 'pinchoff'
+			? 'With the parts rounded, the gate drive swings VGS down to VP or past it, which pinches the channel off: lower SWING_FRACTION' + onList + '.'
+			: 'The target modulation index cannot exceed the conductance depth s = ' + ceiling.toFixed(3) + ' for this swing: lower TARGET_MODULATION_INDEX or widen the swing' + onList + '.'
+	);
 } else {
 	console.log('='.repeat(72));
 	console.log('GAIN CELL (' + TOPOLOGY + ')');
@@ -237,7 +244,7 @@ const RECTIFIER_TYPE = ${JSON.stringify(p.rectifierType)}; // 'full' or 'half'
 const FP_CARRIER = ${p.fpCarrier};             // Hz, carrier frequency
 const FM_MAX = ${p.fmMax};                 // Hz, highest modulating frequency to recover
 const AMAX_DB = ${p.amaxDb};                // dB, max attenuation allowed up to FM_MAX
-const AMIN_DB = ${p.aminDb};                // dB, min attenuation required at the ripple frequency
+const AMIN_DB = ${p.aminDb};                // dB, min attenuation required from the ripple's nearest sideband (ripple minus FM_MAX) up
 const ORDER = ${p.order ?? 'null'};                  // null: the minimum even order that meets the spec; an odd order is rounded up (second-order stages only)
 const RESPONSE = ${JSON.stringify(p.response)};      // 'butterworth' or 'chebyshev'
 const TEST_INDEX = ${p.index ?? 0.9};              // modulation index of the 1 V test wave the last lines use

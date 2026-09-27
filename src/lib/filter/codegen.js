@@ -52,7 +52,7 @@ function header(filterType) {
 `;
 }
 
-function paramsBlock({ amaxDb, aminDb, fp, fs, fl, fh, fsl, fsh, filterType, response, responseHp, responseLp, topology, order, orderHp, orderLp, capOverrides, resistorStock, capacitorStock }) {
+function paramsBlock({ amaxDb, aminDb, fp, fs, fl, fh, fsl, fsh, filterType, response, responseHp, responseLp, topology, topologyHp, topologyLp, order, orderHp, orderLp, capOverrides, resistorStock, capacitorStock }) {
 	const hasOverrides = capOverrides && Object.keys(capOverrides).length > 0;
 	return `// =====================================================================
 // PARAMETERS - the only block meant to be edited
@@ -70,7 +70,9 @@ const RESPONSE_LP = ${JSON.stringify(responseLp ?? response)};  // band-pass / b
 // responses need 'towThomas': their stages with zeros are Tow-Thomas notch
 // stages, which no other wiring here can build, and the script stops on
 // any other topology with them, as the page does.
-const TOPOLOGY  = ${JSON.stringify(topology)};
+const TOPOLOGY  = ${JSON.stringify(topology)};    // used by 'lowpass' and 'highpass'
+const TOPOLOGY_HP = ${JSON.stringify(topologyHp ?? topology)};  // band-pass / band-stop: the high-pass side's
+const TOPOLOGY_LP = ${JSON.stringify(topologyLp ?? topology)};  // band-pass / band-stop: the low-pass side's
 const RESISTOR_SERIES = ${JSON.stringify(resistorStock ?? 'E24')};
 // 'E24' or 'E96' for a full preferred series, or an explicit array of
 // ohm values to design against only what is actually in the drawer.
@@ -108,10 +110,14 @@ function reportBlock() {
 // REPORT
 // =====================================================================
 
-// zeros in the stopband take a notch stage, and only the Tow-Thomas biquad has one
-const ZERO_RESPONSES = [...new Set(FILTER_TYPE === 'bandpass' || FILTER_TYPE === 'bandstop' ? [RESPONSE_HP, RESPONSE_LP] : [RESPONSE])].filter((r) => RESPONSES[r].zeros);
-if (ZERO_RESPONSES.length > 0 && TOPOLOGY !== 'towThomas') {
-	throw new Error(\`\${ZERO_RESPONSES.map((r) => RESPONSES[r].label).join(' and ')} can only be built with Tow-Thomas stages: set TOPOLOGY = 'towThomas'\`);
+// zeros in the stopband take a notch stage, and only the Tow-Thomas biquad
+// has one: the side (or the filter) with such a response must be Tow-Thomas
+const BAND = FILTER_TYPE === 'bandpass' || FILTER_TYPE === 'bandstop';
+const topologyOf = (side) => (BAND ? (side === 'highpass' ? TOPOLOGY_HP : TOPOLOGY_LP) : TOPOLOGY);
+for (const [response, side, name] of BAND ? [[RESPONSE_HP, 'highpass', 'TOPOLOGY_HP'], [RESPONSE_LP, 'lowpass', 'TOPOLOGY_LP']] : [[RESPONSE, FILTER_TYPE, 'TOPOLOGY']]) {
+	if (RESPONSES[response].zeros && topologyOf(side) !== 'towThomas') {
+		throw new Error(\`\${RESPONSES[response].label} can only be built with Tow-Thomas stages: set \${name} = 'towThomas'\`);
+	}
 }
 
 console.log('='.repeat(72));
@@ -208,18 +214,19 @@ const realized = design.stages.map((stage, i) => {
 	}
 
 	console.log(\`stage \${i + 1} (\${stage.filterType}): f0 = \${f0.toFixed(1)} Hz, Q = \${stage.q.toFixed(4)}\`);
+	const TOPO = topologyOf(stage.filterType);
 	let r;
 	if (stage.filterType === 'highpass') {
-		if (TOPOLOGY === 'towThomas') {
+		if (TOPO === 'towThomas') {
 			r = ov && ov.C ? designTowThomasHighPassFromCap(stage.wn, stage.q, ov.C, OPTS) : designTowThomasHighPass(stage.wn, stage.q, OPTS);
-		} else if (TOPOLOGY === 'sallenKey') {
+		} else if (TOPO === 'sallenKey') {
 			r = ov && ov.C ? designSallenKeyHighPassFromCap(stage.wn, stage.q, ov.C, OPTS) : designSallenKeyHighPass(stage.wn, stage.q, OPTS);
 		} else {
 			r = ov && ov.C ? designMfbHighPassFromCap(stage.wn, stage.q, ov.C, OPTS) : designMfbHighPass(stage.wn, stage.q, OPTS);
 		}
-	} else if (TOPOLOGY === 'towThomas') {
+	} else if (TOPO === 'towThomas') {
 		r = ov && ov.C ? designTowThomasLowPassFromCap(stage.wn, stage.q, ov.C, OPTS) : designTowThomasLowPass(stage.wn, stage.q, OPTS);
-	} else if (TOPOLOGY === 'sallenKey') {
+	} else if (TOPO === 'sallenKey') {
 		const auto = designSallenKeyLowPass(stage.wn, stage.q, OPTS);
 		if (ov && (ov.Ctop || ov.Cbottom)) {
 			const manual = designSallenKeyLowPassFromCaps(stage.wn, stage.q, ov.Ctop || auto.components.Ctop, ov.Cbottom || auto.components.Cbottom, OPTS);
@@ -247,11 +254,11 @@ const realized = design.stages.map((stage, i) => {
 		\`  actual f0 = \${f0Actual.toFixed(1)} Hz (\${(100 * (f0Actual - f0) / f0).toFixed(2)}%), Q = \${r.actual.q.toFixed(4)} (\${(100 * (r.actual.q - stage.q) / stage.q).toFixed(2)}%)\`
 	);
 	if (stage.filterType === 'highpass') {
-		const sens = TOPOLOGY === 'towThomas' ? TOW_THOMAS_HP_SENSITIVITY : TOPOLOGY === 'sallenKey' ? SALLEN_KEY_HP_SENSITIVITY : MFB_HP_SENSITIVITY;
+		const sens = TOPO === 'towThomas' ? TOW_THOMAS_HP_SENSITIVITY : TOPO === 'sallenKey' ? SALLEN_KEY_HP_SENSITIVITY : MFB_HP_SENSITIVITY;
 		console.log(\`  Q sensitivity to 1% component error: \${worstCaseQError(sens, 1).toFixed(2)}% (root-sum-square, fixed for this topology)\`);
-	} else if (TOPOLOGY === 'towThomas') {
+	} else if (TOPO === 'towThomas') {
 		console.log(\`  Q sensitivity to 1% component error: \${worstCaseQError(TOW_THOMAS_SENSITIVITY, 1).toFixed(2)}% (root-sum-square, fixed for this topology)\`);
-	} else if (TOPOLOGY === 'mfb') {
+	} else if (TOPO === 'mfb') {
 		console.log(\`  Q sensitivity to 1% component error: \${worstCaseQError(mfbSensitivity(r.components), 1).toFixed(2)}% (root-sum-square)\`);
 	} else {
 		console.log(\`  Q sensitivity to 1% component error: \${worstCaseQError(SALLEN_KEY_SENSITIVITY, 1).toFixed(2)}% (root-sum-square, fixed for this topology)\`);
@@ -318,7 +325,7 @@ export const NEXT_STEPS = [
 	{
 		title: 'Simulate before building',
 		detail:
-			"Every number above comes from an ideal op-amp: infinite gain-bandwidth, no slew rate limit. The LTspice download runs the design with the op-amp picked next to it (a TL082 or LM741 model, or the single-pole one), so run its AC sweep with the part that will be built. That part's gain-bandwidth should be at least 10 to 20 times the highest stage's f0 times that stage's gain: below that it rolls off before the filter does, and the passband and stopband figures stop holding."
+			"Every number above comes from an ideal op-amp: infinite gain-bandwidth, no slew rate limit. The LTspice download runs the design with the op-amp picked next to it (a TL082 or LM741 model, or the single-pole one), so run its AC sweep with the part that will be built. That part's gain-bandwidth should be well above the sharpest stage's needs: at least 100 times its Q times its f0 as a rule, a few hundred times for a Tow-Thomas stage (the topology note in panel 04 gives the figure for this design). Below that it rolls off before the filter does, and the passband and stopband figures stop holding."
 	},
 	{
 		title: 'Build and test one stage at a time',
@@ -391,6 +398,8 @@ export function generateScript({
 	responseHp = response,
 	responseLp = response,
 	topology,
+	topologyHp = topology,
+	topologyLp = topology,
 	order,
 	orderHp,
 	orderLp,
@@ -414,6 +423,8 @@ export function generateScript({
 			responseHp,
 			responseLp,
 			topology,
+			topologyHp,
+			topologyLp,
 			order,
 			orderHp,
 			orderLp,
