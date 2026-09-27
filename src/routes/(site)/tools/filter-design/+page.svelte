@@ -216,6 +216,18 @@
 	const topologyBlocked = $derived(blockedSides.length > 0);
 	const usesTopology = (t) => (isBandType ? topologyHp === t || topologyLp === t : topology === t);
 	const TOPOLOGY_WORD = { mfb: 'multiple feedback', sallenKey: 'Sallen-Key', towThomas: 'Tow-Thomas biquad' };
+	// the circuit each stage heading names, so a band filter shows which menu drives it
+	const CIRCUIT_WORD = {
+		firstOrder: 'first-order RC, same for every topology',
+		firstOrderHp: 'first-order RC, same for every topology',
+		mfb: 'multiple feedback',
+		mfbHp: 'multiple feedback',
+		sallenKey: 'Sallen-Key',
+		sallenKeyHp: 'Sallen-Key',
+		towThomas: 'Tow-Thomas biquad',
+		towThomasHp: 'Tow-Thomas biquad',
+		towThomasNotch: 'Tow-Thomas notch, for the zeros'
+	};
 	const zeroResponsesText = $derived(
 		zeroResponses.length > 1
 			? `${zeroResponses.map((r) => RESPONSES[r].short ?? RESPONSES[r].label).join(' and ')} responses put`
@@ -1314,7 +1326,10 @@
 				{#each realizedStages as stageDesign, i (i)}
 					{@const sens = sensitivityFor(stageDesign)}
 					<div class="stage-block">
-						<h3>Stage {i + 1}</h3>
+						<h3>
+							Stage {i + 1} ·{isBandType ? ` ${design.stages[i].filterType === 'highpass' ? 'high-pass' : 'low-pass'} ${filterType === 'bandstop' ? 'branch' : 'side'},` : ''}
+							{CIRCUIT_WORD[stageDesign.topology] ?? stageDesign.topology}
+						</h3>
 						<div class="stage-grid">
 							<div>
 								<table>
