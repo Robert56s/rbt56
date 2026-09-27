@@ -52,14 +52,22 @@ function header(filterType) {
 `;
 }
 
-function paramsBlock({ amaxDb, aminDb, fp, fs, fl, fh, fsl, fsh, filterType, response, responseHp, responseLp, topology, topologyHp, topologyLp, order, orderHp, orderLp, capOverrides, resistorStock, capacitorStock }) {
+function paramsBlock({ amaxDb, aminDb, amaxDbHp, aminDbHp, amaxDbLp, aminDbLp, fp, fs, fl, fh, fsl, fsh, filterType, response, responseHp, responseLp, topology, topologyHp, topologyLp, order, orderHp, orderLp, capOverrides, resistorStock, capacitorStock }) {
 	const hasOverrides = capOverrides && Object.keys(capOverrides).length > 0;
 	return `// =====================================================================
 // PARAMETERS - the only block meant to be edited
 // =====================================================================
 
-const Amax = ${amaxDb};              // dB, max attenuation allowed in the passband
-const Amin = ${aminDb};              // dB, min attenuation required in the stopband
+const Amax = ${amaxDb};              // dB, max attenuation allowed in the passband ('lowpass', 'highpass')
+const Amin = ${aminDb};              // dB, min attenuation required in the stopband ('lowpass', 'highpass')
+// 'bandpass' and 'bandstop' are two filters, and each side has its own Amax
+const AMAX_HP = ${amaxDbHp ?? amaxDb};           // dB, the high-pass side's Amax (at fl for a band-pass, fh for a band-stop)
+const AMAX_LP = ${amaxDbLp ?? amaxDb};           // dB, the low-pass side's Amax (at fh for a band-pass, fl for a band-stop)
+// A band-pass has two stopbands, one per side, so each side has its own
+// Amin as well. A band-stop's one stopband keeps Amin above: both branches
+// leak into all of it, so neither could be held to more than the other.
+const AMIN_HP = ${aminDbHp ?? aminDb};          // dB, band-pass: the high-pass side's Amin, at fsl
+const AMIN_LP = ${aminDbLp ?? aminDb};          // dB, band-pass: the low-pass side's Amin, at fsh
 const FILTER_TYPE = ${JSON.stringify(filterType)}; // 'lowpass', 'highpass', 'bandpass' or 'bandstop'
 // Responses: 'butterworth', 'chebyshev', 'legendre', 'bessel',
 // 'inverseChebyshev' or 'elliptic'.
@@ -125,30 +133,30 @@ console.log('ORDER');
 console.log('='.repeat(72));
 
 /** One side's order, printed with where it comes from. */
-function orderFor(label, response, k, forced) {
-	const min = minimumOrder(response, Amax, Amin, k);
+function orderFor(label, response, k, forced, amax = Amax, amin = Amin) {
+	const min = minimumOrder(response, amax, amin, k);
 	if (min.tried) {
 		console.log(\`\${label}: \${RESPONSES[response].label}, k = \${k.toFixed(4)}, no closed formula: loss at the stopband edge by order \${min.tried.map((t) => \`n=\${t.n}: \${t.loss.toFixed(1)} dB\`).join(', ')}\`);
 	} else {
 		console.log(\`\${label}: \${RESPONSES[response].label}, k = \${k.toFixed(4)}, minimum order >= \${min.value.toFixed(4)}\`);
 	}
 	const n = forced ?? min.n;
-	if (n === null) throw new Error(\`\${RESPONSES[response].label} does not reach Amin = \${Amin} dB at any order up to \${SEARCH_LIMIT}: loosen the spec or pick a steeper response\`);
+	if (n === null) throw new Error(\`\${RESPONSES[response].label} does not reach Amin = \${amin} dB at any order up to \${SEARCH_LIMIT}: loosen the spec or pick a steeper response\`);
 	console.log(\`  -> using n = \${n}\`);
 	return n;
 }
 
 let design;
 if (FILTER_TYPE === 'bandpass') {
-	console.log(\`spec: Amax=\${Amax} dB, Amin=\${Amin} dB, bandpass (fl=\${fl} fh=\${fh} fsl=\${fsl} fsh=\${fsh} Hz)\`);
-	const nHp = orderFor('high-pass side', RESPONSE_HP, transitionRatio(fsl, fl), ORDER_HP);
-	const nLp = orderFor('low-pass side', RESPONSE_LP, transitionRatio(fh, fsh), ORDER_LP);
-	design = designBandPass({ responseHp: RESPONSE_HP, responseLp: RESPONSE_LP, amaxDb: Amax, aminDb: Amin, fl, fh, fsl, fsh, orderHigh: nHp, orderLow: nLp });
+	console.log(\`spec: bandpass (fl=\${fl} fh=\${fh} fsl=\${fsl} fsh=\${fsh} Hz), high-pass side Amax=\${AMAX_HP} dB Amin=\${AMIN_HP} dB, low-pass side Amax=\${AMAX_LP} dB Amin=\${AMIN_LP} dB\`);
+	const nHp = orderFor('high-pass side', RESPONSE_HP, transitionRatio(fsl, fl), ORDER_HP, AMAX_HP, AMIN_HP);
+	const nLp = orderFor('low-pass side', RESPONSE_LP, transitionRatio(fh, fsh), ORDER_LP, AMAX_LP, AMIN_LP);
+	design = designBandPass({ responseHp: RESPONSE_HP, responseLp: RESPONSE_LP, amaxDbHp: AMAX_HP, aminDbHp: AMIN_HP, amaxDbLp: AMAX_LP, aminDbLp: AMIN_LP, fl, fh, fsl, fsh, orderHigh: nHp, orderLow: nLp });
 } else if (FILTER_TYPE === 'bandstop') {
-	console.log(\`spec: Amax=\${Amax} dB, Amin=\${Amin} dB, bandstop (fl=\${fl} fsl=\${fsl} fsh=\${fsh} fh=\${fh} Hz)\`);
-	const nLp = orderFor('low-pass branch', RESPONSE_LP, transitionRatio(fl, fsl), ORDER_LP);
-	const nHp = orderFor('high-pass branch', RESPONSE_HP, transitionRatio(fsh, fh), ORDER_HP);
-	design = designBandStop({ responseHp: RESPONSE_HP, responseLp: RESPONSE_LP, amaxDb: Amax, aminDb: Amin, fl, fh, fsl, fsh, orderHigh: nHp, orderLow: nLp });
+	console.log(\`spec: bandstop (fl=\${fl} fsl=\${fsl} fsh=\${fsh} fh=\${fh} Hz), Amin=\${Amin} dB across the stopband, low-pass branch Amax=\${AMAX_LP} dB, high-pass branch Amax=\${AMAX_HP} dB\`);
+	const nLp = orderFor('low-pass branch', RESPONSE_LP, transitionRatio(fl, fsl), ORDER_LP, AMAX_LP, Amin);
+	const nHp = orderFor('high-pass branch', RESPONSE_HP, transitionRatio(fsh, fh), ORDER_HP, AMAX_HP, Amin);
+	design = designBandStop({ responseHp: RESPONSE_HP, responseLp: RESPONSE_LP, amaxDbHp: AMAX_HP, amaxDbLp: AMAX_LP, aminDb: Amin, fl, fh, fsl, fsh, orderHigh: nHp, orderLow: nLp });
 } else {
 	console.log(\`spec: Amax=\${Amax} dB at \${fp} Hz, Amin=\${Amin} dB at \${fs} Hz, \${FILTER_TYPE}\`);
 	const k = FILTER_TYPE === 'highpass' ? transitionRatio(fs, fp) : transitionRatio(fp, fs);
@@ -291,11 +299,13 @@ console.log('='.repeat(72));
 console.log('FREQUENCY RESPONSE (from the rounded, realized components)');
 console.log('='.repeat(72));
 const gainDb = (f) => (FILTER_TYPE === 'bandstop' ? magnitudePhaseAtParallelSum(branches, f, weights).db : magnitudePhaseAt(realized, f).db);
+// each stretch of stopband carries the Amin it answers to: a band-pass's
+// lower stopband is its high-pass side's, its upper one the low-pass side's
 const bands = {
-	lowpass: { pass: [[fp / 100, fp]], stop: [[fs, fs * 100]], points: [fp / 10, fp, Math.sqrt(fp * fs), fs, fs * 10] },
-	highpass: { pass: [[fp, fp * 100]], stop: [[fs / 100, fs]], points: [fs / 10, fs, Math.sqrt(fp * fs), fp, fp * 10] },
-	bandpass: { pass: [[fl, fh]], stop: [[fsl / 100, fsl], [fsh, fsh * 100]], points: [fsl / 10, fsl, fl, Math.sqrt(fl * fh), fh, fsh, fsh * 10] },
-	bandstop: { pass: [[fl / 100, fl], [fh, fh * 100]], stop: [[fsl, fsh]], points: [fl / 10, fl, fsl, Math.sqrt(fsl * fsh), fsh, fh, fh * 10] }
+	lowpass: { pass: [[fp / 100, fp]], stop: [[fs, fs * 100, Amin]], points: [fp / 10, fp, Math.sqrt(fp * fs), fs, fs * 10] },
+	highpass: { pass: [[fp, fp * 100]], stop: [[fs / 100, fs, Amin]], points: [fs / 10, fs, Math.sqrt(fp * fs), fp, fp * 10] },
+	bandpass: { pass: [[fl, fh]], stop: [[fsl / 100, fsl, AMIN_HP], [fsh, fsh * 100, AMIN_LP]], points: [fsl / 10, fsl, fl, Math.sqrt(fl * fh), fh, fsh, fsh * 10] },
+	bandstop: { pass: [[fl / 100, fl], [fh, fh * 100]], stop: [[fsl, fsh, Amin]], points: [fl / 10, fl, fsl, Math.sqrt(fsl * fsh), fsh, fh, fh * 10] }
 }[FILTER_TYPE];
 for (const f of bands.points) console.log(\`  \${f.toFixed(0).padStart(9)} Hz : \${gainDb(f).toFixed(2).padStart(8)} dB\`);
 // Amax and Amin count from the top of the passband (an even-order Chebyshev
@@ -307,12 +317,15 @@ const scan = (ranges) => {
 	return out;
 };
 const top = Math.max(...scan(bands.pass).map(gainDb));
-let worst = { db: Infinity, f: 0 };
-for (const f of scan(bands.stop)) {
-	const att = top - gainDb(f);
-	if (att < worst.db) worst = { db: att, f };
+// the point with the least margin over its own Amin
+let worst = { db: Infinity, f: 0, amin: Amin, margin: Infinity };
+for (const [a, b, amin] of bands.stop) {
+	for (const f of scan([[a, b]])) {
+		const att = top - gainDb(f);
+		if (att - amin < worst.margin) worst = { db: att, f, amin, margin: att - amin };
+	}
 }
-console.log(\`\\npassband top \${top.toFixed(2)} dB; least attenuation in the stopband \${worst.db.toFixed(1)} dB at \${worst.f.toFixed(0)} Hz (spec asks for >= \${Amin} dB): \${worst.db >= Amin ? 'OK' : 'NOT MET'}\`);
+console.log(\`\\npassband top \${top.toFixed(2)} dB; least attenuation in the stopband \${worst.db.toFixed(1)} dB at \${worst.f.toFixed(0)} Hz (spec asks for >= \${worst.amin} dB there): \${worst.margin >= 0 ? 'OK' : 'NOT MET'}\`);
 `;
 }
 
@@ -387,6 +400,10 @@ function wrapComment(text, width) {
 export function generateScript({
 	amaxDb,
 	aminDb,
+	amaxDbHp = amaxDb,
+	aminDbHp = aminDb,
+	amaxDbLp = amaxDb,
+	aminDbLp = aminDb,
 	fp,
 	fs,
 	fl,
@@ -412,6 +429,10 @@ export function generateScript({
 		paramsBlock({
 			amaxDb,
 			aminDb,
+			amaxDbHp,
+			aminDbHp,
+			amaxDbLp,
+			aminDbLp,
 			fp,
 			fs,
 			fl,

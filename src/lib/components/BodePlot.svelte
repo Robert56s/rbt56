@@ -2,9 +2,14 @@
 	// Magnitude Bode plot: log-frequency x axis, dB y axis, with optional
 	// marker lines for the passband and stopband edges. passbandFreqs and
 	// stopbandFreqs each take one frequency (low-pass, high-pass) or two
-	// (band-pass: low and high edge of each).
+	// (band-pass: low and high edge of each). amaxDb and aminDb draw one
+	// level each across the plot; `limits` replaces them with segments, for a
+	// band filter whose two sides ask for different limits: { from, to, db,
+	// db2 } in Hz and dB of loss, from or to left out at the plot's edge, db2
+	// the loss at `to` when the segment slopes from one side's limit to the
+	// other's.
 
-	let { points, passbandFreqs = [], stopbandFreqs = [], amaxDb = null, aminDb = null, height = 260 } = $props();
+	let { points, passbandFreqs = [], stopbandFreqs = [], amaxDb = null, aminDb = null, limits = null, height = 260 } = $props();
 
 	let canvas = $state(null);
 	let width = $state(600);
@@ -94,18 +99,16 @@
 			g.lineTo(xx, h - pad.bottom);
 			g.stroke();
 		}
-		if (Number.isFinite(amaxDb)) {
-			const yy = Math.round(y(-amaxDb)) + 0.5;
+		// the loss a segment asks for at x, straight between its two ends
+		const lossAt = (s, xx) => (s.from && s.to && Number.isFinite(s.db2) ? s.db + (s.db2 - s.db) * ((xx - x(s.from)) / (x(s.to) - x(s.from))) : s.db);
+		for (const s of limits ?? [{ db: amaxDb }, { db: aminDb }]) {
+			if (!Number.isFinite(s.db)) continue;
+			const x0 = s.from ? Math.max(pad.left, x(s.from)) : pad.left;
+			const x1 = s.to ? Math.min(w - pad.right, x(s.to)) : w - pad.right;
+			if (!(x1 > x0)) continue;
 			g.beginPath();
-			g.moveTo(pad.left, yy);
-			g.lineTo(w - pad.right, yy);
-			g.stroke();
-		}
-		if (Number.isFinite(aminDb)) {
-			const yy = Math.round(y(-aminDb)) + 0.5;
-			g.beginPath();
-			g.moveTo(pad.left, yy);
-			g.lineTo(w - pad.right, yy);
+			g.moveTo(x0, Math.round(y(-lossAt(s, x0))) + 0.5);
+			g.lineTo(x1, Math.round(y(-lossAt(s, x1))) + 0.5);
 			g.stroke();
 		}
 		g.setLineDash([]);

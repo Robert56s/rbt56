@@ -425,5 +425,61 @@ check('combiner never leaves depth on the table', worstLoss <= 1e-9, `${worstLos
 	check("downloadable script: stops on an elliptic or inverse Chebyshev side on MFB or Sallen-Key, and names the menu to set to Tow-Thomas", refused === 2 * zeroSpecs.length, `${refused} of ${2 * zeroSpecs.length}`);
 }
 
+/* ---------------------------------- a band filter's limits, side by side */
+{
+	const { designBandPass, minimumOrder } = await import('../src/lib/filter/stages.js');
+	const { transitionRatio } = await import('../src/lib/filter/order.js');
+	const edgesBp = { fl: 1000, fh: 10000, fsl: 300, fsh: 30000 };
+	const edgesBs = { fl: 1000, fh: 30000, fsl: 3000, fsh: 10000 };
+	const sides = { amaxDbHp: 1, aminDbHp: 30, amaxDbLp: 0.5, aminDbLp: 60 };
+
+	// each side's order and prototype come from its own two limits
+	const bp = designBandPass({ responseHp: 'butterworth', responseLp: 'chebyshev', ...edgesBp, ...sides });
+	const bpHp = minimumOrder('butterworth', 1, 30, transitionRatio(300, 1000)).n;
+	const bpLp = minimumOrder('chebyshev', 0.5, 60, transitionRatio(10000, 30000)).n;
+	check(
+		'band-pass: each side is designed on its own Amax and Amin',
+		bp.hp.amaxDb === 1 && bp.hp.aminDb === 30 && bp.lp.amaxDb === 0.5 && bp.lp.aminDb === 60 && bp.hp.n === bpHp && bp.lp.n === bpLp && bp.amaxDb === null && bp.aminDb === null,
+		`n = ${bp.hp.n} + ${bp.lp.n}, expected ${bpHp} + ${bpLp}`
+	);
+	// a band-stop, as the page builds it: an Amax per branch, one Amin for the stopband both share
+	const bs = designBandStop({ responseHp: 'butterworth', responseLp: 'butterworth', ...edgesBs, amaxDbHp: 1, amaxDbLp: 0.5, aminDb: 50 });
+	const bsLp = minimumOrder('butterworth', 0.5, 50, transitionRatio(1000, 3000)).n;
+	const bsHp = minimumOrder('butterworth', 1, 50, transitionRatio(10000, 30000)).n;
+	check('band-stop: each branch gets its own Amax at its passband edge and the one Amin at its stopband edge', bs.lp.amaxDb === 0.5 && bs.hp.amaxDb === 1 && bs.lp.aminDb === 50 && bs.hp.aminDb === 50 && bs.lp.n === bsLp && bs.hp.n === bsHp && bs.amaxDb === null && bs.aminDb === 50, `n = ${bs.lp.n} + ${bs.hp.n}, expected ${bsLp} + ${bsHp}`);
+
+	// left out, the per-side limits are the shared pair: the same design as before
+	const shared = { responseHp: 'legendre', responseLp: 'elliptic', amaxDb: 2, aminDb: 45, ...edgesBp };
+	const same = JSON.stringify(designBandPass(shared)) === JSON.stringify(designBandPass({ ...shared, amaxDbHp: 2, aminDbHp: 45, amaxDbLp: 2, aminDbLp: 45 }));
+	check('band-pass: one shared Amax and Amin give the same design as the same pair on each side', same && designBandPass(shared).amaxDb === 2);
+
+	// the downloadable script designs and checks each side against its own limits
+	const dir = mkdtempSync(join(tmpdir(), 'rbt56-sides-'));
+	const run = (name, opts) => {
+		const file = join(dir, `${name}.js`);
+		writeFileSync(file, generateScript({ fp: 10000, fs: 35000, order: null, orderHp: null, orderLp: null, capOverrides: {}, response: 'butterworth', responseHp: 'butterworth', responseLp: 'butterworth', topology: 'mfb', amaxDb: 3, aminDb: 40, ...opts }));
+		try {
+			return execFileSync(process.execPath, [file], { encoding: 'utf8', stdio: 'pipe' });
+		} catch (e) {
+			return 'ERROR ' + String(e.stderr || e.message);
+		}
+	};
+	const okBp = run('bp-sides', { filterType: 'bandpass', ...edgesBp, ...sides });
+	// the band-stop's AMIN_HP and AMIN_LP (set here to 30 and 60) are ignored: its one stopband takes Amin
+	const okBs = run('bs-sides', { filterType: 'bandstop', ...edgesBs, ...sides, aminDb: 50 });
+	check(
+		'downloadable script: a band-pass with Amax and Amin per side, and a band-stop with Amax per branch and one Amin, meet them',
+		/least attenuation in the stopband .*: OK/.test(okBp) &&
+			/least attenuation in the stopband .*\(spec asks for >= 50 dB there\): OK/.test(okBs) &&
+			/high-pass side Amax=1 dB Amin=30 dB, low-pass side Amax=0.5 dB Amin=60 dB/.test(okBp) &&
+			/Amin=50 dB across the stopband, low-pass branch Amax=0.5 dB, high-pass branch Amax=1 dB/.test(okBs),
+		[okBp, okBs].map((o) => o.trim().split('\n').pop()).join(' / ')
+	);
+	// held to the shared 30 dB the low-pass side would pass with fewer stages: the check must see its own 60 dB
+	const nFor30 = minimumOrder('butterworth', 0.5, 30, transitionRatio(10000, 30000)).n;
+	const short = run('bp-short', { filterType: 'bandpass', ...edgesBp, ...sides, orderLp: nFor30 });
+	check('downloadable script: a low-pass side built for 30 dB is reported short of its own 60 dB', /least attenuation in the stopband .*: NOT MET/.test(short) && /asks for >= 60 dB there/.test(short), short.trim().split('\n').pop());
+}
+
 console.log(fails === 0 ? 'filter checks clean' : `${fails} failure(s)`);
 process.exit(fails === 0 ? 0 : 1);

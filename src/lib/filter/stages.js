@@ -211,11 +211,29 @@ export function designHighPass({ response, amaxDb, aminDb, fp, fs, order }) {
  * list of ordinary low-pass and high-pass stages - no separate code path
  * needed anywhere else for band-pass itself. Since the two sections are
  * independent, each can have its own response (responseHp, responseLp;
- * both default to `response`).
+ * both default to `response`) and its own limits (amaxDbHp and aminDbHp at
+ * fl and fsl, amaxDbLp and aminDbLp at fh and fsh; all default to amaxDb
+ * and aminDb).
  */
-export function designBandPass({ response, responseHp = response, responseLp = response, amaxDb, aminDb, fl, fh, fsl, fsh, orderLow, orderHigh }) {
-	const hp = designHighPass({ response: responseHp, amaxDb, aminDb, fp: fl, fs: fsl, order: orderHigh });
-	const lp = designLowPass({ response: responseLp, amaxDb, aminDb, fp: fh, fs: fsh, order: orderLow });
+export function designBandPass({
+	response,
+	responseHp = response,
+	responseLp = response,
+	amaxDb,
+	aminDb,
+	amaxDbHp = amaxDb,
+	aminDbHp = aminDb,
+	amaxDbLp = amaxDb,
+	aminDbLp = aminDb,
+	fl,
+	fh,
+	fsl,
+	fsh,
+	orderLow,
+	orderHigh
+}) {
+	const hp = designHighPass({ response: responseHp, amaxDb: amaxDbHp, aminDb: aminDbHp, fp: fl, fs: fsl, order: orderHigh });
+	const lp = designLowPass({ response: responseLp, amaxDb: amaxDbLp, aminDb: aminDbLp, fp: fh, fs: fsh, order: orderLow });
 
 	return {
 		hp,
@@ -224,8 +242,13 @@ export function designBandPass({ response, responseHp = response, responseLp = r
 		response: responseHp === responseLp ? responseLp : null,
 		responseHp,
 		responseLp,
-		amaxDb,
-		aminDb,
+		// one figure when both sides share it, null when they differ
+		amaxDb: amaxDbHp === amaxDbLp ? amaxDbLp : null,
+		aminDb: aminDbHp === aminDbLp ? aminDbLp : null,
+		amaxDbHp,
+		aminDbHp,
+		amaxDbLp,
+		aminDbLp,
 		fl,
 		fh,
 		fsl,
@@ -260,11 +283,32 @@ export function designBandPass({ response, responseHp = response, responseLp = r
  * handled regardless of branch); the Bode response must NOT treat this
  * as one cascade - use responseAtParallelSum/sweepParallelSum with
  * [lp.stages-worth of realized stages, hp.stages-worth] kept separate.
- * Each branch can have its own response, as for the band-pass.
+ * Each branch can have its own response and its own limits, as for the
+ * band-pass: the low-pass branch's (amaxDbLp, aminDbLp) hold at fl and
+ * fsl, the high-pass branch's (amaxDbHp, aminDbHp) at fh and fsh. The page
+ * gives both branches the same Amin, though: they share the one stopband
+ * and each leaks into all of it (an elliptic branch's stopband stays at its
+ * Amin right across), so neither can be held to more than the other.
  */
-export function designBandStop({ response, responseHp = response, responseLp = response, amaxDb, aminDb, fl, fh, fsl, fsh, orderLow, orderHigh }) {
-	const lp = designLowPass({ response: responseLp, amaxDb, aminDb, fp: fl, fs: fsl, order: orderLow });
-	const hp = designHighPass({ response: responseHp, amaxDb, aminDb, fp: fh, fs: fsh, order: orderHigh });
+export function designBandStop({
+	response,
+	responseHp = response,
+	responseLp = response,
+	amaxDb,
+	aminDb,
+	amaxDbHp = amaxDb,
+	aminDbHp = aminDb,
+	amaxDbLp = amaxDb,
+	aminDbLp = aminDb,
+	fl,
+	fh,
+	fsl,
+	fsh,
+	orderLow,
+	orderHigh
+}) {
+	const lp = designLowPass({ response: responseLp, amaxDb: amaxDbLp, aminDb: aminDbLp, fp: fl, fs: fsl, order: orderLow });
+	const hp = designHighPass({ response: responseHp, amaxDb: amaxDbHp, aminDb: aminDbHp, fp: fh, fs: fsh, order: orderHigh });
 
 	return {
 		lp,
@@ -273,8 +317,12 @@ export function designBandStop({ response, responseHp = response, responseLp = r
 		response: responseHp === responseLp ? responseLp : null,
 		responseHp,
 		responseLp,
-		amaxDb,
-		aminDb,
+		amaxDb: amaxDbHp === amaxDbLp ? amaxDbLp : null,
+		aminDb: aminDbHp === aminDbLp ? aminDbLp : null,
+		amaxDbHp,
+		aminDbHp,
+		amaxDbLp,
+		aminDbLp,
 		fl,
 		fh,
 		fsl,

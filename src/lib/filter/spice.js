@@ -228,10 +228,18 @@ function responseText({ filterType, response, responseHp, responseLp }) {
 	return name(response ?? responseLp ?? 'butterworth');
 }
 
+/** The limits in one line, each one per side when a band filter's two sides differ. */
+function limitsText({ filterType, amaxDb, aminDb, amaxDbHp, aminDbHp, amaxDbLp, aminDbLp }) {
+	if (!isBand(filterType)) return `Amax = ${amaxDb} dB, Amin = ${aminDb} dB`;
+	const word = filterType === 'bandstop' ? 'branch' : 'side';
+	const pair = (hp, lp) => (hp === lp ? `${lp} dB` : `${hp} dB (high-pass ${word}), ${lp} dB (low-pass ${word})`);
+	return `Amax = ${pair(amaxDbHp ?? amaxDb, amaxDbLp ?? amaxDb)}, Amin = ${pair(aminDbHp ?? aminDb, aminDbLp ?? aminDb)}`;
+}
+
 function specSummary(opts) {
-	const { filterType, amaxDb, aminDb, fp, fs, fl, fh, fsl, fsh, topology, topologyHp, topologyLp } = opts;
+	const { filterType, fp, fs, fl, fh, fsl, fsh, topology, topologyHp, topologyLp } = opts;
 	const edges = isBand(filterType) ? `fl = ${fl} Hz, fh = ${fh} Hz, fsl = ${fsl} Hz, fsh = ${fsh} Hz` : `fp = ${fp} Hz, fs = ${fs} Hz`;
-	return [`${TYPE_LABEL[filterType] ?? filterType}, ${responseText(opts)}`, `Amax = ${amaxDb} dB, Amin = ${aminDb} dB, ${edges}`, topologyHp && topologyLp && topologyHp !== topologyLp ? `topology: ${topologyHp} (high-pass side), ${topologyLp} (low-pass side)` : `topology: ${topology ?? topologyLp}`];
+	return [`${TYPE_LABEL[filterType] ?? filterType}, ${responseText(opts)}`, `${limitsText(opts)}, ${edges}`, topologyHp && topologyLp && topologyHp !== topologyLp ? `topology: ${topologyHp} (high-pass side), ${topologyLp} (low-pass side)` : `topology: ${topology ?? topologyLp}`];
 }
 
 /* ------------------------------------------------------------- output */

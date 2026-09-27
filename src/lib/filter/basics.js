@@ -190,11 +190,22 @@ const LIMITS = {
 /** 10^(-A/20) to two significant figures: 0.71, 0.01. */
 const ratioText = (db) => String(Number((10 ** (-db / 20)).toPrecision(2)));
 
-function decibels({ type, amaxDb, aminDb }) {
+function decibels({ type, amaxDb, aminDb, bandLimits = null }) {
 	const band = type === 'bandpass' || type === 'bandstop';
 	const limits = LIMITS[type];
 	const amaxOk = allPos(amaxDb);
 	const aminOk = allPos(aminDb);
+	// a band filter whose two sides ask for different limits names both;
+	// the figures below are then the low-pass side's, the one counted here
+	const sideWord = type === 'bandstop' ? 'branch' : 'side';
+	const bl = band && bandLimits && allPos(bandLimits.hp.amaxDb, bandLimits.hp.aminDb, bandLimits.lp.amaxDb, bandLimits.lp.aminDb) ? bandLimits : null;
+	const amaxSplit = !!bl && bl.hp.amaxDb !== bl.lp.amaxDb;
+	const aminSplit = !!bl && bl.hp.aminDb !== bl.lp.aminDb;
+	const split = amaxSplit || aminSplit;
+	const perSide = (hp, lp) => `${plain(hp)} dB on the high-pass ${sideWord} and ${plain(lp)} dB on the low-pass ${sideWord}`;
+	const limitsSentence = `${
+		amaxSplit ? `Amax, ${perSide(bl.hp.amaxDb, bl.lp.amaxDb)},` : `Amax${amaxOk ? `, here ${plain(amaxDb)} dB,` : ''}`
+	} is how much the passband may sag. ${aminSplit ? `Amin, ${perSide(bl.hp.aminDb, bl.lp.aminDb)},` : `Amin${aminOk ? `, here ${plain(aminDb)} dB,` : ''}`} is how far down the stopband must be.`;
 	const lines = ['A_{\\text{dB}} &= 20\\log_{10}\\dfrac{V_{in}}{V_{out}}'];
 	if (amaxOk) lines.push(`A_{max} = ${plain(amaxDb)}\\ \\text{dB} &\\Rightarrow \\dfrac{V_{out}}{V_{in}} = 10^{-${plain(amaxDb)}/20} = ${ratioText(amaxDb)}`);
 	if (aminOk) lines.push(`A_{min} = ${plain(aminDb)}\\ \\text{dB} &\\Rightarrow \\dfrac{V_{out}}{V_{in}} = 10^{-${plain(aminDb)}/20} = ${ratioText(aminDb)}`);
@@ -202,14 +213,14 @@ function decibels({ type, amaxDb, aminDb }) {
 	const intro =
 		lines.length === 1
 			? 'A decibel figure is a ratio in disguise. The loss in dB from the voltage ratio:'
-			: `A decibel figure is a ratio in disguise. The loss in dB from the voltage ratio, then the page's ${lines.length === 3 ? 'two limits' : 'limit'} turned back into ${lines.length === 3 ? 'ratios' : 'a ratio'}:`;
+			: `A decibel figure is a ratio in disguise. The loss in dB from the voltage ratio, then ${split ? `the low-pass ${sideWord}'s` : "the page's"} ${lines.length === 3 ? 'two limits' : 'limit'} turned back into ${lines.length === 3 ? 'ratios' : 'a ratio'}:`;
 	return [
 		h('Decibels and the two limits'),
 		p(
 			'Gain ratios run from 1 down to 0.001 and lower, which is awkward on one graph. The page counts them in decibels instead: 20 times the logarithm of the ratio. A ratio of 1 is 0 dB, 0.5 is about 6 dB down, 0.1 is 20 dB down, 0.01 is 40 dB down. Every factor of ten is another 20 dB, so a plot of dB against a log frequency axis turns the curves into near straight lines. That plot is a Bode plot, and panel 05 draws one.'
 		),
 		p(
-			`The specification in panel 01 is written in this unit. ${limits.bands} Amax${amaxOk ? `, here ${plain(amaxDb)} dB,` : ''} is how much the passband may sag. Amin${aminOk ? `, here ${plain(aminDb)} dB,` : ''} is how far down the stopband must be. ${limits.slide} ${
+			`The specification in panel 01 is written in this unit. ${limits.bands} ${limitsSentence} ${limits.slide} ${
 				band
 					? 'The limits and the edges draw forbidden zones on the Bode plot, under each passband and over each stopband, and any curve that misses them all is a valid design.'
 					: 'The four numbers draw two forbidden zones on the Bode plot, one under the passband and one over the stopband, and any curve that misses both is a valid design.'
@@ -588,7 +599,7 @@ function stagesToParts({ topology, stock, design, realizedStages, needsTowThomas
 
 /* ------------------------------------------------ 7. the rest of the page */
 
-function restOfPage({ type, amaxDb, aminDb, k, stages, attenuationAtFs, attenuationAtFp, attenuationAtFsl, attenuationAtFsh, attenuationAtFl, attenuationAtFh }) {
+function restOfPage({ type, amaxDb, aminDb, bandLimits = null, k, stages, attenuationAtFs, attenuationAtFp, attenuationAtFsl, attenuationAtFsh, attenuationAtFl, attenuationAtFh }) {
 	const band = type === 'bandpass' || type === 'bandstop';
 	const high = type === 'highpass';
 	let kText;
@@ -601,7 +612,11 @@ function restOfPage({ type, amaxDb, aminDb, k, stages, attenuationAtFs, attenuat
 	if (limitsOk && !band && isNum(attenuationAtFs) && isNum(attenuationAtFp)) {
 		flags = `and the flags under it say the same in numbers, here ${attenuationAtFs.toFixed(1)} dB at fs against ${plain(aminDb)} required and ${attenuationAtFp.toFixed(2)} dB at fp against ${plain(amaxDb)} allowed`;
 	} else if (limitsOk && band && [attenuationAtFsl, attenuationAtFsh, attenuationAtFl, attenuationAtFh].every(isNum)) {
-		flags = `and the flags under it say the same in numbers, here ${attenuationAtFsl.toFixed(1)} dB at fsl and ${attenuationAtFsh.toFixed(1)} dB at fsh against ${plain(aminDb)} required, ${attenuationAtFl.toFixed(2)} dB at fl and ${attenuationAtFh.toFixed(2)} dB at fh against ${plain(amaxDb)} allowed`;
+		// each edge against its own side's limit
+		const at = bandLimits && allPos(bandLimits.amaxAtFl, bandLimits.amaxAtFh, bandLimits.aminAtFsl, bandLimits.aminAtFsh) ? bandLimits : { amaxAtFl: amaxDb, amaxAtFh: amaxDb, aminAtFsl: aminDb, aminAtFsh: aminDb };
+		const aminText = at.aminAtFsl === at.aminAtFsh ? plain(at.aminAtFsl) : `${plain(at.aminAtFsl)} and ${plain(at.aminAtFsh)}`;
+		const amaxText = at.amaxAtFl === at.amaxAtFh ? plain(at.amaxAtFl) : `${plain(at.amaxAtFl)} and ${plain(at.amaxAtFh)}`;
+		flags = `and the flags under it say the same in numbers, here ${attenuationAtFsl.toFixed(1)} dB at fsl and ${attenuationAtFsh.toFixed(1)} dB at fsh against ${aminText} required, ${attenuationAtFl.toFixed(2)} dB at fl and ${attenuationAtFh.toFixed(2)} dB at fh against ${amaxText} allowed`;
 	}
 	return [
 		h('Reading the rest of the page'),
@@ -639,6 +654,7 @@ export function filterBasics({
 	fs,
 	amaxDb,
 	aminDb,
+	bandLimits = null,
 	fl,
 	fh,
 	fsl,
@@ -664,12 +680,12 @@ export function filterBasics({
 	const ok = specOk(side, amaxDb, aminDb);
 	return [
 		...whatAFilterDoes({ type, fp, fs, fl, fh, fsl, fsh, realizedStages, bandStopBranches, combineSigns }),
-		...decibels({ type, amaxDb, aminDb }),
+		...decibels({ type, amaxDb, aminDb, bandLimits }),
 		...oneRc({ type, side, amaxDb, aminDb, ok }),
 		...theOrder({ type, response, side, amaxDb, aminDb, ok, order }),
 		...opampAndQ({ type, response, side, amaxDb, aminDb, ok }),
 		...stagesToParts({ topology, stock, design, realizedStages, needsTowThomas }),
-		...restOfPage({ type, amaxDb, aminDb, k, stages, attenuationAtFs, attenuationAtFp, attenuationAtFsl, attenuationAtFsh, attenuationAtFl, attenuationAtFh }),
+		...restOfPage({ type, amaxDb, aminDb, bandLimits, k, stages, attenuationAtFs, attenuationAtFp, attenuationAtFsl, attenuationAtFsh, attenuationAtFl, attenuationAtFh }),
 		h('Words used on this page'),
 		terms(GLOSSARY)
 	];

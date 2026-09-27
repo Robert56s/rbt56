@@ -74,6 +74,13 @@
 
 	let amaxDb = $state(3);
 	let aminDb = $state(40);
+	// a band-pass or band-stop is two filters, so each side has its own
+	// limits too: Amax for either, and Amin for a band-pass's two sides (a
+	// band-stop keeps one Amin, see aminSideHp below)
+	let amaxDbHp = $state(3);
+	let aminDbHp = $state(40);
+	let amaxDbLp = $state(3);
+	let aminDbLp = $state(40);
 	let fp = $state(10000);
 	let fs = $state(35000);
 	let fl = $state(1000);
@@ -154,8 +161,8 @@
 			fsl = 3000;
 			fsh = 10000;
 		}
-		// entering a band type starts both sides on the response and the
-		// topology already chosen
+		// entering a band type starts both sides on the response, the
+		// topology and the limits already chosen
 		if (filterType === 'bandpass' || filterType === 'bandstop') {
 			const single = untrack(() => response);
 			responseHp = single;
@@ -163,6 +170,11 @@
 			const wiring = untrack(() => topology);
 			topologyHp = wiring;
 			topologyLp = wiring;
+			const [amax, amin] = untrack(() => [amaxDb, aminDb]);
+			amaxDbHp = amax;
+			amaxDbLp = amax;
+			aminDbHp = amin;
+			aminDbLp = amin;
 		}
 	});
 
@@ -244,9 +256,26 @@
 					? fl > 0 && fl < fsl && fsl < fsh && fsh < fh
 					: fs > fp
 	);
+	// A band-stop's one stopband takes one Amin: both branches leak into all
+	// of it, so neither could be held to more than the other lets through.
+	const aminSideHp = $derived(filterType === 'bandstop' ? aminDb : aminDbHp);
+	const aminSideLp = $derived(filterType === 'bandstop' ? aminDb : aminDbLp);
+	const limitsOk = (amax, amin) => amax > 0 && amin > amax;
 	const valid = $derived(
-		isBandType ? edgesOk && amaxDb > 0 && aminDb > amaxDb : fp > 0 && fs > 0 && edgesOk && amaxDb > 0 && aminDb > amaxDb
+		isBandType ? edgesOk && limitsOk(amaxDbHp, aminSideHp) && limitsOk(amaxDbLp, aminSideLp) : fp > 0 && fs > 0 && edgesOk && limitsOk(amaxDb, aminDb)
 	);
+	const sideWord = $derived(filterType === 'bandstop' ? 'branch' : 'side');
+	// The limits each edge answers to. A band-pass's lower edges (fsl, fl)
+	// belong to its high-pass side and its upper ones (fh, fsh) to its
+	// low-pass side; a band-stop's lower edges (fl, fsl) belong to its
+	// low-pass branch and its upper ones (fsh, fh) to its high-pass branch.
+	const amaxAtFl = $derived(filterType === 'bandstop' ? amaxDbLp : amaxDbHp);
+	const aminAtFsl = $derived(filterType === 'bandstop' ? aminDb : aminDbHp);
+	const amaxAtFh = $derived(filterType === 'bandstop' ? amaxDbHp : amaxDbLp);
+	const aminAtFsh = $derived(filterType === 'bandstop' ? aminDb : aminDbLp);
+	// a band filter's limits in words, one figure when both sides share it
+	const amaxBandText = $derived(amaxAtFl === amaxAtFh ? `${amaxAtFl} dB` : `${amaxAtFl} dB at fl and ${amaxAtFh} dB at fh`);
+	const aminBandText = $derived(aminAtFsl === aminAtFsh ? `${aminAtFsl} dB` : `${aminAtFsl} dB at fsl and ${aminAtFsh} dB at fsh`);
 
 	const k = $derived(
 		valid && !isBandType
@@ -278,7 +307,7 @@
 	const lpFs = $derived(filterType === 'bandstop' ? fsl : fsh);
 
 	const kHp = $derived(valid && isBandType ? transitionRatio(hpFs, hpFp) : null);
-	const orderInfoHp = $derived(kHp !== null ? minimumOrder(responseHp, amaxDb, aminDb, kHp) : null);
+	const orderInfoHp = $derived(kHp !== null ? minimumOrder(responseHp, amaxDbHp, aminSideHp, kHp) : null);
 	const minOrderHp = $derived(orderInfoHp ? orderInfoHp.value : null);
 	const minOrderHpCeil = $derived(orderInfoHp ? orderInfoHp.n : null);
 	const orderHp = $derived(
@@ -287,7 +316,7 @@
 	const orderHpTooHigh = $derived(orderInfoHp !== null && (minOrderHpCeil === null || minOrderHpCeil > MAX_ORDER));
 
 	const kLp = $derived(valid && isBandType ? transitionRatio(lpFp, lpFs) : null);
-	const orderInfoLp = $derived(kLp !== null ? minimumOrder(responseLp, amaxDb, aminDb, kLp) : null);
+	const orderInfoLp = $derived(kLp !== null ? minimumOrder(responseLp, amaxDbLp, aminSideLp, kLp) : null);
 	const minOrderLp = $derived(orderInfoLp ? orderInfoLp.value : null);
 	const minOrderLpCeil = $derived(orderInfoLp ? orderInfoLp.n : null);
 	const orderLp = $derived(
@@ -296,12 +325,12 @@
 	const orderLpTooHigh = $derived(orderInfoLp !== null && (minOrderLpCeil === null || minOrderLpCeil > MAX_ORDER));
 
 	/** The one-line reason a side cannot be built: its order past the limit, or a response that never gets there. */
-	function tooHighText(info, resp, edges) {
+	function tooHighText(info, resp, edges, whose = '') {
 		if (info?.n === null) {
 			const last = info.tried?.[info.tried.length - 1];
-			return `${RESPONSES[resp].label} never gets there: even at order ${SEARCH_LIMIT} it loses only ${last ? last.loss.toFixed(1) : '?'} dB at the stopband edge. Loosen Amax, Amin or ${edges}, or pick a steeper response.`;
+			return `${RESPONSES[resp].label} never gets there: even at order ${SEARCH_LIMIT} it loses only ${last ? last.loss.toFixed(1) : '?'} dB at the stopband edge. Loosen ${whose}Amax, Amin or ${edges}, or pick a steeper response.`;
 		}
-		return `That needs order ${info?.n}, past this tool's limit of ${MAX_ORDER}. Loosen Amax, Amin or ${edges}, or pick a steeper response.`;
+		return `That needs order ${info?.n}, past this tool's limit of ${MAX_ORDER}. Loosen ${whose}Amax, Amin or ${edges}, or pick a steeper response.`;
 	}
 
 	/** Every response in one list, with what it is best at. */
@@ -311,7 +340,7 @@
 		if (!valid || topologyBlocked) return null;
 		if (isBandType) {
 			if (orderHpTooHigh || orderLpTooHigh) return null;
-			const args = { responseHp, responseLp, amaxDb, aminDb, fl, fh, fsl, fsh, orderHigh: orderHp, orderLow: orderLp };
+			const args = { responseHp, responseLp, amaxDbHp, aminDbHp: aminSideHp, amaxDbLp, aminDbLp: aminSideLp, fl, fh, fsl, fsh, orderHigh: orderHp, orderLow: orderLp };
 			return filterType === 'bandstop' ? designBandStop(args) : designBandPass(args);
 		}
 		if (orderTooHigh) return null;
@@ -501,31 +530,54 @@
 	// least attenuation found across the stopband, and where.
 	const stopbandWorst = $derived.by(() => {
 		if (!design || realizedStages.length === 0) return null;
+		// each stretch of stopband against its own Amin (a band-pass's two
+		// sides may ask for different ones), so the point that counts is the
+		// one with the least margin
 		const ranges =
 			filterType === 'lowpass'
-				? [[fs, fs * 100]]
+				? [[fs, fs * 100, aminDb]]
 				: filterType === 'highpass'
-					? [[fs / 100, fs]]
+					? [[fs / 100, fs, aminDb]]
 					: filterType === 'bandpass'
 						? [
-								[fsl / 100, fsl],
-								[fsh, fsh * 100]
+								[fsl / 100, fsl, aminAtFsl],
+								[fsh, fsh * 100, aminAtFsh]
 							]
-						: [[fsl, fsh]];
-		let worst = { db: Infinity, freq: null };
-		for (const [a, b] of ranges) {
+						: [[fsl, fsh, aminDb]];
+		let worst = { db: Infinity, freq: null, required: null, margin: Infinity };
+		for (const [a, b, required] of ranges) {
 			for (let i = 0; i <= 800; i++) {
 				const f = a * (b / a) ** (i / 800);
 				const att = passbandPeakDb - gainDbAt(f);
-				if (att < worst.db) worst = { db: att, freq: f };
+				if (att - required < worst.margin) worst = { db: att, freq: f, required, margin: att - required };
 			}
 		}
 		return worst;
 	});
+	const stopbandHolds = $derived((stopbandWorst?.margin ?? Infinity) >= -1e-6);
+
+	// The Bode plot's amber limits for a band filter whose sides differ: each
+	// side's figure over the stretch it answers for, straight from one Amax
+	// to the other across a band-pass's passband, which both sides share.
+	// Counted from the top of the passband, like the figures in the flags.
+	const limitLines = $derived.by(() => {
+		if (!isBandType) return null;
+		const top = passbandPeakDb;
+		const pass = filterType === 'bandpass';
+		const lines = [];
+		if (amaxAtFl === amaxAtFh) lines.push({ db: amaxAtFl - top });
+		else if (pass) lines.push({ to: fl, db: amaxAtFl - top }, { from: fl, to: fh, db: amaxAtFl - top, db2: amaxAtFh - top }, { from: fh, db: amaxAtFh - top });
+		else lines.push({ to: fl, db: amaxAtFl - top }, { from: fh, db: amaxAtFh - top });
+		if (aminAtFsl === aminAtFsh) lines.push({ db: aminAtFsl - top });
+		else lines.push({ to: fsl, db: aminAtFsl - top }, { from: fsh, db: aminAtFsh - top });
+		return lines;
+	});
 	// a response with zeros can dip below Amin inside the band while its edges are fine
 	const stopbandDipsInside = $derived(
 		stopbandWorst !== null &&
-			(isBandType ? stopbandWorst.db < Math.min(attenuationAtFsl ?? Infinity, attenuationAtFsh ?? Infinity) - 0.05 : stopbandWorst.db < (attenuationAtFs ?? Infinity) - 0.05)
+			(isBandType
+				? stopbandWorst.margin < Math.min((attenuationAtFsl ?? Infinity) - aminAtFsl, (attenuationAtFsh ?? Infinity) - aminAtFsh) - 0.05
+				: stopbandWorst.margin < (attenuationAtFs ?? Infinity) - aminDb - 0.05)
 	);
 
 	const attenuationAtFs = $derived.by(() => {
@@ -621,6 +673,10 @@
 		const code = generateScript({
 			amaxDb,
 			aminDb,
+			amaxDbHp,
+			aminDbHp: aminSideHp,
+			amaxDbLp,
+			aminDbLp: aminSideLp,
 			fp,
 			fs,
 			fl,
@@ -659,6 +715,10 @@
 			responseLp,
 			amaxDb,
 			aminDb,
+			amaxDbHp: isBandType ? amaxDbHp : null,
+			aminDbHp: isBandType ? aminSideHp : null,
+			amaxDbLp: isBandType ? amaxDbLp : null,
+			aminDbLp: isBandType ? aminSideLp : null,
 			fp,
 			fs,
 			fl,
@@ -725,7 +785,7 @@
 			</span>
 		</div>
 
-		<div class="grid">
+		<div class="grid" class:fill={isBandType}>
 			<div class="field">
 				<label for="filterType">Filter type</label>
 				<select id="filterType" bind:value={filterType}>
@@ -735,49 +795,19 @@
 					<option value="bandstop">Band-stop</option>
 				</select>
 			</div>
-			<div class="field">
-				<label for="amax">Amax - passband ripple (dB)</label>
-				<input id="amax" type="number" min="0.01" step="0.1" bind:value={amaxDb} />
-			</div>
-			<div class="field">
-				<label for="amin">Amin - stopband attenuation (dB)</label>
-				<input id="amin" type="number" min="0.01" step="1" bind:value={aminDb} />
-			</div>
-			{#if filterType === 'bandpass'}
+			{#if !isBandType}
 				<div class="field">
-					<label for="fl">fl - lower passband edge (Hz)</label>
-					<input id="fl" type="number" min="1" step="100" bind:value={fl} />
+					<label for="amax">Amax - passband ripple (dB)</label>
+					<input id="amax" type="number" min="0.01" step="0.1" bind:value={amaxDb} />
 				</div>
+			{/if}
+			{#if filterType !== 'bandpass'}
 				<div class="field">
-					<label for="fh">fh - upper passband edge (Hz)</label>
-					<input id="fh" type="number" min="1" step="100" bind:value={fh} />
+					<label for="amin">Amin - stopband attenuation (dB)</label>
+					<input id="amin" type="number" min="0.01" step="1" bind:value={aminDb} />
 				</div>
-				<div class="field">
-					<label for="fsl">fsl - lower stopband edge (Hz)</label>
-					<input id="fsl" type="number" min="1" step="100" bind:value={fsl} />
-				</div>
-				<div class="field">
-					<label for="fsh">fsh - upper stopband edge (Hz)</label>
-					<input id="fsh" type="number" min="1" step="100" bind:value={fsh} />
-				</div>
-			{:else if filterType === 'bandstop'}
-				<div class="field">
-					<label for="fl">fl - upper edge of lower passband (Hz)</label>
-					<input id="fl" type="number" min="1" step="100" bind:value={fl} />
-				</div>
-				<div class="field">
-					<label for="fsl">fsl - lower edge of stopband (Hz)</label>
-					<input id="fsl" type="number" min="1" step="100" bind:value={fsl} />
-				</div>
-				<div class="field">
-					<label for="fsh">fsh - upper edge of stopband (Hz)</label>
-					<input id="fsh" type="number" min="1" step="100" bind:value={fsh} />
-				</div>
-				<div class="field">
-					<label for="fh">fh - lower edge of upper passband (Hz)</label>
-					<input id="fh" type="number" min="1" step="100" bind:value={fh} />
-				</div>
-			{:else}
+			{/if}
+			{#if !isBandType}
 				<div class="field">
 					<label for="fp">fp - passband edge (Hz)</label>
 					<input id="fp" type="number" min="1" step="100" bind:value={fp} />
@@ -787,45 +817,13 @@
 					<input id="fs" type="number" min="1" step="100" bind:value={fs} />
 				</div>
 			{/if}
-			{#if isBandType}
-				<div class="field">
-					<label for="responseHp">Response, high-pass {filterType === 'bandstop' ? 'branch' : 'side'}</label>
-					<select id="responseHp" bind:value={responseHp}>
-						{#each responseOptions as r (r.key)}<option value={r.key}>{r.label}</option>{/each}
-					</select>
-				</div>
-				<div class="field">
-					<label for="responseLp">Response, low-pass {filterType === 'bandstop' ? 'branch' : 'side'}</label>
-					<select id="responseLp" bind:value={responseLp}>
-						{#each responseOptions as r (r.key)}<option value={r.key}>{r.label}</option>{/each}
-					</select>
-				</div>
-			{:else}
+			{#if !isBandType}
 				<div class="field">
 					<label for="response">Response</label>
 					<select id="response" bind:value={response}>
 						{#each responseOptions as r (r.key)}<option value={r.key}>{r.label}</option>{/each}
 					</select>
 				</div>
-			{/if}
-			{#if isBandType}
-				<div class="field">
-					<label for="topologyHp">Topology, high-pass {filterType === 'bandstop' ? 'branch' : 'side'}</label>
-					<select id="topologyHp" bind:value={topologyHp}>
-						<option value="mfb" disabled={zerosHp}>Multiple feedback (MFB)</option>
-						<option value="sallenKey" disabled={zerosHp}>Sallen-Key (unity gain)</option>
-						<option value="towThomas">Tow-Thomas (3 op-amps)</option>
-					</select>
-				</div>
-				<div class="field">
-					<label for="topologyLp">Topology, low-pass {filterType === 'bandstop' ? 'branch' : 'side'}</label>
-					<select id="topologyLp" bind:value={topologyLp}>
-						<option value="mfb" disabled={zerosLp}>Multiple feedback (MFB)</option>
-						<option value="sallenKey" disabled={zerosLp}>Sallen-Key (unity gain)</option>
-						<option value="towThomas">Tow-Thomas (3 op-amps)</option>
-					</select>
-				</div>
-			{:else}
 				<div class="field">
 					<label for="topology">Topology</label>
 					<select id="topology" bind:value={topology}>
@@ -836,6 +834,115 @@
 				</div>
 			{/if}
 		</div>
+
+		{#if isBandType}
+			<div class="grid fill">
+				{#if filterType === 'bandpass'}
+					<div class="field">
+						<label for="fl">fl - lower passband edge (Hz)</label>
+						<input id="fl" type="number" min="1" step="100" bind:value={fl} />
+					</div>
+					<div class="field">
+						<label for="fh">fh - upper passband edge (Hz)</label>
+						<input id="fh" type="number" min="1" step="100" bind:value={fh} />
+					</div>
+					<div class="field">
+						<label for="fsl">fsl - lower stopband edge (Hz)</label>
+						<input id="fsl" type="number" min="1" step="100" bind:value={fsl} />
+					</div>
+					<div class="field">
+						<label for="fsh">fsh - upper stopband edge (Hz)</label>
+						<input id="fsh" type="number" min="1" step="100" bind:value={fsh} />
+					</div>
+				{:else}
+					<div class="field">
+						<label for="fl">fl - upper edge of lower passband (Hz)</label>
+						<input id="fl" type="number" min="1" step="100" bind:value={fl} />
+					</div>
+					<div class="field">
+						<label for="fsl">fsl - lower edge of stopband (Hz)</label>
+						<input id="fsl" type="number" min="1" step="100" bind:value={fsl} />
+					</div>
+					<div class="field">
+						<label for="fsh">fsh - upper edge of stopband (Hz)</label>
+						<input id="fsh" type="number" min="1" step="100" bind:value={fsh} />
+					</div>
+					<div class="field">
+						<label for="fh">fh - lower edge of upper passband (Hz)</label>
+						<input id="fh" type="number" min="1" step="100" bind:value={fh} />
+					</div>
+				{/if}
+			</div>
+		{/if}
+
+		<!-- a band filter is two filters: each side has its own response,
+		     topology and Amax (and Amin, on a band-pass), listed from the
+		     lower frequencies up -->
+		{#snippet hpSide()}
+			<h3 class="subhead side-head">High-pass {sideWord} <span class="edges">{filterType === 'bandstop' ? 'fsh to fh' : 'fsl to fl'}</span></h3>
+			<div class="grid fill">
+				<div class="field">
+					<label for="responseHp">Response</label>
+					<select id="responseHp" bind:value={responseHp}>
+						{#each responseOptions as r (r.key)}<option value={r.key}>{r.label}</option>{/each}
+					</select>
+				</div>
+				<div class="field">
+					<label for="topologyHp">Topology</label>
+					<select id="topologyHp" bind:value={topologyHp}>
+						<option value="mfb" disabled={zerosHp}>Multiple feedback (MFB)</option>
+						<option value="sallenKey" disabled={zerosHp}>Sallen-Key (unity gain)</option>
+						<option value="towThomas">Tow-Thomas (3 op-amps)</option>
+					</select>
+				</div>
+				<div class="field">
+					<label for="amaxHp">Amax - passband ripple (dB)</label>
+					<input id="amaxHp" type="number" min="0.01" step="0.1" bind:value={amaxDbHp} />
+				</div>
+				{#if filterType === 'bandpass'}
+					<div class="field">
+						<label for="aminHp">Amin - stopband attenuation (dB)</label>
+						<input id="aminHp" type="number" min="0.01" step="1" bind:value={aminDbHp} />
+					</div>
+				{/if}
+			</div>
+		{/snippet}
+		{#snippet lpSide()}
+			<h3 class="subhead side-head">Low-pass {sideWord} <span class="edges">{filterType === 'bandstop' ? 'fl to fsl' : 'fh to fsh'}</span></h3>
+			<div class="grid fill">
+				<div class="field">
+					<label for="responseLp">Response</label>
+					<select id="responseLp" bind:value={responseLp}>
+						{#each responseOptions as r (r.key)}<option value={r.key}>{r.label}</option>{/each}
+					</select>
+				</div>
+				<div class="field">
+					<label for="topologyLp">Topology</label>
+					<select id="topologyLp" bind:value={topologyLp}>
+						<option value="mfb" disabled={zerosLp}>Multiple feedback (MFB)</option>
+						<option value="sallenKey" disabled={zerosLp}>Sallen-Key (unity gain)</option>
+						<option value="towThomas">Tow-Thomas (3 op-amps)</option>
+					</select>
+				</div>
+				<div class="field">
+					<label for="amaxLp">Amax - passband ripple (dB)</label>
+					<input id="amaxLp" type="number" min="0.01" step="0.1" bind:value={amaxDbLp} />
+				</div>
+				{#if filterType === 'bandpass'}
+					<div class="field">
+						<label for="aminLp">Amin - stopband attenuation (dB)</label>
+						<input id="aminLp" type="number" min="0.01" step="1" bind:value={aminDbLp} />
+					</div>
+				{/if}
+			</div>
+		{/snippet}
+		{#if filterType === 'bandpass'}
+			{@render hpSide()}
+			{@render lpSide()}
+		{:else if filterType === 'bandstop'}
+			{@render lpSide()}
+			{@render hpSide()}
+		{/if}
 
 		<p class="note">
 			{#if filterType === 'highpass'}
@@ -893,11 +1000,11 @@
 				{#if filterType === 'highpass'}
 					fp must be greater than fs, and Amin must be greater than Amax.
 				{:else if filterType === 'bandpass'}
-					Frequencies must satisfy fsl &lt; fl &lt; fh &lt; fsh, and Amin must be greater than
-					Amax.
+					Frequencies must satisfy fsl &lt; fl &lt; fh &lt; fsh, and on each side Amin must be
+					greater than Amax.
 				{:else if filterType === 'bandstop'}
 					Frequencies must satisfy fl &lt; fsl &lt; fsh &lt; fh, and Amin must be greater than
-					Amax.
+					each branch's Amax.
 				{:else}
 					fs must be greater than fp, and Amin must be greater than Amax.
 				{/if}
@@ -917,8 +1024,9 @@
 			stages: realizedStages.length,
 			fp,
 			fs,
-			amaxDb,
-			aminDb,
+			amaxDb: isBandType ? amaxDbLp : amaxDb,
+			aminDb: isBandType ? aminSideLp : aminDb,
+			bandLimits: isBandType ? { hp: { amaxDb: amaxDbHp, aminDb: aminSideHp }, lp: { amaxDb: amaxDbLp, aminDb: aminSideLp }, amaxAtFl, amaxAtFh, aminAtFsl, aminAtFsh } : null,
 			fl,
 			fh,
 			fsl,
@@ -952,27 +1060,27 @@
 				</div>
 
 				{#if filterType === 'bandstop'}
-					<h3 class="subhead">Low-pass branch (fl = {fl} Hz, fsl = {fsl} Hz)</h3>
+					<h3 class="subhead">Low-pass branch (fl = {fl} Hz, fsl = {fsl} Hz, Amax = {amaxDbLp} dB, Amin = {aminSideLp} dB)</h3>
 					<Equation tex={`k = \\dfrac{f_l}{f_{sl}} = \\dfrac{${fl}}{${fsl}} = ${kLp.toFixed(4)}`} />
 				{:else}
-					<h3 class="subhead">High-pass side (fl = {fl} Hz, fsl = {fsl} Hz)</h3>
+					<h3 class="subhead">High-pass side (fl = {fl} Hz, fsl = {fsl} Hz, Amax = {amaxDbHp} dB, Amin = {aminSideHp} dB)</h3>
 					<Equation tex={`k = \\dfrac{f_{sl}}{f_l} = \\dfrac{${fsl}}{${fl}} = ${kHp.toFixed(4)}`} />
 				{/if}
 				{#if filterType === 'bandstop'}
-					<Equation tex={orderSummaryTex({ response: responseLp, minOrder: minOrderLp, tried: orderInfoLp?.tried, aminDb })} />
+					<Equation tex={orderSummaryTex({ response: responseLp, minOrder: minOrderLp, tried: orderInfoLp?.tried, aminDb: aminSideLp })} />
 				{:else}
-					<Equation tex={orderSummaryTex({ response: responseHp, minOrder: minOrderHp, tried: orderInfoHp?.tried, aminDb })} />
+					<Equation tex={orderSummaryTex({ response: responseHp, minOrder: minOrderHp, tried: orderInfoHp?.tried, aminDb: aminSideHp })} />
 				{/if}
 				<MathPanel
 					summary="Show where this order comes from"
 					blocks={filterType === 'bandstop'
-						? explainOrder({ response: responseLp, amaxDb, aminDb, k: kLp, minOrder: minOrderLp, filterType: 'lowpass', tried: orderInfoLp?.tried })
-						: explainOrder({ response: responseHp, amaxDb, aminDb, k: kHp, minOrder: minOrderHp, filterType: 'highpass', tried: orderInfoHp?.tried })}
+						? explainOrder({ response: responseLp, amaxDb: amaxDbLp, aminDb: aminSideLp, k: kLp, minOrder: minOrderLp, filterType: 'lowpass', tried: orderInfoLp?.tried })
+						: explainOrder({ response: responseHp, amaxDb: amaxDbHp, aminDb: aminSideHp, k: kHp, minOrder: minOrderHp, filterType: 'highpass', tried: orderInfoHp?.tried })}
 				/>
 
 				{#if filterType === 'bandstop' ? orderLpTooHigh : orderHpTooHigh}
 					<p class="flag bad">
-						{filterType === 'bandstop' ? tooHighText(orderInfoLp, responseLp, 'the fl/fsl edges') : tooHighText(orderInfoHp, responseHp, 'the fl/fsl edges')}
+						{filterType === 'bandstop' ? tooHighText(orderInfoLp, responseLp, 'the fl/fsl edges', "this branch's ") : tooHighText(orderInfoHp, responseHp, 'the fl/fsl edges', "this side's ")}
 					</p>
 				{:else}
 					<div class="field order-field">
@@ -1010,27 +1118,27 @@
 				{/if}
 
 				{#if filterType === 'bandstop'}
-					<h3 class="subhead">High-pass branch (fh = {fh} Hz, fsh = {fsh} Hz)</h3>
+					<h3 class="subhead">High-pass branch (fh = {fh} Hz, fsh = {fsh} Hz, Amax = {amaxDbHp} dB, Amin = {aminSideHp} dB)</h3>
 					<Equation tex={`k = \\dfrac{f_{sh}}{f_h} = \\dfrac{${fsh}}{${fh}} = ${kHp.toFixed(4)}`} />
 				{:else}
-					<h3 class="subhead">Low-pass side (fh = {fh} Hz, fsh = {fsh} Hz)</h3>
+					<h3 class="subhead">Low-pass side (fh = {fh} Hz, fsh = {fsh} Hz, Amax = {amaxDbLp} dB, Amin = {aminSideLp} dB)</h3>
 					<Equation tex={`k = \\dfrac{f_h}{f_{sh}} = \\dfrac{${fh}}{${fsh}} = ${kLp.toFixed(4)}`} />
 				{/if}
 				{#if filterType === 'bandstop'}
-					<Equation tex={orderSummaryTex({ response: responseHp, minOrder: minOrderHp, tried: orderInfoHp?.tried, aminDb })} />
+					<Equation tex={orderSummaryTex({ response: responseHp, minOrder: minOrderHp, tried: orderInfoHp?.tried, aminDb: aminSideHp })} />
 				{:else}
-					<Equation tex={orderSummaryTex({ response: responseLp, minOrder: minOrderLp, tried: orderInfoLp?.tried, aminDb })} />
+					<Equation tex={orderSummaryTex({ response: responseLp, minOrder: minOrderLp, tried: orderInfoLp?.tried, aminDb: aminSideLp })} />
 				{/if}
 				<MathPanel
 					summary="Show where this order comes from"
 					blocks={filterType === 'bandstop'
-						? explainOrder({ response: responseHp, amaxDb, aminDb, k: kHp, minOrder: minOrderHp, filterType: 'highpass', tried: orderInfoHp?.tried })
-						: explainOrder({ response: responseLp, amaxDb, aminDb, k: kLp, minOrder: minOrderLp, filterType: 'lowpass', tried: orderInfoLp?.tried })}
+						? explainOrder({ response: responseHp, amaxDb: amaxDbHp, aminDb: aminSideHp, k: kHp, minOrder: minOrderHp, filterType: 'highpass', tried: orderInfoHp?.tried })
+						: explainOrder({ response: responseLp, amaxDb: amaxDbLp, aminDb: aminSideLp, k: kLp, minOrder: minOrderLp, filterType: 'lowpass', tried: orderInfoLp?.tried })}
 				/>
 
 				{#if filterType === 'bandstop' ? orderHpTooHigh : orderLpTooHigh}
 					<p class="flag bad">
-						{filterType === 'bandstop' ? tooHighText(orderInfoHp, responseHp, 'the fh/fsh edges') : tooHighText(orderInfoLp, responseLp, 'the fh/fsh edges')}
+						{filterType === 'bandstop' ? tooHighText(orderInfoHp, responseHp, 'the fh/fsh edges', "this branch's ") : tooHighText(orderInfoLp, responseLp, 'the fh/fsh edges', "this side's ")}
 					</p>
 				{:else}
 					<div class="field order-field">
@@ -1602,6 +1710,7 @@
 					stopbandFreqs={isBandType ? [fsl, fsh] : [fs]}
 					amaxDb={amaxDb - passbandPeakDb}
 					aminDb={aminDb - passbandPeakDb}
+					limits={limitLines}
 				/>
 				{#if Math.abs(passbandPeakDb) > 0.05}
 					<p class="note">
@@ -1627,34 +1736,33 @@
 
 				{#if isBandType}
 					{#if attenuationAtFsl !== null && attenuationAtFsh !== null}
-						{#if attenuationAtFsl >= aminDb && attenuationAtFsh >= aminDb && (stopbandWorst?.db ?? Infinity) >= aminDb - 1e-6}
+						{#if attenuationAtFsl >= aminAtFsl && attenuationAtFsh >= aminAtFsh && stopbandHolds}
 							<p class="flag ok">
-								Meets the spec: {attenuationAtFsl.toFixed(1)} dB at fsl and {attenuationAtFsh.toFixed(
-									1
-								)} dB at fsh{stopbandDipsInside
-									? `, and at least ${stopbandWorst.db.toFixed(1)} dB anywhere in the stopband (the least at ${formatHz(stopbandWorst.freq)}, between two zeros)`
-									: ''}, at least {aminDb} dB required{filterType === 'bandstop'
-									? ' across the stopband'
-									: ' on both sides'}.
+								Meets the spec: {attenuationAtFsl.toFixed(1)} dB at fsl and {attenuationAtFsh.toFixed(1)} dB at fsh{stopbandDipsInside
+									? aminAtFsl === aminAtFsh
+										? `, and at least ${stopbandWorst.db.toFixed(1)} dB anywhere in the stopband (the least at ${formatHz(stopbandWorst.freq)}, between two zeros)`
+										: `, and ${stopbandWorst.db.toFixed(1)} dB at ${formatHz(stopbandWorst.freq)}, between two zeros, where ${Number(stopbandWorst.required.toFixed(1))} dB is required`
+									: ''}, {aminAtFsl === aminAtFsh
+									? `at least ${aminAtFsl} dB required${filterType === 'bandstop' ? ' across the stopband' : ' on both sides'}`
+									: `at least ${aminAtFsl} dB required below fsl and ${aminAtFsh} dB above fsh`}.
 							</p>
-						{:else if attenuationAtFsl >= aminDb && attenuationAtFsh >= aminDb}
+						{:else if attenuationAtFsl >= aminAtFsl && attenuationAtFsh >= aminAtFsh}
 							<p class="flag bad">
 								Both stopband edges hold ({attenuationAtFsl.toFixed(1)} dB at fsl, {attenuationAtFsh.toFixed(1)} dB at fsh),
 								but between two zeros the loss comes back up to only {stopbandWorst.db.toFixed(1)} dB at
-								{formatHz(stopbandWorst.freq)}, under Amin = {aminDb} dB. The rounded parts moved a zero or a
+								{formatHz(stopbandWorst.freq)}, under the {Number(stopbandWorst.required.toFixed(1))} dB required there. The rounded parts moved a zero or a
 								pole: try a higher order or the E96 series.
 							</p>
 						{:else}
 							<p class="flag bad">
-								Falls short after rounding: {attenuationAtFsl.toFixed(1)} dB at fsl, {attenuationAtFsh.toFixed(
-									1
-								)} dB at fsh, {aminDb} dB required on both. Try a higher order on whichever side
-								is short, or a tighter resistor series.
+								Falls short after rounding: {attenuationAtFsl.toFixed(1)} dB at fsl, {attenuationAtFsh.toFixed(1)} dB at fsh,
+								{aminAtFsl === aminAtFsh ? `${aminAtFsl} dB required on both` : `${aminAtFsl} dB required at fsl and ${aminAtFsh} dB at fsh`}. Try a higher
+								order on whichever {sideWord} is short, or a tighter resistor series.
 							</p>
 						{/if}
 					{/if}
 				{:else if attenuationAtFs !== null}
-					{#if attenuationAtFs >= aminDb && (stopbandWorst?.db ?? Infinity) >= aminDb - 1e-6}
+					{#if attenuationAtFs >= aminDb && stopbandHolds}
 						<p class="flag ok">
 							Meets the spec: {attenuationAtFs.toFixed(1)} dB of attenuation at fs{stopbandDipsInside
 								? `, and at least ${stopbandWorst.db.toFixed(1)} dB anywhere past it (the least at ${formatHz(stopbandWorst.freq)}, between two zeros)`
@@ -1677,29 +1785,29 @@
 
 					{#if isBandType}
 						{#if attenuationAtFl !== null && attenuationAtFh !== null}
-							{#if attenuationAtFl <= amaxDb + PASSBAND_SLACK_DB && attenuationAtFh <= amaxDb + PASSBAND_SLACK_DB}
+							{#if attenuationAtFl <= amaxAtFl + PASSBAND_SLACK_DB && attenuationAtFh <= amaxAtFh + PASSBAND_SLACK_DB}
 								<p class="flag ok">
 									Passband edges: {attenuationAtFl.toFixed(2)} dB at fl and {attenuationAtFh.toFixed(2)}
-									dB at fh, at most {amaxDb} dB allowed.
+									dB at fh, {amaxAtFl === amaxAtFh ? `at most ${amaxAtFl} dB allowed` : `at most ${amaxAtFl} dB allowed at fl and ${amaxAtFh} dB at fh`}.
 								</p>
-							{:else if attenuationAtFl <= amaxDb + PASSBAND_ROUNDING_DB && attenuationAtFh <= amaxDb + PASSBAND_ROUNDING_DB}
+							{:else if attenuationAtFl <= amaxAtFl + PASSBAND_ROUNDING_DB && attenuationAtFh <= amaxAtFh + PASSBAND_ROUNDING_DB}
 								<p class="flag warn">
 									Passband edges with rounded parts: {attenuationAtFl.toFixed(2)} dB at fl and
-									{attenuationAtFh.toFixed(2)} dB at fh, against Amax = {amaxDb} dB. The ideal design
+									{attenuationAtFh.toFixed(2)} dB at fh, against Amax = {amaxBandText}. The ideal design
 									sits exactly at Amax; the excess is the rounding to {stockPhrase}, smaller than the
 									shift the parts' own tolerance produces on a real board.
 								</p>
 							{:else if restrictedStock}
 								<p class="flag warn">
 									Passband edges: {attenuationAtFl.toFixed(2)} dB at fl, {attenuationAtFh.toFixed(2)}
-									dB at fh, against Amax = {amaxDb} dB. More than rounding explains, and the limited
+									dB at fh, against Amax = {amaxBandText}. More than rounding explains, and the limited
 									value list is the likely reason: the search had nothing closer to pick. Add values,
 									loosen Amax, or accept the wider passband if the stopband still holds above.
 								</p>
 							{:else}
 								<p class="flag bad">
 									Passband edges miss: {attenuationAtFl.toFixed(2)} dB at fl, {attenuationAtFh.toFixed(2)}
-									dB at fh, against Amax = {amaxDb} dB. That is more than rounding explains: {missCause}.
+									dB at fh, against Amax = {amaxBandText}. That is more than rounding explains: {missCause}.
 								</p>
 							{/if}
 						{/if}
@@ -1810,6 +1918,12 @@
 		align-items: end;
 	}
 
+	/* a band filter's rows: the same four tracks however few fields a row
+	   has, so the columns line up from one row to the next */
+	.grid.fill {
+		grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+	}
+
 	/* the last field keeps its margin too, so what follows the grid sits the
 	   same distance under it however full the last row is */
 	.grid > .field:last-child {
@@ -1848,6 +1962,20 @@
 
 	.subhead:first-of-type {
 		margin-top: 0;
+	}
+
+	/* a band side's name sits as far under the row above as the next one,
+	   first of its kind or not */
+	.subhead.side-head {
+		margin-top: 1.1rem;
+	}
+
+	/* a band side's edges, next to its name */
+	.subhead .edges {
+		font-weight: 400;
+		text-transform: none;
+		letter-spacing: 0;
+		margin-left: 0.35rem;
 	}
 
 	.stage-block {
