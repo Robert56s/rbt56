@@ -72,6 +72,7 @@ ${p.carrierNote ? `// ${p.carrierNote}\n` : ''}// The values the parts are round
 // an array of the resistors on hand in ohms; CAPACITORS is null for the usual
 // values, or an array of the capacitors on hand in farads.
 const RESISTOR_SERIES = ${JSON.stringify(p.resistorSeries ?? 'E24')};
+const RESISTOR_PAIRS = ${p.pairs ? 'true' : 'false'}; // true lets a resistor that sets a figure be two from the list in series (no effect with 'E24' or 'E96')
 const CAPACITORS = ${JSON.stringify(p.capacitors ?? null)};
 `;
 }
@@ -80,6 +81,13 @@ function jfetReportBlock() {
 	return `// =====================================================================
 // REPORT
 // =====================================================================
+
+// a resistor as this report prints it: its value, then the two in series it is built from when it is a pair
+const ohmsLabel = (v) => {
+	const pair = RESISTOR_PAIRS ? seriesPair(v, RESISTOR_SERIES) : null;
+	const r = (x) => Number(x.toPrecision(6));
+	return pair ? \`\${r(v)} ohm (\${r(pair[0])} + \${r(pair[1])} in series)\` : \`\${r(v)} ohm\`;
+};
 
 const jfetModel =
 	JFET_MODE === 'rdson'
@@ -106,7 +114,7 @@ const design = designJfetModulator({
 	targetModulationIndex: TARGET_MODULATION_INDEX, rb: RB,
 	sourceAmplitude: SOURCE_AMPLITUDE, fmMin: FM_MIN, vcc: VCC,
 	fp: FP, carrierSourceAmplitude: CARRIER_SOURCE_AMPLITUDE, carrierMargin: CARRIER_MARGIN,
-	opampSwing: OPAMP_SWING, gbw: GBW, slewRate: SLEW_RATE, resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS
+	opampSwing: OPAMP_SWING, gbw: GBW, slewRate: SLEW_RATE, resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS, pairs: RESISTOR_PAIRS
 });
 if (!design) {
 	const ceiling = conductanceDepth(jfetModel, SWING_FRACTION);
@@ -121,7 +129,7 @@ if (!design) {
 	console.log('GAIN CELL (' + TOPOLOGY + ')');
 	console.log('='.repeat(72));
 	console.log(\`bias point VC = \${design.vc.toFixed(3)} V, channel resistance at VC = \${design.r1AtCenter.toFixed(1)} ohm, conductance depth s = \${design.gDepth.toFixed(3)}\`);
-	console.log(\`\${TOPOLOGY === 'inverting' ? 'R2' : 'Rb'} = \${design.feedback.toFixed(1)} ohm  (x = \${design.x.toFixed(3)})\`);
+	console.log(\`\${TOPOLOGY === 'inverting' ? 'R2' : 'Rb'} = \${ohmsLabel(design.feedback)}  (x = \${design.x.toFixed(3)})\`);
 	console.log(\`modulation index n = \${design.modulationIndex.toFixed(3)}, gain at bias K0 = \${design.nominalGain.toFixed(3)}, signal gain \${design.gainMin.toFixed(3)} .. \${design.gainMax.toFixed(3)}\`);
 	console.log(\`gate swing: VGS in [\${design.vgsMin.toFixed(3)}, \${design.vgsMax.toFixed(3)}] V, channel R in [\${design.r1Min.toFixed(1)}, \${design.r1Max.toFixed(1)}] ohm\`);
 	if (design.buffer) {
@@ -159,7 +167,9 @@ if (!design) {
 	console.log('GATE DRIVE (one inverting summer: series C + Rac from the source, Rbias from +Vcc, Rf)');
 	console.log('='.repeat(72));
 	const sm = design.conditioning.summer;
-	console.log(\`Rf = \${sm.rf} ohm, Rac = \${sm.rac} ohm (gain \${sm.gainActual.toFixed(3)}, target \${sm.gainTarget.toFixed(3)}), Rbias = \${sm.rbias} ohm (bias \${sm.biasActual.toFixed(3)} V, target -\${sm.biasTarget.toFixed(3)} V)\`);
+	console.log(\`Rf = \${ohmsLabel(sm.rf)}\`);
+	console.log(\`Rac = \${ohmsLabel(sm.rac)}: gain \${sm.gainActual.toFixed(3)} (target \${sm.gainTarget.toFixed(3)})\`);
+	console.log(\`Rbias = \${ohmsLabel(sm.rbias)}: bias \${sm.biasActual.toFixed(3)} V (target -\${sm.biasTarget.toFixed(3)} V)\`);
 	console.log(\`C = \${sm.c.toExponential(2)} F -> high-pass corner \${sm.fcActual.toFixed(1)} Hz (target \${sm.fcTarget.toFixed(1)} Hz); most negative gate voltage \${sm.outMin.toFixed(2)} V vs swing \${sm.opampSwing} V -> \${sm.headroomOk ? 'fits' : 'DOES NOT FIT: raise Vcc or use a smaller |VP|'}\`);
 
 	console.log();
@@ -188,6 +198,7 @@ const DIODE = ${JSON.stringify(p.diode ?? '1N4148')};           // '1N4148' or '
 // an array of the resistors on hand in ohms; CAPACITORS is null for the usual
 // values, or an array of the capacitors on hand in farads.
 const RESISTOR_SERIES = ${JSON.stringify(p.resistorSeries ?? 'E24')};
+const RESISTOR_PAIRS = ${p.pairs ? 'true' : 'false'}; // true lets a resistor that sets a figure be two from the list in series (no effect with 'E24' or 'E96')
 const CAPACITORS = ${JSON.stringify(p.capacitors ?? null)};
 `;
 }
@@ -197,10 +208,17 @@ function diodeReportBlock() {
 // REPORT
 // =====================================================================
 
+// a resistor as this report prints it: its value, then the two in series it is built from when it is a pair
+const ohmsLabel = (v) => {
+	const pair = RESISTOR_PAIRS ? seriesPair(v, RESISTOR_SERIES) : null;
+	const r = (x) => Number(x.toPrecision(6));
+	return pair ? \`\${r(v)} ohm (\${r(pair[0])} + \${r(pair[1])} in series)\` : \`\${r(v)} ohm\`;
+};
+
 const design = designDiodeMixerModulator({
 	fp: FP, fmMax: FM_MAX, sidebandMargin: SIDEBAND_MARGIN, inductance: INDUCTANCE,
 	carrierAmplitude: CARRIER_AMPLITUDE, modAmplitude: MOD_AMPLITUDE, targetModulationIndex: TARGET_MODULATION_INDEX,
-	carrierDrive: CARRIER_DRIVE, vcc: VCC, opampSwing: OPAMP_SWING, diode: DIODE, resistorSeries: RESISTOR_SERIES, capacitorStock: CAPACITORS
+	carrierDrive: CARRIER_DRIVE, vcc: VCC, opampSwing: OPAMP_SWING, diode: DIODE, resistorSeries: RESISTOR_SERIES, capacitorStock: CAPACITORS, pairs: RESISTOR_PAIRS
 });
 const inputsOk = FP > 0 && FM_MAX > 0 && FP - SIDEBAND_MARGIN * FM_MAX > FM_MAX && INDUCTANCE > 0 && SIDEBAND_MARGIN > 0 && CARRIER_AMPLITUDE > 0 && MOD_AMPLITUDE > 0 && CARRIER_DRIVE > 0 && VCC > 0 && TARGET_MODULATION_INDEX > 0 && TARGET_MODULATION_INDEX <= 1;
 if (!inputsOk) {
@@ -212,7 +230,9 @@ if (!inputsOk) {
 	console.log('='.repeat(72));
 	console.log('SUMMER (inverting: carrier through Rp, message through Rm, bias from -VCC through Rb)');
 	console.log('='.repeat(72));
-	console.log(\`Rf = \${s.rf} ohm, Rp = \${s.rp} ohm (carrier at the diode \${s.drive.toFixed(3)} V), Rm = \${s.rm} ohm (message \${s.um.toFixed(3)} V)\`);
+	console.log(\`Rf = \${ohmsLabel(s.rf)}\`);
+	console.log(\`Rp = \${ohmsLabel(s.rp)}: carrier at the diode \${s.drive.toFixed(3)} V\`);
+	console.log(\`Rm = \${ohmsLabel(s.rm)}: message at the diode \${s.um.toFixed(3)} V\`);
 	console.log(s.rb ? \`Rb = \${s.rb} ohm from -VCC: bias \${s.vb.toFixed(3)} V (least distortion at \${s.vbBest.toFixed(3)} V)\` : 'no Rb: this diode switches cleanly with no bias');
 	console.log(\`peak output \${s.peak.toFixed(2)} V against a swing of \${s.opampSwing} V -> \${s.swingOk ? 'fits' : 'DOES NOT FIT'}; noise gain \${s.noiseGain.toFixed(2)}, fp x noise gain / GBW = \${s.gbwRatio.toFixed(3)} \${s.gbwOk ? '(fine for a TL08x)' : '(too much for a TL08x)'}\`);
 	console.log();
@@ -252,6 +272,7 @@ const TEST_INDEX = ${p.index ?? 0.9};              // modulation index of the 1 
 // an array of the resistors on hand in ohms; CAPACITORS is null for the usual
 // values, or an array of the capacitors on hand in farads.
 const RESISTOR_SERIES = ${JSON.stringify(p.resistorSeries ?? 'E24')};
+const RESISTOR_PAIRS = ${p.pairs ? 'true' : 'false'}; // true lets a resistor that sets a figure be two from the list in series (no effect with 'E24' or 'E96')
 const CAPACITORS = ${JSON.stringify(p.capacitors ?? null)};
 `;
 }
@@ -260,6 +281,13 @@ function demodReportBlock() {
 	return `// =====================================================================
 // REPORT
 // =====================================================================
+
+// a resistor as this report prints it: its value, then the two in series it is built from when it is a pair
+const ohmsLabel = (v) => {
+	const pair = RESISTOR_PAIRS ? seriesPair(v, RESISTOR_SERIES) : null;
+	const r = (x) => Number(x.toPrecision(6));
+	return pair ? \`\${r(v)} ohm (\${r(pair[0])} + \${r(pair[1])} in series)\` : \`\${r(v)} ohm\`;
+};
 
 const rippleHz = RECTIFIER_TYPE === 'full' ? 2 * FP_CARRIER : FP_CARRIER;
 // the ripple carries the message as sidebands: its lowest one, rippleHz - FM_MAX, is where the stopband starts
@@ -279,7 +307,7 @@ console.log();
 console.log('='.repeat(72));
 console.log('ENVELOPE LOW-PASS FILTER');
 console.log('='.repeat(72));
-const design = designEnvelopeLowPass({ response: RESPONSE, amaxDb: AMAX_DB, aminDb: AMIN_DB, fp: FM_MAX, fs: rippleHz - FM_MAX, order: ORDER, resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS, maxOrder: 8 });
+const design = designEnvelopeLowPass({ response: RESPONSE, amaxDb: AMAX_DB, aminDb: AMIN_DB, fp: FM_MAX, fs: rippleHz - FM_MAX, order: ORDER, resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS, pairs: RESISTOR_PAIRS, maxOrder: 8 });
 console.log(\`k = fp/fs = \${design.k.toFixed(4)} (fs = \${rippleHz - FM_MAX} Hz, the ripple's lowest sideband), minimum order >= \${design.minOrder.toFixed(2)} -> n = \${design.n}\`);
 if (design.tooHigh) {
 	console.log('That is past order 8, more stages than a demodulator should carry: lower AMIN_DB, raise AMAX_DB or FP_CARRIER.');
@@ -289,7 +317,9 @@ design.realized.forEach((r, i) => {
 	const f0Target = design.stages[i].wn / (2 * Math.PI);
 	const f0Actual = r.actual.wn / (2 * Math.PI);
 	console.log(\`stage \${i + 1}: target f0 = \${f0Target.toFixed(1)} Hz, Q = \${design.stages[i].q.toFixed(4)}\`);
-	console.log(\`  R = \${r.components.R1} ohm, Ctop = \${r.components.Ctop.toExponential(4)} F, Cbottom = \${r.components.Cbottom.toExponential(4)} F\`);
+	// a stage the list cannot build comes from E24, with single resistors
+	const rText = r.stockShortfall ? r.components.R1 + ' ohm (E24: the list cannot build this stage)' : ohmsLabel(r.components.R1);
+	console.log(\`  R1 = R2 = \${rText}, Ctop = \${r.components.Ctop.toExponential(4)} F, Cbottom = \${r.components.Cbottom.toExponential(4)} F\`);
 	console.log(\`  actual f0 = \${f0Actual.toFixed(1)} Hz (\${(100 * (f0Actual - f0Target) / f0Target).toFixed(2)}%), Q = \${r.actual.q.toFixed(4)}\`);
 });
 

@@ -65,24 +65,28 @@ export function formatStock(values, kind) {
 		.join(', ');
 }
 
-/** What a fresh visit starts with: E24, and the lab drawer in the boxes as a starting list. */
+/** What a fresh visit starts with: E24, the lab drawer in the boxes as a starting list, one resistor per part. */
 export function defaultStock() {
-	return { stock: 'E24', resistorText: formatStock(LAB_KIT.resistors, 'resistor'), capacitorText: formatStock(LAB_KIT.capacitors, 'capacitor') };
+	return { stock: 'E24', resistorText: formatStock(LAB_KIT.resistors, 'resistor'), capacitorText: formatStock(LAB_KIT.capacitors, 'capacitor'), pairs: false };
 }
 
 /**
  * The setting as the pickers take it. An empty custom box falls back to the
  * lab drawer for that kind, rather than leaving nothing to pick from.
+ * `pairs` lets the parts that set a design's figures be two resistors in
+ * series (pairedResistor in the eseries modules); it only means something
+ * with a list, since a full series already has a close value everywhere.
  */
-export function componentOptions(stock, resistorText, capacitorText) {
-	if (stock === 'lab') return { resistorSeries: LAB_KIT.resistors, capacitors: LAB_KIT.capacitors };
-	if (stock === 'labR') return { resistorSeries: LAB_KIT.resistors, capacitors: null };
+export function componentOptions(stock, resistorText, capacitorText, pairs = false) {
+	const paired = Boolean(pairs) && isRestricted(stock);
+	if (stock === 'lab') return { resistorSeries: LAB_KIT.resistors, capacitors: LAB_KIT.capacitors, pairs: paired };
+	if (stock === 'labR') return { resistorSeries: LAB_KIT.resistors, capacitors: null, pairs: paired };
 	if (stock === 'custom') {
 		const resistors = parseStock(resistorText, 'resistor');
 		const capacitors = parseStock(capacitorText, 'capacitor');
-		return { resistorSeries: resistors.length ? resistors : LAB_KIT.resistors, capacitors: capacitors.length ? capacitors : LAB_KIT.capacitors };
+		return { resistorSeries: resistors.length ? resistors : LAB_KIT.resistors, capacitors: capacitors.length ? capacitors : LAB_KIT.capacitors, pairs: paired };
 	}
-	return { resistorSeries: stock === 'E96' ? 'E96' : 'E24', capacitors: null };
+	return { resistorSeries: stock === 'E96' ? 'E96' : 'E24', capacitors: null, pairs: false };
 }
 
 /** Whether the setting narrows the search to a list rather than a full series. */
@@ -104,6 +108,7 @@ export function loadStock() {
 		if (STOCK_CHOICES.some((c) => c.id === saved.stock)) out.stock = saved.stock;
 		if (typeof saved.resistorText === 'string') out.resistorText = saved.resistorText;
 		if (typeof saved.capacitorText === 'string') out.capacitorText = saved.capacitorText;
+		if (typeof saved.pairs === 'boolean') out.pairs = saved.pairs;
 		return out;
 	} catch {
 		return null;
@@ -111,9 +116,9 @@ export function loadStock() {
 }
 
 /** Keeps the setting for the next visit; blocked storage just means it is not kept. */
-export function saveStock({ stock, resistorText, capacitorText }) {
+export function saveStock({ stock, resistorText, capacitorText, pairs = false }) {
 	try {
-		localStorage.setItem(STOCK_KEY, JSON.stringify({ stock, resistorText, capacitorText }));
+		localStorage.setItem(STOCK_KEY, JSON.stringify({ stock, resistorText, capacitorText, pairs }));
 	} catch {
 		// private window or storage blocked
 	}

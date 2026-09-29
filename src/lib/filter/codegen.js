@@ -52,7 +52,7 @@ function header(filterType) {
 `;
 }
 
-function paramsBlock({ amaxDb, aminDb, amaxDbHp, aminDbHp, amaxDbLp, aminDbLp, fp, fs, fl, fh, fsl, fsh, filterType, response, responseHp, responseLp, topology, topologyHp, topologyLp, order, orderHp, orderLp, capOverrides, resistorStock, capacitorStock }) {
+function paramsBlock({ amaxDb, aminDb, amaxDbHp, aminDbHp, amaxDbLp, aminDbLp, fp, fs, fl, fh, fsl, fsh, filterType, response, responseHp, responseLp, topology, topologyHp, topologyLp, order, orderHp, orderLp, capOverrides, resistorStock, resistorPairs, capacitorStock }) {
 	const hasOverrides = capOverrides && Object.keys(capOverrides).length > 0;
 	return `// =====================================================================
 // PARAMETERS - the only block meant to be edited
@@ -84,6 +84,7 @@ const TOPOLOGY_LP = ${JSON.stringify(topologyLp ?? topology)};  // band-pass / b
 const RESISTOR_SERIES = ${JSON.stringify(resistorStock ?? 'E24')};
 // 'E24' or 'E96' for a full preferred series, or an explicit array of
 // ohm values to design against only what is actually in the drawer.
+const RESISTOR_PAIRS = ${resistorPairs ? 'true' : 'false'};   // with an array above: a resistor that sets f0, Q or a zero may be two in series
 const CAPACITORS = ${JSON.stringify(capacitorStock ?? null)};
 // null for the usual E6/E12 capacitor grids, or an array of farad values.
 const SUMMING_R = 10000;          // ohms, band-stop's summing amplifier (any equal value works)
@@ -180,11 +181,16 @@ console.log();
 console.log('='.repeat(72));
 console.log('STAGES');
 console.log('='.repeat(72));
-const OPTS = { resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS };
+const OPTS = { resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS, pairs: RESISTOR_PAIRS };
+// a resistor built from two in series is printed with its two parts
+const ohms = (value) => {
+	const pair = RESISTOR_PAIRS ? seriesPair(value, RESISTOR_SERIES) : null;
+	return \`\${value.toFixed(0)} ohm\${pair ? \` (\${Number(pair[0].toPrecision(6))} + \${Number(pair[1].toPrecision(6))} in series)\` : ''}\`;
+};
 const printParts = (r) => {
 	for (const [name, value] of Object.entries(r.components)) {
 		const isR = /^[Rr]/.test(name);
-		console.log(\`  \${name} = \${isR ? value.toFixed(0) + ' ohm' : value.toExponential(4) + ' F'}\`);
+		console.log(\`  \${name} = \${isR ? ohms(value) : value.toExponential(4) + ' F'}\`);
 	}
 };
 const realized = design.stages.map((stage, i) => {
@@ -198,7 +204,7 @@ const realized = design.stages.map((stage, i) => {
 			r = ov && ov.C ? designFirstOrderLowPassFromCap(stage.tau, ov.C, OPTS) : designFirstOrderLowPass(stage.tau, OPTS);
 		}
 		console.log(\`stage \${i + 1} (1st order, \${stage.filterType}): tau = \${stage.tau.toExponential(4)} s\`);
-		console.log(\`  R = \${r.components.R} ohm, C = \${r.components.C.toExponential(4)} F\`);
+		console.log(\`  R = \${RESISTOR_PAIRS && seriesPair(r.components.R, RESISTOR_SERIES) ? ohms(r.components.R) : r.components.R + ' ohm'}, C = \${r.components.C.toExponential(4)} F\`);
 		console.log(\`  actual tau = \${r.actual.tau.toExponential(4)} s (\${(100 * (r.actual.tau - stage.tau) / stage.tau).toFixed(2)}%)\`);
 		return r;
 	}
@@ -422,6 +428,7 @@ export function generateScript({
 	orderLp,
 	capOverrides,
 	resistorStock = null,
+	resistorPairs = false,
 	capacitorStock = null
 }) {
 	const chunks = [
@@ -451,6 +458,7 @@ export function generateScript({
 			orderLp,
 			capOverrides,
 			resistorStock,
+			resistorPairs,
 			capacitorStock
 		}),
 		'// ===================================================================== \n// ENGINE - same code the web tool runs\n// =====================================================================\n',

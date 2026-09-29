@@ -1,5 +1,5 @@
 import { DIODE_MODELS, diodeCurrent } from './diodeLaw';
-import { capacitorValues, largestResistorNotAbove, nearestResistor, nearestValue, resistorValues, stockName } from './eseries';
+import { capacitorValues, largestResistorNotAbove, nearestResistor, nearestValue, pairedResistor, resistorValues, seriesPair, stockName } from './eseries';
 
 /**
  * Diode + resonant tank AM modulator, built as a switching modulator.
@@ -44,6 +44,14 @@ import { capacitorValues, largestResistorNotAbove, nearestResistor, nearestValue
  *        that gives the least distortion at the target index
  *   R_m  sets the message's gain, u_m = (R_f / R_m) A_m, solved for the
  *        target index
+ *
+ * With a list of values on hand and `pairs` on, R_p and R_m may each be
+ * two resistors in series (pairedResistor), kept only when the design they
+ * give does no worse than the single parts' on what the page checks: the
+ * index at least as close to the target, and no check lost. The rest
+ * stay single: R_t is a ceiling (rounded down, so the band is never
+ * narrower than asked), R_s's rounding is taken up by R_t, and R_b and
+ * R_f only set levels.
  *
  * The tank passes the sidebands at f_p +/- f_m with the gain of its
  * loaded band, 1 / sqrt(1 + (2 f_m / BW)^2), so the index a tone at
@@ -206,6 +214,20 @@ function driveForIndex(current, base, vb, target, P, S) {
 	return (a + b) / 2;
 }
 
+/**
+ * Whether a design with two resistors in series somewhere does worse
+ * than the same design with single parts on what the page checks: the
+ * index further from the target, the carrier taken past 1, or a check
+ * the single parts pass that it fails.
+ */
+const DIODE_CHECKS = [(d) => d.indexOk, (d) => d.tuneOk, (d) => d.rangeOk, (d) => d.cjOk, (d) => d.sidebandsInBand, (d) => d.currentOk, (d) => d.leakOk, (d) => d.summer.swingOk, (d) => d.summer.gbwOk, (d) => d.sidebandGain >= 0.9];
+function worseThanSingle(paired, single) {
+	const miss = (d) => Math.abs(d.modulationIndex - d.targetModulationIndex);
+	if (miss(paired) > miss(single)) return true;
+	if (paired.modulationIndex > 1 && single.modulationIndex <= 1) return true;
+	return DIODE_CHECKS.some((ok) => ok(single) && !ok(paired));
+}
+
 export function designDiodeMixerModulator({
 	fp,
 	fmMax,
@@ -221,7 +243,8 @@ export function designDiodeMixerModulator({
 	diode = '1N4148',
 	resistorSeries = 'E24', // a series name, or a list of the resistors on hand (ohms)
 	capacitors = null, // null for E12 capacitors, or a list of the capacitors on hand (farads)
-	capacitorStock = capacitors // the same, under the name the downloaded script uses
+	capacitorStock = capacitors, // the same, under the name the downloaded script uses
+	pairs = false // with a list: R_p and R_m may each be two resistors in series (pairedResistor)
 } = {}) {
 	if (!(fp > 0) || !(fmMax > 0) || !(inductance > 0) || !(sidebandMargin > 0)) return null;
 	// the band, sidebandMargin x fmMax either side of fp, has to stay clear of the message itself
@@ -328,8 +351,8 @@ export function designDiodeMixerModulator({
 	const vb = rb ? (rf * vcc) / rb : 0;
 
 	// the carrier and message resistors: the index follows u_m / A_d, the
-	// ratio of R_p to R_m, so the stock pair that gives the target index
-	// best is picked among the neighbours of the ideal values
+	// ratio of R_p to R_m, so the R_p and R_m that give the target index
+	// best are picked among the stock neighbours of the ideal values
 	const umWanted = driveForIndex(current, base, vb, targetModulationIndex, P0, S0) ?? bestVb.um;
 	const rpIdeal = (rf * carrierAmplitude) / carrierDrive;
 	const stocked = resistorValues(stock, 1, 8);
@@ -338,149 +361,169 @@ export function designDiodeMixerModulator({
 		const at = k < 0 ? stocked.length : k;
 		return stocked.slice(Math.max(0, at - 2), at + 2);
 	};
+	// with `pairs` on, the two in series pairedResistor builds for an ideal
+	// value (where no single one comes within 2 %) joins the candidates,
+	// after the single ones so that a tie keeps the single part
+	const pairFor = (target) => {
+		const v = pairedResistor(target, stock, pairs);
+		return seriesPair(v, stock) ? [v] : [];
+	};
 	// R_p within 12 % of its ideal value, or the stock values either side of
 	// it when a sparse stock has none that close (the nearest one otherwise)
 	const rpNear = neighbours(rpIdeal).filter((v) => Math.abs(Math.log(v / rpIdeal)) < 0.12);
 	const rpAround = neighbours(rpIdeal);
+	const rpSingles = rpNear.length ? rpNear : rpAround.length ? rpAround : [nearestResistor(rpIdeal, stock)];
 	let pick = null;
-	for (const rpC of rpNear.length ? rpNear : rpAround.length ? rpAround : [nearestResistor(rpIdeal, stock)]) {
+	let pickSingle = null; // the best of the single parts alone, which is the design without pairs
+	for (const rpC of [...rpSingles, ...pairFor(rpIdeal)]) {
 		const driveC = (rf / rpC) * carrierAmplitude;
 		const rmIdeal = (rf * modAmplitude) / (umWanted * (driveC / drive));
 		const rmAround = neighbours(rmIdeal);
-		for (const rmC of rmAround.length ? rmAround : [nearestResistor(rmIdeal, stock)]) {
+		const rmSingles = rmAround.length ? rmAround : [nearestResistor(rmIdeal, stock)];
+		for (const rmC of [...rmSingles, ...pairFor(rmIdeal)]) {
 			const umC = (rf / rmC) * modAmplitude;
 			const nC = envelopeOf(current, { ...base, a: driveC, um: umC, vb }, P0, S0).n;
 			const err = Math.abs(nC - targetModulationIndex) + 0.02 * Math.abs(Math.log(rpC / rpIdeal));
-			if (!pick || err < pick.err) pick = { rp: rpC, rm: rmC, err };
+			const cand = { rp: rpC, rm: rmC, err };
+			if (!pick || err < pick.err) pick = cand;
+			if (rpSingles.includes(rpC) && rmSingles.includes(rmC) && (!pickSingle || err < pickSingle.err)) pickSingle = cand;
 		}
 	}
 	if (!pick) return null;
-	const rp = pick.rp;
-	const rm = pick.rm;
-	const driveBuilt = (rf / rp) * carrierAmplitude;
-	const um = (rf / rm) * modAmplitude;
-	const built = { ...base, a: driveBuilt };
-	const env = envelopeOf(current, { ...built, um, vb }, 32, 128);
-	// parts so far off (a list with nothing near the ohms needed) that the cycle solve breaks down: no design
-	if (!Number.isFinite(env.n) || !Number.isFinite(env.mean)) return null;
 
-	// the source the tank sees at the carrier, from how the carrier current
-	// gives way when the tank's voltage rises (at the message's zero)
-	const at = carrierCycle(current, driveBuilt, vb, z, 128, relax);
-	const dv = 1e-3 * Math.max(1e-3, Math.hypot(at.v1.re, at.v1.im));
-	const i1a = fundamentalWith(current, driveBuilt, vb, at.v1, 128);
-	const i1b = fundamentalWith(current, driveBuilt, vb, { re: at.v1.re + dv, im: at.v1.im }, 128);
-	const di = i1a.re - i1b.re;
-	const rSource = di > 0 ? dv / di : 2 * rs;
-	const rEff = 1 / (1 / rt + 1 / rSource);
-	const bwLoaded = 1 / (2 * Math.PI * rEff * c);
-	const qLoaded = f0Actual / bwLoaded;
-	const bandLow = f0Actual - bwLoaded / 2;
-	const bandHigh = f0Actual + bwLoaded / 2;
-	const slack = 1e-9 * fp;
-	const sidebandsInBand = fp - fmMax >= bandLow - slack && fp + fmMax <= bandHigh + slack;
-	// what the loaded tank does to each sideband, relative to the carrier
-	const loaded = { r: rEff, l: inductance, c };
-	const zc = tankImpedance(fp, loaded);
-	const mag = (q) => Math.hypot(q.re, q.im);
-	const sideband = (f) => (mag(tankImpedance(fp - f, loaded)) + mag(tankImpedance(fp + f, loaded))) / (2 * mag(zc));
-	const gainLow = mag(tankImpedance(fp - fmMax, loaded)) / mag(zc);
-	const gainHigh = mag(tankImpedance(fp + fmMax, loaded)) / mag(zc);
-	const sidebandGain = (gainLow + gainHigh) / 2;
-	// a tone at f_m,max: its envelope's harmonics sit further out, at
-	// f_p +/- h f_m, where the tank passes less still
-	const hOut = env.harmonics.map((x, k) => x * sideband((k + 1) * fmMax));
-	const thdAtFmMax = hOut[0] > 0 ? Math.sqrt(hOut.slice(1).reduce((s, x) => s + x * x, 0)) / hOut[0] : 0;
+	// the design a pick of R_p and R_m gives: its envelope in full, the
+	// source the tank sees, the band and every check the page makes
+	const build = ({ rp, rm }) => {
+		const driveBuilt = (rf / rp) * carrierAmplitude;
+		const um = (rf / rm) * modAmplitude;
+		const env = envelopeOf(current, { ...base, a: driveBuilt, um, vb }, 32, 128);
+		// parts so far off (a list with nothing near the ohms needed) that the cycle solve breaks down: no design
+		if (!Number.isFinite(env.n) || !Number.isFinite(env.mean)) return null;
 
-	// the summer: its peak output and how hard its op-amp works at the carrier
-	const summerPeak = driveBuilt + um + vb;
+		// the source the tank sees at the carrier, from how the carrier current
+		// gives way when the tank's voltage rises (at the message's zero)
+		const at = carrierCycle(current, driveBuilt, vb, z, 128, relax);
+		const dv = 1e-3 * Math.max(1e-3, Math.hypot(at.v1.re, at.v1.im));
+		const i1a = fundamentalWith(current, driveBuilt, vb, at.v1, 128);
+		const i1b = fundamentalWith(current, driveBuilt, vb, { re: at.v1.re + dv, im: at.v1.im }, 128);
+		const di = i1a.re - i1b.re;
+		const rSource = di > 0 ? dv / di : 2 * rs;
+		const rEff = 1 / (1 / rt + 1 / rSource);
+		const bwLoaded = 1 / (2 * Math.PI * rEff * c);
+		const qLoaded = f0Actual / bwLoaded;
+		const bandLow = f0Actual - bwLoaded / 2;
+		const bandHigh = f0Actual + bwLoaded / 2;
+		const slack = 1e-9 * fp;
+		const sidebandsInBand = fp - fmMax >= bandLow - slack && fp + fmMax <= bandHigh + slack;
+		// what the loaded tank does to each sideband, relative to the carrier
+		const loaded = { r: rEff, l: inductance, c };
+		const zc = tankImpedance(fp, loaded);
+		const mag = (q) => Math.hypot(q.re, q.im);
+		const sideband = (f) => (mag(tankImpedance(fp - f, loaded)) + mag(tankImpedance(fp + f, loaded))) / (2 * mag(zc));
+		const gainLow = mag(tankImpedance(fp - fmMax, loaded)) / mag(zc);
+		const gainHigh = mag(tankImpedance(fp + fmMax, loaded)) / mag(zc);
+		const sidebandGain = (gainLow + gainHigh) / 2;
+		// a tone at f_m,max: its envelope's harmonics sit further out, at
+		// f_p +/- h f_m, where the tank passes less still
+		const hOut = env.harmonics.map((x, k) => x * sideband((k + 1) * fmMax));
+		const thdAtFmMax = hOut[0] > 0 ? Math.sqrt(hOut.slice(1).reduce((s, x) => s + x * x, 0)) / hOut[0] : 0;
 
-	// what the page cannot vouch for: the diode's junction capacitance passes
-	// the drive while the diode is off once 2 pi f_p Cjo R_s is not small (the
-	// cycle solve leaves Cjo out, LTspice does not); a tank tuned off the
-	// carrier because no capacitor pair reaches it; resistors at the bottom
-	// of the search, where the band can no longer be set
-	const cjRatio = 2 * Math.PI * fp * (d.cjo ?? 0) * rs;
-	// the summer's output current at the crest: the diode's peak through R_s
-	// and the feedback current through R_f, which a TL08x keeps to about 20 mA
-	const summerCurrent = env.peak + summerPeak / rf;
-	// the message itself in the diode current (about u_m / 2 R_s, on half the
-	// time), across the loaded tank at f_m: what of it reaches the output
-	const messageLeak = (mag(tankImpedance(fmMax, loaded)) * (um / (2 * rs))) / Math.max(1e-12, env.mean);
-	const noiseGain = 1 + rf * (1 / rp + 1 / rm + (rb ? 1 / rb : 0));
-	const gbwRatio = (fp * noiseGain) / gbw;
+		// the summer: its peak output and how hard its op-amp works at the carrier
+		const summerPeak = driveBuilt + um + vb;
 
-	return {
-		fp,
-		fmMax,
-		sidebandMargin,
-		bandwidth,
-		bandwidthNeeded,
-		q: fp / bandwidth,
-		inductance,
-		capacitance: c,
-		capacitors: tankParts,
-		cTarget,
-		f0Actual,
-		detuning,
-		diode: d.id,
-		diodeLabel: d.label,
-		carrierAmplitude,
-		modAmplitude,
-		targetModulationIndex,
-		vcc,
-		stockName: stockName(stock),
-		summer: {
-			rf,
-			rp,
-			rm,
-			rb,
-			drive: driveBuilt,
-			driveTarget: carrierDrive,
-			um,
-			vb,
-			vbBest: bestVb.vb,
-			peak: summerPeak,
-			swingOk: summerPeak <= opampSwing,
-			opampSwing,
-			noiseGain,
-			gbwRatio,
-			gbwOk: gbwRatio <= 0.2
-		},
-		rs,
-		rt,
-		rtTarget,
-		rEffTarget,
-		rSource,
-		rEff,
-		bwLoaded,
-		qLoaded,
-		bandLow,
-		bandHigh,
-		sidebandsInBand,
-		idealIndex: (4 * um) / (Math.PI * driveBuilt),
-		idealCarrier: (driveBuilt * rEff) / (2 * rs),
-		modulationIndex: env.n,
-		thd: env.thd,
-		thdAtFmMax,
-		carrierOut: env.mean,
-		envelopeMax: env.max,
-		envelopeMin: env.min,
-		peakCurrent: env.peak,
-		sidebandGain,
-		gainLow,
-		gainHigh,
-		indexAtFmMax: env.n * sidebandGain,
-		cjRatio,
-		cjOk: cjRatio <= 0.05,
-		tuneOk: Math.abs(f0Actual / fp - 1) <= 0.03,
-		resistorFloor: floor,
-		rangeOk: rtTarget >= floor * (1 - 1e-9) && 2 * rEffTarget >= floor * 0.95,
-		// how far the stock parts leave the index from the target
-		indexOk: Math.abs(env.n - targetModulationIndex) <= 0.05 && env.n <= 1,
-		summerCurrent,
-		currentOk: summerCurrent <= 0.02,
-		messageLeak,
-		leakOk: messageLeak <= 0.03
+		// what the page cannot vouch for: the diode's junction capacitance passes
+		// the drive while the diode is off once 2 pi f_p Cjo R_s is not small (the
+		// cycle solve leaves Cjo out, LTspice does not); a tank tuned off the
+		// carrier because no capacitor pair reaches it; resistors at the bottom
+		// of the search, where the band can no longer be set
+		const cjRatio = 2 * Math.PI * fp * (d.cjo ?? 0) * rs;
+		// the summer's output current at the crest: the diode's peak through R_s
+		// and the feedback current through R_f, which a TL08x keeps to about 20 mA
+		const summerCurrent = env.peak + summerPeak / rf;
+		// the message itself in the diode current (about u_m / 2 R_s, on half the
+		// time), across the loaded tank at f_m: what of it reaches the output
+		const messageLeak = (mag(tankImpedance(fmMax, loaded)) * (um / (2 * rs))) / Math.max(1e-12, env.mean);
+		const noiseGain = 1 + rf * (1 / rp + 1 / rm + (rb ? 1 / rb : 0));
+		const gbwRatio = (fp * noiseGain) / gbw;
+
+		return {
+			fp,
+			fmMax,
+			sidebandMargin,
+			bandwidth,
+			bandwidthNeeded,
+			q: fp / bandwidth,
+			inductance,
+			capacitance: c,
+			capacitors: tankParts,
+			cTarget,
+			f0Actual,
+			detuning,
+			diode: d.id,
+			diodeLabel: d.label,
+			carrierAmplitude,
+			modAmplitude,
+			targetModulationIndex,
+			vcc,
+			stockName: stockName(stock),
+			summer: {
+				rf,
+				rp,
+				rm,
+				rb,
+				drive: driveBuilt,
+				driveTarget: carrierDrive,
+				um,
+				vb,
+				vbBest: bestVb.vb,
+				peak: summerPeak,
+				swingOk: summerPeak <= opampSwing,
+				opampSwing,
+				noiseGain,
+				gbwRatio,
+				gbwOk: gbwRatio <= 0.2
+			},
+			rs,
+			rt,
+			rtTarget,
+			rEffTarget,
+			rSource,
+			rEff,
+			bwLoaded,
+			qLoaded,
+			bandLow,
+			bandHigh,
+			sidebandsInBand,
+			idealIndex: (4 * um) / (Math.PI * driveBuilt),
+			idealCarrier: (driveBuilt * rEff) / (2 * rs),
+			modulationIndex: env.n,
+			thd: env.thd,
+			thdAtFmMax,
+			carrierOut: env.mean,
+			envelopeMax: env.max,
+			envelopeMin: env.min,
+			peakCurrent: env.peak,
+			sidebandGain,
+			gainLow,
+			gainHigh,
+			indexAtFmMax: env.n * sidebandGain,
+			cjRatio,
+			cjOk: cjRatio <= 0.05,
+			tuneOk: Math.abs(f0Actual / fp - 1) <= 0.03,
+			resistorFloor: floor,
+			rangeOk: rtTarget >= floor * (1 - 1e-9) && 2 * rEffTarget >= floor * 0.95,
+			// how far the stock parts leave the index from the target
+			indexOk: Math.abs(env.n - targetModulationIndex) <= 0.05 && env.n <= 1,
+			summerCurrent,
+			currentOk: summerCurrent <= 0.02,
+			messageLeak,
+			leakOk: messageLeak <= 0.03
+		};
 	};
+	// a pick with a pair in it is kept only if its design does no worse
+	// than the single parts' on anything the page checks
+	const single = build(pickSingle);
+	if (pick === pickSingle) return single;
+	const paired = build(pick);
+	return paired && (!single || !worseThanSingle(paired, single)) ? paired : single;
 }

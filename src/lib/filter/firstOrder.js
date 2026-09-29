@@ -1,4 +1,4 @@
-import { capacitorCandidates, nearestCapacitor, nearestResistor } from './eseries';
+import { capacitorCandidates, nearestCapacitor, pairedResistor } from './eseries';
 
 /**
  * First-order low-pass stage: H(s) = 1 / (RCs + 1), used for the leftover
@@ -9,7 +9,20 @@ const FO_R_MIN = 200;
 const FO_R_MAX = 2_000_000;
 const FO_R_SWEET = 10_000;
 
-export function designFirstOrderLowPass(tau, { resistorSeries = 'E24', capacitors = null } = {}) {
+/**
+ * R rounded to stock. With `pairs` it may be two resistors in series, kept
+ * only when that leaves tau no further off than a single part, as in
+ * roundMfb (mfb.js); with tau set by R alone, a pair is always kept.
+ */
+function roundFirstOrder(Rtarget, C, tau, resistorSeries, pairs) {
+	const single = pairedResistor(Rtarget, resistorSeries, false);
+	if (!pairs) return single;
+	const paired = pairedResistor(Rtarget, resistorSeries, true);
+	const miss = (R) => Math.abs(Math.log((R * C) / tau));
+	return miss(paired) <= miss(single) ? paired : single;
+}
+
+export function designFirstOrderLowPass(tau, { resistorSeries = 'E24', capacitors = null, pairs = false } = {}) {
 	const caps = capacitorCandidates(capacitors);
 
 	let best = null;
@@ -29,7 +42,7 @@ export function designFirstOrderLowPass(tau, { resistorSeries = 'E24', capacitor
 		}
 	}
 
-	const R = nearestResistor(best.Rtarget, resistorSeries);
+	const R = roundFirstOrder(best.Rtarget, best.C, tau, resistorSeries, pairs);
 	return {
 		topology: 'firstOrder',
 		order: 1,
@@ -44,9 +57,9 @@ export function designFirstOrderLowPass(tau, { resistorSeries = 'E24', capacitor
  * Solves for R from a capacitor chosen by hand (e.g. to match what is
  * actually in stock) instead of searching a preferred series for it.
  */
-export function designFirstOrderLowPassFromCap(tau, C, { resistorSeries = 'E24', capacitors = null } = {}) {
+export function designFirstOrderLowPassFromCap(tau, C, { resistorSeries = 'E24', capacitors = null, pairs = false } = {}) {
 	const Rtarget = tau / C;
-	const R = nearestResistor(Rtarget, resistorSeries);
+	const R = roundFirstOrder(Rtarget, C, tau, resistorSeries, pairs);
 	const outOfRange = !(Rtarget > FO_R_MIN && Rtarget < FO_R_MAX);
 
 	return {

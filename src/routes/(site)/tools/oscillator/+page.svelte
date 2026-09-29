@@ -9,6 +9,7 @@
 	import MathPanel from '$lib/components/MathPanel.svelte';
 	import OpampPicker from '$lib/components/OpampPicker.svelte';
 	import StockPicker from '$lib/components/StockPicker.svelte';
+	import { pairLabel } from '$lib/filter/eseries';
 	import { formatFarads, formatHz, formatOhms, formatVolts } from '$lib/modulation/format';
 	import { oscillatorBasics } from '$lib/oscillator/basics';
 	import { buildAgcDiagram, buildClampDiagram, buildLimiterDiagram, buildOscillatorDiagram, hasLimiterDiagram } from '$lib/oscillator/circuits';
@@ -36,13 +37,16 @@
 
 	// Which values every resistor and capacitor is rounded to: a series, the
 	// lab drawer or the user's own list, the same setting as the filter and
-	// AM tools (src/lib/stock.js), kept in this browser
+	// AM tools (src/lib/stock.js), kept in this browser. With a list, `pairs`
+	// lets the resistors that set the frequency, the start and the amplitude
+	// be two in series.
 	const initialStock = defaultStock();
 	let stock = $state(initialStock.stock);
 	let resistorText = $state(initialStock.resistorText);
 	let capacitorText = $state(initialStock.capacitorText);
+	let pairs = $state(initialStock.pairs);
 	let stockLoaded = $state(false);
-	const parts = $derived(componentOptions(stock, resistorText, capacitorText));
+	const parts = $derived(componentOptions(stock, resistorText, capacitorText, pairs));
 	const restricted = $derived(isRestricted(stock));
 	onMount(() => {
 		const saved = loadStock();
@@ -50,11 +54,12 @@
 			if (saved.stock) stock = saved.stock;
 			if (saved.resistorText !== undefined) resistorText = saved.resistorText;
 			if (saved.capacitorText !== undefined) capacitorText = saved.capacitorText;
+			if (saved.pairs !== undefined) pairs = saved.pairs;
 		}
 		stockLoaded = true;
 	});
 	$effect(() => {
-		const state = { stock, resistorText, capacitorText };
+		const state = { stock, resistorText, capacitorText, pairs };
 		if (stockLoaded) saveStock(state);
 	});
 
@@ -74,12 +79,13 @@
 	});
 	// a restricted stock that cannot build this oscillator, or builds one
 	// that does not start or hold its amplitude, falls back to E24 and the
-	// usual capacitors, flagged, rather than showing nothing
+	// usual capacitors, one resistor per part, flagged, rather than showing
+	// nothing
 	const design = $derived.by(() => {
 		if (!valid) return null;
 		const own = designOscillator({ ...params, topology });
 		if (!restricted || (own && own.starts && own.limiter.regulates !== false)) return own;
-		const fallback = designOscillator({ ...params, topology, resistorSeries: 'E24', capacitors: null });
+		const fallback = designOscillator({ ...params, topology, resistorSeries: 'E24', capacitors: null, pairs: false });
 		if (!fallback) return own;
 		if (own && !(fallback.starts && fallback.limiter.regulates !== false)) return own;
 		return { ...fallback, stockShortfall: true };
@@ -102,6 +108,10 @@
 	});
 
 	const pct = (x, digits = 1) => `${x >= 0 ? '+' : ''}${(100 * x).toFixed(digits)} %`;
+	// a resistor as the tables print it: two in series read "2.88 kΩ (2.20 kΩ +
+	// 680 Ω)". The design says what it was picked from, so the E24 fallback
+	// prints single values even when the list could add up to one of them.
+	const ohms = (v) => pairLabel(v, design.resistorSeries, formatOhms, design.pairs);
 
 	function save(text, filename) {
 		const blob = new Blob([text], { type: 'text/plain' });
@@ -213,17 +223,19 @@
 				<input id="swing" type="number" min="0.5" step="0.5" bind:value={opampSwing} />
 			</div>
 		</div>
-		<StockPicker id="stock" bind:stock bind:resistorText bind:capacitorText />
+		<StockPicker id="stock" bind:stock bind:resistorText bind:capacitorText bind:pairs />
 		{#if restricted}
 			<p class="note">
-				{stock === 'labR' ? 'Every resistor below is rounded to the lab resistors, the capacitors to the usual values,' : 'Every resistor and capacitor below is rounded to those values only,'} and the loop is
+				{stock === 'labR'
+					? `Every resistor below is rounded to the lab resistors${parts.pairs ? ' (or two of them in series)' : ''}, the capacitors to the usual values,`
+					: `Every resistor and capacitor below is rounded to those values ${parts.pairs ? '(or, for a resistor, to two of them in series)' : 'only'},`} and the loop is
 				solved again with the rounded parts, so the frequency and amplitude shown are what they give.
 			</p>
 		{/if}
 		{#if design?.stockShortfall}
 			<p class="flag warn">
 				The parts on hand cannot build this oscillator so that it starts and holds its amplitude, so it is shown with E24
-				resistors and E6 capacitors instead. Add values near the ones below, or pick another topology.
+				resistors and E6 capacitors instead. Add values near the ones below, {parts.pairs ? '' : 'allow two resistors in series, '}or pick another topology.
 			</p>
 		{/if}
 		<p class="note">{TOPOLOGIES.find((t) => t.id === topology)?.summary}</p>
@@ -252,11 +264,11 @@
 			<table>
 				<tbody>
 					<tr><td>Frequency: wanted / predicted with this op-amp</td><td>{formatHz(frequency)} / {formatHz(design.f0)} ({pct(design.f0Error, 2)})</td></tr>
-					<tr><td>R (each)</td><td>{formatOhms(design.r)}</td></tr>
+					<tr><td>R (each)</td><td>{ohms(design.r)}</td></tr>
 					<tr><td>C (each)</td><td>{formatFarads(design.c)}</td></tr>
 					<tr><td>Textbook frequency of these R and C</td><td>{formatHz(design.fIdeal)}: retuned {pct(design.retunePercent)} so the op-amp's lag lands the loop on target</td></tr>
 					{#if design.kind === 'quadrature'}
-						<tr><td>Inverter</td><td>gain exactly 1 (Ra = Rb = {formatOhms(design.parts.ra)}); start-up from Rn = {formatOhms(design.parts.rn)}, {pct(design.growthPerCycle)} per cycle</td></tr>
+						<tr><td>Inverter</td><td>gain exactly 1 (Ra = Rb = {ohms(design.parts.ra)}); start-up from Rn = {ohms(design.parts.rn)}, {pct(design.growthPerCycle)} per cycle</td></tr>
 					{:else}
 						<tr><td>Gain the loop needs with this op-amp</td><td>{design.requiredGain.toFixed(2)} (textbook {design.idealGain.toFixed(2)}), set to {Number.isFinite(design.startGain) ? design.startGain.toFixed(2) : '?'} with the parts below</td></tr>
 						{#if design.limiter.kind === 'diodes'}
@@ -264,9 +276,9 @@
 						{/if}
 					{/if}
 					{#if design.topology === 'wien'}
-						<tr><td>Rg (lower feedback leg)</td><td>{formatOhms(design.rg)}</td></tr>
+						<tr><td>Rg (lower feedback leg)</td><td>{ohms(design.rg)}</td></tr>
 					{:else if design.topo.ladder}
-						<tr><td>Rg (also the last ladder resistor)</td><td>{formatOhms(design.rg)}</td></tr>
+						<tr><td>Rg (also the last ladder resistor)</td><td>{ohms(design.rg)}</td></tr>
 					{/if}
 					<tr><td>Output amplitude</td><td>{design.limiter.amplitudeActual === null ? 'cannot be set with these parts' : `about ${formatVolts(design.limiter.amplitudeActual)} peak`}{design.outputs === 'quadrature' ? ', sine and cosine' : ''}</td></tr>
 					{#if design.sectionLoss < 1}
@@ -294,7 +306,7 @@
 			{#if design.limiter.kind === 'diodes'}
 				<table>
 					<tbody>
-						<tr><td>Rf1 / Rf2 (diodes across Rf2)</td><td>{formatOhms(design.limiter.rf1)} / {formatOhms(design.limiter.rf2)}</td></tr>
+						<tr><td>Rf1 / Rf2 (diodes across Rf2)</td><td>{ohms(design.limiter.rf1)} / {ohms(design.limiter.rf2)}</td></tr>
 						<tr><td>Gain before the diodes conduct / with them fully on</td><td>{design.limiter.gainStart.toFixed(2)} / {design.limiter.gainLimited.toFixed(2)}, against {design.requiredGain.toFixed(2)} needed</td></tr>
 						<tr><td>Diode</td><td>{DIODES[design.diode].label}</td></tr>
 					</tbody>
@@ -315,7 +327,7 @@
 			{:else if design.limiter.kind === 'lamp'}
 				<table>
 					<tbody>
-						<tr><td>Rf</td><td>{formatOhms(design.limiter.rf)}</td></tr>
+						<tr><td>Rf</td><td>{ohms(design.limiter.rf)}</td></tr>
 						<tr><td>Lamp resistance needed, hot / cold</td><td>{formatOhms(design.limiter.rHot)} at {formatVolts(amplitude / design.requiredGain)} peak across it / about {formatOhms(design.limiter.rCold)}</td></tr>
 						<tr><td>Gain at switch-on, cold</td><td>{design.limiter.gainStart.toFixed(1)}, falling to {design.requiredGain.toFixed(2)} as the filament warms</td></tr>
 					</tbody>
@@ -329,10 +341,10 @@
 				{#if design.limiter.regulates}
 					<table>
 						<tbody>
-							<tr><td>Rf / series resistor with the channel</td><td>{formatOhms(design.limiter.rf)} / {formatOhms(design.limiter.rSeries)}</td></tr>
+							<tr><td>Rf / series resistor with the channel</td><td>{ohms(design.limiter.rf)} / {ohms(design.limiter.rSeries)}</td></tr>
 							<tr><td>Channel at balance / gate needed</td><td>{formatOhms(design.limiter.rBalance)} / {design.limiter.vgsNeeded.toFixed(2)} V</td></tr>
-							<tr><td>Detector divider Ra / Rb, Cdet</td><td>{design.limiter.ra > 0 ? formatOhms(design.limiter.ra) : 'none'} / {formatOhms(design.limiter.rb)}, {formatFarads(design.limiter.cDet)} ({Math.round(design.limiter.cyclesPerTau)} cycles)</td></tr>
-							<tr><td>Gate averaging resistors</td><td>2 x {formatOhms(design.limiter.rx)}</td></tr>
+							<tr><td>Detector divider Ra / Rb, Cdet</td><td>{design.limiter.ra > 0 ? ohms(design.limiter.ra) : 'none'} / {ohms(design.limiter.rb)}, {formatFarads(design.limiter.cDet)} ({Math.round(design.limiter.cyclesPerTau)} cycles)</td></tr>
+							<tr><td>Gate averaging resistors</td><td>2 x {ohms(design.limiter.rx)}</td></tr>
 							<tr><td>Gain at switch-on</td><td>{design.limiter.gainStart.toFixed(2)}, against {design.requiredGain.toFixed(2)} needed</td></tr>
 						</tbody>
 					</table>
@@ -359,8 +371,8 @@
 			{:else}
 				<table>
 					<tbody>
-						<tr><td>Start-up resistor Rn (inverter output into integrator 2)</td><td>{formatOhms(design.limiter.rn)}: {pct(design.limiter.growthPerCycle)} per cycle</td></tr>
-						<tr><td>Clamp divider Rd1 / Rd2, diodes into the same input</td><td>{formatOhms(design.limiter.rd1)} / {formatOhms(design.limiter.rd2)}, {DIODES[design.diode].label.split(' (')[0]}</td></tr>
+						<tr><td>Start-up resistor Rn (inverter output into integrator 2)</td><td>{ohms(design.limiter.rn)}: {pct(design.limiter.growthPerCycle)} per cycle</td></tr>
+						<tr><td>Clamp divider Rd1 / Rd2, diodes into the same input</td><td>{ohms(design.limiter.rd1)} / {ohms(design.limiter.rd2)}, {DIODES[design.diode].label.split(' (')[0]}</td></tr>
 					</tbody>
 				</table>
 				{#if design.limiter.regulates}

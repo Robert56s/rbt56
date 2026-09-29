@@ -678,5 +678,253 @@ check('carrier: peak current is Ac times the largest conductance', near(d.carrie
 	check('stock: an index the parts cannot reach is flagged (indexOk false)', off && off.indexOk === false && designDiodeMixerModulator({ fp: 40000, fmMax: 1000 }).indexOk === true, off && off.modulationIndex.toFixed(3));
 }
 
+/* ------------------------------ two resistors in series (the stock picker's option) */
+{
+	const { LAB_KIT } = await import('../src/lib/filter/eseries.js');
+	const { componentOptions } = await import('../src/lib/stock.js');
+	const { pairLabel, seriesPair } = await import('../src/lib/modulation/eseries.js');
+	const { formatOhms } = await import('../src/lib/modulation/format.js');
+	const { generateDemodScript, generateDiodeScript, generateJfetScript } = await import('../src/lib/modulation/codegen.js');
+	const { generateDemodNetlist } = await import('../src/lib/modulation/spice.js');
+	const { execFileSync } = await import('node:child_process');
+	const { mkdtempSync, writeFileSync } = await import('node:fs');
+	const { tmpdir } = await import('node:os');
+	const { join } = await import('node:path');
+	const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+	const inList = (v, list) => list.some((x) => Math.abs(x / v - 1) < 1e-9);
+	const kit = [...LAB_KIT.capacitors, 10e-6];
+
+	// the case that asked for the option: a J111-like line measured on the
+	// bench, the lab kit with a 10 uF capacitor added
+	const rows = ['-0.5 0.2 0.0026 1000', '-1.0 0.2 0.0029 1000', '-1.5 0.2 0.0031 1000', '-2.0 0.2 0.0034 1000', '-2.5 0.2 0.0037 1000', '-3.0 0.2 0.0041 1000'];
+	const measured = fitModel(parseMeasurements(rows.join(String.fromCharCode(10))), { low: -7, high: 0 });
+	const bench = { model: measured, topology: 'noninverting', swingFraction: 0.9, targetModulationIndex: 0.7, fp: 50000, vcc: 15, opampSwing: 13.5, gbw: 4e6, slewRate: 16e6, carrierMargin: 0.15, carrierSourceAmplitude: 0.6, resistorSeries: LAB_KIT.resistors, capacitors: kit };
+
+	// (a) off, or on with a full series: exactly the designs from before the option
+	{
+		const single = designJfetModulator({ ...bench, pairs: false });
+		const sm1 = single.conditioning.summer;
+		const dLab = designDiodeMixerModulator({ fp: 40000, fmMax: 1000, resistorSeries: LAB_KIT.resistors, capacitorStock: LAB_KIT.capacitors, pairs: false });
+		const envLab = designEnvelopeLowPass({ response: 'chebyshev', amaxDb: 1, aminDb: 40, fp: 1000, fs: 79000, order: null, resistorSeries: LAB_KIT.resistors, capacitors: LAB_KIT.capacitors, pairs: false });
+		check(
+			'pairs off: the parts the tool gave before the option (bench JFET, lab diode, lab envelope)',
+			sm1.rac === 4700 && sm1.rbias === 68000 && single.rb === 150 && near(single.modulationIndex, 0.6882, 5e-5) && dLab.summer.rp === 4700 && dLab.summer.rm === 8200 && near(dLab.modulationIndex, 0.7766, 5e-5) && envLab.realized[0].components.R1 === 7500,
+			`R_bias ${sm1.rbias}, R_b ${single.rb}, n ${single.modulationIndex.toFixed(4)}; R_p ${dLab.summer.rp}, R_m ${dLab.summer.rm}; R ${envLab.realized[0].components.R1}`
+		);
+		const diff = [];
+		const stocks = { E24: componentOptions('E24'), E96: componentOptions('E96'), lab: componentOptions('lab'), labR: componentOptions('labR') };
+		for (const [name, parts] of Object.entries(stocks)) {
+			const { resistorSeries, capacitors } = parts;
+			const settings = name === 'E24' || name === 'E96' ? [false, true] : [false];
+			for (const pairs of settings) {
+				for (const topology of ['noninverting', 'inverting']) {
+					for (const set of [base, { ...bench, resistorSeries: undefined, capacitors: undefined }]) {
+						if (!same(designJfetModulator({ ...set, topology, resistorSeries, capacitors }), designJfetModulator({ ...set, topology, resistorSeries, capacitors, pairs }))) diff.push(`${name} jfet ${topology} pairs ${pairs}`);
+					}
+				}
+				for (const set of [{ fp: 40000, fmMax: 1000 }, { fp: 55000, fmMax: 3000, targetModulationIndex: 0.6, diode: 'BAT54' }]) {
+					if (!same(designDiodeMixerModulator({ ...set, resistorSeries, capacitorStock: capacitors }), designDiodeMixerModulator({ ...set, resistorSeries, capacitorStock: capacitors, pairs }))) diff.push(`${name} diode pairs ${pairs}`);
+				}
+				for (const response of ['butterworth', 'chebyshev']) {
+					const spec = { response, amaxDb: 1, aminDb: 40, fp: 1000, fs: 79000, order: null, resistorSeries, capacitors };
+					if (!same(designEnvelopeLowPass(spec), designEnvelopeLowPass({ ...spec, pairs }))) diff.push(`${name} envelope ${response} pairs ${pairs}`);
+				}
+			}
+		}
+		check('pairs off (and on for E24 or E96): every design is the one without the option', diff.length === 0, diff.length ? diff.slice(0, 4).join('; ') : 'JFET both cells, diode, envelope on E24, E96, lab, labR');
+		check('pairs: the stock setting only turns them on for a list', !componentOptions('E24', '', '', true).pairs && !componentOptions('E96', '', '', true).pairs && componentOptions('lab', '', '', true).pairs && componentOptions('labR', '', '', true).pairs && !componentOptions('lab').pairs);
+	}
+
+	// (c) the bench case: 68 k left the bias at -3.31 V and n at 0.688
+	{
+		const d0 = designJfetModulator({ ...bench, pairs: false });
+		const d1 = designJfetModulator({ ...bench, pairs: true });
+		const s1 = d1.conditioning.summer;
+		check(
+			'pairs: the bench JFET gets R_bias = 56 k + 8.2 k, the bias on -3.50 V and n back to 0.70',
+			near(d0.conditioning.summer.biasActual, -3.31, 0.005) && near(d0.modulationIndex, 0.688, 5e-4) && s1.rbias === 64200 && same(seriesPair(s1.rbias, LAB_KIT.resistors), [56000, 8200]) && near(s1.biasActual, -3.5, 0.01) && d1.modulationIndex > d0.modulationIndex && Math.abs(d1.modulationIndex - 0.7) < 0.005,
+			`before: R_bias ${d0.conditioning.summer.rbias}, bias ${d0.conditioning.summer.biasActual.toFixed(3)} V, n ${d0.modulationIndex.toFixed(3)}; with pairs: R_bias ${s1.rbias}, bias ${s1.biasActual.toFixed(3)} V, R_b ${d1.rb}, n ${d1.modulationIndex.toFixed(3)}`
+		);
+		check('pairs: a table prints a pair with its two parts, a single value as before', pairLabel(64200, LAB_KIT.resistors, formatOhms) === '64.2 kΩ (56.0 kΩ + 8.20 kΩ)' && pairLabel(68000, LAB_KIT.resistors, formatOhms) === '68.0 kΩ' && pairLabel(64200, LAB_KIT.resistors, formatOhms, false) === '64.2 kΩ', pairLabel(64200, LAB_KIT.resistors, formatOhms));
+		// the same design redone for a slower op-amp with the files' R_b keeps the same gate drive
+		const slow = designJfetModulator({ ...bench, pairs: true, gbw: 1e6, slewRate: 0.5e6, rb: d1.rb });
+		check('pairs: redone for an LM741 with the same R_b, the gate drive does not change', slow.conditioning.summer.rac === s1.rac && slow.conditioning.summer.rbias === s1.rbias && slow.rb === d1.rb, `R_ac ${slow.conditioning.summer.rac}, R_bias ${slow.conditioning.summer.rbias}`);
+	}
+
+	// (b) on, with a list: every part is a list value or two of them, and
+	// nothing the page reports against a target lands further off
+	{
+		let seed = 20260928;
+		const rand = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+		const lists = { lab: LAB_KIT.resistors, custom: componentOptions('custom', '1k 2.2k 4.7k 10k 22k 47k 100k 220k 470k 1M', '').resistorSeries, sparse: componentOptions('custom', '10 22 47 100 220 470 1k 2.2k 4.7k 10k 22k 47k 100k 220k 470k 1M', '').resistorSeries };
+		const bad = [];
+		let designs = 0;
+		let better = 0;
+		let rescued = 0;
+		const madeOf = (label, v, list) => {
+			if (v > 0 && !inList(v, list) && !seriesPair(v, list)) bad.push(`${label} ${v} is neither on the list nor two of it`);
+		};
+		const single = (label, v, list) => {
+			if (v > 0 && !inList(v, list)) bad.push(`${label} ${v} should be one part`);
+		};
+		const logMiss = (a, b) => Math.abs(Math.log(a / b));
+		for (let i = 0; i < 600; i++) {
+			const [ln, list] = Object.entries(lists)[i % 3];
+			const vp = -(0.5 + 9.5 * rand());
+			const model = i % 4 === 3 ? measured : rand() < 0.5 ? modelFromIdss(vp, 1e-3 * (0.5 + 40 * rand())) : modelFromRdsOn(vp, 10 + 500 * rand());
+			const swingFraction = 0.4 + 0.6 * rand();
+			const topology = i % 5 === 4 ? 'inverting' : 'noninverting';
+			const set = { model, topology, swingFraction, targetModulationIndex: (0.2 + 0.75 * rand()) * swingFraction, sourceAmplitude: 0.2 + 2 * rand(), vcc: 5 + 12 * rand(), fp: 10000 + 90000 * rand(), fmMin: 20 + 200 * rand(), opampSwing: 3 + 10.5 * rand(), resistorSeries: list, capacitors: i % 2 ? kit : null };
+			const d0 = designJfetModulator({ ...set, pairs: false });
+			const d1 = designJfetModulator({ ...set, pairs: true });
+			if (d0 && !d1) bad.push(`jfet ${ln} ${i}: pairs lost the design`);
+			if (!d0 && d1) rescued++;
+			if (!d0 || !d1) continue;
+			designs++;
+			const [s0, s1] = [d0.conditioning.summer, d1.conditioning.summer];
+			for (const [k, v] of Object.entries({ rac: s1.rac, rbias: s1.rbias, rb: d1.rb })) madeOf(`jfet ${ln} ${k}`, v, list);
+			for (const [k, v] of Object.entries({ rf: s1.rf, r2: d1.r2, divTop: d1.carrier.divider.top, divBottom: d1.carrier.divider.bottom, rtop: d1.postGain?.rtop, rbottom: d1.postGain?.rbottom })) single(`jfet ${ln} ${k}`, v, list);
+			if (logMiss(-s1.biasActual, s1.biasTarget) > logMiss(-s0.biasActual, s0.biasTarget) + 1e-12) bad.push(`jfet ${ln} ${i}: bias further off`);
+			if (logMiss(s1.gainActual, s1.gainTarget) > logMiss(s0.gainActual, s0.gainTarget) + 1e-12) bad.push(`jfet ${ln} ${i}: gain further off`);
+			// the bias and swing within the summer's reach, and the coupling corner, where the single parts had them
+			if (s0.headroomOk && !s1.headroomOk) bad.push(`jfet ${ln} ${i}: the summer no longer reaches the gate swing`);
+			if (s0.fcOk && !s1.fcOk) bad.push(`jfet ${ln} ${i}: the coupling corner lost`);
+			if (topology === 'noninverting') {
+				const [e0, e1] = [d0, d1].map((d) => Math.abs(d.modulationIndex - set.targetModulationIndex));
+				if (e1 > e0 + 1e-12) bad.push(`jfet ${ln} ${i}: n further off (${e0.toFixed(4)} -> ${e1.toFixed(4)})`);
+				if (e1 < e0 - 1e-6) better++;
+			}
+		}
+		check(`pairs: ${designs} random JFET designs on three lists, every part on the list or two of it, R_f and the level parts single, bias, gain and n never further off, headroom and coupling corner never lost, no design lost`, bad.length === 0 && designs > 400, bad.length ? bad.slice(0, 3).join('; ') : `n closer in ${better}, ${rescued} designs only with pairs`);
+
+		// every check the diode panels make, as the page reads it
+		const DIODE_FLAGS = { indexOk: (x) => x.indexOk, tuneOk: (x) => x.tuneOk, rangeOk: (x) => x.rangeOk, cjOk: (x) => x.cjOk, sidebandsInBand: (x) => x.sidebandsInBand, currentOk: (x) => x.currentOk, leakOk: (x) => x.leakOk, swingOk: (x) => x.summer.swingOk, gbwOk: (x) => x.summer.gbwOk, slope: (x) => x.sidebandGain >= 0.9, underOne: (x) => x.modulationIndex <= 1 };
+		const badD = [];
+		let diodeBetter = 0;
+		for (let i = 0; i < 30; i++) {
+			const [ln, list] = Object.entries(lists)[i % 3];
+			const fp = 10000 + 300000 * rand();
+			const set = { fp, fmMax: fp / (8 + 60 * rand()), sidebandMargin: 0.8 + 3 * rand(), inductance: [1e-4, 1e-3, 1e-2][i % 3], carrierAmplitude: 0.2 + 2 * rand(), modAmplitude: 0.1 + 2 * rand(), targetModulationIndex: 0.3 + 0.7 * rand(), carrierDrive: 0.5 + 5 * rand(), vcc: 5 + 10 * rand(), opampSwing: 3 + 8 * rand(), diode: i % 4 ? '1N4148' : 'BAT54', resistorSeries: list, capacitorStock: i % 2 ? LAB_KIT.capacitors : null };
+			const d0 = designDiodeMixerModulator({ ...set, pairs: false });
+			const d1 = designDiodeMixerModulator({ ...set, pairs: true });
+			if (d0 && !d1) badD.push(`diode ${ln} ${i}: pairs lost the design`);
+			if (!d0 || !d1) continue;
+			madeOf(`diode ${ln} rp`, d1.summer.rp, list);
+			madeOf(`diode ${ln} rm`, d1.summer.rm, list);
+			for (const [k, v] of Object.entries({ rf: d1.summer.rf, rb: d1.summer.rb, rs: d1.rs, rt: d1.rt })) single(`diode ${ln} ${k}`, v, list);
+			if (d1.rt !== d0.rt || d1.rs !== d0.rs || d1.summer.rb !== d0.summer.rb || d1.capacitance !== d0.capacitance) badD.push(`diode ${ln} ${i}: the tank or the bias moved`);
+			const [e0, e1] = [d0, d1].map((d) => Math.abs(d.modulationIndex - set.targetModulationIndex));
+			if (e1 > e0 + 1e-12) badD.push(`diode ${ln} ${i}: index further off (${e0.toFixed(4)} -> ${e1.toFixed(4)})`);
+			for (const [k, ok] of Object.entries(DIODE_FLAGS)) if (ok(d0) && !ok(d1)) badD.push(`diode ${ln} ${i}: ${k} lost`);
+			if (e1 < e0 - 1e-6) diodeBetter++;
+		}
+		badD.push(...bad.filter((b) => b.startsWith('diode')));
+		check('pairs: diode designs on three lists, R_p and R_m on the list or two of it, the tank and the bias untouched, the index never further off, no page check lost', badD.length === 0 && diodeBetter > 5, badD.length ? badD.slice(0, 3).join('; ') : `index closer in ${diodeBetter} of 30`);
+
+		const badE = [];
+		let stages = 0;
+		let stageBetter = 0;
+		for (let i = 0; i < 120; i++) {
+			const [ln, list] = Object.entries(lists)[i % 3];
+			const fm = 100 + 5000 * rand();
+			const spec = { response: i % 2 ? 'chebyshev' : 'butterworth', amaxDb: 0.5 + rand(), aminDb: 20 + 40 * rand(), fp: fm, fs: fm * (5 + 80 * rand()), order: null, maxOrder: 8, resistorSeries: list, capacitors: i % 3 ? LAB_KIT.capacitors : null };
+			const e0 = designEnvelopeLowPass({ ...spec, pairs: false });
+			const e1 = designEnvelopeLowPass({ ...spec, pairs: true });
+			if (e0.tooHigh) continue;
+			e1.realized.forEach((s1, k) => {
+				const s0 = e0.realized[k];
+				stages++;
+				const { wn, q } = e1.stages[k];
+				if (!s1.stockShortfall) madeOf(`envelope ${ln} R`, s1.components.R1, list);
+				if (s1.stockShortfall && !same(s0, s1)) badE.push(`envelope ${ln} ${i}: an E24 stage changed`);
+				if (s1.components.Ctop !== s0.components.Ctop || s1.components.Cbottom !== s0.components.Cbottom) badE.push(`envelope ${ln} ${i}: the capacitors moved`);
+				// how far a stage lands from what it was asked: its f0 or its Q, whichever is further off
+				const stageMiss = (st) => Math.max(logMiss(st.actual.wn, wn), logMiss(st.actual.q, q));
+				if (stageMiss(s1) > stageMiss(s0) + 1e-12) badE.push(`envelope ${ln} ${i}: stage ${k + 1} further off`);
+				if (logMiss(s1.actual.wn, wn) > logMiss(s0.actual.wn, wn) + 1e-12) badE.push(`envelope ${ln} ${i}: f0 further off`);
+				if (logMiss(s1.actual.wn, wn) < logMiss(s0.actual.wn, wn) - 1e-9) stageBetter++;
+			});
+		}
+		badE.push(...bad.filter((b) => b.startsWith('envelope')));
+		check('pairs: envelope stages on three lists, R on the list or two of it, the capacitors untouched, max(|ln f0 ratio|, |ln Q ratio|) and f0 never further off', badE.length === 0 && stageBetter > 20, badE.length ? badE.slice(0, 3).join('; ') : `f0 closer in ${stageBetter} of ${stages} stages`);
+
+		// the Wien carrier the page can put on the board, from the same list
+		const badW = [];
+		for (const [ln, list] of Object.entries(lists)) {
+			for (const frequency of [20000, 55000]) {
+				const osc = designOscillator({ topology: 'wien', stabilizer: 'diodes', frequency, amplitude: 0.6, resistorSeries: list, capacitors: LAB_KIT.capacitors, pairs: true });
+				if (!osc) continue;
+				for (const [k, v] of Object.entries({ r: osc.r, rf1: osc.parts.rf1, rf2: osc.parts.rf2, rg: osc.rg })) if (v > 0 && !inList(v, list) && !seriesPair(v, list)) badW.push(`wien ${ln} ${frequency} ${k} ${v}`);
+			}
+		}
+		check('pairs: the Wien carrier oscillator from a list: every resistor on it or two of it', badW.length === 0, badW.length ? badW.slice(0, 3).join('; ') : 'lab, custom, sparse');
+	}
+
+	// the LTspice files keep the sums and say how each is built
+	{
+		const d1 = designJfetModulator({ ...bench, pairs: true });
+		const osc = designOscillator({ topology: 'wien', stabilizer: 'diodes', frequency: 50000, amplitude: 0.6, resistorSeries: LAB_KIT.resistors, capacitors: kit, pairs: true });
+		const stock = { resistorSeries: LAB_KIT.resistors, pairs: true };
+		const opts = { design: d1, fmPreview: 1000, oscillator: osc };
+		const cir = modNetlist({ ...opts, ...stock });
+		const asc = modSchematic({ ...opts, ...stock });
+		const oscPairs = osc ? [['RSO', osc.r], ['RPO', osc.r], ['RF1O', osc.parts.rf1], ['RF2O', osc.parts.rf2], ['RGO', osc.rg]].filter(([, v]) => seriesPair(v, LAB_KIT.resistors)) : [];
+		const cirOk = cir.includes('* RBIAS = 56k + 8.2k in series (their sum is used below)') && /\nRBIAS vcc nsum 64\.2k\n/.test(cir) && oscPairs.every(([name]) => cir.includes(`* ${name} = `));
+		const ascOk = asc.includes('RBIAS = 56k + 8.2k in series (drawn as their sum)') && oscPairs.every(([name]) => asc.includes(`${name} = `));
+		const { elements: got, clashes, dangling } = parseSchematic(asc);
+		const wanted = buildModElements(opts).filter((e) => e.kind !== 'LABEL');
+		const drawnOk = clashes.length === 0 && dangling.length === 0 && got.length === wanted.length && audit(asc).length === 0;
+		check('pairs: the JFET .cir and .asc note each pair (the oscillator\'s too), keep the sum, and the drawing stays clean', cirOk && ascOk && drawnOk, `${oscPairs.length} oscillator pairs; ${audit(asc).map((x) => x.kind).join(', ') || 'clean'}`);
+		const off = [
+			modNetlist(opts) === modNetlist({ ...opts, resistorSeries: LAB_KIT.resistors, pairs: false }),
+			modSchematic(opts) === modSchematic({ ...opts, resistorSeries: LAB_KIT.resistors, pairs: false }),
+			!modNetlist({ ...opts, resistorSeries: 'E24', pairs: true }).includes('in series')
+		];
+		check('pairs: off, or with a series, the LTspice files are the ones from before', off.every(Boolean), off.join(' '));
+		const dd = designDiodeMixerModulator({ fp: 40000, fmMax: 1000, resistorSeries: LAB_KIT.resistors, capacitorStock: LAB_KIT.capacitors, pairs: true });
+		const dCir = generateDiodeNetlist({ design: dd, ...stock });
+		const dAsc = generateDiodeSchematic({ design: dd, ...stock });
+		const dPairs = [['RP', dd.summer.rp], ['RM', dd.summer.rm]].filter(([, v]) => seriesPair(v, LAB_KIT.resistors));
+		check('pairs: the diode files note R_p and R_m when they are pairs, and the drawing stays clean', dPairs.length > 0 && dPairs.every(([name]) => dCir.includes(`* ${name} = `) && dAsc.includes(`${name} = `)) && audit(dAsc).length === 0 && parseSchematic(dAsc).elements.length === buildDiodeElements({ design: dd }).filter((e) => e.kind !== 'LABEL').length, dPairs.map(([n, v]) => `${n} ${v}`).join(', '));
+		const envelope = designEnvelopeLowPass({ response: 'chebyshev', amaxDb: 1, aminDb: 40, fp: 1000, fs: 79000, order: null, resistorSeries: LAB_KIT.resistors, capacitors: LAB_KIT.capacitors, pairs: true });
+		const dm = { rectifierType: 'full', rectifier: designPrecisionRectifier({ resistorSeries: LAB_KIT.resistors }), envelope, fp: 40000, fm: 1000, index: 0.9, ...stock };
+		const eCir = generateDemodNetlist(dm);
+		const eAsc = generateDemodSchematic(dm);
+		const rPair = seriesPair(envelope.realized[0].components.R1, LAB_KIT.resistors);
+		check('pairs: the demodulator files note both R of a stage built as a pair, and the drawing stays clean', rPair !== null && eCir.includes(`* R11 = ${spiceValue(rPair[0])} + ${spiceValue(rPair[1])} in series`) && eCir.includes('* R21 = ') && eAsc.includes('R21 = ') && audit(eAsc).length === 0, rPair ? `R ${envelope.realized[0].components.R1} = ${rPair.join(' + ')}` : 'no pair');
+	}
+
+	// (d) the downloaded scripts run with RESISTOR_PAIRS = true, and print the pairs
+	{
+		const dir = mkdtempSync(join(tmpdir(), 'rbt56-am-pairs-'));
+		const jfetScript = (pairs) =>
+			generateJfetScript({ mode: 'measured', vp: measured.vp, idss: measured.idss, rdsOn: measured.rdsOn, measurements: measured.points.map((pt) => [pt.vgs, pt.rds]), windowLow: -7, windowHigh: 0, topology: 'noninverting', targetOutputAmplitude: 1, carrierBuffer: true, swingFraction: 0.9, targetModulationIndex: 0.7, rb: null, sourceAmplitude: 1, fmMin: 100, vcc: 15, fp: 50000, carrierSourceAmplitude: 0.6, carrierMargin: 0.15, opampSwing: 13.5, gbw: 4e6, slewRate: 16e6, resistorSeries: LAB_KIT.resistors, capacitors: kit, pairs, carrierNote: null });
+		const diodeScript = (pairs) => generateDiodeScript({ fp: 40000, fmMax: 1000, sidebandMargin: 3, inductance: 1e-3, carrierAmplitude: 1, modAmplitude: 1, targetModulationIndex: 0.8, carrierDrive: 2, vcc: 12, opampSwing: 10.5, diode: '1N4148', resistorSeries: LAB_KIT.resistors, capacitorStock: LAB_KIT.capacitors, capacitors: LAB_KIT.capacitors, pairs });
+		const demodScript = (pairs) => generateDemodScript({ rectifierType: 'full', fpCarrier: 40000, fmMax: 1000, amaxDb: 1, aminDb: 40, order: null, response: 'chebyshev', index: 0.9, resistorSeries: LAB_KIT.resistors, capacitors: LAB_KIT.capacitors, pairs });
+		const run = (name, code) => {
+			const file = join(dir, name);
+			writeFileSync(file, code);
+			try {
+				return execFileSync(process.execPath, [file], { encoding: 'utf8', stdio: 'pipe' });
+			} catch (e) {
+				return `CRASH ${String(e.stderr || e.message).split(String.fromCharCode(10)).slice(0, 3).join(' / ')}`;
+			}
+		};
+		const outs = {
+			jfet: [run('jfet-off.js', jfetScript(false)), run('jfet-on.js', jfetScript(true))],
+			diode: [run('diode-off.js', diodeScript(false)), run('diode-on.js', diodeScript(true))],
+			demod: [run('demod-off.js', demodScript(false)), run('demod-on.js', demodScript(true))]
+		};
+		const constOk = /\nconst RESISTOR_PAIRS = true; /.test(jfetScript(true)) && /\nconst RESISTOR_PAIRS = false; /.test(diodeScript(false));
+		const crashed = Object.entries(outs).filter(([, o]) => o.some((x) => x.startsWith('CRASH')));
+		const offClean = Object.values(outs).every(([off]) => !off.includes('in series'));
+		const jfetOk = outs.jfet[1].includes('Rbias = 64200 ohm (56000 + 8200 in series): bias -3.505 V (target -3.500 V)') && outs.jfet[1].includes(`modulation index n = ${designJfetModulator({ ...bench, pairs: true }).modulationIndex.toFixed(3)}`);
+		const dd = designDiodeMixerModulator({ fp: 40000, fmMax: 1000, resistorSeries: LAB_KIT.resistors, capacitorStock: LAB_KIT.capacitors, pairs: true });
+		const diodeOk = outs.diode[1].includes(`index ${dd.modulationIndex.toFixed(4)} for a slow message`) && / in series\)/.test(outs.diode[1]);
+		const demodOk = /R1 = R2 = \d+ ohm \(\d+ \+ \d+ in series\)/.test(outs.demod[1]);
+		check('pairs: the downloaded scripts run with RESISTOR_PAIRS = true and print each pair, and print none with it false', constOk && crashed.length === 0 && offClean && jfetOk && diodeOk && demodOk, crashed.length ? crashed.map(([k, o]) => `${k}: ${o.find((x) => x.startsWith('CRASH'))}`).join('; ') : `jfet ${jfetOk}, diode ${diodeOk}, demod ${demodOk}, off clean ${offClean}`);
+	}
+}
+
 console.log(fails === 0 ? 'am checks clean' : `${fails} failure(s)`);
 process.exit(fails === 0 ? 0 : 1);

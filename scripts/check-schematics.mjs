@@ -488,7 +488,18 @@ console.log();
 	const { designPrecisionRectifier, designHalfWaveRectifier } = await import('../src/lib/modulation/rectifier.js');
 	const { componentOptions } = await import('../src/lib/stock.js');
 	const { hasLimiterDiagram } = await import('../src/lib/oscillator/circuits.js');
-	const STOCKS = ['E24', 'E96', 'lab', 'labR'].map((s) => [s, componentOptions(s)]);
+	const { pairDiagramLabel } = await import('../src/lib/modulation/eseries.js');
+	const { formatOhms } = await import('../src/lib/modulation/format.js');
+	const STOCKS = [
+		...['E24', 'E96', 'lab', 'labR'].map((s) => [s, componentOptions(s)]),
+		// two resistors in series: the drawings label a pair by its two parts,
+		// longer than a single value (the oscillator's own drawings read the
+		// pair from the design, the AM ones get the page's label function)
+		['lab+pairs', componentOptions('lab', '', '', true)],
+		['labR+pairs', componentOptions('labR', '', '', true)],
+		// a list of 3-digit values gives the longest pair labels ("49.9k + 24.9k")
+		['custom3+pairs', componentOptions('custom', '1.02k 2.49k 4.99k 10.2k 24.9k 49.9k 102k 249k 499k 1.02M', '', true)]
+	];
 	const seen = new Set();
 	const SWEEP = [];
 	const add = (name, build) => {
@@ -504,6 +515,9 @@ console.log();
 		SWEEP.push([name, () => d]);
 	};
 	for (const [sn, parts] of STOCKS) {
+		// the resistor labels the AM page passes: a pair by its two parts, never for an E24 fallback (own false)
+		const ohmsFor = (own = true) => (v) => pairDiagramLabel(v, parts.resistorSeries, formatOhms, parts.pairs && own);
+		const ohms = ohmsFor();
 		for (const model of [modelFromIdss(-4, 5e-3), modelFromRdsOn(-6.5, 30), modelFromIdss(-1.5, 2e-3)]) {
 			for (const topology of ['noninverting', 'inverting']) {
 				for (const carrierBuffer of [true, false]) {
@@ -512,17 +526,20 @@ console.log();
 							for (const amp of [0.05, 1, 5]) {
 								const osc = wien ? designOscillator({ topology: 'wien', stabilizer: 'diodes', frequency: fp, amplitude: amp, ...parts }) : null;
 								const cin = osc?.limiter.amplitudeActual ?? amp;
-								const d = designJfetModulator({ model, topology, carrierBuffer, targetModulationIndex: 0.6, swingFraction: 0.9, sourceAmplitude: 1, fmMin: 100, vcc: 12, fp, carrierSourceAmplitude: cin, targetOutputAmplitude: 1, ...parts });
-								if (!d) continue;
-								const tag = `${sn} ${topology} buf=${carrierBuffer} ${fp} ${wien ? 'wien' : 'gen'} ${amp}V`;
-								if (topology === 'inverting') add(`am/inverting cell ${tag}`, () => modulation.buildJfetInvertingCellDiagram({ r2: d.r2, follower: d.buffer.enabled }));
-								else add(`am/gain cell ${tag}`, () => modulation.buildJfetGainCellDiagram({ rb: d.rb }));
-								if (d.postGain?.needed) add(`am/post-gain ${tag}`, () => modulation.buildGainStageDiagram({ rtop: d.postGain.rtop, rbottom: d.postGain.rbottom }));
-								add(`am/divider ${tag}`, () =>
-									modulation.buildCarrierDividerDiagram({ ...d.carrier.divider, from: osc ? 'from the Wien oscillator' : 'carrier source', to: topology === 'inverting' ? (d.buffer.enabled ? 'to the follower' : 'to the drain') : 'to + input' })
-								);
-								add(`am/gate summer ${tag}`, () => modulation.buildBiasSummerDiagram(d.conditioning.summer));
-								if (osc) add(`am/wien ${tag}`, () => buildOscillatorDiagram(osc));
+								// n = 0.6, and the page's default 0.85, which asks for a larger R_b and longer pairs
+								for (const targetN of [0.6, 0.85]) {
+									const d = designJfetModulator({ model, topology, carrierBuffer, targetModulationIndex: targetN, swingFraction: 0.9, sourceAmplitude: 1, fmMin: 100, vcc: 12, fp, carrierSourceAmplitude: cin, targetOutputAmplitude: 1, ...parts });
+									if (!d) continue;
+									const tag = `${sn} ${topology} buf=${carrierBuffer} ${fp} ${wien ? 'wien' : 'gen'} ${amp}V n=${targetN}`;
+									if (topology === 'inverting') add(`am/inverting cell ${tag}`, () => modulation.buildJfetInvertingCellDiagram({ r2: d.r2, follower: d.buffer.enabled, ohms }));
+									else add(`am/gain cell ${tag}`, () => modulation.buildJfetGainCellDiagram({ rb: d.rb, ohms }));
+									if (d.postGain?.needed) add(`am/post-gain ${tag}`, () => modulation.buildGainStageDiagram({ rtop: d.postGain.rtop, rbottom: d.postGain.rbottom }));
+									add(`am/divider ${tag}`, () =>
+										modulation.buildCarrierDividerDiagram({ ...d.carrier.divider, from: osc ? 'from the Wien oscillator' : 'carrier source', to: topology === 'inverting' ? (d.buffer.enabled ? 'to the follower' : 'to the drain') : 'to + input' })
+									);
+									add(`am/gate summer ${tag}`, () => modulation.buildBiasSummerDiagram(d.conditioning.summer, { ohms }));
+									if (osc) add(`am/wien ${tag}`, () => buildOscillatorDiagram(osc));
+								}
 							}
 						}
 					}
@@ -534,7 +551,7 @@ console.log();
 				const dd = designDiodeMixerModulator({ fp, fmMax, inductance: L, diode, ...parts });
 				if (!dd) continue;
 				const tag = `${sn} ${fp}/${fmMax}/${L} ${diode}`;
-				add(`am/diode summer ${tag}`, () => modulation.buildDiodeSummerDiagram(dd.summer));
+				add(`am/diode summer ${tag}`, () => modulation.buildDiodeSummerDiagram(dd.summer, { ohms: ohmsFor(!dd.stockShortfall) }));
 				add(`am/diode tank ${tag}`, () => modulation.buildDiodeTankDiagram({ rs: dd.rs, l: dd.inductance, capacitors: dd.capacitors, r: dd.rt }));
 			}
 		}
@@ -544,7 +561,7 @@ console.log();
 			for (const [fm, fs] of [[1000, 79000], [5000, 35000], [300, 9700]]) {
 				const env = designEnvelopeLowPass({ response, amaxDb: 1, aminDb: 40, fp: fm, fs, order: null, maxOrder: 8, ...parts });
 				if (env.tooHigh) continue;
-				env.realized.forEach((s, i) => add(`am/envelope ${sn} ${response} ${fm} stage ${i + 1}`, () => modulation.buildEnvelopeLowPassDiagram(s.components)));
+				env.realized.forEach((s, i) => add(`am/envelope ${sn} ${response} ${fm} stage ${i + 1}`, () => modulation.buildEnvelopeLowPassDiagram(s.components, { ohms: ohmsFor(!s.stockShortfall) })));
 			}
 		}
 		for (const t of TOPOLOGIES) {
@@ -584,6 +601,96 @@ console.log();
 		for (const i of bad) console.log(`      ! [${i.kind}] ${i.msg}`);
 	}
 	console.log(`${sweepBugs === 0 ? 'PASS' : 'FAIL'}  sweep: ${SWEEP.length} distinct diagrams the AM and oscillator pages draw, with their own labels and every stock`);
+	bugs += sweepBugs;
+}
+
+// Every stage diagram the filter page draws, from real designs with two
+// resistors in series allowed: a resistor built from a pair is labelled with
+// its two parts ("R1 56k + 8.2k"), longer than a single value, so a label
+// that only collides with pairs on is caught here. Each stock is swept over
+// f0 and Q (and the notch zeros), its own list naming the parts; the
+// 3-digit list gives the longest pair labels a list can ("12.1k + 3.32k").
+{
+	const { designMfbLowPass } = await import('../src/lib/filter/mfb.js');
+	const { designMfbHighPass } = await import('../src/lib/filter/mfbHighPass.js');
+	const { designSallenKeyLowPass } = await import('../src/lib/filter/sallenKey.js');
+	const { designSallenKeyHighPass } = await import('../src/lib/filter/sallenKeyHighPass.js');
+	const { designFirstOrderLowPass } = await import('../src/lib/filter/firstOrder.js');
+	const { designFirstOrderHighPass } = await import('../src/lib/filter/firstOrderHighPass.js');
+	const { LAB_KIT, pairDiagramLabel } = await import('../src/lib/filter/eseries.js');
+	const { formatOhms } = await import('../src/lib/filter/format.js');
+	const { componentOptions } = await import('../src/lib/stock.js');
+	const STOCKS = [
+		['lab', { resistorSeries: LAB_KIT.resistors, capacitors: LAB_KIT.capacitors, pairs: true }],
+		['labR', { resistorSeries: LAB_KIT.resistors, capacitors: null, pairs: true }],
+		['3-digit list', componentOptions('custom', '1.21k 3.32k 12.1k 33.2k 121k 332k 1.21M', '1n 4.7n 22n 100n', true)]
+	];
+	const draw = (d, opts) => {
+		const c = d.components;
+		if (d.topology === 'mfb') return filter.buildMfbDiagram(c, opts);
+		if (d.topology === 'mfbHp') return filter.buildMfbHpDiagram(c, opts);
+		if (d.topology === 'sallenKey') return filter.buildSallenKeyDiagram(c, opts);
+		if (d.topology === 'sallenKeyHp') return filter.buildSallenKeyHpDiagram(c, opts);
+		if (d.topology === 'towThomas') return filter.buildTowThomasDiagram(c, opts);
+		if (d.topology === 'towThomasHp') return filter.buildTowThomasHpDiagram(c, opts);
+		if (d.topology === 'towThomasNotch') return filter.buildTowThomasNotchDiagram(c, opts);
+		if (d.topology === 'firstOrder') return filter.buildFirstOrderDiagram(c, d.actual.tau, opts);
+		if (d.topology === 'firstOrderHp') return filter.buildFirstOrderHpDiagram(c, d.actual.tau, opts);
+		throw new Error(`no diagram for ${d.topology}`);
+	};
+	const F0 = [50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000];
+	const QS = [0.5, 0.5412, 0.7071, 1, 1.3066, 2, 3, 5];
+	const seen = new Set();
+	const SWEEP = [];
+	let withPairs = 0;
+	const add = (name, build) => {
+		let d;
+		try {
+			d = build();
+		} catch (e) {
+			SWEEP.push([name + ' THROWS ' + e.message, () => ({ svg: '', viewBox: '0 0 1 1' })]);
+			return;
+		}
+		if (!d || seen.has(d.svg)) return;
+		seen.add(d.svg);
+		if (/<text[^>]*>[^<]* \+ [^<]*<\/text>/.test(d.svg)) withPairs++;
+		SWEEP.push([name, () => d]);
+	};
+	for (const [sn, parts] of STOCKS) {
+		const ohms = (v) => pairDiagramLabel(v, parts.resistorSeries, formatOhms, true);
+		const stage = (name, design) => design && add(`filter/${name} ${sn}`, () => draw(design, { ohms }));
+		for (const f0 of F0) {
+			const wn = 2 * Math.PI * f0;
+			stage(`firstOrder ${f0} Hz`, designFirstOrderLowPass(1 / wn, parts));
+			stage(`firstOrderHp ${f0} Hz`, designFirstOrderHighPass(1 / wn, parts));
+			for (const q of QS) {
+				const tag = `${f0} Hz Q ${q}`;
+				stage(`mfb ${tag}`, designMfbLowPass(wn, q, parts));
+				stage(`mfbHp ${tag}`, designMfbHighPass(wn, q, parts));
+				stage(`sallenKey ${tag}`, designSallenKeyLowPass(wn, q, parts));
+				stage(`sallenKeyHp ${tag}`, designSallenKeyHighPass(wn, q, parts));
+				stage(`towThomas ${tag}`, designTowThomasLowPass(wn, q, parts));
+				stage(`towThomasHp ${tag}`, designTowThomasHighPass(wn, q, parts));
+				for (const k of [1.1, 1.5, 2.5, 5]) stage(`notch (low side) ${tag} fz ${k} f0`, designTowThomasNotch(wn, q, k * wn, { lowSide: true, ...parts }));
+				for (const k of [0.2, 0.4, 0.67, 0.9]) stage(`notch (high side) ${tag} fz ${k} f0`, designTowThomasNotch(wn, q, k * wn, { lowSide: false, ...parts }));
+			}
+		}
+	}
+	let sweepBugs = 0;
+	for (const [name, build] of SWEEP) {
+		const result = checkDiagram(name, build());
+		const bad = result.issues.filter((i) => i.level === 'bug');
+		if (/ THROWS /.test(name)) {
+			sweepBugs++;
+			console.log(`FAIL  ${name}`);
+			continue;
+		}
+		if (!bad.length) continue;
+		sweepBugs += bad.length;
+		console.log(`FAIL  ${name}`);
+		for (const i of bad) console.log(`      ! [${i.kind}] ${i.msg}`);
+	}
+	console.log(`${sweepBugs === 0 ? 'PASS' : 'FAIL'}  sweep: ${SWEEP.length} distinct stage diagrams the filter page draws with two in series allowed (${withPairs} with a pair label)`);
 	bugs += sweepBugs;
 }
 

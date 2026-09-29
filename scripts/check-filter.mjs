@@ -17,6 +17,7 @@
 // Exits non-zero on any failure.
 
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -24,18 +25,20 @@ import katex from 'katex';
 import { besselPrototype, ellipticOrder, inverseChebyshevOrder, legendrePolynomial, prototypeFor, prototypeLossDb } from '../src/lib/filter/approximations.js';
 import { combinerChoice, magnitudePhaseAt, magnitudePhaseAtParallelSum } from '../src/lib/filter/bode.js';
 import { generateScript } from '../src/lib/filter/codegen.js';
-import { explainApproximation, explainHpStage, explainOrder, explainStage, explainSummingAmp, explainTowThomas, explainTowThomasHp } from '../src/lib/filter/explain.js';
+import { explainApproximation, explainFirstOrder, explainHpStage, explainMfb, explainMfbHp, explainOrder, explainSallenKey, explainSallenKeyHp, explainStage, explainSummingAmp, explainTowThomas, explainTowThomasHp } from '../src/lib/filter/explain.js';
 import { explainTowThomasNotch } from '../src/lib/filter/explainResponses.js';
-import { designFirstOrderLowPass } from '../src/lib/filter/firstOrder.js';
-import { designFirstOrderHighPass } from '../src/lib/filter/firstOrderHighPass.js';
-import { designMfbLowPass } from '../src/lib/filter/mfb.js';
-import { designMfbHighPass } from '../src/lib/filter/mfbHighPass.js';
-import { designSallenKeyLowPass } from '../src/lib/filter/sallenKey.js';
-import { designSallenKeyHighPass } from '../src/lib/filter/sallenKeyHighPass.js';
-import { LAB_KIT } from '../src/lib/filter/eseries.js';
+import { designFirstOrderLowPass, designFirstOrderLowPassFromCap } from '../src/lib/filter/firstOrder.js';
+import { designFirstOrderHighPass, designFirstOrderHighPassFromCap } from '../src/lib/filter/firstOrderHighPass.js';
+import { designMfbLowPass, designMfbLowPassFromCaps } from '../src/lib/filter/mfb.js';
+import { designMfbHighPass, designMfbHighPassFromCap } from '../src/lib/filter/mfbHighPass.js';
+import { designSallenKeyLowPass, designSallenKeyLowPassFromCaps } from '../src/lib/filter/sallenKey.js';
+import { designSallenKeyHighPass, designSallenKeyHighPassFromCap } from '../src/lib/filter/sallenKeyHighPass.js';
+import { LAB_KIT, pairedResistor, seriesPair } from '../src/lib/filter/eseries.js';
 import { TOW_THOMAS_SENSITIVITY } from '../src/lib/filter/sensitivity.js';
+import { generateNetlist, generateSchematic, spiceValue } from '../src/lib/filter/spice.js';
 import { designBandStop, designHighPass, designLowPass } from '../src/lib/filter/stages.js';
-import { designTowThomasHighPass, designTowThomasLowPass, designTowThomasLowPassFromCap, designTowThomasNotch } from '../src/lib/filter/towThomas.js';
+import { designTowThomasHighPass, designTowThomasHighPassFromCap, designTowThomasLowPass, designTowThomasLowPassFromCap, designTowThomasNotch, designTowThomasNotchFromCap } from '../src/lib/filter/towThomas.js';
+import { audit } from '../src/lib/spice/geometry.js';
 
 let fails = 0;
 const check = (label, ok, detail) => {
@@ -479,6 +482,354 @@ check('combiner never leaves depth on the table', worstLoss <= 1e-9, `${worstLos
 	const nFor30 = minimumOrder('butterworth', 0.5, 30, transitionRatio(10000, 30000)).n;
 	const short = run('bp-short', { filterType: 'bandpass', ...edgesBp, ...sides, orderLp: nFor30 });
 	check('downloadable script: a low-pass side built for 30 dB is reported short of its own 60 dB', /least attenuation in the stopband .*: NOT MET/.test(short) && /asks for >= 60 dB there/.test(short), short.trim().split('\n').pop());
+}
+
+/* -------------------------------------------- 8. two resistors in series */
+// The stock picker's "two in series" option (pairedResistor in eseries.js):
+// with a list of values, a resistor that sets f0, Q or a zero may be the
+// sum of two. The sweep runs every designer, automatic and from capacitors
+// chosen by hand, over a spread of f0 and Q.
+const PAIR_F0 = [37, 480, 3300, 10000, 32260, 150000];
+const PAIR_Q = [0.5412, 0.7071, 1.3066, 1.8398, 3, 8];
+/** Every designer, automatic and from capacitors chosen by hand, over a spread of f0 and Q: [label, design] rows. */
+function sweepDesigns(opts) {
+	const rows = [];
+	for (const f0 of PAIR_F0) {
+		const wn = 2 * Math.PI * f0;
+		const tau = 1 / wn;
+		const fo = designFirstOrderLowPass(tau, opts);
+		rows.push(['firstOrder', fo], ['firstOrder by hand', designFirstOrderLowPassFromCap(tau, fo.components.C * 2.2, opts)]);
+		rows.push(['firstOrderHp', designFirstOrderHighPass(tau, opts)], ['firstOrderHp by hand', designFirstOrderHighPassFromCap(tau, fo.components.C / 2.2, opts)]);
+		for (const q of PAIR_Q) {
+			const at = `${f0} Hz Q ${q}`;
+			const mfb = designMfbLowPass(wn, q, opts);
+			rows.push([`mfb ${at}`, mfb]);
+			if (mfb) {
+				rows.push([`mfb by hand ${at}`, designMfbLowPassFromCaps(wn, q, mfb.components.C1 * 2.2, mfb.components.C2, opts)]);
+				rows.push([`mfb by hand, too close ${at}`, designMfbLowPassFromCaps(wn, q, mfb.components.C2, mfb.components.C2, opts)]);
+			}
+			const mfbHp = designMfbHighPass(wn, q, opts);
+			rows.push([`mfbHp ${at}`, mfbHp], [`mfbHp by hand ${at}`, designMfbHighPassFromCap(wn, q, mfbHp.components.C1 * 2.2, opts)]);
+			const sk = designSallenKeyLowPass(wn, q, opts);
+			rows.push([`sallenKey ${at}`, sk]);
+			if (sk) rows.push([`sallenKey by hand ${at}`, designSallenKeyLowPassFromCaps(wn, q, sk.components.Ctop * 1.5, sk.components.Cbottom, opts)]);
+			const skHp = designSallenKeyHighPass(wn, q, opts);
+			rows.push([`sallenKeyHp ${at}`, skHp], [`sallenKeyHp by hand ${at}`, designSallenKeyHighPassFromCap(wn, q, skHp.components.C1 * 2.2, opts)]);
+			const tt = designTowThomasLowPass(wn, q, opts);
+			rows.push([`towThomas ${at}`, tt]);
+			if (tt) rows.push([`towThomas by hand ${at}`, designTowThomasLowPassFromCap(wn, q, tt.components.C1 * 2.2, opts)]);
+			const ttHp = designTowThomasHighPass(wn, q, opts);
+			rows.push([`towThomasHp ${at}`, ttHp]);
+			if (ttHp) rows.push([`towThomasHp by hand ${at}`, designTowThomasHighPassFromCap(wn, q, ttHp.components.C1 / 2.2, opts)]);
+			for (const [ratio, lowSide] of [[1.6, true], [3.1, true], [1 / 1.7, false], [1 / 2.9, false]]) {
+				const notch = designTowThomasNotch(wn, q, wn * ratio, { ...opts, lowSide });
+				rows.push([`notch ${ratio.toFixed(3)} ${at}`, notch]);
+				if (notch) rows.push([`notch by hand ${ratio.toFixed(3)} ${at}`, designTowThomasNotchFromCap(wn, q, wn * ratio, notch.components.C1 * 2.2, { ...opts, lowSide })]);
+			}
+		}
+	}
+	return rows;
+}
+/** A design as plain text, numbers to nine digits (so a last-bit difference in Math.log cannot show) and lists by length. */
+function designText([label, d]) {
+	const flat = (o) => o && Object.fromEntries(Object.entries(o).map(([k, v]) => [k, typeof v === 'number' ? Number(v.toPrecision(9)) : Array.isArray(v) ? v.length : v]));
+	return JSON.stringify([label, d && { ...flat(d), theoretical: flat(d.theoretical), components: flat(d.components), actual: flat(d.actual), steps: flat(d.steps) }]);
+}
+const fingerprint = (rows) => createHash('sha256').update(rows.map(designText).join('\n')).digest('hex').slice(0, 16);
+const PAIR_STOCKS = {
+	E24: { resistorSeries: 'E24', capacitors: null },
+	E96: { resistorSeries: 'E96', capacitors: null },
+	lab: { resistorSeries: LAB_KIT.resistors, capacitors: LAB_KIT.capacitors },
+	labR: { resistorSeries: LAB_KIT.resistors, capacitors: null }
+};
+
+// (a) Off, and always for E24 and E96 (a full series has a close value
+// everywhere), every design is the one the code gave before the option
+// existed: these fingerprints were taken from that code over this sweep.
+// A deliberate change to a designer moves them too: rerun and update them.
+{
+	const BEFORE = { E24: '55b291a947b0dbd5', E96: '30dfbf3d28313c82', lab: '281fd971f50c20b1', labR: '22b02fda69c38974' };
+	for (const [name, opts] of Object.entries(PAIR_STOCKS)) {
+		const rows = sweepDesigns({ ...opts, pairs: false });
+		const off = fingerprint(rows);
+		const unset = fingerprint(sweepDesigns(opts));
+		const list = Array.isArray(opts.resistorSeries);
+		const on = list ? null : fingerprint(sweepDesigns({ ...opts, pairs: true }));
+		check(
+			`pairs off, ${name}${list ? '' : ' (and on: a series never pairs)'}: all ${rows.length} designs exactly as before the option`,
+			off === BEFORE[name] && unset === BEFORE[name] && (list || on === BEFORE[name]),
+			`${off}${list ? '' : `, on ${on}`}, expected ${BEFORE[name]}`
+		);
+	}
+}
+
+// (b) On, with the lab kit: every resistor is a kit value or two of them in
+// series; only the parts that set f0, Q or a zero pair up, each exactly as
+// the rule picks for its own target (Rd for the rounded R, Rz for the parts
+// actually used), or, in a stage those pairs would have left further off,
+// every part a single value; the inverter's matched pair and the
+// capacitors stay single kit values.
+{
+	const kit = LAB_KIT.resistors;
+	const inList = (list, v) => list.some((x) => Math.abs(x / v - 1) < 1e-9);
+	const TARGETS = {
+		mfb: (d) => ({ R1: d.theoretical.R1, R2: d.theoretical.R2, R3: d.theoretical.R1 }),
+		mfbHp: (d) => ({ R1: d.theoretical.R1, R2: d.theoretical.R2 }),
+		sallenKey: (d) => ({ R1: d.steps.Rtarget, R2: d.steps.Rtarget }),
+		sallenKeyHp: (d) => ({ Rtop: d.steps.RtopTarget, Rbottom: d.steps.RbottomTarget }),
+		towThomas: (d) => ({ R1: d.steps.Rtarget, Ra: d.steps.Rtarget, Rb: d.steps.Rtarget, Rd: d.steps.RdTarget }),
+		towThomasHp: (d) => ({ Ra: d.steps.Rtarget, Rb: d.steps.Rtarget, Rd: d.steps.RdTarget }),
+		towThomasNotch: (d) => ({ Ra: d.steps.Rtarget, Rb: d.steps.Rtarget, Rd: d.steps.RdTarget, Rz: d.steps.RzTarget }),
+		firstOrder: (d) => ({ R: d.steps.Rtarget }),
+		firstOrderHp: (d) => ({ R: d.steps.Rtarget })
+	};
+	for (const name of ['lab', 'labR']) {
+		const rows = sweepDesigns({ ...PAIR_STOCKS[name], pairs: true }).filter(([, d]) => d && d.components);
+		const problems = [];
+		const pairedParts = new Set();
+		let resistors = 0;
+		let paired = 0;
+		let kept = 0;
+		for (const [label, d] of rows) {
+			const targets = TARGETS[d.topology](d);
+			// every figure-setting part as the rule picks it, with pairs or (the stage kept single parts) without
+			const rule = (p) => Object.entries(targets).every(([part, t]) => d.components[part] === pairedResistor(t, kit, p));
+			if (!rule(true)) {
+				if (rule(false)) kept++;
+				else problems.push(`${label}: ${JSON.stringify(d.components)} is neither the rule's pairs nor single parts`);
+			}
+			for (const [part, v] of Object.entries(d.components)) {
+				if (/^[Rr]/.test(part)) {
+					resistors++;
+					const pair = seriesPair(v, kit);
+					if (pair) {
+						paired++;
+						pairedParts.add(`${d.topology} ${part}`);
+					}
+					if (!(part in targets)) {
+						if (!inList(kit, v)) problems.push(`${label} ${part} = ${v} should be one kit value`);
+					} else if (!inList(kit, v) && !pair) problems.push(`${label} ${part} = ${v} is neither a kit value nor two of them`);
+				} else if (name === 'lab' && !/by hand/.test(label) && !inList(LAB_KIT.capacitors, v)) problems.push(`${label} ${part} = ${v} is not a kit capacitor`);
+			}
+		}
+		// every part that sets a figure pairs somewhere in the sweep
+		const expected = Object.entries(TARGETS).flatMap(([t, f]) => Object.keys(f({ theoretical: {}, steps: {} })).map((part) => `${t} ${part}`));
+		const never = expected.filter((p) => !pairedParts.has(p));
+		check(
+			`pairs on, ${name}: every resistor a kit value or two in series, only the parts that set f0, Q or a zero pair up, each as the rule picks for its target`,
+			problems.length === 0 && never.length === 0,
+			problems.length ? problems.slice(0, 3).join('; ') : never.length ? `never paired: ${never.join(', ')}` : `${paired} of ${resistors} resistors in ${rows.length} designs are pairs, ${kept} stages kept single parts`
+		);
+	}
+}
+
+// What the pairs buy: how far each stage lands from its targets, the
+// largest of its f0, Q and (for a notch) zero misses as logs, or its tau
+// miss, with the option off and on. Every designer keeps a stage's pairs
+// only when they leave it no further off by that measure than single parts,
+// since pairing each part on its own miss is not enough: in an MFB
+// low-pass the misses of R1 and R2 can partly cancel in Q, a Tow-Thomas Rd
+// is re-solved against the paired R, and the notch search can settle on
+// another capacitor. So no stage of any designer may come out worse. The
+// worst and mean misses are printed for the record.
+{
+	const STAGE_KINDS = {
+		firstOrder: (wn, q, o) => designFirstOrderLowPass(1 / wn, o),
+		sallenKey: (wn, q, o) => designSallenKeyLowPass(wn, q, o),
+		sallenKeyHp: (wn, q, o) => designSallenKeyHighPass(wn, q, o),
+		mfbHp: (wn, q, o) => designMfbHighPass(wn, q, o),
+		mfb: (wn, q, o) => designMfbLowPass(wn, q, o),
+		towThomas: (wn, q, o) => designTowThomasLowPass(wn, q, o),
+		towThomasHp: (wn, q, o) => designTowThomasHighPass(wn, q, o),
+		notch: (wn, q, o) => designTowThomasNotch(wn, q, wn * 1.6, { ...o, lowSide: true }),
+		notchHp: (wn, q, o) => designTowThomasNotch(wn, q, wn / 1.7, { ...o, lowSide: false })
+	};
+	const stageMiss = (d, wn, q) =>
+		d.order === 1
+			? Math.abs(Math.log(d.actual.tau * wn))
+			: Math.max(Math.abs(Math.log(d.actual.wn / wn)), Math.abs(Math.log(d.actual.q / q)), d.actual.wz ? Math.abs(Math.log(d.actual.wz / (d.lowSide ? wn * 1.6 : wn / 1.7))) : 0);
+	// 50 Hz to 100 kHz, low to high Q, the kit with its capacitors and with every capacitor
+	const grid = [];
+	for (let i = 0; i <= 30; i++) for (const q of [0.5, 0.5412, 0.6, 0.7071, 0.9, 1.1, 1.3066, 1.6, 1.8398, 2.2, 3, 4.5, 8]) grid.push([2 * Math.PI * 50 * 2000 ** (i / 30), q]);
+	const pct = (x) => `${(100 * x).toFixed(2)}%`;
+	for (const [kind, make] of Object.entries(STAGE_KINDS)) {
+		const s = { stages: 0, better: 0, worse: [], worstOff: 0, worstOn: 0, sumOff: 0, sumOn: 0 };
+		for (const stock of [PAIR_STOCKS.lab, PAIR_STOCKS.labR]) {
+			for (const [wn, q] of grid) {
+				const off = make(wn, q, { ...stock, pairs: false });
+				const on = make(wn, q, { ...stock, pairs: true });
+				if (!off || !on) continue;
+				const a = stageMiss(off, wn, q);
+				const b = stageMiss(on, wn, q);
+				s.stages++;
+				if (b < a) s.better++;
+				if (b > a) s.worse.push(`${(wn / 2 / Math.PI).toFixed(0)} Hz Q ${q}: ${pct(a)} -> ${pct(b)}`);
+				s.worstOff = Math.max(s.worstOff, a);
+				s.worstOn = Math.max(s.worstOn, b);
+				s.sumOff += a;
+				s.sumOn += b;
+			}
+		}
+		// a Sallen-Key low-pass's Q comes from its capacitors, so its miss often stays what it was
+		check(
+			`pairs on, ${kind}: no stage worse, ${s.better} of ${s.stages} better`,
+			s.worse.length === 0 && s.better * 3 > s.stages,
+			s.worse.length ? `${s.worse.length} worse, first ${s.worse[0]}` : `worst stage ${pct(s.worstOff)} -> ${pct(s.worstOn)}, mean ${pct(s.sumOff / s.stages)} -> ${pct(s.sumOn / s.stages)}`
+		);
+	}
+
+	// where pairing each part on its own miss would leave the stage further
+	// off, it keeps single parts: an MFB low-pass stage (Q 0.5412 at 79.6
+	// kHz: R1 8.2 k would take 8.2 k + 330 while R2 = 15 k stays single, and
+	// f0 would go from 0.8 % to 2.8 % low) and the first stage of a Chebyshev
+	// Tow-Thomas high-pass (Q 3.07 at 10.9 kHz: pairing R would move Rd's
+	// target 4 % from 47 k, with no pair halving that)
+	{
+		const wn = 2 * Math.PI * 20 * 10 ** 3.6;
+		const hp = designHighPass({ response: 'chebyshev', amaxDb: 3, aminDb: 40, fp: 10000, fs: 3000, order: null }).stages[0];
+		const cases = [
+			[designMfbLowPass(wn, 0.5412, { ...PAIR_STOCKS.lab, pairs: false }), designMfbLowPass(wn, 0.5412, { ...PAIR_STOCKS.lab, pairs: true }), (d) => d.theoretical.R1, 'R1'],
+			[designTowThomasHighPass(hp.wn, hp.q, { ...PAIR_STOCKS.lab, pairs: false }), designTowThomasHighPass(hp.wn, hp.q, { ...PAIR_STOCKS.lab, pairs: true }), (d) => d.steps.Rtarget, 'Ra']
+		];
+		const kept = cases.filter(([off, on, target, part]) => JSON.stringify(on.components) === JSON.stringify(off.components) && pairedResistor(target(off), LAB_KIT.resistors, true) !== off.components[part]);
+		check('pairs on: a stage those pairs would leave further off keeps its single parts (an MFB low-pass and a Tow-Thomas high-pass stage)', kept.length === cases.length, `${kept.length} of ${cases.length}`);
+	}
+
+	// two known cases. An MFB high-pass stage of 32.26 kHz, Q 1.8398: the
+	// kit's nearest single values, 1.5 k and 47 k, put f0 13.6 % low.
+	{
+		const wn = 2 * Math.PI * 32260;
+		const q = 1.8398;
+		const off = designMfbHighPass(wn, q, { ...PAIR_STOCKS.lab, pairs: false });
+		const on = designMfbHighPass(wn, q, { ...PAIR_STOCKS.lab, pairs: true });
+		const f0 = (d) => d.actual.wn / wn - 1;
+		const qe = (d) => d.actual.q / q - 1;
+		check(
+			'pairs on: MFB high-pass at 32.26 kHz, Q 1.8398 goes from 1.5 k and 47 k to 1 k + 330 and 33 k + 7.5 k, f0 back within 1.5 %',
+			off.components.R1 === 1500 && off.components.R2 === 47000 && f0(off) < -0.13 && JSON.stringify(seriesPair(on.components.R1, LAB_KIT.resistors)) === '[1000,330]' && JSON.stringify(seriesPair(on.components.R2, LAB_KIT.resistors)) === '[33000,7500]' && Math.abs(f0(on)) < 0.015 && Math.abs(qe(on)) < 0.005,
+			`f0 ${pct(f0(off))} -> ${pct(f0(on))}, Q ${pct(qe(off))} -> ${pct(qe(on))}`
+		);
+	}
+	// the page's opening design (Butterworth low-pass, 10 kHz, 3 and 40 dB, MFB) on the lab kit
+	{
+		const design = designLowPass({ response: 'butterworth', amaxDb: 3, aminDb: 40, fp: 10000, fs: 35000, order: null });
+		const worst = (pairs) => Math.max(...design.stages.map((st) => designMfbLowPass(st.wn, st.q, { ...PAIR_STOCKS.lab, pairs })).map((r, i) => Math.abs(r.actual.wn / design.stages[i].wn - 1)));
+		check("pairs on: the page's opening design on the lab kit gets every f0 within 1 %", worst(false) > 0.1 && worst(true) < 0.01, `worst f0 ${pct(worst(false))} -> ${pct(worst(true))}`);
+	}
+}
+
+// the math panels print a pair with its two parts and name what was
+// rounded to (the list, not every value on it), and still render
+{
+	const o = { ...PAIR_STOCKS.lab, pairs: true };
+	const wn = 2 * Math.PI * 10000;
+	const blocks = [
+		...explainMfb(designMfbLowPass(wn, 0.5412, o), wn, 0.5412),
+		...explainMfb(designMfbLowPass(wn, 0.5412, PAIR_STOCKS.lab), wn, 0.5412),
+		...explainMfbHp(designMfbHighPass(2 * Math.PI * 32260, 1.8398, o), 2 * Math.PI * 32260, 1.8398),
+		...explainSallenKey(designSallenKeyLowPass(wn, 0.7071, o), 0.7071),
+		...explainSallenKeyHp(designSallenKeyHighPass(wn, 0.7071, o), 0.7071),
+		...explainFirstOrder(designFirstOrderLowPass(1 / wn, o)),
+		...explainTowThomas(designTowThomasLowPass(wn, 1.618, o), wn, 1.618),
+		...explainTowThomasHp(designTowThomasHighPass(wn, 1.618, o), wn, 1.618)
+	];
+	const texts = blocks.filter((b) => b.type === 'p').map((b) => b.text);
+	let texBad = 0;
+	for (const b of blocks.filter((x) => x.type === 'eq')) {
+		try {
+			katex.renderToString(b.tex, { throwOnError: true, strict: 'error' });
+		} catch {
+			texBad++;
+		}
+	}
+	// "NaN" case-sensitive, or it would find "discriminant"
+	const wordBad = texts.filter((t) => /undefined|NaN/.test(t) || /[–—]|\byou(r)?\b|\d,\d/i.test(t));
+	const pairShown = texts.filter((t) => /Ω \([\d.]+ k?Ω \+ [\d.]+ k?Ω\)/.test(t)).length;
+	check('pairs on: the math panels show each pair with its two parts, render, and name the list rather than printing it', texBad === 0 && wordBad.length === 0 && pairShown >= 6, wordBad.length ? wordBad[0].slice(0, 120) : `${pairShown} sentences with a pair, ${texBad} TeX failures`);
+}
+
+// (c) The downloaded script: RESISTOR_PAIRS = true hands the option to the
+// same designers and prints each pair with its two parts; switched to false
+// it gives the single-part design back. The Chebyshev high-pass has a stage
+// that keeps single parts with the option on (see above), so the script
+// has to carry that rule too.
+{
+	const dir = mkdtempSync(join(tmpdir(), 'rbt56-pairs-'));
+	const base = { amaxDb: 3, aminDb: 40, fl: 1000, fh: 10000, fsl: 300, fsh: 30000, order: null, orderHp: null, orderLp: null, capOverrides: {} };
+	const run = (name, text) => {
+		const file = join(dir, name);
+		writeFileSync(file, text);
+		try {
+			return execFileSync(process.execPath, [file], { encoding: 'utf8', stdio: 'pipe' });
+		} catch (e) {
+			return 'ERROR ' + String(e.stderr || e.message);
+		}
+	};
+	// each stage's resistors as the script prints them, from the page's own designers
+	const printed = (stages, second, pairs) =>
+		stages.flatMap((st) => {
+			const o = { ...PAIR_STOCKS.lab, pairs };
+			const ohms = (v) => {
+				const pair = pairs ? seriesPair(v, LAB_KIT.resistors) : null;
+				return `${v.toFixed(0)} ohm${pair ? ` (${pair[0]} + ${pair[1]} in series)` : ''}`;
+			};
+			if (st.order === 1) {
+				const R = (st.filterType === 'highpass' ? designFirstOrderHighPass : designFirstOrderLowPass)(st.tau, o).components.R;
+				return [`  R = ${pairs && seriesPair(R, LAB_KIT.resistors) ? ohms(R) : `${R} ohm`}, C = `];
+			}
+			return Object.entries(second(st, o).components)
+				.filter(([n]) => /^[Rr]/.test(n))
+				.map(([n, v]) => `  ${n} = ${ohms(v)}\n`);
+		});
+	const cases = [
+		['mfb-lowpass', { filterType: 'lowpass', response: 'butterworth', topology: 'mfb', fp: 10000, fs: 35000 }, designLowPass, (st, o) => designMfbLowPass(st.wn, st.q, o)],
+		['tt-highpass', { filterType: 'highpass', response: 'chebyshev', topology: 'towThomas', fp: 10000, fs: 3000 }, designHighPass, (st, o) => designTowThomasHighPass(st.wn, st.q, o)]
+	];
+	const problems = [];
+	let sample = '';
+	for (const [name, spec, make, second] of cases) {
+		const code = generateScript({ ...base, ...spec, resistorStock: LAB_KIT.resistors, capacitorStock: LAB_KIT.capacitors, resistorPairs: true });
+		const on = run(`${name}-on.js`, code);
+		const off = run(`${name}-off.js`, code.replace('const RESISTOR_PAIRS = true;', 'const RESISTOR_PAIRS = false;'));
+		const stages = make({ response: spec.response, amaxDb: 3, aminDb: 40, fp: spec.fp, fs: spec.fs, order: null }).stages;
+		const missing = [...printed(stages, second, true).filter((l) => !on.includes(l)), ...printed(stages, second, false).filter((l) => !off.includes(l))];
+		if (!/^const RESISTOR_PAIRS = true;/m.test(code) || !/^const RESISTOR_PAIRS = false;/m.test(generateScript({ ...base, ...spec }))) problems.push(`${name}: RESISTOR_PAIRS not written as asked`);
+		if (!/ohm \(\d+ \+ \d+ in series\)/.test(on) || /in series\)/.test(off)) problems.push(`${name}: pairs printed ${/in series\)/.test(on) ? 'with the option off' : 'nowhere'}`);
+		if (missing.length) problems.push(`${name} missing: ${missing[0].trim()}`);
+		if (!/least attenuation in the stopband .*: OK/.test(on)) problems.push(`${name}: ${on.trim().split('\n').pop()}`);
+		sample ||= on.split('\n').find((l) => /in series\)/.test(l))?.trim() ?? '';
+	}
+	check(
+		'downloadable script: RESISTOR_PAIRS = true prints each pair with its two parts exactly as the page designs it (single parts where the page keeps them) and meets the spec; false gives single parts back',
+		problems.length === 0,
+		problems.length ? problems.slice(0, 2).join('; ') : sample
+	);
+}
+
+// LTspice: the files keep each pair's sum, so the circuit is the one the
+// page computes, and their notes name the two parts, one line per paired
+// resistor, in the .cir header and on the .asc sheet
+{
+	const spec = { filterType: 'lowpass', response: 'butterworth', amaxDb: 3, aminDb: 40, fp: 10000, fs: 35000 };
+	const design = designLowPass({ ...spec, order: null });
+	const realized = design.stages.map((st) => designMfbLowPass(st.wn, st.q, { ...PAIR_STOCKS.lab, pairs: true }));
+	const opts = { realizedStages: realized, topology: 'mfb', lpCount: 0, combinerMode: 'sum', combinerR: 10000, combinerResistors: null, ...spec, resistorStock: LAB_KIT.resistors, pairs: true };
+	const cir = generateNetlist(opts);
+	const asc = generateSchematic(opts);
+	const circuit = (text) => text.split('\n').filter((l) => !l.startsWith('*')).join('\n');
+	const notes = realized.flatMap((r, k) =>
+		['R1', 'R2', 'R3'].flatMap((n) => {
+			const pair = seriesPair(r.components[n], LAB_KIT.resistors);
+			return pair ? [`stage ${k + 1} ${n}${k + 1} = ${spiceValue(pair[0])} + ${spiceValue(pair[1])} in series`] : [];
+		})
+	);
+	const missing = notes.filter((l) => !cir.includes(`* ${l} (their sum is used below)\n`) || !asc.includes(`${l} (the drawing shows their sum)`));
+	const issues = audit(asc);
+	check(
+		'LTspice: a note per paired resistor in the .cir header and on the .asc sheet, the circuit itself unchanged, drawn clean',
+		notes.length === 6 && missing.length === 0 && circuit(cir) === circuit(generateNetlist({ ...opts, pairs: false })) && !/in series/.test(generateNetlist({ ...opts, pairs: false })) && issues.length === 0,
+		missing.length ? `missing: ${missing[0]}` : issues.length ? `${issues[0].kind}: ${issues[0].detail}` : notes[0]
+	);
 }
 
 console.log(fails === 0 ? 'filter checks clean' : `${fails} failure(s)`);

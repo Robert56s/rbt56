@@ -1,9 +1,10 @@
 import { chainElements } from '../filter/spice';
 import { buildElements as buildOscillatorElements, paramLines as oscillatorParamLines } from '../oscillator/spice';
-import { renderNetlist } from '../spice/core';
+import { renderNetlist, spiceValue } from '../spice/core';
 import { opampModel, opampPhrase } from '../spice/opamps';
 import { DIODE_MODELS } from './diodeLaw';
 import { envelopeGainDb } from './envelopeFilter';
+import { seriesPair } from './eseries';
 import { recoveredEnvelope } from './rectifier';
 import { drawDemodulator, drawDiodeModulator, drawModulator } from './schematic';
 
@@ -23,6 +24,29 @@ import { drawDemodulator, drawDiodeModulator, drawModulator } from './schematic'
  *   I_D = beta * [(V_GS - V_P) V_DS - V_DS^2 / 2]
  * so Vto = V_P and Beta = beta / 2 = I_DSS / V_P^2.
  */
+
+/**
+ * With the stock picker's two-in-series option on, one note per resistor
+ * that is two values of the list in series. The files keep their sum,
+ * which is the same circuit, so the notes only say how to build it.
+ * `pairable` names the elements that may be pairs: a model resistor such
+ * as RZS never is, and a part shown from the E24 fallback says nothing
+ * about the list. `tail` ends each note: the .cir has the parts below its
+ * header, the .asc draws them above its notes.
+ */
+function pairNotes(elements, pairable, { resistorSeries = null, pairs = false } = {}, tail = 'their sum is used below') {
+	if (!pairs || !Array.isArray(resistorSeries)) return [];
+	const notes = [];
+	for (const e of elements) {
+		if (e.kind !== 'R' || typeof e.value !== 'number' || !pairable(e.name)) continue;
+		const pair = seriesPair(e.value, resistorSeries);
+		if (pair) notes.push(`${e.name} = ${spiceValue(pair[0])} + ${spiceValue(pair[1])} in series (${tail})`);
+	}
+	return notes;
+}
+
+/** The .cir header's notes: an empty line, then one line per pair. */
+const pairBlock = (notes) => (notes.length ? ['', ...notes] : []);
 
 /**
  * Renames an oscillator's nodes so it can be dropped into a larger
@@ -111,6 +135,15 @@ export function buildElements({ design, fmPreview = 1000, oscillator = null }) {
 	return out;
 }
 
+/**
+ * The JFET modulator's resistors that may be pairs: R_ac, R_bias and R_b,
+ * and the resistors of an on-board oscillator built from the list.
+ */
+function modulatorPairs(elements, oscillator, stock, tail) {
+	const fromList = oscillator && !oscillator.stockShortfall;
+	return pairNotes(elements, (name) => name === 'RAC' || name === 'RBIAS' || name === 'RB' || (fromList && name.endsWith('O')), stock, tail);
+}
+
 function meta(design, oscillator, opampChoice = 'ideal') {
 	const { carrier, opamp, modulationIndex, topology } = design;
 	const parts = opampModel(opampChoice).real ? `the op-amps are ${opampPhrase(opampChoice)}` : 'the op-amps';
@@ -170,12 +203,18 @@ function analysis(design, fmPreview, oscillator) {
 	return lines;
 }
 
-export function generateNetlist({ design, fmPreview = 1000, oscillator = null, ideal = false, opamp = 'ideal' }) {
+/**
+ * resistorSeries and pairs: the stock the design was rounded to and the
+ * two-in-series setting, for the notes on which resistors are pairs.
+ */
+export function generateNetlist({ design, fmPreview = 1000, oscillator = null, ideal = false, opamp = 'ideal', resistorSeries = null, pairs = false }) {
 	const { title, comments } = meta(design, oscillator, opamp);
+	const elements = buildElements({ design, fmPreview, oscillator });
+	const notes = modulatorPairs(elements, oscillator, { resistorSeries, pairs });
 	return renderNetlist({
-		elements: buildElements({ design, fmPreview, oscillator }),
+		elements,
 		title,
-		comments: [...comments, '', 'Open in LTspice (File > Open, set the filter to All Files) and Run,', 'then plot V(vout) for the modulated carrier and V(vgate) for the gate drive.'],
+		comments: [...comments, ...pairBlock(notes), '', 'Open in LTspice (File > Open, set the filter to All Files) and Run,', 'then plot V(vout) for the modulated carrier and V(vgate) for the gate drive.'],
 		params: params(design, oscillator),
 		directives: analysis(design, fmPreview, oscillator),
 		ideal,
@@ -197,9 +236,10 @@ function schematicNotes(design, oscillator) {
 	];
 }
 
-export function generateSchematic({ design, fmPreview = 1000, oscillator = null, opamp = 'ideal' }) {
+export function generateSchematic({ design, fmPreview = 1000, oscillator = null, opamp = 'ideal', resistorSeries = null, pairs = false }) {
+	const notes = pairs ? modulatorPairs(buildElements({ design, fmPreview, oscillator }), oscillator, { resistorSeries, pairs }, 'drawn as their sum') : [];
 	return drawModulator({ design, fmPreview, oscillator }, {
-		comments: schematicNotes(design, oscillator),
+		comments: [...schematicNotes(design, oscillator), ...notes],
 		directives: ['.lib opamp.sub', ...params(design, oscillator).filter((l) => !l.startsWith('.param AOL')), ...analysis(design, fmPreview, oscillator)],
 		gbw: `${(design.opamp.gbw / 1e6).toPrecision(3)}Meg`,
 		opamp
@@ -317,12 +357,24 @@ function demodMeta(opts) {
 	};
 }
 
+/**
+ * The envelope stages' resistors that may be pairs: R1 and R2 of each
+ * stage (R1i, R2i), unless that stage came from the E24 fallback. The
+ * rectifier's matched resistors are single parts.
+ */
+function demodPairs(elements, opts, tail) {
+	const names = new Set(opts.envelope.realized.flatMap((stage, k) => (stage.stockShortfall ? [] : [`R1${k + 1}`, `R2${k + 1}`])));
+	return pairNotes(elements, (name) => names.has(name), opts, tail);
+}
+
+/** opts.resistorSeries and opts.pairs: the stock and the two-in-series setting, for the pair notes. */
 export function generateDemodNetlist(opts) {
 	const { title, comments } = demodMeta(opts);
+	const elements = buildDemodElements(opts);
 	return renderNetlist({
-		elements: buildDemodElements(opts),
+		elements,
 		title,
-		comments: [...comments, '', 'Open in LTspice (File > Open, set the filter to All Files) and Run,', 'then plot V(vam), V(vrect) after the rectifier and V(vout) for the recovered message.'],
+		comments: [...comments, ...pairBlock(demodPairs(elements, opts)), '', 'Open in LTspice (File > Open, set the filter to All Files) and Run,', 'then plot V(vam), V(vrect) after the rectifier and V(vout) for the recovered message.'],
 		params: demodParams(opts),
 		directives: demodAnalysis(opts),
 		ideal: opts.ideal ?? false,
@@ -341,7 +393,7 @@ function demodNotes(opts) {
 
 export function generateDemodSchematic(opts) {
 	return drawDemodulator(opts, {
-		comments: demodNotes(opts),
+		comments: [...demodNotes(opts), ...(opts.pairs ? demodPairs(buildDemodElements(opts), opts, 'drawn as their sum') : [])],
 		directives: ['.lib opamp.sub', ...demodParams(opts).filter((l) => !l.startsWith('.param AOL')), ...demodAnalysis(opts)],
 		gbw: '3Meg',
 		opamp: opts.opamp ?? 'ideal'
@@ -419,12 +471,20 @@ function diodeMeta(design, opamp = 'ideal') {
 	};
 }
 
-export function generateDiodeNetlist({ design, ideal = false, opamp = 'ideal' }) {
+/** The diode modulator's resistors that may be pairs: R_p and R_m, which set the index. */
+const diodePairs = (elements, stock, tail) => pairNotes(elements, (name) => name === 'RP' || name === 'RM', stock, tail);
+
+/**
+ * resistorSeries and pairs: the stock the design was rounded to and the
+ * two-in-series setting (false for a design from the E24 fallback).
+ */
+export function generateDiodeNetlist({ design, ideal = false, opamp = 'ideal', resistorSeries = null, pairs = false }) {
 	const { title, comments } = diodeMeta(design, opamp);
+	const elements = buildDiodeElements({ design });
 	return renderNetlist({
-		elements: buildDiodeElements({ design }),
+		elements,
 		title,
-		comments: [...comments, '', 'Open in LTspice (File > Open, set the filter to All Files) and Run,', 'then plot V(vout) for the AM wave and V(vs) for the summed drive.'],
+		comments: [...comments, ...pairBlock(diodePairs(elements, { resistorSeries, pairs })), '', 'Open in LTspice (File > Open, set the filter to All Files) and Run,', 'then plot V(vout) for the AM wave and V(vs) for the summed drive.'],
 		params: diodeParams(design),
 		directives: diodeAnalysis(design),
 		ideal,
@@ -439,9 +499,9 @@ function diodeNotes(design) {
 	];
 }
 
-export function generateDiodeSchematic({ design, opamp = 'ideal' }) {
+export function generateDiodeSchematic({ design, opamp = 'ideal', resistorSeries = null, pairs = false }) {
 	return drawDiodeModulator({ design }, {
-		comments: diodeNotes(design),
+		comments: [...diodeNotes(design), ...(pairs ? diodePairs(buildDiodeElements({ design }), { resistorSeries, pairs }, 'drawn as their sum') : [])],
 		directives: ['.lib opamp.sub', ...diodeParams(design).filter((l) => !l.startsWith('.param AOL')), ...diodeAnalysis(design)],
 		gbw: '3Meg',
 		opamp

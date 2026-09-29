@@ -1,4 +1,4 @@
-import { largestResistorNotAbove, nearestResistor, nearestValue, resistorValues, stockList, stockName } from './eseries';
+import { largestResistorNotAbove, nearestResistor, nearestValue, pairedResistor, resistorValues, stockList, stockName } from './eseries';
 import { modelFromIdss } from './jfetModel';
 
 /**
@@ -138,6 +138,7 @@ export function designJfetModulator({
 	slewRate = 13e6,
 	resistorSeries = 'E24', // a series name, or a list of the resistors on hand (ohms)
 	capacitors = null, // null for the usual values, or a list of the capacitors on hand (farads)
+	pairs = false, // with a list: R_ac, R_bias and R_b may each be two resistors in series (pairedResistor)
 	onFail = null // told why when no design comes back: 'pinchoff' or 'depth'
 } = {}) {
 	const m = model ?? modelFromIdss(vp, idss);
@@ -160,14 +161,18 @@ export function designJfetModulator({
 	// parallel to move it. It is designed first because its rounded parts
 	// deliver a bias and a swing a few percent off the targets, and every
 	// number below (conductance depth, modulation index, triode margin) is
-	// worth stating for the gate drive the circuit actually gets.
+	// worth stating for the gate drive the circuit actually gets. The
+	// carrier divider and the post-gain stage only set levels, so they stay
+	// single parts whatever `pairs` says.
 	const stock = resistorSeries;
 	const gainTarget = swingTarget / sourceAmplitude;
 	const biasTarget = Math.abs(vcTarget);
 	// Rf is free, so it is chosen from the series (4.7 k to 47 k) as the
 	// value that lets Rac and Rbias both round closest to their targets:
 	// with Rf = 10 k a 2 V bias from 12 V wants 60 k, and the nearest E24
-	// value 62 k costs 3 % of bias, where 20 k wants 120 k, which exists
+	// value 62 k costs 3 % of bias, where 20 k wants 120 k, which exists.
+	// Rf is the one reference the others are solved against, so it stays a
+	// single part, picked on single parts whatever `pairs` says.
 	const pickRf = () => {
 		let best = null;
 		for (const cand of resistorValues(stock, 3, 4)) {
@@ -182,10 +187,62 @@ export function designJfetModulator({
 	};
 	const rf = pickRf();
 	const racTarget = rf / gainTarget;
-	const rac = nearestResistor(racTarget, stock);
-	const gainActual = rf / rac;
 	const rbiasTarget = (rf * vcc) / biasTarget;
-	const rbias = nearestResistor(rbiasTarget, stock);
+	const inverting = topology === 'inverting';
+	// With `pairs` on and a list, Rac, Rbias and Rb may each be two
+	// resistors in series (pairedResistor), as long as that leaves the
+	// design no worse than the same design with single parts: it must
+	// exist whenever that one does, keep the bias and swing within the
+	// summer's reach and the coupling corner where that one has them, and
+	// land n at least as close to the target. A pair's gain and bias are
+	// never further off than a single part's, but the depth they give
+	// moves Rb's target, and a stock with nothing near the new one can
+	// leave n further off. So the gate drive from pairs is tried first,
+	// then the single-part one, each with Rb as a pair then single, and the
+	// first that qualifies is kept; the last is the design without pairs.
+	// The inverting cell has no target for n, so there only the checks
+	// count. The op-amp's speed plays no part in the choice, so the same
+	// design redone for a slower op-amp, with its Rb, keeps its gate drive.
+	const choosePairs = () => {
+		const cells = [];
+		const drives = [
+			[pairedResistor(racTarget, stock, true), pairedResistor(rbiasTarget, stock, true)],
+			[nearestResistor(racTarget, stock), nearestResistor(rbiasTarget, stock)]
+		];
+		for (const [racC, rbiasC] of drives) {
+			// the same steps as the design below, so every figure comes out identical
+			const vcC = -(rf * vcc) / rbiasC;
+			const swing = (rf / racC) * sourceAmplitude;
+			const depth = swing / (vcC - vp);
+			const open = vcC - swing > vp;
+			const headroom = Math.abs(vcC - swing) <= opampSwing;
+			const cC = nearestCap(1 / (2 * Math.PI * racC * (fmMin / 10)), capacitors);
+			const cornerOk = 1 / (2 * Math.PI * racC * cC) <= fmMin / 3;
+			for (const rbPaired of [true, false]) {
+				let n = null;
+				if (open && !inverting && targetModulationIndex > 0 && targetModulationIndex < depth) {
+					const r1 = 1 / G(vcC);
+					const rbTarget = (targetModulationIndex / (depth - targetModulationIndex)) * r1;
+					const xC = (rbPaired ? pairedResistor(rbTarget, stock, true) : nearestResistor(rbTarget, stock)) / r1;
+					n = (depth * xC) / (1 + xC);
+				}
+				cells.push({ rac: racC, rbias: rbiasC, rbPaired, open, headroom, cornerOk, n });
+			}
+		}
+		const usable = (cell) => cell.open && (inverting || rb > 0 || cell.n !== null);
+		const miss = (cell) => Math.abs(cell.n - targetModulationIndex);
+		const single = cells[cells.length - 1];
+		const notWorse = (cell) =>
+			!usable(single) ||
+			((cell.headroom || !single.headroom) && (cell.cornerOk || !single.cornerOk) && (single.n === null || (cell.n !== null && miss(cell) <= miss(single))));
+		// nothing works: the pairs' gate drive, so the reason given is its own
+		return cells.find((cell) => usable(cell) && notWorse(cell)) ?? cells[0];
+	};
+	const chosen =
+		pairs && Array.isArray(stock) ? choosePairs() : { rac: nearestResistor(racTarget, stock), rbias: nearestResistor(rbiasTarget, stock), rbPaired: false };
+	const rac = chosen.rac;
+	const gainActual = rf / rac;
+	const rbias = chosen.rbias;
 	const biasActual = -(rf * vcc) / rbias;
 	const fcTarget = fmMin / 10;
 	const cTarget = 1 / (2 * Math.PI * rac * fcTarget);
@@ -216,7 +273,6 @@ export function designJfetModulator({
 	// bias sits at VP/2 with the full |VP|/2 half-range; smaller when a
 	// measured window keeps the design inside a checked stretch of the curve.
 	const gDepth = vgsPeakSwing / (vc - vp);
-	const inverting = topology === 'inverting';
 
 	const bandwidthFactor = (k) => {
 		const r = (fp * k) / gbw;
@@ -238,7 +294,9 @@ export function designJfetModulator({
 		// Vout = -R2 G(VGS) xp: the signal gain is x(1 + gDepth m) with no
 		// "1 +", so n = gDepth whatever x is, and x is free to be small. By
 		// default it takes the largest value the GBW rule allows, capped so
-		// the cell does not become a big amplifier for no reason.
+		// the cell does not become a big amplifier for no reason. R2 is a
+		// ceiling rather than a target (n does not depend on it), so it
+		// stays one part even with `pairs` on.
 		let r2Actual = r2;
 		if (!(r2Actual > 0)) {
 			const xRule = (kLimit - 1) / (1 + gDepth);
@@ -253,8 +311,9 @@ export function designJfetModulator({
 		gainMax = x * (1 + gDepth);
 		noiseGain = (mm) => 1 + x * (1 + gDepth * mm);
 	} else {
-		// R_b from the target index, rounded to the stock: n then follows
-		// from the rounded value, a little off the target
+		// R_b from the target index, rounded to the stock (or two in series,
+		// as chosen above): n then follows from the rounded value, a little
+		// off the target
 		let rbActual = rb;
 		if (!(rbActual > 0)) {
 			if (!(targetModulationIndex > 0 && targetModulationIndex < gDepth)) {
@@ -263,7 +322,7 @@ export function designJfetModulator({
 			}
 			xTarget = targetModulationIndex / (gDepth - targetModulationIndex);
 			feedbackTarget = xTarget * r1AtCenter;
-			rbActual = nearestResistor(feedbackTarget, stock);
+			rbActual = chosen.rbPaired ? pairedResistor(feedbackTarget, stock, true) : nearestResistor(feedbackTarget, stock);
 		}
 		feedback = rbActual;
 		x = rbActual / r1AtCenter;

@@ -14,15 +14,20 @@
 // 5. The drawn .asc describes the same circuit as the .cir, carries every
 //    model and directive, and the export refuses a design it cannot size.
 // 6. The explanations and the formula sheet render under strict KaTeX.
+// 7. Parts from the stock the page picks, and two resistors in series:
+//    off changes nothing, on keeps every resistor a value on hand or a
+//    pair of them, is never worse than one resistor per part, and the
+//    export names each pair.
 // Exits non-zero on any failure. LTspice itself is run by check-ltspice.mjs.
 
 import { readFileSync } from 'node:fs';
 import katex from 'katex';
+import { LAB_KIT, seriesPair } from '../src/lib/filter/eseries.js';
 import { explainBarkhausen, explainOpampLimit, explainStabilizer, explainTopology } from '../src/lib/oscillator/explain.js';
 import { DIODES, feedbackLimiterAmplitude } from '../src/lib/oscillator/limiter.js';
 import { openLoop, retune, solveBalance, solvePole, zeroPhase } from '../src/lib/oscillator/loop.js';
-import { buildElements, generateNetlist, generateSchematic } from '../src/lib/oscillator/spice.js';
-import { compareOscillators, designOscillator, solveLadder, TOPOLOGIES } from '../src/lib/oscillator/topologies.js';
+import { buildElements, generateNetlist, generateSchematic, pairNotes } from '../src/lib/oscillator/spice.js';
+import { compareOscillators, designOscillator, PAIRS_FREQUENCY_SLACK, solveLadder, TOPOLOGIES } from '../src/lib/oscillator/topologies.js';
 import { parseSchematic, spiceValue } from '../src/lib/spice/core.js';
 import { audit } from '../src/lib/spice/geometry.js';
 import { realOpampProblems } from './lib-real-opamp.mjs';
@@ -372,6 +377,166 @@ const WT = 2 * Math.PI * 3e6;
 	// the default is E24 and the usual capacitors, the same parts as with the option spelled out
 	const same = JSON.stringify(designOscillator({ topology: 'wien', frequency: 1000, amplitude: 3 })) === JSON.stringify(designOscillator({ topology: 'wien', frequency: 1000, amplitude: 3, resistorSeries: 'E24', capacitors: null }));
 	check('stock: E24 by default, the same oscillator with the option spelled out', same);
+
+	/* ---- two resistors in series (the stock picker's option, pairedResistor) */
+	const E24_PARTS = { resistorSeries: 'E24', capacitors: null };
+	const LAB_PARTS = { resistorSeries: LAB_KIT.resistors, capacitors: LAB_KIT.capacitors };
+	const pairCases = [];
+	for (const t of TOPOLOGIES) {
+		for (const stabilizer of t.id === 'wien' ? ['diodes', 'lamp', 'jfet'] : ['diodes']) {
+			for (const [frequency, amplitude] of [[1000, 3], [55000, 1], [200, 5], [7300, 4], [20000, 3]]) pairCases.push({ topology: t.id, stabilizer, frequency, amplitude });
+		}
+	}
+	const json = (d) => JSON.stringify(d);
+
+	// off, nothing moves: the option spelled out as false is the oscillator
+	// without it, on E24 and on the lab list, and a series never pairs
+	{
+		const moved = [];
+		for (const c of pairCases) {
+			const tag = `${c.topology}/${c.stabilizer} ${c.frequency} Hz`;
+			const e24 = json(designOscillator({ ...c, ...E24_PARTS }));
+			if (e24 !== json(designOscillator({ ...c, ...E24_PARTS, pairs: false }))) moved.push(`E24 ${tag}`);
+			if (e24 !== json(designOscillator({ ...c, ...E24_PARTS, pairs: true }))) moved.push(`E24 with pairs on ${tag}`);
+			if (json(designOscillator({ ...c, ...LAB_PARTS })) !== json(designOscillator({ ...c, ...LAB_PARTS, pairs: false }))) moved.push(`lab ${tag}`);
+		}
+		check('pairs: off, every design is the one without the option, on E24 and on the lab list; E24 never pairs', moved.length === 0, moved.length ? moved.slice(0, 3).join('; ') : `${pairCases.length} cases`);
+	}
+	// and these are still the parts, frequency and amplitude they had before
+	// the option existed (values to six figures)
+	{
+		const golden = [
+			['E24|wien|diodes|1000|3|3000000', '16000 1e-8 10000 15400 6200 - - - - - f0 993.07 A 2.9338'],
+			['E24|wien|jfet|1000|4|3000000', '16000 1e-8 10000 - - 20000 9100 147000 - - f0 993.24 A 4.0076'],
+			['E24|phaseShift|diodes|1000|3|3000000', '4300 1.5e-8 4300 110000 18000 - - - - - f0 1005.19 A 3.0415'],
+			['E24|bubba|diodes|55000|1|3000000', '8200 3.3e-10 8200 23200 15000 - - - - - f0 55036.59 A 1.0063'],
+			['E24|quadrature|diodes|1000|3|3000000', '16000 1e-8 10000 - - - - 10000 510000 6800 f0 994.23 A 3.0497'],
+			['lab|wien|diodes|1000|3|3000000', '33000 4.7e-9 10000 15000 7500 - - - - - f0 1024.30 A 2.7540'],
+			['lab|wien|lamp|1000|3|3000000', '33000 4.7e-9 10000 - - 22000 - - - - f0 1024.57 A 3.0000'],
+			['lab|wien|jfet|1000|4|3000000', '33000 4.7e-9 10000 - - 22000 10000 100000 - - f0 1024.57 A 3.9327'],
+			['lab|bufferedPhaseShift|diodes|1000|3|3000000', '2000 4.7e-8 2000 15000 3000 - - - - - f0 976.23 A 8.9913'],
+			['lab|quadrature|diodes|1000|3|3000000', '33000 4.7e-9 10000 - - - - 10000 1000000 7500 f0 1025.62 A 3.0102'],
+			['lab|wien|diodes|55000|1|3000000', '7500 3.3e-10 10000 8200 15000 - - - - - f0 56859.32 A 0.9704'],
+			['lab10u|wien|diodes|50000|0.2|4000000', '3000 1e-9 10000 2200 22000 - - - - - f0 47467.99 A 0.6017']
+		];
+		const stocks = { E24: E24_PARTS, lab: LAB_PARTS, lab10u: { resistorSeries: LAB_KIT.resistors, capacitors: [...LAB_KIT.capacitors, 10e-6] } };
+		const six = (v) => (v == null ? '-' : String(Number(v.toPrecision(6))));
+		const fingerprint = (d) => {
+			const p = d.parts;
+			return `${[d.r, d.c, d.rg, p.rf1, p.rf2, p.rf1 ? null : p.rf, p.rSeries, p.ra, p.rn, p.rd1].map(six).join(' ')} f0 ${d.f0.toFixed(2)} A ${d.limiter.amplitudeActual == null ? '-' : d.limiter.amplitudeActual.toFixed(4)}`;
+		};
+		const changed = [];
+		for (const [key, want] of golden) {
+			const [stock, topology, stabilizer, frequency, amplitude, gbw] = key.split('|');
+			const opamp = gbw === '4000000' ? { gbw: 4e6, slewRate: 16e6, opampSwing: 13.5 } : {};
+			const got = fingerprint(designOscillator({ topology, stabilizer, frequency: Number(frequency), amplitude: Number(amplitude), ...opamp, ...stocks[stock], pairs: false }));
+			if (got !== want) changed.push(`${key}: ${got}`);
+		}
+		check('pairs: off, the designs are the ones from before the option (E24 and lab, every topology)', changed.length === 0, changed.length ? changed.slice(0, 2).join('; ') : `${golden.length} fingerprints`);
+	}
+
+	// on, with the lab list: every resistor is a value on hand or two of them
+	// in series, and the design is never worse than with one resistor per
+	// part (designOscillator keeps that one otherwise): it starts and holds
+	// its amplitude whenever that one does, and where both do the same it
+	// lands no further from the frequency, |ln(f0 / f)|, give or take
+	// PAIRS_FREQUENCY_SLACK (0.05 %)
+	{
+		const stray = [];
+		const worse = [];
+		let built = 0;
+		let withPairs = 0;
+		let closer = 0;
+		for (const stock of ['lab', 'labR']) {
+			const parts = componentOptions(stock, '', '', true);
+			const list = parts.resistorSeries;
+			for (const c of pairCases) {
+				const tag = `${stock} ${c.topology}/${c.stabilizer} ${c.frequency} Hz`;
+				const on = designOscillator({ ...c, ...parts });
+				const off = designOscillator({ ...c, ...parts, pairs: false });
+				if (!on) {
+					if (off) worse.push(`${tag}: no design with pairs`);
+					continue;
+				}
+				built++;
+				const p = on.parts;
+				let paired = false;
+				for (const [k, v] of Object.entries({ r: on.r, rg: on.rg, rf1: p.rf1, rf2: p.rf2, rf: p.rf1 ? null : p.rf, rSeries: p.rSeries, ra: p.ra, rb: p.rb, rx: p.rx, rn: p.rn, rd1: p.rd1, rd2: p.rd2 })) {
+					if (!v) continue;
+					if (seriesPair(v, list)) paired = true;
+					else if (!onList(v, list)) stray.push(`${tag} ${k} ${v}`);
+				}
+				if (parts.capacitors) {
+					for (const [k, v] of Object.entries({ c: on.c, cDet: p.cDet })) if (v && !onList(v, parts.capacitors)) stray.push(`${tag} ${k} ${v}`);
+				}
+				if (paired) withPairs++;
+				if (!off) continue;
+				const s = [off.starts, off.limiter.regulates !== false];
+				const q = [on.starts, on.limiter.regulates !== false];
+				const miss = (d) => Math.abs(Math.log(d.f0 / c.frequency));
+				if ((s[0] && !q[0]) || (s[1] && !q[1])) worse.push(`${tag}: starts ${s[0]} -> ${q[0]}, holds ${s[1]} -> ${q[1]}`);
+				else if (q[0] === s[0] && q[1] === s[1] && miss(on) > miss(off) + PAIRS_FREQUENCY_SLACK) worse.push(`${tag}: ${(100 * miss(off)).toFixed(3)} % -> ${(100 * miss(on)).toFixed(3)} %`);
+				if (miss(on) < miss(off) - 1e-6) closer++;
+			}
+		}
+		check('pairs: on with the lab list, every resistor is a value on hand or two of them in series', stray.length === 0 && withPairs > 20, stray.length ? stray.slice(0, 3).join('; ') : `${withPairs} of ${built} designs use a pair`);
+		check('pairs: never worse than one resistor per part: starts and holds whenever it does, and no further from the frequency', worse.length === 0 && closer > 10, worse.length ? worse.slice(0, 3).join('; ') : `${closer} of ${built} land closer`);
+	}
+
+	// the case that asked for it: a 50 kHz Wien bridge on the lab kit (plus a
+	// 10 uF capacitor) takes R = 3 k and runs 5 % low; with two in series R is
+	// 2.2 k + 680 on the same capacitor and lands within 2 %
+	const known = { topology: 'wien', stabilizer: 'diodes', frequency: 50000, amplitude: 0.2, gbw: 4e6, slewRate: 16e6, opampSwing: 13.5, resistorSeries: LAB_KIT.resistors, capacitors: [...LAB_KIT.capacitors, 10e-6] };
+	const knownSingle = designOscillator(known);
+	const knownPaired = designOscillator({ ...known, pairs: true });
+	check('pairs: the 50 kHz Wien on the lab kit takes R = 3 k and lands about 5 % low with one resistor per part', knownSingle.r === 3000 && knownSingle.f0Error < -0.04 && knownSingle.f0Error > -0.06, `${(100 * knownSingle.f0Error).toFixed(2)} %`);
+	const knownPair = seriesPair(knownPaired.r, LAB_KIT.resistors);
+	check(
+		'pairs: with two in series it takes 2.88 k (2.2 k + 680) on the same capacitor and lands within 2 %',
+		knownPaired.r === 2880 && knownPair?.[0] === 2200 && knownPair?.[1] === 680 && knownPaired.c === knownSingle.c && Math.abs(knownPaired.f0Error) < 0.02 && knownPaired.starts && knownPaired.limiter.regulates,
+		`R ${knownPaired.r} (${knownPair?.join(' + ')}), C ${knownPaired.c}, ${(100 * knownPaired.f0Error).toFixed(2)} %`
+	);
+
+	// the export: each pair named in the header, the sum in the netlist and on
+	// the drawing, and the drawing still the netlist, drawn clean
+	{
+		const notes = pairNotes(knownPaired);
+		const cir = generateNetlist(knownPaired);
+		const asc = generateSchematic(knownPaired);
+		check(
+			'pairs: the .cir names each pair in its header and uses the sum below',
+			notes.some((l) => l.startsWith('RS, RP = 2.2k + 680 in series, each')) && notes.every((l) => cir.includes(`\n* ${l}\n`)) && /^RS vout ws 2\.88k$/m.test(cir) && /^RP wp 0 2\.88k$/m.test(cir),
+			notes.join(' | ')
+		);
+		check('pairs: the .asc carries the same lines under the drawing', notes.every((l) => asc.includes(l.replace('their sum is used below', 'the drawing above carries their sum'))));
+		const pairLine = / = [\d.]+(k|meg)? \+ [\d.]+(k|meg)? in series/;
+		check('pairs: a design without a pair has no such line', !pairLine.test(generateNetlist(designOscillator({ topology: 'wien', frequency: 1000, amplitude: 3, ...LAB_PARTS }))) && !pairLine.test(generateNetlist(designOscillator({ ...known, pairs: false }))));
+		const problems = [];
+		let drawn = 0;
+		for (const c of pairCases) {
+			const d = designOscillator({ ...c, ...LAB_PARTS, pairs: true });
+			if (!d?.pairs) continue;
+			// a control that could not be sized has nothing to export
+			let a;
+			try {
+				if (!pairNotes(d).length) continue;
+				a = generateSchematic(d);
+			} catch {
+				continue;
+			}
+			drawn++;
+			const tag = `${c.topology}/${c.stabilizer} ${c.frequency} Hz`;
+			const { elements: got, clashes, dangling } = parseSchematic(a);
+			if (clashes.length || dangling.length) problems.push(`${tag}: ${[...clashes, ...dangling][0]}`);
+			for (const w of buildElements(d).filter((e) => (e.kind === 'R' || e.kind === 'C') && typeof e.value === 'number')) {
+				const g = got.find((e) => e.name === w.name);
+				if (!g || g.value !== spiceValue(w.value)) problems.push(`${tag}: ${w.name} reads ${g?.value}`);
+			}
+			const issues = audit(a);
+			if (issues.length) problems.push(`${tag}: ${issues[0].kind}: ${issues[0].detail}`);
+		}
+		check('pairs: every drawing with a pair shows the sums, wired as the netlist and drawn clean', problems.length === 0 && drawn > 10, problems.length ? problems.slice(0, 3).join('; ') : `${drawn} drawings`);
+	}
 }
 
 console.log(fails === 0 ? 'oscillator checks clean' : `${fails} failure(s)`);

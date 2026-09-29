@@ -1,4 +1,4 @@
-import { capacitorCandidates, nearestCapacitor, nearestResistor } from './eseries';
+import { capacitorCandidates, nearestCapacitor, pairedResistor } from './eseries';
 
 /**
  * Multiple-feedback (MFB) low-pass, the standard (Rauch) layout: R1 from
@@ -45,11 +45,36 @@ function scoreResistors(R1, R2) {
 }
 
 /**
+ * R1 (= R3) and R2 rounded to stock, and the f0 and Q they give. With
+ * `pairs` and a list of values each may be two resistors in series
+ * (pairedResistor in eseries.js), but the stage keeps its pairs only when
+ * they leave it no further from its targets than single parts would: the
+ * larger of its f0 and Q misses, as logs, decides. Each resistor is paired
+ * on its own miss, and in Q the misses of R1 and R2 can partly cancel, so
+ * pairing one of them alone could otherwise move the stage further off.
+ */
+function roundMfb(R1, R2, C1, C2, wn, q, resistorSeries, pairs) {
+	const round = (p) => {
+		const R1n = pairedResistor(R1, resistorSeries, p);
+		const R2n = pairedResistor(R2, resistorSeries, p);
+		const aActual = (1 / C1) * (2 / R1n + 1 / R2n);
+		const bActual = 1 / (R1n * R2n * C1 * C2);
+		return { R1n, R2n, wn: Math.sqrt(bActual), q: Math.sqrt(bActual) / aActual };
+	};
+	const single = round(false);
+	if (!pairs) return single;
+	const paired = round(true);
+	const miss = (r) => Math.max(Math.abs(Math.log(r.wn / wn)), Math.abs(Math.log(r.q / q)));
+	return miss(paired) <= miss(single) ? paired : single;
+}
+
+/**
  * Searches a preferred capacitor series for a realizable, well-scaled pair
  * (C1, C2), then rounds the resulting resistors to a preferred series and
- * reports the actual wn/Q/gain the rounded values give.
+ * reports the actual wn/Q/gain the rounded values give (two in series
+ * allowed with `pairs`, see roundMfb).
  */
-export function designMfbLowPass(wn, q, { resistorSeries = 'E24', capacitors = null } = {}) {
+export function designMfbLowPass(wn, q, { resistorSeries = 'E24', capacitors = null, pairs = false } = {}) {
 	const a = wn / q;
 	const b = wn * wn;
 	const caps = capacitorCandidates(capacitors);
@@ -69,18 +94,15 @@ export function designMfbLowPass(wn, q, { resistorSeries = 'E24', capacitors = n
 	}
 	if (!best) return null;
 
-	const R1n = nearestResistor(best.R1, resistorSeries);
-	const R2n = nearestResistor(best.R2, resistorSeries);
-	const aActual = (1 / best.C1) * (2 / R1n + 1 / R2n);
-	const bActual = 1 / (R1n * R2n * best.C1 * best.C2);
+	const r = roundMfb(best.R1, best.R2, best.C1, best.C2, wn, q, resistorSeries, pairs);
 	const discriminant = (a * best.C1) ** 2 - 8 * b * best.C1 * best.C2;
 
 	return {
 		topology: 'mfb',
 		order: 2,
 		theoretical: { R1: best.R1, R2: best.R2, R3: best.R1, C1: best.C1, C2: best.C2 },
-		components: { R1: R1n, R2: R2n, R3: R1n, C1: best.C1, C2: best.C2 },
-		actual: { wn: Math.sqrt(bActual), q: Math.sqrt(bActual) / aActual, gain: -1 },
+		components: { R1: r.R1n, R2: r.R2n, R3: r.R1n, C1: best.C1, C2: best.C2 },
+		actual: { wn: r.wn, q: r.q, gain: -1 },
 		steps: { a, b, C1: best.C1, C2: best.C2, discriminant, x: 1 / best.R1, resistorSeries }
 	};
 }
@@ -92,7 +114,7 @@ export function designMfbLowPass(wn, q, { resistorSeries = 'E24', capacitors = n
  * realize this Q at all (C1/C2 < 8*Q^2, the same singularity the automatic
  * search avoids by construction).
  */
-export function designMfbLowPassFromCaps(wn, q, C1, C2, { resistorSeries = 'E24', capacitors = null } = {}) {
+export function designMfbLowPassFromCaps(wn, q, C1, C2, { resistorSeries = 'E24', capacitors = null, pairs = false } = {}) {
 	const a = wn / q;
 	const b = wn * wn;
 	const discriminant = (a * C1) ** 2 - 8 * b * C1 * C2;
@@ -111,11 +133,8 @@ export function designMfbLowPassFromCaps(wn, q, C1, C2, { resistorSeries = 'E24'
 		if (best === null || score < best.score) best = { R1, R2, score };
 	}
 
-	const R1n = nearestResistor(best.R1, resistorSeries);
-	const R2n = nearestResistor(best.R2, resistorSeries);
-	const aActual = (1 / C1) * (2 / R1n + 1 / R2n);
-	const bActual = 1 / (R1n * R2n * C1 * C2);
-	const outOfRange = !(R1n > MFB_R_MIN && R1n < MFB_R_MAX && R2n > MFB_R_MIN && R2n < MFB_R_MAX);
+	const r = roundMfb(best.R1, best.R2, C1, C2, wn, q, resistorSeries, pairs);
+	const outOfRange = !(r.R1n > MFB_R_MIN && r.R1n < MFB_R_MAX && r.R2n > MFB_R_MIN && r.R2n < MFB_R_MAX);
 
 	return {
 		ok: true,
@@ -123,8 +142,8 @@ export function designMfbLowPassFromCaps(wn, q, C1, C2, { resistorSeries = 'E24'
 		topology: 'mfb',
 		order: 2,
 		theoretical: { R1: best.R1, R2: best.R2, R3: best.R1, C1, C2 },
-		components: { R1: R1n, R2: R2n, R3: R1n, C1, C2 },
-		actual: { wn: Math.sqrt(bActual), q: Math.sqrt(bActual) / aActual, gain: -1 },
+		components: { R1: r.R1n, R2: r.R2n, R3: r.R1n, C1, C2 },
+		actual: { wn: r.wn, q: r.q, gain: -1 },
 		steps: { a, b, C1, C2, discriminant, x: 1 / best.R1, resistorSeries },
 		outOfRange
 	};

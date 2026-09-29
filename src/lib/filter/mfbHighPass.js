@@ -1,4 +1,4 @@
-import { capacitorCandidates, nearestCapacitor, nearestResistor } from './eseries';
+import { capacitorCandidates, nearestCapacitor, pairedResistor } from './eseries';
 
 /**
  * Multiple-feedback (MFB) high-pass, the standard equal-capacitor layout:
@@ -39,11 +39,34 @@ function scoreMfbHpResistors(R1, R2) {
 }
 
 /**
+ * R1 and R2 rounded to stock, and the f0 and Q they give. With `pairs`
+ * each may be two resistors in series, kept only when that leaves the
+ * stage no further off than single parts, as in roundMfb (mfb.js). Here it
+ * never has to refuse: f0 and Q share R1 and R2 evenly, so the stage's
+ * larger miss is the mean of the two parts' own.
+ */
+function roundMfbHp(R1, R2, C, wn, q, resistorSeries, pairs) {
+	const round = (p) => {
+		const R1n = pairedResistor(R1, resistorSeries, p);
+		const R2n = pairedResistor(R2, resistorSeries, p);
+		const aActual = 3 / (R2n * C);
+		const bActual = 1 / (R1n * R2n * C * C);
+		return { R1n, R2n, wn: Math.sqrt(bActual), q: Math.sqrt(bActual) / aActual };
+	};
+	const single = round(false);
+	if (!pairs) return single;
+	const paired = round(true);
+	const miss = (r) => Math.max(Math.abs(Math.log(r.wn / wn)), Math.abs(Math.log(r.q / q)));
+	return miss(paired) <= miss(single) ? paired : single;
+}
+
+/**
  * Searches a preferred capacitor series for a well-scaled C (used for all
  * three capacitors), then rounds the resulting resistors to a preferred
- * series and reports the actual wn/Q/gain the rounded values give.
+ * series and reports the actual wn/Q/gain the rounded values give (two in
+ * series allowed with `pairs`, see roundMfbHp).
  */
-export function designMfbHighPass(wn, q, { resistorSeries = 'E24', capacitors = null } = {}) {
+export function designMfbHighPass(wn, q, { resistorSeries = 'E24', capacitors = null, pairs = false } = {}) {
 	const a = wn / q;
 	const b = wn * wn;
 	const caps = capacitorCandidates(capacitors);
@@ -56,17 +79,14 @@ export function designMfbHighPass(wn, q, { resistorSeries = 'E24', capacitors = 
 	}
 	if (!best) return null;
 
-	const R1n = nearestResistor(best.R1, resistorSeries);
-	const R2n = nearestResistor(best.R2, resistorSeries);
-	const aActual = 3 / (R2n * best.C);
-	const bActual = 1 / (R1n * R2n * best.C * best.C);
+	const r = roundMfbHp(best.R1, best.R2, best.C, wn, q, resistorSeries, pairs);
 
 	return {
 		topology: 'mfbHp',
 		order: 2,
 		theoretical: { R1: best.R1, R2: best.R2, C1: best.C, C2: best.C, C3: best.C },
-		components: { R1: R1n, R2: R2n, C1: best.C, C2: best.C, C3: best.C },
-		actual: { wn: Math.sqrt(bActual), q: Math.sqrt(bActual) / aActual, gain: -1 },
+		components: { R1: r.R1n, R2: r.R2n, C1: best.C, C2: best.C, C3: best.C },
+		actual: { wn: r.wn, q: r.q, gain: -1 },
 		steps: { a, b, C: best.C, resistorSeries }
 	};
 }
@@ -77,16 +97,13 @@ export function designMfbHighPass(wn, q, { resistorSeries = 'E24', capacitors = 
  * Unlike MFB low-pass, this always has a real solution: there is no
  * realizability ceiling on Q for this topology.
  */
-export function designMfbHighPassFromCap(wn, q, C, { resistorSeries = 'E24', capacitors = null } = {}) {
+export function designMfbHighPassFromCap(wn, q, C, { resistorSeries = 'E24', capacitors = null, pairs = false } = {}) {
 	const a = wn / q;
 	const b = wn * wn;
 	const { R1, R2 } = solveMfbHpResistors(a, b, C);
 
-	const R1n = nearestResistor(R1, resistorSeries);
-	const R2n = nearestResistor(R2, resistorSeries);
-	const aActual = 3 / (R2n * C);
-	const bActual = 1 / (R1n * R2n * C * C);
-	const outOfRange = !(R1n > MFB_HP_R_MIN && R1n < MFB_HP_R_MAX && R2n > MFB_HP_R_MIN && R2n < MFB_HP_R_MAX);
+	const r = roundMfbHp(R1, R2, C, wn, q, resistorSeries, pairs);
+	const outOfRange = !(r.R1n > MFB_HP_R_MIN && r.R1n < MFB_HP_R_MAX && r.R2n > MFB_HP_R_MIN && r.R2n < MFB_HP_R_MAX);
 
 	return {
 		ok: true,
@@ -94,8 +111,8 @@ export function designMfbHighPassFromCap(wn, q, C, { resistorSeries = 'E24', cap
 		topology: 'mfbHp',
 		order: 2,
 		theoretical: { R1, R2, C1: C, C2: C, C3: C },
-		components: { R1: R1n, R2: R2n, C1: C, C2: C, C3: C },
-		actual: { wn: Math.sqrt(bActual), q: Math.sqrt(bActual) / aActual, gain: -1 },
+		components: { R1: r.R1n, R2: r.R2n, C1: C, C2: C, C3: C },
+		actual: { wn: r.wn, q: r.q, gain: -1 },
 		steps: { a, b, C, resistorSeries },
 		outOfRange
 	};

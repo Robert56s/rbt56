@@ -65,7 +65,7 @@
 	import { designLowPass, designHighPass, designBandPass, designBandStop, minimumOrder } from '$lib/filter/stages';
 	import { branchDcGain, branchOrder, branchSign, combinerChoice, combinerDesign, magnitudePhaseAt, sweep, magnitudePhaseAtParallelSum, sweepParallelSum } from '$lib/filter/bode';
 	import { buildDifferenceAmpDiagram, buildSummingAmpDiagram } from '$lib/filter/circuits';
-	import { nearestResistor } from '$lib/filter/eseries';
+	import { nearestResistor, pairDiagramLabel, pairLabel } from '$lib/filter/eseries';
 	import { componentOptions, defaultStock, isRestricted, loadStock, saveStock } from '$lib/stock';
 
 	const SUMMING_R = 10_000; // ohms, the summing amplifier's three equal resistors
@@ -105,15 +105,20 @@
 	// stock does not change the design, only what it can round to, so the
 	// cost shows up in the f0/Q error columns rather than in the maths. The
 	// setting is the site's (src/lib/stock.js): the AM tool shares it, and it
-	// is kept in this browser.
+	// is kept in this browser. With a list, `pairs` lets the resistors that
+	// set f0, Q or a zero be two in series (pairedResistor in eseries.js).
 	const initialStock = defaultStock();
 	let stock = $state(initialStock.stock); // 'E24' | 'E96' | 'lab' | 'labR' | 'custom'
 	let resistorText = $state(initialStock.resistorText);
 	let capacitorText = $state(initialStock.capacitorText);
+	let pairs = $state(initialStock.pairs);
 	let stockLoaded = $state(false);
 	const restrictedStock = $derived(isRestricted(stock));
-	const stockPhrase = $derived(stock === 'E96' ? 'the E96 series' : stock === 'lab' ? 'the lab kit' : stock === 'labR' ? 'the lab resistors' : stock === 'custom' ? 'the list on hand' : 'the E24 series');
-	const componentOpts = $derived(componentOptions(stock, resistorText, capacitorText));
+	const componentOpts = $derived(componentOptions(stock, resistorText, capacitorText, pairs));
+	const stockPhrase = $derived(
+		(stock === 'E96' ? 'the E96 series' : stock === 'lab' ? 'the lab kit' : stock === 'labR' ? 'the lab resistors' : stock === 'custom' ? 'the list on hand' : 'the E24 series') +
+			(componentOpts.pairs ? ' (two in series allowed)' : '')
+	);
 	const combinerR = $derived(restrictedStock ? nearestResistor(SUMMING_R, componentOpts.resistorSeries) : SUMMING_R);
 
 	// the drawer is worth remembering between visits; blocked storage just
@@ -124,12 +129,13 @@
 			if (saved.stock) stock = saved.stock;
 			if (saved.resistorText !== undefined) resistorText = saved.resistorText;
 			if (saved.capacitorText !== undefined) capacitorText = saved.capacitorText;
+			if (saved.pairs !== undefined) pairs = saved.pairs;
 		}
 		stockLoaded = true;
 	});
 
 	$effect(() => {
-		const state = { stock, resistorText, capacitorText };
+		const state = { stock, resistorText, capacitorText, pairs };
 		if (stockLoaded) saveStock(state);
 	});
 
@@ -695,6 +701,7 @@
 			orderLp,
 			capOverrides: capOverridesFarads,
 			resistorStock: componentOpts.resistorSeries,
+			resistorPairs: componentOpts.pairs,
 			capacitorStock: componentOpts.capacitors
 		});
 		saveFile(code, 'filter-design.js', 'text/javascript');
@@ -731,7 +738,10 @@
 			lpCount: filterType === 'bandstop' ? design.lp.stages.length : 0,
 			combinerMode,
 			combinerR: combinerR,
-			combinerResistors: combinerParts?.resistors ?? null
+			combinerResistors: combinerParts?.resistors ?? null,
+			// the file keeps each pair's sum; its notes name the two parts
+			resistorStock: componentOpts.resistorSeries,
+			pairs: componentOpts.pairs
 		});
 		saveFile(schematic, 'filter-design.asc', 'text/plain');
 	}
@@ -1045,7 +1055,8 @@
 			attenuationAtFl,
 			attenuationAtFh,
 			stock,
-			needsTowThomas
+			needsTowThomas,
+			pairs: componentOpts.pairs
 		})}
 		widgets={{ 'two-tones': TwoTonesDemo, 'rc-on-spec': RcOnSpecDemo, 'order-on-spec': OrderOnSpecDemo, 'stages-multiply': StagesMultiplyDemo }}
 	/>
@@ -1368,11 +1379,11 @@
 					</span>
 				</div>
 
-				<StockPicker id="stock" bind:stock bind:resistorText bind:capacitorText />
+				<StockPicker id="stock" bind:stock bind:resistorText bind:capacitorText bind:pairs />
 
 				{#if restrictedStock}
 					<p class="note">
-						The search now rounds {stock === 'labR' ? 'every resistor to the lab resistors, the capacitors staying on the usual series,' : 'to those values only,'} so the f0 and Q error columns below grow.
+						The search now rounds {stock === 'labR' ? 'every resistor to the lab resistors, the capacitors staying on the usual series,' : 'to those values only,'} so the f0 and Q error columns below grow{componentOpts.pairs ? ', less so with two in series' : ''}.
 						Everything downstream is computed from the rounded values, so the Bode plot and the
 						spec check at the end already show whether the result still meets the spec.
 					</p>
@@ -1451,7 +1462,8 @@
 										{#each Object.entries(stageDesign.components) as [name, value] (name)}
 											<tr>
 												<td>{name}</td>
-												<td>{name.startsWith('R') || name.startsWith('r') ? formatOhms(value) : formatFarads(value)}</td>
+												<!-- a pair reads 64.2 kΩ (56.0 kΩ + 8.20 kΩ); a stage that fell back to E24 has none -->
+												<td>{name.startsWith('R') || name.startsWith('r') ? pairLabel(value, componentOpts.resistorSeries, formatOhms, componentOpts.pairs && !stageDesign.stockShortfall) : formatFarads(value)}</td>
 											</tr>
 										{/each}
 									</tbody>
@@ -1522,7 +1534,11 @@
 									{/if}
 								{/if}
 							</div>
-							<CircuitDiagram design={stageDesign} />
+							<!-- a pair is drawn as its two parts, R1 56k + 8.2k; a stage that fell back to E24 has none -->
+							<CircuitDiagram
+								design={stageDesign}
+								ohms={(v) => pairDiagramLabel(v, componentOpts.resistorSeries, formatOhms, componentOpts.pairs && !stageDesign.stockShortfall)}
+							/>
 							<div class="math-full cap-picker">
 								<p class="note">
 									{#if stageDesign.topology === 'firstOrder' || stageDesign.topology === 'firstOrderHp' || stageDesign.topology === 'mfbHp' || stageDesign.topology === 'sallenKeyHp' || stageDesign.topology === 'towThomas' || stageDesign.topology === 'towThomasHp' || stageDesign.topology === 'towThomasNotch'}
@@ -1802,7 +1818,7 @@
 									Passband edges: {attenuationAtFl.toFixed(2)} dB at fl, {attenuationAtFh.toFixed(2)}
 									dB at fh, against Amax = {amaxBandText}. More than rounding explains, and the limited
 									value list is the likely reason: the search had nothing closer to pick. Add values,
-									loosen Amax, or accept the wider passband if the stopband still holds above.
+									{componentOpts.pairs ? '' : 'try two resistors in series, '}loosen Amax, or accept the wider passband if the stopband still holds above.
 								</p>
 							{:else}
 								<p class="flag bad">
@@ -1826,8 +1842,8 @@
 							<p class="flag warn">
 								Passband edge: {attenuationAtFp.toFixed(2)} dB at fp, against Amax = {amaxDb} dB.
 								More than rounding explains, and the limited value list is the likely reason: the
-								search had nothing closer to pick. Add values, loosen Amax, or accept the wider
-								passband if the stopband above still holds.
+								search had nothing closer to pick. Add values, {componentOpts.pairs ? '' : 'try two resistors in series, '}loosen
+								Amax, or accept the wider passband if the stopband above still holds.
 							</p>
 						{:else}
 							<p class="flag bad">

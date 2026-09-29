@@ -23,7 +23,7 @@ import { designSallenKeyLowPass } from './sallenKeyLowPass';
  * ripple ends up at least Amin under every part of the message. An order past
  * maxOrder is only reported (tooHigh), with no stages built.
  */
-export function designEnvelopeLowPass({ response, amaxDb, aminDb, fp, fs, order, resistorSeries = 'E24', capacitors = null, maxOrder = Infinity }) {
+export function designEnvelopeLowPass({ response, amaxDb, aminDb, fp, fs, order, resistorSeries = 'E24', capacitors = null, pairs = false, maxOrder = Infinity }) {
 	const k = transitionRatio(fp, fs);
 	const aminSized = response === 'chebyshev' ? aminDb + amaxDb : aminDb;
 	const minOrder = response === 'chebyshev' ? chebyshevOrder(amaxDb, aminSized, k) : butterworthOrder(amaxDb, aminDb, k);
@@ -49,9 +49,9 @@ export function designEnvelopeLowPass({ response, amaxDb, aminDb, fp, fs, order,
 	}));
 
 	// a stage the parts on hand cannot build is built from E24 and the E6/E12
-	// capacitors instead, and flagged, rather than dropped
+	// capacitors instead (single resistors), and flagged, rather than dropped
 	const realized = stages.map((stage) => {
-		const r = designSallenKeyLowPass(stage.wn, stage.q, { resistorSeries, capacitors });
+		const r = designSallenKeyLowPass(stage.wn, stage.q, { resistorSeries, capacitors, pairs });
 		if (r) return r;
 		const fallback = designSallenKeyLowPass(stage.wn, stage.q);
 		return fallback && { ...fallback, stockShortfall: true };

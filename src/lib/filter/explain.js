@@ -1,3 +1,4 @@
+import { pairLabel, seriesPair } from './eseries';
 import { explainModernApproximation, explainModernOrder, isClassic, modernRealPoleBlocks, modernStageBlocks } from './explainResponses';
 import { formatFarads, formatHz, formatOhms, formatSeconds } from './format';
 
@@ -20,6 +21,19 @@ function p(text) {
 }
 function eq(tex) {
 	return { type: 'eq', tex };
+}
+
+/** A rounded resistor as the component table prints it: 64.2 kΩ (56.0 kΩ + 8.20 kΩ) when it is two in series. */
+const ohms = (value, series) => pairLabel(value, series, formatOhms);
+/** What the resistors were rounded to: a series by name, or the values on hand. */
+const stockValue = (series) => (Array.isArray(series) ? 'value on hand' : `${series} value`);
+/** ', or two in series ...' when any of these values is a pair, '' otherwise. */
+const pairedTail = (series, values) => (values.some((v) => seriesPair(v, series)) ? ', or two in series where no single one comes within 2 %' : '');
+/** The sentence naming the resistors built from two in series ([name, value] rows), or '' when there is none. */
+function pairsSentence(parts, series) {
+	const paired = parts.filter(([, v]) => seriesPair(v, series));
+	if (paired.length === 0) return '';
+	return `${paired.map(([name, v]) => `${name} = ${ohms(v, series)}`).join(' and ')} ${paired.length > 1 ? 'are each' : 'is'} two resistors in series, since no single value on hand comes within 2 %.`;
 }
 
 /** eps = sqrt(10^(Amax/10) - 1), the one number the passband spec turns into. */
@@ -442,7 +456,7 @@ export function explainMfb(stageDesign, targetWn, targetQ) {
 		),
 		eq(`R_2 = \\dfrac{1}{y} = \\dfrac{1}{aC_1 - 2x} = ${formatOhms(stageDesign.theoretical.R2)}`),
 		p(
-			`Real resistors only come in standard values, so R1 and R2 get rounded to the nearest ${st.resistorSeries} value: ${formatOhms(stageDesign.components.R1)} and ${formatOhms(stageDesign.components.R2)}. Plugging those rounded values back into a and b (not the target ones) gives what this stage will actually do, which is what the "actual" row above and the Bode plot further down are built from:`
+			`Real resistors only come in standard values, so R1 and R2 get rounded to the nearest ${stockValue(st.resistorSeries)}${pairedTail(st.resistorSeries, [stageDesign.components.R1, stageDesign.components.R2])}: ${ohms(stageDesign.components.R1, st.resistorSeries)} and ${ohms(stageDesign.components.R2, st.resistorSeries)}. Plugging those rounded values back into a and b (not the target ones) gives what this stage will actually do, which is what the "actual" row above and the Bode plot further down are built from:`
 		),
 		eq(
 			`f_0' = ${formatHz(stageDesign.actual.wn / (2 * Math.PI))},\\quad Q' = ${stageDesign.actual.q.toFixed(4)}`
@@ -486,7 +500,7 @@ export function explainSallenKey(stageDesign, targetQ) {
 					eq(`R = \\dfrac{1}{\\omega_n\\sqrt{C_{top}C_{bottom}}} = ${formatOhms(st.Rtarget)}`)
 				]),
 		p(
-			`Rounded to the nearest preferred values: R = ${formatOhms(stageDesign.components.R1)}, C_top = ${formatFarads(stageDesign.components.Ctop)}. Recomputing ωn and Q from those rounded values (not the targets) gives what this stage will actually do:`
+			`Rounded to the nearest preferred values: R = ${ohms(stageDesign.components.R1, st.resistorSeries)}, C_top = ${formatFarads(stageDesign.components.Ctop)}. Recomputing ωn and Q from those rounded values (not the targets) gives what this stage will actually do:`
 		),
 		eq(
 			`f_0' = ${formatHz(stageDesign.actual.wn / (2 * Math.PI))},\\quad Q' = ${stageDesign.actual.q.toFixed(4)}`
@@ -552,7 +566,7 @@ export function explainFirstOrder(stageDesign) {
 				: 'C is picked from a preferred capacitor series first, and R is solved from it; R then gets rounded in turn, same as every other stage in this design:'
 		),
 		eq(`C = ${formatFarads(st.C)}\\ \\ \\Rightarrow\\ \\ R = \\dfrac{\\tau}{C} = ${formatOhms(st.Rtarget)}`),
-		p(`Rounded to R = ${formatOhms(stageDesign.components.R)}.`),
+		p(`Rounded to R = ${ohms(stageDesign.components.R, st.resistorSeries)}.`),
 		eq(`\\tau' = RC = ${formatSeconds(stageDesign.actual.tau)}`),
 		...bufferBlocks(stageDesign, 'lowpass')
 	];
@@ -587,7 +601,7 @@ export function explainMfbHp(stageDesign, targetWn, targetQ) {
 				: `This tool searches a preferred capacitor series for a C that lands both resistors in a sane 200 ohm to 2 megohm range: ${formatFarads(st.C)}.`
 		),
 		p(
-			`Real resistors only come in standard values, so R1 and R2 get rounded to the nearest ${st.resistorSeries} value: ${formatOhms(stageDesign.components.R1)} and ${formatOhms(stageDesign.components.R2)}. Plugging those rounded values back into a and b (not the target ones) gives what this stage will actually do, which is what the "actual" row above and the Bode plot further down are built from:`
+			`Real resistors only come in standard values, so R1 and R2 get rounded to the nearest ${stockValue(st.resistorSeries)}${pairedTail(st.resistorSeries, [stageDesign.components.R1, stageDesign.components.R2])}: ${ohms(stageDesign.components.R1, st.resistorSeries)} and ${ohms(stageDesign.components.R2, st.resistorSeries)}. Plugging those rounded values back into a and b (not the target ones) gives what this stage will actually do, which is what the "actual" row above and the Bode plot further down are built from:`
 		),
 		eq(
 			`f_0' = ${formatHz(stageDesign.actual.wn / (2 * Math.PI))},\\quad Q' = ${stageDesign.actual.q.toFixed(4)}`
@@ -622,7 +636,7 @@ export function explainSallenKeyHp(stageDesign, targetQ) {
 		eq(`R_{top} = \\dfrac{1}{2Q\\,\\omega_n\\,C} = ${formatOhms(st.RtopTarget)}`),
 		eq(`R_{bottom} = 4Q^2 \\times R_{top} = ${formatOhms(st.RbottomTarget)}`),
 		p(
-			`Rounded to the nearest preferred values: R_top = ${formatOhms(stageDesign.components.Rtop)}, R_bottom = ${formatOhms(stageDesign.components.Rbottom)}, C = ${formatFarads(stageDesign.components.C1)}. Recomputing ωn and Q from those rounded values (not the targets) gives what this stage will actually do:`
+			`Rounded to the nearest preferred values: R_top = ${ohms(stageDesign.components.Rtop, st.resistorSeries)}, R_bottom = ${ohms(stageDesign.components.Rbottom, st.resistorSeries)}, C = ${formatFarads(stageDesign.components.C1)}. Recomputing ωn and Q from those rounded values (not the targets) gives what this stage will actually do:`
 		),
 		eq(
 			`f_0' = ${formatHz(stageDesign.actual.wn / (2 * Math.PI))},\\quad Q' = ${stageDesign.actual.q.toFixed(4)}`
@@ -646,7 +660,7 @@ export function explainFirstOrderHp(stageDesign) {
 				: 'C is picked from a preferred capacitor series first, and R is solved from it; R then gets rounded in turn, same as every other stage in this design:'
 		),
 		eq(`C = ${formatFarads(st.C)}\\ \\ \\Rightarrow\\ \\ R = \\dfrac{\\tau}{C} = ${formatOhms(st.Rtarget)}`),
-		p(`Rounded to R = ${formatOhms(stageDesign.components.R)}.`),
+		p(`Rounded to R = ${ohms(stageDesign.components.R, st.resistorSeries)}.`),
 		eq(`\\tau' = RC = ${formatSeconds(stageDesign.actual.tau)}`),
 		...bufferBlocks(stageDesign, 'highpass')
 	];
@@ -673,6 +687,7 @@ function towThomasComparison(targetQ) {
 export function explainTowThomas(stageDesign, targetWn, targetQ) {
 	const st = stageDesign.steps;
 	const c = stageDesign.components;
+	const paired = pairsSentence([['R', c.Ra], ['Rd', c.Rd]], st.resistorSeries);
 	const f0 = targetWn / (2 * Math.PI);
 	const blocks = [
 		p(
@@ -700,7 +715,7 @@ export function explainTowThomas(stageDesign, targetWn, targetQ) {
 		),
 		eq(`C = ${formatFarads(st.C)}\\ \\ \\Rightarrow\\ \\ R = \\dfrac{1}{\\omega_n C} = ${formatOhms(st.Rtarget)} \\rightarrow ${formatOhms(st.Rrounded)}`),
 		eq(`R_d = Q \\times R = ${targetQ.toFixed(4)} \\times ${formatOhms(st.Rrounded)} = ${formatOhms(st.RdTarget)} \\rightarrow ${formatOhms(c.Rd)}, \\qquad R_1 = R_a = R_b = ${formatOhms(c.Ra)}, \\qquad r = ${formatOhms(c.r)}`),
-		p('Recomputing from the rounded values gives what the stage will actually do (the gain is exactly 1, since R1 and R are the same part value):'),
+		p(`${paired} Recomputing from the rounded values gives what the stage will actually do (the gain is exactly 1, since R1 and R are the same part value):`.trim()),
 		eq(
 			`f_0' = \\dfrac{1}{2\\pi R C} = ${formatHz(stageDesign.actual.wn / (2 * Math.PI))},\\quad Q' = \\dfrac{R_d}{R} = \\dfrac{${formatOhms(c.Rd)}}{${formatOhms(c.Ra)}} = ${stageDesign.actual.q.toFixed(4)}`
 		),
@@ -716,6 +731,7 @@ export function explainTowThomas(stageDesign, targetWn, targetQ) {
 export function explainTowThomasHp(stageDesign, targetWn, targetQ) {
 	const st = stageDesign.steps;
 	const c = stageDesign.components;
+	const paired = pairsSentence([['R', c.Ra], ['Rd', c.Rd]], st.resistorSeries);
 	const f0 = targetWn / (2 * Math.PI);
 	return [
 		p(
@@ -735,6 +751,7 @@ export function explainTowThomasHp(stageDesign, targetWn, targetQ) {
 		),
 		eq(`C_{in} = C_1 = C_2 = ${formatFarads(st.C)}\\ \\ \\Rightarrow\\ \\ R = \\dfrac{1}{\\omega_n C} = ${formatOhms(st.Rtarget)} \\rightarrow ${formatOhms(st.Rrounded)}`),
 		eq(`R_d = Q \\times R = ${targetQ.toFixed(4)} \\times ${formatOhms(st.Rrounded)} = ${formatOhms(st.RdTarget)} \\rightarrow ${formatOhms(c.Rd)}, \\qquad R_a = R_b = ${formatOhms(c.Ra)}, \\qquad r = ${formatOhms(c.r)}`),
+		...(paired ? [p(paired)] : []),
 		eq(
 			`f_0' = \\dfrac{1}{2\\pi R C} = ${formatHz(stageDesign.actual.wn / (2 * Math.PI))},\\quad Q' = \\dfrac{R_d}{R} = ${stageDesign.actual.q.toFixed(4)}, \\quad H(\\infty) = -1`
 		),

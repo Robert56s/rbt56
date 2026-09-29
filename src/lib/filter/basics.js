@@ -542,7 +542,7 @@ function stageCorner(stage) {
 	return { f, tex: `${lhs} = ${numeric} = ${hzTex(f)}${where ? ` \\qquad ${where.replace('\\quad ', '')}` : ''}` };
 }
 
-function stagesToParts({ topology, stock, design, realizedStages, needsTowThomas }) {
+function stagesToParts({ topology, stock, design, realizedStages, needsTowThomas, pairs = false }) {
 	const known = TOPOLOGY_LINE[topology] ? topology : 'mfb';
 	const others = Object.keys(TOPOLOGY_LINE).filter((t) => t !== known);
 	// order 1: every stage is first order, which the Topology menu does not touch
@@ -553,7 +553,9 @@ function stagesToParts({ topology, stock, design, realizedStages, needsTowThomas
 			? `The Topology menu sets how second-order stages are wired around the op-amp, and this page is set to ${TOPOLOGY_NAME[topology]}; with order 1 there is no such stage, so the menu changes nothing yet.`
 			: `The Topology menu sets how they are wired around the op-amp, and this page is set to ${TOPOLOGY_NAME[topology]}.`;
 	}
-	const rounding = ROUNDING[stock] ?? 'fixes the capacitors from the values in stock, solves for the resistors, rounds each to the nearest value in stock';
+	const rounding =
+		(ROUNDING[stock] ?? 'fixes the capacitors from the values in stock, solves for the resistors, rounds each to the nearest value in stock') +
+		(pairs ? ' (or to two resistors in series where no single one comes close)' : '');
 	// zeros take the Tow-Thomas notch form, so the menu has to be on it
 	if (needsTowThomas && topology !== 'towThomas') {
 		menu += ' Elliptic and inverse Chebyshev put zeros in the stopband, which only the Tow-Thomas notch form can build, so the page designs nothing until the menu is on Tow-Thomas.';
@@ -673,7 +675,8 @@ export function filterBasics({
 	attenuationAtFl,
 	attenuationAtFh,
 	stock,
-	needsTowThomas
+	needsTowThomas,
+	pairs = false
 } = {}) {
 	const type = TYPES.includes(filterType) ? filterType : 'lowpass';
 	const side = sideOf({ type, fp, fs, fl, fh, fsl, fsh, lpFp, lpFs, design });
@@ -684,7 +687,7 @@ export function filterBasics({
 		...oneRc({ type, side, amaxDb, aminDb, ok }),
 		...theOrder({ type, response, side, amaxDb, aminDb, ok, order }),
 		...opampAndQ({ type, response, side, amaxDb, aminDb, ok }),
-		...stagesToParts({ topology, stock, design, realizedStages, needsTowThomas }),
+		...stagesToParts({ topology, stock, design, realizedStages, needsTowThomas, pairs }),
 		...restOfPage({ type, amaxDb, aminDb, bandLimits, k, stages, attenuationAtFs, attenuationAtFp, attenuationAtFsl, attenuationAtFsh, attenuationAtFl, attenuationAtFh }),
 		h('Words used on this page'),
 		terms(GLOSSARY)

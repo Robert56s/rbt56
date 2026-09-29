@@ -10,6 +10,50 @@ const MARGIN = 24;
 // through it.
 const HANG = { resistor_down: 0.51, capacitor_down: 0.3 };
 
+// Every stage builder below takes an optional last argument { ohms }: how a
+// resistor's value is written on the drawing. It defaults to formatOhms
+// ("4.20 kΩ"); the filter page passes one that names the two parts of a
+// resistor built from two in series ("2.2k + 2k", pairDiagramLabel in
+// eseries.js). Capacitors are always written with formatFarads.
+//
+// Such a label is longer than a single value ("R1 12.1k + 3.32k" against
+// "R1 10.0 kΩ"), so where one would run into a wire or another label, the
+// builder makes room: it moves the label, or lengthens a lead so the parts
+// after it move right. Only a label that no longer fits does that: every
+// label that fits stays exactly where it always was.
+
+// Labels are 11px monospace (CircuitDiagram.svelte), about 6.6px a
+// character: the width scripts/check-schematics.mjs measures them with.
+const CHAR_W = 6.6;
+// Baseline to baseline for two labels, one just clear above the other.
+const LINE = 15;
+const textWidth = (text) => text.length * CHAR_W;
+// Every stage has its Vin label at the left margin, over the input lead.
+const VIN_END = MARGIN + textWidth('Vin');
+const BUFFER_NOTE = 'unity-gain buffer';
+
+/**
+ * How far to move a label, or whatever it runs into, when the two overlap
+ * by `overlap` px (a negative overlap: they are clear by that much).
+ * Nothing when they are at least 1px clear, otherwise enough to leave a
+ * character's space between them.
+ */
+function clearance(overlap) {
+	return overlap <= -1 ? 0 : overlap + CHAR_W;
+}
+
+/**
+ * Places a horizontal part with `place(dx)` (dx = 0: its usual place),
+ * moved right just enough for its label, right-aligned `gap` px short of
+ * the part's right pin, to start clear of `limit`: the Vin label, or a
+ * riser to the left. Moving the part lengthens its lead, and every part
+ * placed from it moves right too.
+ */
+function placeClear(place, text, gap, limit) {
+	const end = place(0).ports['2'].x - gap;
+	return place(clearance(limit - (end - textWidth(text))));
+}
+
 /**
  * MFB low-pass, the standard (Rauch) layout that mfb.js's transfer function
  * describes: R1 from Vin to the summing node S, C1 from S to ground, R2 from
@@ -23,10 +67,12 @@ const HANG = { resistor_down: 0.51, capacitor_down: 0.3 };
  * across a virtual ground and does nothing), so it did not realize the
  * formula the components were solved from.
  */
-export function buildMfbDiagram(components) {
+export function buildMfbDiagram(components, { ohms = formatOhms } = {}) {
 	const y0 = 220;
 	const Vin = { x: MARGIN, y: y0 };
-	const R1 = placeSymbol('resistor_right', Vin.x + 90, y0, SCALE);
+	// R1's label ends 10px short of S; a long one moves R1 right
+	const r1Text = `R1 ${ohms(components.R1)}`;
+	const R1 = placeClear((dx) => placeSymbol('resistor_right', Vin.x + 90 + dx, y0, SCALE), r1Text, 10, VIN_END);
 	const S = R1.ports['2']; // summing node: R1, C1, R2, R3
 
 	const C1 = placeSymbol('capacitor_down', S.x, S.y + HANG.capacitor_down * SCALE, SCALE);
@@ -79,10 +125,10 @@ export function buildMfbDiagram(components) {
 		net.dots(portPoints(R1, C1, gndC1, R2, opamp, gndPlus, R3, C2)),
 		label('Vin', Vin.x, Vin.y - 12, { anchor: 'start' }),
 		label('Vout', Vout.x + 48, Vout.y + 5, { anchor: 'start' }),
-		label(`R1 ${formatOhms(components.R1)}`, S.x - 10, y0 - 22, { anchor: 'end' }),
-		label(`R2 ${formatOhms(components.R2)}`, R2.ports['1'].x, y0 - 22, { anchor: 'start' }),
+		label(r1Text, S.x - 10, y0 - 22, { anchor: 'end' }),
+		label(`R2 ${ohms(components.R2)}`, R2.ports['1'].x, y0 - 22, { anchor: 'start' }),
 		label(`C1 ${formatFarads(components.C1)}`, C1.ports['1'].x + 12, (C1.ports['1'].y + C1.ports['2'].y) / 2 + 8, { anchor: 'start' }),
-		label(`R3 ${formatOhms(components.R3)}`, R3.ports['1'].x, railY - 12, { anchor: 'start' }),
+		label(`R3 ${ohms(components.R3)}`, R3.ports['1'].x, railY - 12, { anchor: 'start' }),
 		label(`C2 ${formatFarads(components.C2)}`, C2.ports['1'].x, loopY + 26, { anchor: 'start' })
 	];
 
@@ -99,11 +145,16 @@ export function buildMfbDiagram(components) {
  * the triangle. The op-amp is placed so its + input lines up with the second
  * junction's height, so nothing runs vertically past the - input pin.
  */
-export function buildSallenKeyDiagram(components) {
+export function buildSallenKeyDiagram(components, { ohms = formatOhms } = {}) {
 	const y0 = 220;
 	const Vin = { x: MARGIN, y: y0 };
-	const R1 = placeSymbol('resistor_right', Vin.x + 90, y0, SCALE);
+	// R1's label starts 20px left of R1 and ends short of J1's riser; a long
+	// one ends a character short of it instead, and moves R1 right when it
+	// would then reach the Vin label
+	const r1Text = `R ${ohms(components.R1)}`;
+	const R1 = placeClear((dx) => placeSymbol('resistor_right', Vin.x + 90 + dx, y0, SCALE), r1Text, CHAR_W, VIN_END);
 	const J1 = R1.ports['2'];
+	const r1X = R1.ports['1'].x - 20;
 	const R2 = placeSymbol('resistor_right', J1.x + 100, y0, SCALE);
 	const J2 = R2.ports['2'];
 
@@ -143,8 +194,8 @@ export function buildSallenKeyDiagram(components) {
 		net.dots(portPoints(R1, R2, Cbottom, gndBottom, opamp, Ctop)),
 		label('Vin', Vin.x, Vin.y - 12, { anchor: 'start' }),
 		label('Vout', Vout.x + 48, Vout.y + 5, { anchor: 'start' }),
-		label(`R ${formatOhms(components.R1)}`, R1.ports['1'].x - 20, R1.ports['1'].y - 24, { anchor: 'start' }),
-		label(`R ${formatOhms(components.R2)}`, R2.ports['1'].x, R2.ports['1'].y - 24, { anchor: 'start' }),
+		label(r1Text, r1X - clearance(r1X + textWidth(r1Text) - J1.x), R1.ports['1'].y - 24, { anchor: 'start' }),
+		label(`R ${ohms(components.R2)}`, R2.ports['1'].x, R2.ports['1'].y - 24, { anchor: 'start' }),
 		label(`C_top ${formatFarads(components.Ctop)}`, Ctop.ports['1'].x, railY - 20, { anchor: 'start' }),
 		label(`C_bottom ${formatFarads(components.Cbottom)}`, Cbottom.ports['1'].x - 40, gndBottom.ports['1'].y + 35, { anchor: 'start' })
 	];
@@ -158,7 +209,7 @@ export function buildSallenKeyDiagram(components) {
  * ground, C2 from A to the inverting input X, and two feedback paths back to
  * Vout - C3 from A, R2 from X. R1 hangs so its top pin sits exactly on A.
  */
-export function buildMfbHpDiagram(components) {
+export function buildMfbHpDiagram(components, { ohms = formatOhms } = {}) {
 	const y0 = 220;
 	const Vin = { x: MARGIN, y: y0 };
 	const C1 = placeSymbol('capacitor_right', Vin.x + 90, y0, SCALE);
@@ -211,10 +262,10 @@ export function buildMfbHpDiagram(components) {
 		label('Vin', Vin.x, Vin.y - 12, { anchor: 'start' }),
 		label('Vout', Vout.x + 48, Vout.y + 5, { anchor: 'start' }),
 		label(`C1 ${formatFarads(components.C1)}`, A.x - 8, C1.ports['1'].y - 24, { anchor: 'end' }),
-		label(`R1 ${formatOhms(components.R1)}`, R1.ports['1'].x + 12, (R1.ports['1'].y + R1.ports['2'].y) / 2, { anchor: 'start' }),
+		label(`R1 ${ohms(components.R1)}`, R1.ports['1'].x + 12, (R1.ports['1'].y + R1.ports['2'].y) / 2, { anchor: 'start' }),
 		label(`C2 ${formatFarads(components.C2)}`, X.x - 8, C2.ports['1'].y - 24, { anchor: 'end' }),
 		label(`C3 ${formatFarads(components.C3)}`, C3.ports['1'].x, railY1 - 12, { anchor: 'start' }),
-		label(`R2 ${formatOhms(components.R2)}`, R2.ports['1'].x, railY2 + 24, { anchor: 'start' })
+		label(`R2 ${ohms(components.R2)}`, R2.ports['1'].x, railY2 + 24, { anchor: 'start' })
 	];
 
 	const width = Vout.x + 40 + 60;
@@ -227,7 +278,7 @@ export function buildMfbHpDiagram(components) {
  * Vout to the first junction, a grounded resistor at the second (hung so its
  * top pin sits on the junction).
  */
-export function buildSallenKeyHpDiagram(components) {
+export function buildSallenKeyHpDiagram(components, { ohms = formatOhms } = {}) {
 	const y0 = 220;
 	const Vin = { x: MARGIN, y: y0 };
 	const C1 = placeSymbol('capacitor_right', Vin.x + 90, y0, SCALE);
@@ -273,8 +324,8 @@ export function buildSallenKeyHpDiagram(components) {
 		label('Vout', Vout.x + 48, Vout.y + 5, { anchor: 'start' }),
 		label(`C ${formatFarads(components.C1)}`, J1.x - 8, C1.ports['1'].y - 24, { anchor: 'end' }),
 		label(`C ${formatFarads(components.C2)}`, C2.ports['1'].x, C2.ports['1'].y - 24, { anchor: 'start' }),
-		label(`R_top ${formatOhms(components.Rtop)}`, Rtop.ports['1'].x, railY - 20, { anchor: 'start' }),
-		label(`R_bottom ${formatOhms(components.Rbottom)}`, Rbottom.ports['1'].x - 40, gndBottom.ports['1'].y + 35, { anchor: 'start' })
+		label(`R_top ${ohms(components.Rtop)}`, Rtop.ports['1'].x, railY - 20, { anchor: 'start' }),
+		label(`R_bottom ${ohms(components.Rbottom)}`, Rbottom.ports['1'].x - 40, gndBottom.ports['1'].y + 35, { anchor: 'start' })
 	];
 
 	const width = Vout.x + 40 + 60;
@@ -289,9 +340,14 @@ export function buildSallenKeyHpDiagram(components) {
  * headphone or a speaker is hung on it. The follower costs one op-amp and
  * changes nothing in the transfer function.
  */
-function followerAfter(net, node, parts, ports) {
-	// + input lined up with the RC node's height, so the node feeds it with a plain wire
-	const opamp = placeSymbol('opamp_no_power_right', node.x + 110, node.y + 0.18 * SCALE, SCALE);
+function followerOpamp(node, dx = 0) {
+	// + input lined up with the RC node's height, so the node feeds it with a
+	// plain wire; `dx` further right when a long label needs the room
+	return placeSymbol('opamp_no_power_right', node.x + 110 + dx, node.y + 0.18 * SCALE, SCALE);
+}
+
+function followerAfter(net, node, parts, ports, dx = 0) {
+	const opamp = followerOpamp(node, dx);
 	const out = opamp.ports.out;
 	const loopY = out.y + 60;
 	const Vout = { x: out.x + 60, y: out.y };
@@ -307,7 +363,7 @@ function followerAfter(net, node, parts, ports) {
 }
 
 /** First-order high-pass, H(s) = RCs / (RCs + 1): series C, R to ground, then a follower. */
-export function buildFirstOrderHpDiagram(components, actualTau) {
+export function buildFirstOrderHpDiagram(components, actualTau, { ohms = formatOhms } = {}) {
 	const y0 = 160;
 	const Vin = { x: MARGIN, y: y0 };
 	const C = placeSymbol('capacitor_right', Vin.x + 90, y0, SCALE);
@@ -320,7 +376,12 @@ export function buildFirstOrderHpDiagram(components, actualTau) {
 	const ports = portPoints(C, R, gnd);
 	net.wire(Vin, C.ports['1']);
 	net.wire(R.ports['2'], gnd.ports['1']);
-	const { opamp, Vout, loopY } = followerAfter(net, node, parts, ports);
+	// R's label, beside it, has to end short of the buffer's input; a long
+	// one moves the buffer right
+	const rText = `R ${ohms(components.R)}`;
+	const rX = R.ports['1'].x + 12;
+	const dx = clearance(rX + textWidth(rText) - followerOpamp(node).ports.inp2.x);
+	const { opamp, Vout, loopY } = followerAfter(net, node, parts, ports, dx);
 
 	parts.push(
 		net.svg(),
@@ -328,9 +389,9 @@ export function buildFirstOrderHpDiagram(components, actualTau) {
 		label('Vin', Vin.x, Vin.y - 12, { anchor: 'start' }),
 		label('Vout', Vout.x + 36, Vout.y + 5, { anchor: 'start' }),
 		label(`C ${formatFarads(components.C)}`, C.ports['1'].x, C.ports['1'].y - 24, { anchor: 'start' }),
-		label(`R ${formatOhms(components.R)}`, R.ports['1'].x + 12, (R.ports['1'].y + R.ports['2'].y) / 2, { anchor: 'start' }),
+		label(rText, rX, (R.ports['1'].y + R.ports['2'].y) / 2, { anchor: 'start' }),
 		label(`τ = RC = ${formatSeconds(actualTau)}`, C.ports['1'].x, R.ports['2'].y + 40, { cls: 'lbl note' }),
-		label('unity-gain buffer', opamp.ports.out.x - 24, node.y - 26, { anchor: 'middle', cls: 'lbl note' })
+		label(BUFFER_NOTE, opamp.ports.out.x - 24, node.y - 26, { anchor: 'middle', cls: 'lbl note' })
 	);
 
 	const width = Vout.x + 30 + 60;
@@ -338,7 +399,7 @@ export function buildFirstOrderHpDiagram(components, actualTau) {
 }
 
 /** First-order low-pass, H(s) = 1 / (RCs + 1): series R, C to ground, then a follower. */
-export function buildFirstOrderDiagram(components, actualTau) {
+export function buildFirstOrderDiagram(components, actualTau, { ohms = formatOhms } = {}) {
 	const y0 = 160;
 	const Vin = { x: MARGIN, y: y0 };
 	const R = placeSymbol('resistor_right', Vin.x + 90, y0, SCALE);
@@ -351,17 +412,22 @@ export function buildFirstOrderDiagram(components, actualTau) {
 	const ports = portPoints(R, C, gnd);
 	net.wire(Vin, R.ports['1']);
 	net.wire(C.ports['2'], gnd.ports['1']);
-	const { opamp, Vout, loopY } = followerAfter(net, node, parts, ports);
+	// R's label, over it, has to end short of the note over the buffer; a
+	// long one moves the buffer right
+	const rText = `R ${ohms(components.R)}`;
+	const noteStart = followerOpamp(node).ports.out.x - 24 - textWidth(BUFFER_NOTE) / 2;
+	const dx = clearance(R.ports['1'].x + textWidth(rText) - noteStart);
+	const { opamp, Vout, loopY } = followerAfter(net, node, parts, ports, dx);
 
 	parts.push(
 		net.svg(),
 		net.dots(ports),
 		label('Vin', Vin.x, Vin.y - 12, { anchor: 'start' }),
 		label('Vout', Vout.x + 36, Vout.y + 5, { anchor: 'start' }),
-		label(`R ${formatOhms(components.R)}`, R.ports['1'].x, R.ports['1'].y - 24, { anchor: 'start' }),
+		label(rText, R.ports['1'].x, R.ports['1'].y - 24, { anchor: 'start' }),
 		label(`C ${formatFarads(components.C)}`, C.ports['1'].x + 12, (C.ports['1'].y + C.ports['2'].y) / 2, { anchor: 'start' }),
 		label(`τ = RC = ${formatSeconds(actualTau)}`, R.ports['1'].x, C.ports['2'].y + 40, { cls: 'lbl note' }),
-		label('unity-gain buffer', opamp.ports.out.x - 24, node.y - 26, { anchor: 'middle', cls: 'lbl note' })
+		label(BUFFER_NOTE, opamp.ports.out.x - 24, node.y - 26, { anchor: 'middle', cls: 'lbl note' })
 	);
 
 	const width = Vout.x + 30 + 60;
@@ -378,12 +444,14 @@ export function buildFirstOrderDiagram(components, actualTau) {
  * pass at A1's; the high-pass form takes its output at A1 and A2's output
  * is then the band-pass.
  */
-function towThomasCore(components, highPass) {
+function towThomasCore(components, highPass, ohms) {
+	const c = components;
 	const y0 = 300;
 	const Vin = { x: MARGIN, y: y0 };
-	const input = highPass
-		? placeSymbol('capacitor_right', Vin.x + 90, y0, SCALE)
-		: placeSymbol('resistor_right', Vin.x + 90, y0, SCALE);
+	// the input element's label ends 10px short of N1; a long one moves the
+	// input element, and the whole stage after it, right
+	const inputText = highPass ? `Cin ${formatFarads(c.Cin)}` : `R1 ${ohms(c.R1)}`;
+	const input = placeClear((dx) => placeSymbol(highPass ? 'capacitor_right' : 'resistor_right', Vin.x + 90 + dx, y0, SCALE), inputText, 10, VIN_END);
 	const N1 = input.ports['2']; // A1 summing node: input, Ra (loop), C1 and Rd rails, A1 -
 
 	const A1 = placeSymbol('opamp_no_power_right', N1.x + 110, y0 - 0.09 * SCALE, SCALE);
@@ -391,7 +459,10 @@ function towThomasCore(components, highPass) {
 	const gnd1 = placeSymbol('ground_down', gnd1X - 0.01 * SCALE, A1.ports.inp1.y + 40 + 0.29 * SCALE, SCALE);
 	const B = A1.ports.out; // A1 output: band-pass (low-pass form) or the high-pass output
 
-	const Rb = placeSymbol('resistor_right', B.x + 90, B.y, SCALE);
+	// Rb's label ends 8px short of N2 and has to start clear of B's riser; a
+	// long one moves Rb, and A2 after it, right
+	const rbText = `Rb ${ohms(c.Rb)}`;
+	const Rb = placeClear((dx) => placeSymbol('resistor_right', B.x + 90 + dx, B.y, SCALE), rbText, 8, B.x);
 	const N2 = Rb.ports['2'];
 	const A2 = placeSymbol('opamp_no_power_right', N2.x + 110, B.y - 0.09 * SCALE, SCALE);
 	const gnd2X = A2.ports.inp1.x - 35;
@@ -456,7 +527,10 @@ function towThomasCore(components, highPass) {
 	net.wire(L, end);
 	if (!highPass) net.wire(end, { x: end.x + 40, y: end.y });
 
-	const c = components;
+	// Rd's label starts at Rd and has to end short of B's riser; a long one
+	// ends a character short of it instead
+	const rdText = `Rd ${ohms(c.Rd)}`;
+	const rdX = Rd.ports['1'].x - clearance(Rd.ports['1'].x + textWidth(rdText) - B.x);
 	const parts = [
 		input.svg,
 		A1.svg,
@@ -475,14 +549,14 @@ function towThomasCore(components, highPass) {
 		net.svg(),
 		net.dots(portPoints(input, A1, gnd1, Rb, A2, gnd2, C1, Rd, C2, A3, r1, r2, gnd3, Ra)),
 		label('Vin', Vin.x, Vin.y - 12, { anchor: 'start' }),
-		label(highPass ? `Cin ${formatFarads(c.Cin)}` : `R1 ${formatOhms(c.R1)}`, N1.x - 10, y0 - 22, { anchor: 'end' }),
-		label(`Rb ${formatOhms(c.Rb)}`, N2.x - 8, B.y - 22, { anchor: 'end' }),
+		label(inputText, N1.x - 10, y0 - 22, { anchor: 'end' }),
+		label(rbText, N2.x - 8, B.y - 22, { anchor: 'end' }),
 		label(`C1 ${formatFarads(c.C1)}`, C1.ports['1'].x, railY1 - 12, { anchor: 'start' }),
-		label(`Rd ${formatOhms(c.Rd)}`, Rd.ports['1'].x, railY2 - 12, { anchor: 'start' }),
+		label(rdText, rdX, railY2 - 12, { anchor: 'start' }),
 		label(`C2 ${formatFarads(c.C2)}`, C2.ports['1'].x, railY1 - 12, { anchor: 'start' }),
-		label(`Ra ${formatOhms(c.Ra)}`, N1.x - 12, (Ra.ports['1'].y + Ra.ports['2'].y) / 2 + 4, { anchor: 'end' }),
-		label(`r ${formatOhms(c.r)}`, r1.ports['1'].x, r1.ports['1'].y - 12, { anchor: 'start' }),
-		label(`r ${formatOhms(c.r)}`, r2.ports['1'].x, loopY + 24, { anchor: 'start' }),
+		label(`Ra ${ohms(c.Ra)}`, N1.x - 12, (Ra.ports['1'].y + Ra.ports['2'].y) / 2 + 4, { anchor: 'end' }),
+		label(`r ${ohms(c.r)}`, r1.ports['1'].x, r1.ports['1'].y - 12, { anchor: 'start' }),
+		label(`r ${ohms(c.r)}`, r2.ports['1'].x, loopY + 24, { anchor: 'start' }),
 		label('A1', A1.ports.out.x - 24, y0 + 24, { anchor: 'middle' }),
 		label('A2', A2.ports.out.x - 24, B.y + 24, { anchor: 'middle' }),
 		label('A3', A3.ports.out.x + 24, yA3 - 22, { anchor: 'middle' }),
@@ -496,12 +570,12 @@ function towThomasCore(components, highPass) {
 	return { svg: parts.join(''), viewBox: `0 ${top} ${width} ${height}` };
 }
 
-export function buildTowThomasDiagram(components) {
-	return towThomasCore(components, false);
+export function buildTowThomasDiagram(components, { ohms = formatOhms } = {}) {
+	return towThomasCore(components, false, ohms);
 }
 
-export function buildTowThomasHpDiagram(components) {
-	return towThomasCore(components, true);
+export function buildTowThomasHpDiagram(components, { ohms = formatOhms } = {}) {
+	return towThomasCore(components, true, ohms);
 }
 
 /** Places a symbol so that its port `key` lands exactly on `p`. */
@@ -518,12 +592,15 @@ function atPort(name, key, p) {
  * the bottom facing left, Ra up the left side into A1's summing node, and
  * Rz along the very bottom from the input to A2's summing node.
  */
-export function buildTowThomasNotchDiagram(components) {
+export function buildTowThomasNotchDiagram(components, { ohms = formatOhms } = {}) {
 	const c = components;
 	const y0 = 190;
 	const Vin = { x: MARGIN, y: y0 };
 	const J0 = { x: MARGIN + 40, y: y0 };
-	const Cin = atPort('capacitor_right', '1', { x: J0.x + 40, y: y0 });
+	// Cin's label ends 10px short of N1; a long one moves Cin, and the whole
+	// loop after it, right
+	const cinText = `Cin ${formatFarads(c.Cin)}`;
+	const Cin = placeClear((dx) => atPort('capacitor_right', '1', { x: J0.x + 40 + dx, y: y0 }), cinText, 10, VIN_END);
 	const N1 = Cin.ports['2'];
 	const A1 = atPort('opamp_no_power_right', 'inp2', { x: N1.x + 90, y: y0 });
 	const gnd1 = atPort('ground_down', '1', { x: A1.ports.inp1.x - 35, y: A1.ports.inp1.y + 40 });
@@ -613,6 +690,18 @@ export function buildTowThomasNotchDiagram(components) {
 	net.wire(Rz.ports['2'], { x: N2.x, y: laneY });
 	net.wire({ x: N2.x, y: laneY }, N2);
 
+	// Rd's label starts at Rd and has to end short of the riser at FB; a
+	// long one ends a character short of it instead
+	const rdText = `Rd ${ohms(c.Rd)}`;
+	const rdX = Rd.ports['1'].x - clearance(Rd.ports['1'].x + textWidth(rdText) - FB.x);
+	// Ra's label, beside it, is level with the label over r2; a long one
+	// would run into that one, so it moves up just clear of it
+	const raText = `Ra ${ohms(c.Ra)}`;
+	const raX = N1.x + 12;
+	const raMid = (Ra.ports['1'].y + Ra.ports['2'].y) / 2 + 4;
+	const r2Y = loop3Y - 12;
+	const raY = clearance(raX + textWidth(raText) - r2.ports['1'].x) > 0 ? Math.min(raMid, r2Y - LINE) : raMid;
+
 	const parts = [
 		Cin.svg,
 		A1.svg,
@@ -632,15 +721,15 @@ export function buildTowThomasNotchDiagram(components) {
 		net.svg(),
 		net.dots(portPoints(Cin, A1, gnd1, C1, Rd, Rb, A2, gnd2, C2, r1, A3, gnd3, r2, Ra, Rz)),
 		label('Vin', Vin.x, Vin.y - 12, { anchor: 'start' }),
-		label(`Cin ${formatFarads(c.Cin)}`, N1.x - 10, y0 - 22, { anchor: 'end' }),
+		label(cinText, N1.x - 10, y0 - 22, { anchor: 'end' }),
 		label(`C1 ${formatFarads(c.C1)}`, C1.ports['1'].x, railY1 - 12, { anchor: 'start' }),
-		label(`Rd ${formatOhms(c.Rd)}`, Rd.ports['1'].x, railY2 - 12, { anchor: 'start' }),
-		label(`Rb ${formatOhms(c.Rb)}`, V1.x + 12, (Rb.ports['1'].y + Rb.ports['2'].y) / 2 + 4, { anchor: 'start' }),
+		label(rdText, rdX, railY2 - 12, { anchor: 'start' }),
+		label(`Rb ${ohms(c.Rb)}`, V1.x + 12, (Rb.ports['1'].y + Rb.ports['2'].y) / 2 + 4, { anchor: 'start' }),
 		label(`C2 ${formatFarads(c.C2)}`, C2.ports['1'].x - 10, loop2Y - 14, { anchor: 'start' }),
-		label(`r ${formatOhms(c.r)}`, r1.ports['1'].x, V2.y + 22, { anchor: 'start' }),
-		label(`r ${formatOhms(c.r)}`, r2.ports['1'].x, loop3Y - 12, { anchor: 'start' }),
-		label(`Ra ${formatOhms(c.Ra)}`, N1.x + 12, (Ra.ports['1'].y + Ra.ports['2'].y) / 2 + 4, { anchor: 'start' }),
-		label(`Rz ${formatOhms(c.Rz)}`, Rz.ports['1'].x, laneY + 22, { anchor: 'start' }),
+		label(`r ${ohms(c.r)}`, r1.ports['1'].x, V2.y + 22, { anchor: 'start' }),
+		label(`r ${ohms(c.r)}`, r2.ports['1'].x, r2Y, { anchor: 'start' }),
+		label(raText, raX, raY, { anchor: 'start' }),
+		label(`Rz ${ohms(c.Rz)}`, Rz.ports['1'].x, laneY + 22, { anchor: 'start' }),
 		label('A1', A1.ports.out.x - 24, y0 + 26, { anchor: 'middle' }),
 		label('A2', A2.ports.out.x + 24, yB + 26, { anchor: 'middle' }),
 		label('A3', A3.ports.out.x + 24, V2.y + 26, { anchor: 'middle' }),

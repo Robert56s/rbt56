@@ -1,4 +1,4 @@
-import { capacitorCandidates, nearestCapacitor, nearestResistor } from './eseries';
+import { capacitorCandidates, nearestCapacitor, nearestResistor, pairedResistor } from './eseries';
 
 /**
  * Sallen-Key low-pass, unity-gain simplified form: two equal resistors R, a
@@ -21,7 +21,7 @@ export function capRatio(q) {
 	return 4 * q * q;
 }
 
-export function designSallenKeyLowPass(wn, q, { resistorSeries = 'E24', capacitors = null } = {}) {
+export function designSallenKeyLowPass(wn, q, { resistorSeries = 'E24', capacitors = null, pairs = false } = {}) {
 	const ratio = capRatio(q);
 	const caps = capacitorCandidates(capacitors);
 
@@ -41,11 +41,18 @@ export function designSallenKeyLowPass(wn, q, { resistorSeries = 'E24', capacito
 	// AFTER that rounding, from the capacitor pair that will actually be
 	// used. Same fix as filter/sallenKey.js: solving R from the ideal C_top
 	// let the capacitor rounding land in f0 (1.40 kHz target -> 1.31 kHz).
+	// R sets f0 alone, so with `pairs` on and a list it may be two in series
+	// where no single value comes within 2 % (both R, since they are equal),
+	// kept only if the stage then lands no further from its f0 and Q than
+	// with one resistor each.
 	const Ctop = nearestCapacitor(best.Ctarget, capacitors);
 	const Rsolved = 1 / (wn * Math.sqrt(Ctop * best.Cbottom));
-	const R = nearestResistor(Rsolved, resistorSeries);
-	const wnActual = 1 / (R * Math.sqrt(Ctop * best.Cbottom));
 	const qActual = 0.5 * Math.sqrt(Ctop / best.Cbottom);
+	const stageMiss = (r) => Math.max(Math.abs(Math.log(1 / (r * Math.sqrt(Ctop * best.Cbottom)) / wn)), Math.abs(Math.log(qActual / q)));
+	const single = nearestResistor(Rsolved, resistorSeries);
+	const paired = pairedResistor(Rsolved, resistorSeries, pairs);
+	const R = paired !== single && stageMiss(paired) <= stageMiss(single) ? paired : single;
+	const wnActual = 1 / (R * Math.sqrt(Ctop * best.Cbottom));
 
 	return {
 		topology: 'sallenKey',

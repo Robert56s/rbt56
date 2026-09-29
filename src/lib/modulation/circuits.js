@@ -3,6 +3,18 @@ import { formatFarads, formatHenries, formatOhms } from './format';
 
 const SCALE = 48;
 const MARGIN = 24;
+// labels are 11 px monospace, 6.6 px a character (the schematic audit measures them the same way)
+const CHAR_W = 6.6;
+
+/**
+ * How far a label that starts at x runs past `limit`, a wire or a part it
+ * has to stop `gap` short of: 0 when it ends in time. A resistor labelled
+ * by its two parts in series ("56k + 8.2k") is longer than its value, and
+ * the diagrams make room for it by this much.
+ */
+function overrun(text, x, limit, gap = 5) {
+	return Math.max(0, x + CHAR_W * text.length + gap - limit);
+}
 
 /** Places a symbol so that its port `key` lands exactly on `p`, which keeps every wire to it straight. */
 function placeAt(name, key, p, opts = {}) {
@@ -31,8 +43,10 @@ function voltmeter(cx, cy) {
  * summer: the bias V_C plus the scaled message. Rb's feedback loop
  * is routed below the triangle so it never crosses the carrier wire that
  * feeds the + input at a height between the JFET and any top rail.
+ * `ohms` writes the resistor's value in its label (the page passes one that
+ * writes a pair of two in series as its two parts).
  */
-export function buildJfetGainCellDiagram({ rb }) {
+export function buildJfetGainCellDiagram({ rb, ohms = formatOhms }) {
 	const y0 = 220;
 	const opampX = MARGIN + 260;
 	const opamp = placeSymbol('opamp_no_power_right', opampX, y0, SCALE);
@@ -46,6 +60,10 @@ export function buildJfetGainCellDiagram({ rb }) {
 	const loopY = jfet.ports.source.y + 40;
 	const Rb = placeSymbol('resistor_right', (negNode.x + Vout.x) / 2, loopY, SCALE);
 	const gateNode = { x: jfet.ports.gate.x - 70, y: jfet.ports.gate.y };
+	// over R_b from its left pin, or further left when a long value (two in
+	// series) would reach the wire up to Vout
+	const rbText = `R_b ${ohms(rb)}`;
+	const rbX = Rb.ports['1'].x - overrun(rbText, Rb.ports['1'].x, Vout.x);
 
 	const net = createNet();
 	net.wire(Vin, opamp.ports.inp1);
@@ -69,7 +87,7 @@ export function buildJfetGainCellDiagram({ rb }) {
 		label('x_p(t)', Vin.x, Vin.y - 12, { anchor: 'start' }),
 		label('v_gate', gateNode.x - 6, gateNode.y - 10, { anchor: 'start' }),
 		label('Vout', Vout.x + 48, Vout.y + 5, { anchor: 'start' }),
-		label(`R_b ${formatOhms(rb)}`, Rb.ports['1'].x, loopY - 12, { anchor: 'start' }),
+		label(rbText, rbX, loopY - 12, { anchor: 'start' }),
 		label('S', jfet.ports.source.x + 8, jfet.ports.source.y + 4, { anchor: 'start' }),
 		label('D', jfet.ports.drain.x + 8, jfet.ports.drain.y - 4, { anchor: 'start' }),
 		label('G', jfet.ports.gate.x - 8, jfet.ports.gate.y - 6, { anchor: 'end' })
@@ -264,13 +282,14 @@ export function buildDividerDiagram({ top, bottom, vcc }) {
  * row runs straight in and the bus hangs below it: one junction where
  * the rows meet, and R_f rises from a tap of its own. The op-amp is
  * drawn with its - input on top, so the + input's ground drops clear of
- * everything.
+ * everything. `ohms` writes the resistors' values in their labels (the
+ * page passes one that writes a pair of two in series as its two parts).
  */
-export function buildDiodeSummerDiagram({ rp, rm, rb, rf }) {
+export function buildDiodeSummerDiagram({ rp, rm, rb, rf }, { ohms = formatOhms } = {}) {
 	const inputs = [
-		{ name: 'x_p(t)', text: `R_p ${formatOhms(rp)}` },
-		{ name: 'x_m(t)', text: `R_m ${formatOhms(rm)}` },
-		...(rb ? [{ name: '-Vcc', text: `R_b ${formatOhms(rb)}` }] : [])
+		{ name: 'x_p(t)', text: `R_p ${ohms(rp)}` },
+		{ name: 'x_m(t)', text: `R_m ${ohms(rm)}` },
+		...(rb ? [{ name: '-Vcc', text: `R_b ${ohms(rb)}` }] : [])
 	];
 	const spacing = 70;
 	const top = 120;
@@ -313,7 +332,7 @@ export function buildDiodeSummerDiagram({ rp, rm, rb, rf }) {
 		...rows.map((r) => label(r.name, MARGIN, r.y - 10, { anchor: 'start' })),
 		...rows.map((r) => label(r.text, r.R.ports['1'].x, r.y - 14, { anchor: 'start' })),
 		label('v_s', Vout.x + 34, Vout.y + 5, { anchor: 'start' }),
-		label(`R_f ${formatOhms(rf)}`, Rf.ports['1'].x, railY - 12, { anchor: 'start' })
+		label(`R_f ${ohms(rf)}`, Rf.ports['1'].x, railY - 12, { anchor: 'start' })
 	];
 
 	const width = Vout.x + 30 + 60;
@@ -500,12 +519,20 @@ export function buildHalfWaveDiagram({ rl }) {
 	return { svg: parts.join(''), viewBox: `0 ${y0 - 40} ${width} ${gnd.ports['1'].y + 36 - (y0 - 40)}` };
 }
 
-/** Envelope-recovery low-pass: unity-gain Sallen-Key, same topology as the filter-design tool. */
-export function buildEnvelopeLowPassDiagram(components) {
+/**
+ * Envelope-recovery low-pass: unity-gain Sallen-Key, same topology as the
+ * filter-design tool. `ohms` writes the resistors' values in their labels
+ * (the page passes one that writes a pair of two in series as its two parts).
+ */
+export function buildEnvelopeLowPassDiagram(components, { ohms = formatOhms } = {}) {
 	const y0 = 220;
 	const Vin = { x: MARGIN, y: y0 };
 	const R1 = placeSymbol('resistor_right', Vin.x + 90, y0, SCALE);
-	const J1 = R1.ports['2'];
+	// J1 is R1's right pin, or a little past it when a long value (two in
+	// series) needs the room before J1's wire up to C_top: the rest moves right
+	const r1Text = `R ${ohms(components.R1)}`;
+	const r1X = R1.ports['1'].x - 20;
+	const J1 = { x: R1.ports['2'].x + overrun(r1Text, r1X, R1.ports['2'].x), y: R1.ports['2'].y };
 	const R2 = placeSymbol('resistor_right', J1.x + 100, y0, SCALE);
 	const J2 = R2.ports['2'];
 
@@ -550,8 +577,8 @@ export function buildEnvelopeLowPassDiagram(components) {
 		net.dots(portPoints(R1, R2, Cbottom, gndBottom, opamp, Ctop)),
 		label('Vin', Vin.x, Vin.y - 12, { anchor: 'start' }),
 		label('Vout', Vout.x + 48, Vout.y + 5, { anchor: 'start' }),
-		label(`R ${formatOhms(components.R1)}`, R1.ports['1'].x - 20, R1.ports['1'].y - 24, { anchor: 'start' }),
-		label(`R ${formatOhms(components.R2)}`, R2.ports['1'].x, R2.ports['1'].y - 24, { anchor: 'start' }),
+		label(r1Text, r1X, R1.ports['1'].y - 24, { anchor: 'start' }),
+		label(`R ${ohms(components.R2)}`, R2.ports['1'].x, R2.ports['1'].y - 24, { anchor: 'start' }),
 		label(`C_top ${formatFarads(components.Ctop)}`, Ctop.ports['1'].x, railY - 20, { anchor: 'start' }),
 		label(`C_bottom ${formatFarads(components.Cbottom)}`, Cbottom.ports['1'].x - 40, gndBottom.ports['1'].y + 35, { anchor: 'start' })
 	];
@@ -566,21 +593,30 @@ export function buildEnvelopeLowPassDiagram(components) {
  * source through C and Rac into the summing node. Bottom row: +Vcc through
  * Rbias into the same node. Rf on a rail above. Every input ends on the
  * virtual ground, so nothing loads anything (which is the reason this
- * replaced a three-stage chain).
+ * replaced a three-stage chain). `ohms` writes the resistors' values in
+ * their labels (the page passes one that writes a pair of two in series as
+ * its two parts).
  */
-export function buildBiasSummerDiagram({ c, rac, rbias, rf }) {
+export function buildBiasSummerDiagram({ c, rac, rbias, rf }, { ohms = formatOhms } = {}) {
 	const yTop = 120;
 	const yBot = 200;
-	const opamp = placeSymbol('opamp_no_power_right', MARGIN + 330, (yTop + yBot) / 2, SCALE);
+	const Vin = { x: MARGIN, y: yTop };
+	const C = placeSymbol('capacitor_right', Vin.x + 70, yTop, SCALE);
+	const Rac = placeSymbol('resistor_right', C.ports['2'].x + 70, yTop, SCALE);
+	const racText = `Rac ${ohms(rac)}`;
+
+	// Rac's label ends before the summing node's column, 70 short of the -
+	// input: a long value (two in series) moves the op-amp, and everything
+	// after the column with it, right
+	const opampAt = (x) => placeSymbol('opamp_no_power_right', x, (yTop + yBot) / 2, SCALE);
+	const shift = overrun(racText, Rac.ports['1'].x, opampAt(MARGIN + 330).ports.inp2.x - 70);
+	const opamp = opampAt(MARGIN + 330 + shift);
 	const negNode = opamp.ports.inp2;
 	const sumX = negNode.x - 70;
 
 	const gndPlusX = opamp.ports.inp1.x - 35;
 	const gndPlus = placeSymbol('ground_down', gndPlusX - 0.01 * SCALE, opamp.ports.inp1.y + 40 + 0.29 * SCALE, SCALE);
 
-	const Vin = { x: MARGIN, y: yTop };
-	const C = placeSymbol('capacitor_right', Vin.x + 70, yTop, SCALE);
-	const Rac = placeSymbol('resistor_right', C.ports['2'].x + 70, yTop, SCALE);
 	const supply = { x: MARGIN + 30, y: yBot };
 	const Rbias = placeSymbol('resistor_right', Rac.ports['1'].x, yBot, SCALE);
 
@@ -616,9 +652,9 @@ export function buildBiasSummerDiagram({ c, rac, rbias, rf }) {
 		label('x_m(t)', Vin.x, Vin.y - 12, { anchor: 'start' }),
 		label('+Vcc', supply.x, supply.y - 12, { anchor: 'middle' }),
 		label(`C ${formatFarads(c)}`, C.ports['1'].x, yTop - 14, { anchor: 'start' }),
-		label(`Rac ${formatOhms(rac)}`, Rac.ports['1'].x, yTop - 14, { anchor: 'start' }),
-		label(`Rbias ${formatOhms(rbias)}`, Rbias.ports['1'].x, yBot + 26, { anchor: 'start' }),
-		label(`Rf ${formatOhms(rf)}`, Rf.ports['1'].x, railY - 12, { anchor: 'start' }),
+		label(racText, Rac.ports['1'].x, yTop - 14, { anchor: 'start' }),
+		label(`Rbias ${ohms(rbias)}`, Rbias.ports['1'].x, yBot + 26, { anchor: 'start' }),
+		label(`Rf ${ohms(rf)}`, Rf.ports['1'].x, railY - 12, { anchor: 'start' }),
 		label('to gate', Vout.x + 34, Vout.y + 5, { anchor: 'start' })
 	];
 
@@ -749,9 +785,10 @@ export function buildJfetTestDiagram() {
  * to that node, so Vout = -R2 G(VGS) x_p. The follower is part of the cell:
  * without it the divider's impedance adds to the channel and bends the
  * envelope, which is why it is drawn rather than assumed. With follower
- * false the divider drives the drain directly, as the page allows.
+ * false the divider drives the drain directly, as the page allows. `ohms`
+ * writes R2's value in its label, as in the gain cell.
  */
-export function buildJfetInvertingCellDiagram({ r2, follower: withFollower = true, divided = true }) {
+export function buildJfetInvertingCellDiagram({ r2, follower: withFollower = true, divided = true, ohms = formatOhms }) {
 	const y0 = 150;
 	const follower = placeSymbol('opamp_no_power_right', MARGIN + 150, y0, SCALE);
 	const Vin = { x: MARGIN, y: follower.ports.inp1.y };
@@ -807,7 +844,7 @@ export function buildJfetInvertingCellDiagram({ r2, follower: withFollower = tru
 		...(withFollower ? [label('follower', follower.ports.out.x - 24, y0 - 32, { anchor: 'middle', cls: 'lbl note' })] : []),
 		label('v_gate', gateNode.x - 6, gateNode.y - 10, { anchor: 'start' }),
 		label('Vout', Vout.x + 48, Vout.y + 5, { anchor: 'start' }),
-		label(`R2 ${formatOhms(r2)}`, R2.ports['1'].x, loopB - 12, { anchor: 'start' }),
+		label(`R2 ${ohms(r2)}`, R2.ports['1'].x, loopB - 12, { anchor: 'start' }),
 		label('S', jfet.ports.source.x + 8, jfet.ports.source.y + 4, { anchor: 'start' }),
 		label('D', jfet.ports.drain.x + 8, jfet.ports.drain.y - 4, { anchor: 'start' }),
 		label('G', jfet.ports.gate.x - 8, jfet.ports.gate.y - 6, { anchor: 'end' })

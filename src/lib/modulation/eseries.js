@@ -108,3 +108,98 @@ export function capacitorCandidates(option = null) {
 	if (Array.isArray(option)) return stockList(option);
 	return seriesValues(E6, -12, -6);
 }
+
+
+/* ---------------------------------------------- two resistors in series */
+
+/**
+ * With a list of values on hand, a part that sets a figure (a frequency, a
+ * Q, a gain, a bias) can be built from two resistors in series when no
+ * single one comes close: the stock picker's "two in series" option. The
+ * rule is the same in every tool: a pair only where the closest single
+ * value misses by more than PAIR_TRIGGER, and only when the pair at least
+ * halves that miss. A pair is two values of the list, the same one twice
+ * allowed. Only resistors pair up: capacitors stay single parts.
+ */
+const PAIR_TRIGGER = 0.02;
+const pairTables = new WeakMap();
+
+/** Every sum of two list values, by sum; of pairs with the same sum, the one with the larger part first. */
+function pairTable(option) {
+	let table = pairTables.get(option);
+	if (!table) {
+		const list = stockList(option);
+		table = [];
+		for (let i = 0; i < list.length; i++) {
+			for (let j = 0; j <= i; j++) table.push({ sum: list[i] + list[j], a: list[i], b: list[j] });
+		}
+		table.sort((p, q) => p.sum - q.sum || q.a - p.a);
+		pairTables.set(option, table);
+	}
+	return table;
+}
+
+/** Index of the first pair whose sum is at or above the value. */
+function firstPairAtOrAbove(table, value) {
+	let lo = 0;
+	let hi = table.length;
+	while (lo < hi) {
+		const mid = (lo + hi) >> 1;
+		if (table[mid].sum < value) lo = mid + 1;
+		else hi = mid;
+	}
+	return lo;
+}
+
+/**
+ * A stocked resistor for a part that sets the design: the nearest single
+ * value, or, with `pairs` on and a list to pick from, the sum of two in
+ * series when the single value misses by more than 2 % and the pair at
+ * least halves that miss. The result is a plain number either way, so the
+ * design maths needs no change; seriesPair() tells the two parts apart.
+ */
+export function pairedResistor(target, option, pairs = false) {
+	const single = nearestResistor(target, option);
+	if (!pairs || !Array.isArray(option) || !(target > 0)) return single;
+	const miss = Math.abs(Math.log(single / target));
+	if (miss <= Math.log(1 + PAIR_TRIGGER)) return single;
+	const table = pairTable(option);
+	const i = firstPairAtOrAbove(table, target);
+	let best = null;
+	for (const p of [table[i - 1], table[i]]) {
+		if (!p) continue;
+		const pairMiss = Math.abs(Math.log(p.sum / target));
+		if (best === null || pairMiss < best.miss) best = { sum: p.sum, miss: pairMiss };
+	}
+	return best && best.miss <= miss / 2 ? best.sum : single;
+}
+
+/** The two list values a resistor is built from, [larger, smaller], or null when the list has it as one part. */
+export function seriesPair(value, option) {
+	if (!Array.isArray(option) || !(value > 0)) return null;
+	if (stockList(option).some((v) => Math.abs(v / value - 1) < 1e-9)) return null;
+	const table = pairTable(option);
+	const p = table[firstPairAtOrAbove(table, value * (1 - 1e-9))];
+	return p && Math.abs(p.sum / value - 1) < 1e-9 ? [p.a, p.b] : null;
+}
+
+/** A resistor as a table prints it: its value, then the two parts in series when it is a pair. */
+export function pairLabel(value, option, format, pairs = true) {
+	const pair = pairs ? seriesPair(value, option) : null;
+	return pair ? `${format(value)} (${format(pair[0])} + ${format(pair[1])})` : format(value);
+}
+
+
+/** A value in the short form a drawing uses: 2.2k, 680, 1M. */
+function shortOhms(v) {
+	const trim = (x) => String(Number(x.toPrecision(3)));
+	if (v >= 1e6) return trim(v / 1e6) + 'M';
+	if (v >= 1e3) return trim(v / 1e3) + 'k';
+	return trim(v);
+}
+
+/** A resistor as a schematic labels it: its value, or its two parts in short form ("2.2k + 2k") when it is a pair. */
+export function pairDiagramLabel(value, option, format, pairs = true) {
+	const pair = pairs ? seriesPair(value, option) : null;
+	return pair ? `${shortOhms(pair[0])} + ${shortOhms(pair[1])}` : format(value);
+}

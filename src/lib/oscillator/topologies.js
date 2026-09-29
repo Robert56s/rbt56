@@ -1,4 +1,4 @@
-import { capacitorCandidates, nearestResistor } from '../filter/eseries';
+import { capacitorCandidates, nearestResistor, pairedResistor } from '../filter/eseries';
 import { ladderTransfer, retune, retuneQuadrature, solveBalance, solvePole, stageLagDeg, TWO_PI, zeroPhase } from './loop';
 import { agcAmplitude, DIODES, dividerClampAmplitude, feedbackLimiterAmplitude, JFETS, lampModel, sizeAgc, sizeDividerClamp, sizeFeedbackLimiter } from './limiter';
 
@@ -157,8 +157,12 @@ for (const t of TOPOLOGIES) {
 	t.solved = solved;
 }
 
-/** Picks C from a preferred series so that R lands near 10 kohm, for a wanted R C product. */
-function pickRC(rcTarget, capacitors, resistorSeries) {
+/**
+ * Picks C from a preferred series so that R lands near 10 kohm, for a wanted
+ * R C product. R sets the frequency, so with `pairs` on (and a list of parts
+ * on hand) it may then be two resistors in series for the same C.
+ */
+function pickRC(rcTarget, capacitors, resistorSeries, pairs = false) {
 	let best = null;
 	for (const c of capacitorCandidates(capacitors)) {
 		if (c < CAP_MIN || c > CAP_MAX) continue;
@@ -170,6 +174,9 @@ function pickRC(rcTarget, capacitors, resistorSeries) {
 		const score = 100 * Math.log(r / rTarget) ** 2 + 0.05 * Math.log(r / R_SWEET) ** 2;
 		if (best === null || score < best.score) best = { c, r, rTarget, score };
 	}
+	// pairedResistor keeps the single value unless two in series at least
+	// halve its miss, so the frequency can only come closer
+	if (best && pairs) best = { ...best, r: pairedResistor(best.rTarget, resistorSeries, true) };
 	return best;
 }
 
@@ -223,8 +230,13 @@ function frequencyCeiling(kind, base, { k, gain, rho, fStart }) {
  * The parts that set the loop gain and hold the amplitude, for a Wien
  * bridge with any of its three stabilizers or for a ladder with its
  * inverting stage and diode limiter. Returns { parts, limiter }.
+ *
+ * With `pairs` on, the resistors that set the start gain and the amplitude
+ * may be two in series: Rf1 and Rf2 of a diode limiter, and the AGC's
+ * divider Ra (and its series resistor, when no single value fits). A lamp's
+ * or an AGC's Rf only scales the rest of the leg, so it stays one part.
  */
-function sizeStabilizer({ topology, stabilizer, requiredGain, excessGain, r, c, rg, amplitude, frequency, diode, jfet, resistorSeries, capacitors }) {
+function sizeStabilizer({ topology, stabilizer, requiredGain, excessGain, r, c, rg, amplitude, frequency, diode, jfet, resistorSeries, capacitors, pairs = false }) {
 	const gStartTarget = requiredGain * (1 + excessGain);
 	let parts = { r, c, rg };
 	let limiter;
@@ -234,9 +246,9 @@ function sizeStabilizer({ topology, stabilizer, requiredGain, excessGain, r, c, 
 		if (stab.id === 'diodes') {
 			const fraction = (requiredGain - 1) / requiredGain;
 			const rs = (gStartTarget - 1) * rg;
-			const sz = sizeFeedbackLimiter({ rt: rfBalance, rs, amplitude, fraction, diode, resistorSeries });
-			const rf1 = sz ? sz.rf1 : nearestResistor(0.1 * rs, resistorSeries);
-			const rf2 = sz ? sz.rf2 : nearestResistor(0.9 * rs, resistorSeries);
+			const sz = sizeFeedbackLimiter({ rt: rfBalance, rs, amplitude, fraction, diode, resistorSeries, pairs });
+			const rf1 = sz ? sz.rf1 : pairedResistor(0.1 * rs, resistorSeries, pairs);
+			const rf2 = sz ? sz.rf2 : pairedResistor(0.9 * rs, resistorSeries, pairs);
 			const gainStart = 1 + (rf1 + rf2) / rg;
 			const gainLimited = 1 + rf1 / rg;
 			const amplitudeActual = feedbackLimiterAmplitude({ rf1, rf2, rt: rfBalance, fraction, diode });
@@ -261,7 +273,7 @@ function sizeStabilizer({ topology, stabilizer, requiredGain, excessGain, r, c, 
 			limiter = { kind: 'lamp', rf, ...lamp, lampHot: rHot, lampCold: lamp.rCold, gainStart: 1 + rf / lamp.rCold, gainLimited: 1, amplitudeActual: amplitude, regulates: true };
 		} else {
 			const rf = nearestResistor(rfBalance, resistorSeries);
-			const agc = sizeAgc({ rf, gBalance: requiredGain, amplitude, jfet, diode, resistorSeries });
+			const agc = sizeAgc({ rf, gBalance: requiredGain, amplitude, jfet, diode, resistorSeries, pairs });
 			if (!agc.ok) {
 				parts = { ...parts, rf };
 				limiter = { kind: 'jfet', rf, gainStart: NaN, gainLimited: 1, amplitudeActual: null, regulates: false, minAmplitude: agc.minAmplitude, rdsOn: agc.rdsOn, jfet: jfet.id };
@@ -301,9 +313,9 @@ function sizeStabilizer({ topology, stabilizer, requiredGain, excessGain, r, c, 
 		// feedback string
 		const rt = requiredGain * rg;
 		const rs = gStartTarget * rg;
-		const sz = sizeFeedbackLimiter({ rt, rs, amplitude, fraction: 1, diode, resistorSeries });
-		const rf1 = sz ? sz.rf1 : nearestResistor(0.1 * rs, resistorSeries);
-		const rf2 = sz ? sz.rf2 : nearestResistor(0.9 * rs, resistorSeries);
+		const sz = sizeFeedbackLimiter({ rt, rs, amplitude, fraction: 1, diode, resistorSeries, pairs });
+		const rf1 = sz ? sz.rf1 : pairedResistor(0.1 * rs, resistorSeries, pairs);
+		const rf2 = sz ? sz.rf2 : pairedResistor(0.9 * rs, resistorSeries, pairs);
 		const rf = rf1 + rf2;
 		const gainStart = rf / rg;
 		const gainLimited = rf1 / rg;
@@ -338,8 +350,59 @@ function sizeStabilizer({ topology, stabilizer, requiredGain, excessGain, r, c, 
  *   excessGain   how far above balance the amplifier is set to start
  *   quadGrowth   growth per cycle designed into the quadrature loop
  *   gbw, slewRate, opampSwing   the op-amp
+ *   resistorSeries, capacitors  the values on hand (src/lib/stock.js)
+ *   pairs        with a list of resistors, let the ones that set the
+ *                frequency, the start and the amplitude be two in series
+ *                (R, Rf1 and Rf2, Rn, Rd1, the AGC's Ra); the reference
+ *                values (Rg, Rd2, Rb, Rx) and matched pairs stay single
+ *
+ * Two in series are only kept where they do no harm. At high frequencies
+ * the op-amp's lag depends on the start gain, and a limiter that now lands
+ * the amplitude closely may land the start gain elsewhere, which moves the
+ * frequency; so the oscillator is also designed with one resistor per part,
+ * and the pairs version must start and hold its amplitude whenever that
+ * one does, and land no further from the frequency asked for (pairsDoNoHarm
+ * below). When it does not, the single-part design is returned.
  */
-export function designOscillator({
+export function designOscillator(options = {}) {
+	const single = designWith({ ...options, pairs: false });
+	if (!(options.pairs && Array.isArray(options.resistorSeries))) return single;
+	const paired = designWith({ ...options, pairs: true });
+	return pairsDoNoHarm(paired, single) ? paired : single;
+}
+
+/**
+ * How much further from the frequency, as |ln(f0 / f)|, a pairs design may
+ * land and still be kept: 0.05 %. The limiter's parts move the predicted
+ * frequency a hair through the op-amp's lag (0.001 % at 50 Hz, a few
+ * hundredths of a percent at 7 kHz), far below what a 1 % resistor or
+ * LTspice would show, and a strict comparison would throw away pairs that
+ * bring the amplitude from 40 % off to within 1 % for that alone.
+ */
+export const PAIRS_FREQUENCY_SLACK = 5e-4;
+
+/**
+ * Whether the design with two resistors in series may replace the one with
+ * a single resistor per part: it must start whenever that one starts and
+ * hold its amplitude whenever that one does; one that does better there
+ * (starts, or holds, where the other does not) is taken; otherwise it must
+ * land no further from the frequency, |ln(f0 / f)|, the rule the filter and
+ * AM tools use too, give or take PAIRS_FREQUENCY_SLACK.
+ */
+function pairsDoNoHarm(paired, single) {
+	if (!paired) return false;
+	if (!single) return true;
+	const outcome = (d) => [d.starts, d.limiter.regulates !== false];
+	const s = outcome(single);
+	const p = outcome(paired);
+	if ((s[0] && !p[0]) || (s[1] && !p[1])) return false;
+	if ((p[0] && !s[0]) || (p[1] && !s[1])) return true;
+	const miss = (d) => Math.abs(Math.log(d.f0 / d.frequency));
+	return miss(paired) <= miss(single) + PAIRS_FREQUENCY_SLACK;
+}
+
+/** One design, with or without pairs: designOscillator above. */
+function designWith({
 	topology = 'wien',
 	frequency = 1000,
 	amplitude = 3,
@@ -352,7 +415,8 @@ export function designOscillator({
 	slewRate = 13e6,
 	opampSwing = 10.5,
 	resistorSeries = 'E24',
-	capacitors = null
+	capacitors = null,
+	pairs = false
 } = {}) {
 	const topo = TOPOLOGY_BY_ID[topology];
 	if (!topo || !(frequency > 0) || !(amplitude > 0) || !(gbw > 0)) return null;
@@ -392,12 +456,13 @@ export function designOscillator({
 		const rt = retuneQuadrature({ ...base, rho: rho0 }, { fTarget: frequency });
 		if (!rt.converged) return null;
 		rcTarget = rt.rc;
-		pick = pickRC(rcTarget, capacitors, resistorSeries);
+		pick = pickRC(rcTarget, capacitors, resistorSeries, pairs);
 		if (!pick) return null;
 		const { c, r } = pick;
 		const rc = r * c;
+		// the inverter's matched pair is the reference; Rn sets the start-up growth
 		rg = nearestResistor(10_000, resistorSeries);
-		const rn = nearestResistor(r / rho0, resistorSeries);
+		const rn = pairedResistor(r / rho0, resistorSeries, pairs);
 		const rho = r / rn;
 		const pole = solvePole('quadrature', { ...base, rc, rho }, { omega0: 1 / rc });
 		const pole0 = solvePole('quadrature', { ...base, rc, rho: 0 }, { omega0: 1 / rc });
@@ -407,7 +472,7 @@ export function designOscillator({
 		// the clamp has to absorb the deliberate negative damping and what
 		// the op-amps' lag adds on top
 		const gTarget = 1 / rn + 2 * Math.max(0, pole0.sigma) * c;
-		const clamp = sizeDividerClamp({ gTarget, amplitude, diode, resistorSeries });
+		const clamp = sizeDividerClamp({ gTarget, amplitude, diode, resistorSeries, pairs });
 		const amplitudeActual = clamp ? dividerClampAmplitude({ rd1: clamp.rd1, rd2: clamp.rd2, gTarget, diode }) : null;
 		requiredGain = 1;
 		startGain = 1;
@@ -443,7 +508,7 @@ export function designOscillator({
 				gStart = bal.gain * (1 + excessGain);
 			}
 			rcTarget = rt.rc;
-			pick = pickRC(rcTarget, capacitors, resistorSeries);
+			pick = pickRC(rcTarget, capacitors, resistorSeries, pairs);
 			if (!pick) return null;
 			// a ladder's last resistor IS the amplifier's input resistor, so
 			// Rg is not free there: it is R
@@ -464,7 +529,8 @@ export function designOscillator({
 				diode,
 				jfet,
 				resistorSeries,
-				capacitors
+				capacitors,
+				pairs
 			}));
 			if (limiter.kind !== 'diodes' || !(diode.cjo > 0)) break;
 			loopParams = { ...base, rAbs: rg, f2: parts.rf2 / (parts.rf1 + parts.rf2), cd: 2 * diode.cjo };
@@ -569,6 +635,10 @@ export function designOscillator({
 		rg,
 		parts,
 		limiter,
+		// what the parts were picked from, so a table or an export can tell
+		// two resistors in series from one part (seriesPair in eseries.js)
+		resistorSeries,
+		pairs: Boolean(pairs) && Array.isArray(resistorSeries),
 		startGain,
 		requiredGain,
 		idealGain: topo.gain,

@@ -44,6 +44,7 @@
 	import { designDiodeMixerModulator } from '$lib/modulation/diodeMixerModulator';
 	import { DIODE_MODELS } from '$lib/modulation/diodeLaw';
 	import { designEnvelopeLowPass, envelopeGainDb } from '$lib/modulation/envelopeFilter';
+	import { pairDiagramLabel, pairLabel } from '$lib/modulation/eseries';
 	import { formatFarads, formatHenries, formatHz, formatOhms, formatVolts } from '$lib/modulation/format';
 	import { compareTopologies, conductanceDepth, designJfetModulator } from '$lib/modulation/jfetModulator';
 	import {
@@ -74,14 +75,16 @@
 
 	// Which values every part is rounded to, for the three circuits alike: a
 	// series, the lab drawer or the user's own list, shared with the filter
-	// tool and kept in this browser (src/lib/stock.js)
+	// tool and kept in this browser (src/lib/stock.js); with a list, the
+	// parts that set a figure may be two resistors in series (pairs)
 	const initialStock = defaultStock();
 	let stock = $state(initialStock.stock);
 	let resistorText = $state(initialStock.resistorText);
 	let capacitorText = $state(initialStock.capacitorText);
+	let pairs = $state(initialStock.pairs);
 	let stockLoaded = $state(false);
-	const parts = $derived(componentOptions(stock, resistorText, capacitorText));
-	const E24_PARTS = { resistorSeries: 'E24', capacitors: null };
+	const parts = $derived(componentOptions(stock, resistorText, capacitorText, pairs));
+	const E24_PARTS = { resistorSeries: 'E24', capacitors: null, pairs: false };
 	const restricted = $derived(isRestricted(stock));
 	onMount(() => {
 		const saved = loadStock();
@@ -89,13 +92,21 @@
 			if (saved.stock) stock = saved.stock;
 			if (saved.resistorText !== undefined) resistorText = saved.resistorText;
 			if (saved.capacitorText !== undefined) capacitorText = saved.capacitorText;
+			if (saved.pairs !== undefined) pairs = saved.pairs;
 		}
 		stockLoaded = true;
 	});
 	$effect(() => {
-		const state = { stock, resistorText, capacitorText };
+		const state = { stock, resistorText, capacitorText, pairs };
 		if (stockLoaded) saveStock(state);
 	});
+	// a resistor as the tables print it: its value, then the two in series
+	// it is built from when it is a pair. `own` is false for a part shown
+	// from the E24 fallback, whose values say nothing about the list
+	const ohms = (value, own = true) => pairLabel(value, parts.resistorSeries, formatOhms, parts.pairs && own);
+	// the schematics' version, handed to the diagram builders: a pair by its
+	// two parts in short form ("56k + 8.2k"), under the same `own` rule
+	const diagramOhms = (own = true) => (value) => pairDiagramLabel(value, parts.resistorSeries, formatOhms, parts.pairs && own);
 
 	// ------------------------------------------------------------------
 	// JFET modulator
@@ -201,6 +212,8 @@
 	});
 	// the oscillator the files and the divider really get: one that starts and holds its amplitude
 	const workingOscillator = $derived(carrierOscillator && carrierOscillator.starts && carrierOscillator.limiter.regulates ? carrierOscillator : null);
+	// its resistors as the tables print them: never as pairs when it fell back to E24
+	const oscOhms = (value) => ohms(value, !carrierOscillator?.stockShortfall);
 	// the phase-shift oscillator at the same carrier, for the comparison the carrier panel makes
 	const phaseShiftAtFp = $derived(carrierOscillator ? designOscillator({ topology: 'phaseShift', frequency: fp, amplitude: carrierSourceAmplitude, gbw: gbwMhz * 1e6, slewRate: slewRateVus * 1e6, opampSwing }) : null);
 	// what an LM741 (1 MHz, 0.5 V/us) makes of this modulator, when it is the part picked
@@ -290,7 +303,7 @@
 				slewRate: slewRateVus * 1e6,
 				...parts,
 				carrierNote: workingOscillator
-					? `the carrier comes from the page's Wien bridge (R ${formatOhms(workingOscillator.r)}, C ${formatFarads(workingOscillator.c)}, Rf1 ${formatOhms(workingOscillator.parts.rf1)}, Rf2 ${formatOhms(workingOscillator.parts.rf2)}, Rg ${formatOhms(workingOscillator.rg)}), which settles at the CARRIER_SOURCE_AMPLITUDE below`
+					? `the carrier comes from the page's Wien bridge (R ${oscOhms(workingOscillator.r)}, C ${formatFarads(workingOscillator.c)}, Rf1 ${oscOhms(workingOscillator.parts.rf1)}, Rf2 ${oscOhms(workingOscillator.parts.rf2)}, Rg ${oscOhms(workingOscillator.rg)}), which settles at the CARRIER_SOURCE_AMPLITUDE below`
 					: null
 			}),
 			'jfet-am-modulator.js'
@@ -329,23 +342,26 @@
 		opampSwing: Math.max(0.5, vccDiode - 1.5),
 		diode: diodePart,
 		resistorSeries: parts.resistorSeries,
-		capacitorStock: parts.capacitors
+		capacitorStock: parts.capacitors,
+		pairs: parts.pairs
 	});
 	// a restricted stock that reaches no design falls back to E24 and E12, flagged
 	const diodeDesign = $derived.by(() => {
 		if (!diodeValid) return null;
 		const own = designDiodeMixerModulator(diodeParams);
 		if (!restricted || (own && own.indexOk)) return own;
-		const fallback = designDiodeMixerModulator({ ...diodeParams, resistorSeries: 'E24', capacitorStock: null });
+		const fallback = designDiodeMixerModulator({ ...diodeParams, resistorSeries: 'E24', capacitorStock: null, pairs: false });
 		// the E24 design only when it does better than the stock's own
 		if (fallback && (!own || (fallback.indexOk && !own.indexOk))) return { ...fallback, stockShortfall: true };
 		return own;
 	});
 	const diodePreview = $derived.by(() => (diodeDesign ? amSignal(fpDiode, fmMaxDiode, diodeDesign.carrierOut, diodeDesign.indexAtFmMax, 4 / fmMaxDiode) : null));
+	// pairs only mean something for the design built from the list itself
+	const diodePairs = $derived(parts.pairs && !diodeDesign?.stockShortfall);
 
 	function downloadDiode() {
 		if (!diodeDesign) return;
-		const stockUsed = diodeDesign.stockShortfall ? { resistorSeries: 'E24', capacitorStock: null, capacitors: null } : { capacitors: parts.capacitors };
+		const stockUsed = diodeDesign.stockShortfall ? { resistorSeries: 'E24', capacitorStock: null, capacitors: null, pairs: false } : { capacitors: parts.capacitors };
 		download(generateDiodeScript({ ...diodeParams, ...stockUsed }), 'diode-tank-am-modulator.js');
 	}
 
@@ -687,7 +703,7 @@
 					</div>
 				{/if}
 			</div>
-			<StockPicker id="stockJfet" bind:stock bind:resistorText bind:capacitorText />
+			<StockPicker id="stockJfet" bind:stock bind:resistorText bind:capacitorText bind:pairs />
 			{#if restricted}
 				<p class="note">
 					{stock === 'labR' ? 'Every resistor below is rounded to the lab resistors, the capacitors to the usual values,' : 'Every resistor and capacitor below is rounded to those values only,'} and the figures are worked out from the rounded parts.
@@ -712,17 +728,17 @@
 				</div>
 				{#if jfetDesign.topology === 'inverting'}
 					<DiagramView
-						diagram={buildJfetInvertingCellDiagram({ r2: jfetDesign.r2, follower: jfetDesign.buffer.enabled, divided: jfetDesign.buffer.dividerImpedance > 0 })}
+						diagram={buildJfetInvertingCellDiagram({ r2: jfetDesign.r2, follower: jfetDesign.buffer.enabled, divided: jfetDesign.buffer.dividerImpedance > 0, ohms: diagramOhms() })}
 						label={jfetDesign.buffer.enabled ? 'JFET inverting gain cell with its carrier follower' : jfetDesign.buffer.dividerImpedance > 0 ? 'JFET inverting gain cell, driven by the divider' : 'JFET inverting gain cell, driven straight from the carrier'}
 					/>
 				{:else}
-					<DiagramView diagram={buildJfetGainCellDiagram({ rb: jfetDesign.rb })} label="JFET gain cell" />
+					<DiagramView diagram={buildJfetGainCellDiagram({ rb: jfetDesign.rb, ohms: diagramOhms() })} label="JFET gain cell" />
 				{/if}
 				<table>
 					<tbody>
 						<tr><td>Bias point V_C</td><td>{formatVolts(jfetDesign.vc)}</td></tr>
 						<tr><td>Channel resistance at V_C</td><td>{formatOhms(jfetDesign.r1AtCenter)}</td></tr>
-						<tr><td>Feedback resistor {jfetDesign.topology === 'inverting' ? 'R_2' : 'R_b'}</td><td>{formatOhms(jfetDesign.feedback)} (x = {jfetDesign.x.toFixed(3)})</td></tr>
+						<tr><td>Feedback resistor {jfetDesign.topology === 'inverting' ? 'R_2' : 'R_b'}</td><td>{ohms(jfetDesign.feedback)} (x = {jfetDesign.x.toFixed(3)})</td></tr>
 						<tr><td>Gate swing V_GS</td><td>{formatVolts(jfetDesign.vgsMin)} to {formatVolts(jfetDesign.vgsMax)}</td></tr>
 						<tr><td>Channel resistance range</td><td>{formatOhms(jfetDesign.r1Min)} to {formatOhms(jfetDesign.r1Max)}</td></tr>
 						<tr><td>Signal gain: trough / bias / crest</td><td>{jfetDesign.gainMin.toFixed(2)} / {jfetDesign.nominalGain.toFixed(2)} / {jfetDesign.gainMax.toFixed(2)}</td></tr>
@@ -843,7 +859,7 @@
 								</tr>
 							</thead>
 							<tbody>
-								{#each [['Modulation index n (designed)', (r) => (r.ok ? r.n.toFixed(3) : 'not realizable')], ['n effective after the crest loss', (r) => (r.ok ? r.nEffective.toFixed(3) : '')], ['Noise gain at the crest K_max', (r) => (r.ok ? r.kCrest.toFixed(1) : '')], ['Closed-loop bandwidth at the crest', (r) => (r.ok ? formatHz(r.bwCrest) : '')], ['f_p K_max / GBW', (r) => (r.ok ? r.gbwRatio.toFixed(2) + (r.gbwRatio > 0.2 ? ' (over)' : '') : '')], ['Audio THD from the envelope', (r) => (r.ok ? (100 * r.thd).toFixed(2) + ' %' : '')], ['Output carrier amplitude', (r) => (r.ok ? formatVolts(r.carrierOut) : '')], ['Feedback resistor', (r) => (r.ok ? formatOhms(r.feedback) : '')], ['Op-amps', (r) => (r.ok ? String(r.opampCount) : '')]] as [name, cell] (name)}
+								{#each [['Modulation index n (designed)', (r) => (r.ok ? r.n.toFixed(3) : 'not realizable')], ['n effective after the crest loss', (r) => (r.ok ? r.nEffective.toFixed(3) : '')], ['Noise gain at the crest K_max', (r) => (r.ok ? r.kCrest.toFixed(1) : '')], ['Closed-loop bandwidth at the crest', (r) => (r.ok ? formatHz(r.bwCrest) : '')], ['f_p K_max / GBW', (r) => (r.ok ? r.gbwRatio.toFixed(2) + (r.gbwRatio > 0.2 ? ' (over)' : '') : '')], ['Audio THD from the envelope', (r) => (r.ok ? (100 * r.thd).toFixed(2) + ' %' : '')], ['Output carrier amplitude', (r) => (r.ok ? formatVolts(r.carrierOut) : '')], ['Feedback resistor', (r) => (r.ok ? ohms(r.feedback) : '')], ['Op-amps', (r) => (r.ok ? String(r.opampCount) : '')]] as [name, cell] (name)}
 									<tr>
 										<td>{name}</td>
 										<td>{cell(topologyRows[0])}</td>
@@ -881,8 +897,8 @@
 					<table>
 						<tbody>
 							<tr><td>Frequency: wanted / predicted with this op-amp</td><td>{formatHz(fp)} / {formatHz(carrierOscillator.f0)} ({(100 * carrierOscillator.f0Error).toFixed(2)} %)</td></tr>
-							<tr><td>R and C (two of each)</td><td>{formatOhms(carrierOscillator.r)}, {formatFarads(carrierOscillator.c)}</td></tr>
-							<tr><td>Feedback: Rf1 / Rf2 (diodes across it) / Rg</td><td>{formatOhms(carrierOscillator.parts.rf1)} / {formatOhms(carrierOscillator.parts.rf2)} / {formatOhms(carrierOscillator.rg)}</td></tr>
+							<tr><td>R and C (two of each)</td><td>{oscOhms(carrierOscillator.r)}, {formatFarads(carrierOscillator.c)}</td></tr>
+							<tr><td>Feedback: Rf1 / Rf2 (diodes across it) / Rg</td><td>{oscOhms(carrierOscillator.parts.rf1)} / {oscOhms(carrierOscillator.parts.rf2)} / {oscOhms(carrierOscillator.rg)}</td></tr>
 							<tr><td>Limiting diodes</td><td>2 x {DIODES[carrierOscillator.diode].label}, one each way</td></tr>
 							<tr><td>Output amplitude</td><td>{carrierOscillator.limiter.amplitudeActual ? `about ${formatVolts(carrierOscillator.limiter.amplitudeActual)} peak, into the divider above` : 'not held by these parts'}</td></tr>
 							<tr><td>Gain needed / set / limited</td><td>{carrierOscillator.requiredGain.toFixed(2)} / {carrierOscillator.startGain.toFixed(2)} / {carrierOscillator.limiter.gainLimited.toFixed(2)}</td></tr>
@@ -939,12 +955,12 @@
 					<h2>Gate drive</h2>
 					<span class="hint">one inverting summer: gain, DC block and bias</span>
 				</div>
-				<DiagramView diagram={buildBiasSummerDiagram(jfetDesign.conditioning.summer)} label="gate-drive summer" />
+				<DiagramView diagram={buildBiasSummerDiagram(jfetDesign.conditioning.summer, { ohms: diagramOhms() })} label="gate-drive summer" />
 				<table>
 					<tbody>
 						<tr><td>R_f</td><td>{formatOhms(jfetDesign.conditioning.summer.rf)}</td></tr>
-						<tr><td>R_ac (sets the gain R_f / R_ac)</td><td>{formatOhms(jfetDesign.conditioning.summer.rac)}, gain {jfetDesign.conditioning.summer.gainActual.toFixed(3)} (target {jfetDesign.conditioning.summer.gainTarget.toFixed(3)})</td></tr>
-						<tr><td>R_bias (from +Vcc, sets the bias)</td><td>{formatOhms(jfetDesign.conditioning.summer.rbias)}, bias {formatVolts(jfetDesign.conditioning.summer.biasActual)} (target {formatVolts(-jfetDesign.conditioning.summer.biasTarget)})</td></tr>
+						<tr><td>R_ac (sets the gain R_f / R_ac)</td><td>{ohms(jfetDesign.conditioning.summer.rac)}, gain {jfetDesign.conditioning.summer.gainActual.toFixed(3)} (target {jfetDesign.conditioning.summer.gainTarget.toFixed(3)})</td></tr>
+						<tr><td>R_bias (from +Vcc, sets the bias)</td><td>{ohms(jfetDesign.conditioning.summer.rbias)}, bias {formatVolts(jfetDesign.conditioning.summer.biasActual)} (target {formatVolts(-jfetDesign.conditioning.summer.biasTarget)})</td></tr>
 						<tr><td>C (blocks DC, high-pass with R_ac)</td><td>{formatFarads(jfetDesign.conditioning.summer.c)}, corner {formatHz(jfetDesign.conditioning.summer.fcActual)} (target {formatHz(jfetDesign.conditioning.summer.fcTarget)})</td></tr>
 						<tr><td>Most negative gate voltage delivered</td><td>{formatVolts(jfetDesign.conditioning.summer.outMin)} (op-amp swing ±{formatVolts(jfetDesign.conditioning.summer.opampSwing)})</td></tr>
 					</tbody>
@@ -989,8 +1005,8 @@
 				<OpampPicker id="spiceOpampJfet" bind:value={spiceOpamp} />
 				<div class="row downloads">
 					<button type="button" onclick={downloadJfet}>Download jfet-am-modulator.js</button>
-					<button type="button" onclick={() => saveFile(generateModSchematic({ design: jfetDesign, fmPreview, oscillator: workingOscillator, opamp: spiceOpamp }), 'jfet-am-modulator.asc')}>Download .asc (LTspice)</button>
-					<button type="button" onclick={() => saveFile(generateModNetlist({ design: jfetDesign, fmPreview, oscillator: workingOscillator, opamp: spiceOpamp }), 'jfet-am-modulator.cir')}>Download .cir (netlist)</button>
+					<button type="button" onclick={() => saveFile(generateModSchematic({ design: jfetDesign, fmPreview, oscillator: workingOscillator, opamp: spiceOpamp, resistorSeries: parts.resistorSeries, pairs: parts.pairs }), 'jfet-am-modulator.asc')}>Download .asc (LTspice)</button>
+					<button type="button" onclick={() => saveFile(generateModNetlist({ design: jfetDesign, fmPreview, oscillator: workingOscillator, opamp: spiceOpamp, resistorSeries: parts.resistorSeries, pairs: parts.pairs }), 'jfet-am-modulator.cir')}>Download .cir (netlist)</button>
 				</div>
 				<p class="note">
 					The LTspice files carry the whole modulator: the gate-drive summer, the carrier path{workingOscillator ? ' with its oscillator' : carrierFrom === 'wien' ? ' (from a generator, since no Wien bridge holds this carrier)' : ''},
@@ -1079,7 +1095,7 @@
 					</select>
 				</div>
 			</div>
-			<StockPicker id="stockDiode" bind:stock bind:resistorText bind:capacitorText />
+			<StockPicker id="stockDiode" bind:stock bind:resistorText bind:capacitorText bind:pairs />
 			{#if !diodeValid}
 				<p class="flag bad">
 					The carrier has to sit far enough above the highest message frequency that the tank's band, the margin times that
@@ -1112,12 +1128,12 @@
 					<h2>Summer</h2>
 					<span class="hint">carrier {formatVolts(diodeDesign.summer.drive)}, message {formatVolts(diodeDesign.summer.um)}{diodeDesign.summer.rb ? `, bias ${formatVolts(diodeDesign.summer.vb)}` : ''}</span>
 				</div>
-				<DiagramView diagram={buildDiodeSummerDiagram(diodeDesign.summer)} label="carrier, message and bias summer" />
+				<DiagramView diagram={buildDiodeSummerDiagram(diodeDesign.summer, { ohms: diagramOhms(!diodeDesign.stockShortfall) })} label="carrier, message and bias summer" />
 				<table>
 					<tbody>
 						<tr><td>R_f</td><td>{formatOhms(diodeDesign.summer.rf)}</td></tr>
-						<tr><td>R_p (carrier gain R_f / R_p)</td><td>{formatOhms(diodeDesign.summer.rp)}, carrier at the diode {formatVolts(diodeDesign.summer.drive)} (asked {formatVolts(diodeDesign.summer.driveTarget)})</td></tr>
-						<tr><td>R_m (message gain R_f / R_m)</td><td>{formatOhms(diodeDesign.summer.rm)}, message at the diode {formatVolts(diodeDesign.summer.um)}</td></tr>
+						<tr><td>R_p (carrier gain R_f / R_p)</td><td>{ohms(diodeDesign.summer.rp, !diodeDesign.stockShortfall)}, carrier at the diode {formatVolts(diodeDesign.summer.drive)} (asked {formatVolts(diodeDesign.summer.driveTarget)})</td></tr>
+						<tr><td>R_m (message gain R_f / R_m)</td><td>{ohms(diodeDesign.summer.rm, !diodeDesign.stockShortfall)}, message at the diode {formatVolts(diodeDesign.summer.um)}</td></tr>
 						<tr><td>R_b (bias from -Vcc)</td><td>{diodeDesign.summer.rb ? `${formatOhms(diodeDesign.summer.rb)}, bias ${formatVolts(diodeDesign.summer.vb)}` : 'none: this diode switches cleanly with no bias'}</td></tr>
 						<tr><td>Peak output / op-amp swing</td><td>{formatVolts(diodeDesign.summer.peak)} / {formatVolts(diodeDesign.summer.opampSwing)}</td></tr>
 					</tbody>
@@ -1229,8 +1245,8 @@
 				<OpampPicker id="spiceOpampDiode" bind:value={spiceOpamp} />
 				<div class="row downloads">
 					<button type="button" onclick={downloadDiode}>Download diode-tank-am-modulator.js</button>
-					<button type="button" onclick={() => saveFile(generateDiodeSchematic({ design: diodeDesign, opamp: spiceOpamp }), 'diode-tank-am-modulator.asc')}>Download .asc (LTspice)</button>
-					<button type="button" onclick={() => saveFile(generateDiodeNetlist({ design: diodeDesign, opamp: spiceOpamp }), 'diode-tank-am-modulator.cir')}>Download .cir (netlist)</button>
+					<button type="button" onclick={() => saveFile(generateDiodeSchematic({ design: diodeDesign, opamp: spiceOpamp, resistorSeries: parts.resistorSeries, pairs: diodePairs }), 'diode-tank-am-modulator.asc')}>Download .asc (LTspice)</button>
+					<button type="button" onclick={() => saveFile(generateDiodeNetlist({ design: diodeDesign, opamp: spiceOpamp, resistorSeries: parts.resistorSeries, pairs: diodePairs }), 'diode-tank-am-modulator.cir')}>Download .cir (netlist)</button>
 				</div>
 				<p class="note">
 					The LTspice files carry the whole modulator: the carrier and message sources, the summer with its
@@ -1299,7 +1315,7 @@
 					<input id="dn" type="number" step="0.05" min="0.05" max="1" bind:value={demoModIndex} />
 				</div>
 			</div>
-			<StockPicker id="stockDemod" bind:stock bind:resistorText bind:capacitorText />
+			<StockPicker id="stockDemod" bind:stock bind:resistorText bind:capacitorText bind:pairs />
 			<p class="note">
 				Residual ripple sits at {formatHz(rippleHz)} ({rectifierType === 'full' ? '2 x fp, full-wave' : 'fp, half-wave'}), and the
 				message it carries puts its nearest sideband at {formatHz(rippleHz - fmMaxDemod)}: that is where the filter's stopband starts.
@@ -1363,10 +1379,10 @@
 				</div>
 				{#each envelopeDesign.realized as stage, i (i)}
 					<p class="note">Stage {i + 1}: f0 = {formatHz(stage.actual.wn / (2 * Math.PI))}, Q = {stage.actual.q.toFixed(3)}</p>
-					<DiagramView diagram={buildEnvelopeLowPassDiagram(stage.components)} label="envelope low-pass stage {i + 1}" />
+					<DiagramView diagram={buildEnvelopeLowPassDiagram(stage.components, { ohms: diagramOhms(!stage.stockShortfall) })} label="envelope low-pass stage {i + 1}" />
 					<table>
 						<tbody>
-							<tr><td>R</td><td>{formatOhms(stage.components.R1)}</td></tr>
+							<tr><td>R1 = R2</td><td>{ohms(stage.components.R1, !stage.stockShortfall)}</td></tr>
 							<tr><td>C_top</td><td>{formatFarads(stage.components.Ctop)}</td></tr>
 							<tr><td>C_bottom</td><td>{formatFarads(stage.components.Cbottom)}</td></tr>
 						</tbody>
@@ -1439,8 +1455,8 @@
 				<OpampPicker id="spiceOpampDemod" bind:value={spiceOpamp} />
 				<div class="row downloads">
 					<button type="button" onclick={downloadDemod}>Download am-demodulator.js</button>
-					<button type="button" onclick={() => saveFile(generateDemodSchematic({ ...demodOptions, opamp: spiceOpamp }), 'am-demodulator.asc')}>Download .asc (LTspice)</button>
-					<button type="button" onclick={() => saveFile(generateDemodNetlist({ ...demodOptions, opamp: spiceOpamp }), 'am-demodulator.cir')}>Download .cir (netlist)</button>
+					<button type="button" onclick={() => saveFile(generateDemodSchematic({ ...demodOptions, opamp: spiceOpamp, resistorSeries: parts.resistorSeries, pairs: parts.pairs }), 'am-demodulator.asc')}>Download .asc (LTspice)</button>
+					<button type="button" onclick={() => saveFile(generateDemodNetlist({ ...demodOptions, opamp: spiceOpamp, resistorSeries: parts.resistorSeries, pairs: parts.pairs }), 'am-demodulator.cir')}>Download .cir (netlist)</button>
 				</div>
 				<p class="note">
 					The LTspice files carry the whole demodulator behind a test source: a 1 V AM wave at

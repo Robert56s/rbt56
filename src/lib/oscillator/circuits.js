@@ -1,4 +1,5 @@
 import { placeSymbol, label, createNet, portPoints } from '../filter/schematic';
+import { pairDiagramLabel } from '../filter/eseries';
 import { DIODES } from './limiter';
 import { formatFarads, formatOhms } from '../modulation/format';
 
@@ -29,8 +30,41 @@ function elbowH(net, from, to) {
 	net.wire(corner, to);
 }
 
-/** Resistor hanging from a node down to ground; returns its parts. */
-function shuntResistor(net, node, value, side = 'right') {
+/**
+ * How a design's resistors are labelled: one value ("2.88 kΩ"), or, for a
+ * resistor built from two of the list in series, its two parts ("2.2k +
+ * 680"). The design says what its parts were picked from, so a design
+ * without a list, or with pairs off, labels every resistor as one value.
+ */
+function resistorLabeller(design) {
+	return (value) => pairDiagramLabel(value, design.resistorSeries, formatOhms, Boolean(design.pairs));
+}
+
+/*
+ * Two parts in series make a longer label than one value ('R 2.2k + 680'
+ * against 'R 2.88 kΩ'), so wherever a label only has the room of the
+ * longest single value, a longer one makes room for itself: it moves over,
+ * or moves the part in its way along. A label of one value always lands
+ * exactly where it did before.
+ */
+
+/** How wide a label is drawn: 11 px monospace, 6.6 px a character. */
+function textWidth(text) {
+	return text.length * 6.6;
+}
+
+/** How far a label runs past the room it has, in px; 0 when it fits. */
+function overflow(text, room) {
+	return Math.max(0, textWidth(text) - room);
+}
+
+/** Where a label meant to start at `x` starts to end `gap` px short of `limit`: further left only when it is too long. */
+function startBefore(text, x, limit, gap) {
+	return Math.min(x, limit - gap - textWidth(text));
+}
+
+/** Resistor hanging from a node down to ground, labelled `R <text>`; returns its parts. */
+function shuntResistor(net, node, text, side = 'right') {
 	const R = placeSymbol('resistor_down', node.x, node.y + HANG.resistor_down * SCALE, SCALE);
 	const g = placeSymbol('ground_down', R.ports['2'].x - 0.01 * SCALE, R.ports['2'].y + 0.29 * SCALE, SCALE);
 	net.wire(node, R.ports['1']);
@@ -39,7 +73,7 @@ function shuntResistor(net, node, value, side = 'right') {
 	return {
 		svgs: [R.svg, g.svg],
 		symbols: [R, g],
-		label: label(`R ${formatOhms(value)}`, side === 'right' ? R.ports['1'].x + 14 : R.ports['1'].x - 14, mid, { anchor: side === 'right' ? 'start' : 'end' }),
+		label: label(`R ${text}`, side === 'right' ? R.ports['1'].x + 14 : R.ports['1'].x - 14, mid, { anchor: side === 'right' ? 'start' : 'end' }),
 		bottom: g.ports['1']
 	};
 }
@@ -54,6 +88,7 @@ function shuntResistor(net, node, value, side = 'right') {
  */
 function limiterRail(net, xLeft, xRight, y, design) {
 	const { rf1, rf2 } = design.limiter;
+	const ohms = resistorLabeller(design);
 	const Rf2 = placeSymbol('resistor_right', xLeft + 92, y, SCALE);
 	const rail = Rf2.ports['1'].y;
 	const a = { x: Rf2.ports['1'].x - 40, y: rail };
@@ -87,8 +122,8 @@ function limiterRail(net, xLeft, xRight, y, design) {
 		svgs: [Rf1.svg, Rf2.svg, Dl.svg, Dh.svg],
 		symbols: [Rf1, Rf2, Dl, Dh],
 		labels: [
-			label(`Rf1 ${formatOhms(rf1)}`, Rf1.ports['1'].x, rail - 14, { anchor: 'start' }),
-			label(`Rf2 ${formatOhms(rf2)}`, Rf2.ports['1'].x, rail + 26, { anchor: 'start' }),
+			label(`Rf1 ${ohms(rf1)}`, Rf1.ports['1'].x, rail - 14, { anchor: 'start' }),
+			label(`Rf2 ${ohms(rf2)}`, Rf2.ports['1'].x, rail + 26, { anchor: 'start' }),
 			label(`${diode}, one each way`, cx, dh - 18, { anchor: 'middle' })
 		],
 		top: dh - 40
@@ -107,9 +142,16 @@ function limiterRail(net, xLeft, xRight, y, design) {
  */
 export function buildWienDiagram(design) {
 	const { parts, limiter, stabilizer } = design;
+	const ohms = resistorLabeller(design);
+	// the parallel R's label stands on its right, 14 px out, and ends 6 px
+	// short of the plates of the parallel C, 110 px along (7.7 px either side
+	// of its node); one too long for that (two in series) moves the parallel
+	// C along, and with it the column up to the + input and the op-amp
+	const rText = ohms(design.r);
+	const stretch = overflow(`R ${rText}`, 110 - 14 - 7.7 - 6);
 	const y0 = 240;
 	const net = createNet();
-	const opamp = placeSymbol('opamp_no_power_right', MARGIN + 520, y0, SCALE);
+	const opamp = placeSymbol('opamp_no_power_right', MARGIN + 520 + stretch, y0, SCALE);
 	const plus = opamp.ports.inp1;
 	const minus = opamp.ports.inp2;
 	const Vout = { x: opamp.ports.out.x + 90, y: opamp.ports.out.y };
@@ -122,8 +164,8 @@ export function buildWienDiagram(design) {
 	const rail = Rs.ports['1'].y;
 	const Cs = placeSymbol('capacitor_right', Rs.ports['2'].x + 70, wienY, SCALE);
 	const wp = { x: Cs.ports['2'].x + 80, y: rail };
-	const Rp = shuntResistor(net, wp, design.r, 'right');
-	const cpNode = { x: wp.x + 110, y: rail };
+	const Rp = shuntResistor(net, wp, rText, 'right');
+	const cpNode = { x: wp.x + 110 + stretch, y: rail };
 	const Cp = placeSymbol('capacitor_down', cpNode.x, cpNode.y + HANG.capacitor_down * SCALE, SCALE);
 	const gndCp = placeSymbol('ground_down', Cp.ports['2'].x - 0.01 * SCALE, Cp.ports['2'].y + 0.29 * SCALE, SCALE);
 
@@ -171,13 +213,15 @@ export function buildWienDiagram(design) {
 	const legSymbols = [Rg, gndRg];
 	const legLabels = [
 		label(
-			stabilizer === 'lamp' ? `lamp, hot ${formatOhms(limiter.lampHot)}` : stabilizer === 'jfet' ? (limiter.regulates ? `Rser ${formatOhms(parts.rSeries)} + channel` : 'Rser + channel') : `Rg ${formatOhms(design.rg)}`,
+			stabilizer === 'lamp' ? `lamp, hot ${formatOhms(limiter.lampHot)}` : stabilizer === 'jfet' ? (limiter.regulates ? `Rser ${ohms(parts.rSeries)} + channel` : 'Rser + channel') : `Rg ${ohms(design.rg)}`,
 			Rg.ports['1'].x + 14,
 			(Rg.ports['1'].y + Rg.ports['2'].y) / 2,
 			{ anchor: 'start' }
 		)
 	];
 	const legBottomY = gndRg.ports['1'].y;
+	// the series R's label ends 10 px before the series C's
+	const rsLabel = `R ${rText}`;
 
 	const all = [
 		opamp.svg,
@@ -191,11 +235,11 @@ export function buildWienDiagram(design) {
 		net.svg(),
 		net.dots(portPoints(opamp, Rs, Cs, ...Rp.symbols, Cp, gndCp, ...(withDiodes ? fb.symbols : [Rf]), ...legSymbols)),
 		label('Vout', Vout.x + 46, Vout.y + 5, { anchor: 'start' }),
-		label(`R ${formatOhms(design.r)}`, Rs.ports['1'].x, rail - 16, { anchor: 'start' }),
+		label(rsLabel, startBefore(rsLabel, Rs.ports['1'].x, Cs.ports['1'].x, 10), rail - 16, { anchor: 'start' }),
 		label(`C ${formatFarads(design.c)}`, Cs.ports['1'].x, rail - 16, { anchor: 'start' }),
 		Rp.label,
 		label(`C ${formatFarads(design.c)}`, Cp.ports['1'].x + 14, (Cp.ports['1'].y + Cp.ports['2'].y) / 2, { anchor: 'start' }),
-		...(withDiodes ? fb.labels : [label(`Rf ${formatOhms(parts.rf)}`, Rf.ports['1'].x, fbRail - 14, { anchor: 'start' })]),
+		...(withDiodes ? fb.labels : [label(`Rf ${ohms(parts.rf)}`, Rf.ports['1'].x, fbRail - 14, { anchor: 'start' })]),
 		...legLabels
 	];
 	const top = withDiodes ? fb.top : fbRail - 60;
@@ -212,6 +256,7 @@ export function buildWienDiagram(design) {
 export function buildLadderDiagram(design) {
 	const n = design.topo.ladder.sections;
 	const buffered = design.topo.ladder.buffered;
+	const ohms = resistorLabeller(design);
 	const y0 = 220;
 	const net = createNet();
 	const svgs = [];
@@ -221,8 +266,15 @@ export function buildLadderDiagram(design) {
 	const startX = MARGIN + 40;
 	let src = { x: startX, y: y0 };
 	let railY = y0;
+	// a shunt's label stands on its left, in the room the section before it
+	// leaves (up to the loop's return, or, with no buffer between them, the
+	// shunt before): a label longer than 'R 10.0 kΩ' spaces the sections out
+	// by what it adds, so it never reaches either
+	const shuntText = ohms(design.r);
+	const shuntStretch = overflow(`R ${shuntText}`, textWidth('R 10.0 kΩ'));
 	for (let k = 1; k <= n; k++) {
-		const C = placeSymbol('capacitor_right', src.x + 70, railY, SCALE);
+		const stretch = k < n && (k === 1 || !buffered) ? shuntStretch : 0;
+		const C = placeSymbol('capacitor_right', src.x + 70 + stretch, railY, SCALE);
 		if (k === 1) railY = C.ports['1'].y;
 		const node = C.ports['2'];
 		net.wire({ x: src.x, y: railY }, C.ports['1']);
@@ -233,7 +285,7 @@ export function buildLadderDiagram(design) {
 			src = node;
 			break;
 		}
-		const sh = shuntResistor(net, node, design.r, 'left');
+		const sh = shuntResistor(net, node, shuntText, 'left');
 		svgs.push(...sh.svgs);
 		symbols.push(...sh.symbols);
 		labels.push(sh.label);
@@ -263,9 +315,12 @@ export function buildLadderDiagram(design) {
 	net.wire(src, Rg.ports['1']);
 	svgs.push(Rg.svg);
 	symbols.push(Rg);
-	labels.push(label(`Rg ${formatOhms(design.rg)}`, Rg.ports['1'].x, railY - 16, { anchor: 'start' }));
+	const rgText = `Rg ${ohms(design.rg)}`;
+	labels.push(label(rgText, Rg.ports['1'].x, railY - 16, { anchor: 'start' }));
 
-	const opamp = placeSymbol('opamp_no_power_right', Rg.ports['2'].x + 170, railY - 0.09 * SCALE, SCALE);
+	// Rg's label ends before the feedback column that rises in front of the
+	// - input, with room for 'Rg 10.0 kΩ'; a longer one moves the op-amp along
+	const opamp = placeSymbol('opamp_no_power_right', Rg.ports['2'].x + 170 + overflow(rgText, textWidth('Rg 10.0 kΩ')), railY - 0.09 * SCALE, SCALE);
 	const minus = opamp.ports.inp2;
 	const gndPlus = placeSymbol('ground_down', opamp.ports.inp1.x - 35 - 0.01 * SCALE, opamp.ports.inp1.y + 46 + 0.29 * SCALE, SCALE);
 	const Vout = { x: opamp.ports.out.x + 90, y: opamp.ports.out.y };
@@ -299,7 +354,7 @@ export function buildLadderDiagram(design) {
 		net.wire(Rf.ports['2'], { x: Vout.x, y: fbRail });
 		svgs.push(Rf.svg);
 		symbols.push(Rf);
-		labels.push(label(`Rf ${formatOhms(design.limiter.rf)}`, Rf.ports['1'].x, fbRail - 14, { anchor: 'start' }));
+		labels.push(label(`Rf ${ohms(design.limiter.rf)}`, Rf.ports['1'].x, fbRail - 14, { anchor: 'start' }));
 	}
 	net.wire(fbTee, { x: fbX, y: fbRail });
 	net.wire({ x: Vout.x, y: fbRail }, Vout);
@@ -324,6 +379,7 @@ export function buildLadderDiagram(design) {
  * clamp that stops it is drawn on its own by buildClampDiagram.
  */
 export function buildQuadratureDiagram(design) {
+	const ohms = resistorLabeller(design);
 	const y0 = 200;
 	const net = createNet();
 	const svgs = [];
@@ -356,8 +412,11 @@ export function buildQuadratureDiagram(design) {
 		net.wire({ x: out.x, y: cRail }, out);
 		svgs.push(R.svg, amp.svg, gnd.svg, C.svg);
 		symbols.push(R, amp, gnd, C);
+		// R's label runs under R towards the + input's ground wire, and ends
+		// 6 px short of it
+		const rLabel = `R ${ohms(design.r)}`;
 		labels.push(
-			label(`R ${formatOhms(design.r)}`, R.ports['1'].x, rail + 26, { anchor: 'start' }),
+			label(rLabel, startBefore(rLabel, R.ports['1'].x, gnd.ports['1'].x, 6), rail + 26, { anchor: 'start' }),
 			label(`C ${formatFarads(design.c)}`, C.ports['1'].x, cRail - 14, { anchor: 'start' }),
 			label(k === 1 ? 'sine' : 'cosine', out.x + 8, out.y - 14, { anchor: 'start' })
 		);
@@ -378,7 +437,7 @@ export function buildQuadratureDiagram(design) {
 	net.wire({ x: startX, y: topRail }, { x: startX, y: y0 });
 	svgs.push(Rn.svg);
 	symbols.push(Rn);
-	labels.push(label(`Rn ${formatOhms(design.parts.rn)}`, Rn.ports['1'].x + 14, (Rn.ports['1'].y + Rn.ports['2'].y) / 2, { anchor: 'start' }), label('starts the loop', Rn.ports['1'].x + 14, (Rn.ports['1'].y + Rn.ports['2'].y) / 2 + 16, { anchor: 'start', cls: 'lbl note' }));
+	labels.push(label(`Rn ${ohms(design.parts.rn)}`, Rn.ports['1'].x + 14, (Rn.ports['1'].y + Rn.ports['2'].y) / 2, { anchor: 'start' }), label('starts the loop', Rn.ports['1'].x + 14, (Rn.ports['1'].y + Rn.ports['2'].y) / 2 + 16, { anchor: 'start', cls: 'lbl note' }));
 
 	// the inverter, on its own row below, closing the loop back to the start
 	const invRowY = y0 + 250;
@@ -407,8 +466,8 @@ export function buildQuadratureDiagram(design) {
 	svgs.push(Ra.svg, inv.svg, gndI.svg, Rb.svg);
 	symbols.push(Ra, inv, gndI, Rb);
 	labels.push(
-		label(`Ra ${formatOhms(design.parts.ra)}`, Ra.ports['1'].x, invRail - 16, { anchor: 'start' }),
-		label(`Rb ${formatOhms(design.parts.rb)}`, Rb.ports['1'].x, rbRail + 26, { anchor: 'start' }),
+		label(`Ra ${ohms(design.parts.ra)}`, Ra.ports['1'].x, invRail - 16, { anchor: 'start' }),
+		label(`Rb ${ohms(design.parts.rb)}`, Rb.ports['1'].x, rbRail + 26, { anchor: 'start' }),
 		label('inverter, gain exactly 1, closing the loop', inv.ports.out.x - 10, invRail - 70, { anchor: 'start', cls: 'lbl note' })
 	);
 
@@ -428,6 +487,7 @@ export function buildQuadratureDiagram(design) {
  */
 export function buildClampDiagram(design) {
 	const { parts } = design;
+	const ohms = resistorLabeller(design);
 	const y0 = 160;
 	const net = createNet();
 	const R2 = placeSymbol('resistor_right', MARGIN + 110, y0, SCALE);
@@ -481,6 +541,8 @@ export function buildClampDiagram(design) {
 	net.wire({ x: leftX, y: dnY }, Rn.ports['1']);
 	const rnBottom = { x: leftX, y: Rn.ports['2'].y + 40 };
 	net.wire(Rn.ports['2'], rnBottom);
+	// R's label runs under R and ends 6 px short of the diode column
+	const rLabel = `R ${ohms(design.r)}`;
 
 	const all = [
 		R2.svg,
@@ -496,13 +558,13 @@ export function buildClampDiagram(design) {
 		net.svg(),
 		net.dots(portPoints(R2, amp, gnd, C, Rn, Rd1, Rd2, gndD, D1, D2)),
 		label('sine in', vsin.x, rail - 14, { anchor: 'start' }),
-		label(`R ${formatOhms(design.r)}`, R2.ports['1'].x - 10, rail + 26, { anchor: 'start' }),
+		label(rLabel, startBefore(rLabel, R2.ports['1'].x - 10, leftX, 6), rail + 26, { anchor: 'start' }),
 		label(`C ${formatFarads(design.c)}`, C.ports['1'].x, cRail - 14, { anchor: 'start' }),
 		label('cosine out', vcos.x + 8, vcos.y - 14, { anchor: 'start' }),
-		label(`Rn ${formatOhms(parts.rn)}`, Rn.ports['1'].x + 14, (Rn.ports['1'].y + Rn.ports['2'].y) / 2, { anchor: 'start' }),
+		label(`Rn ${ohms(parts.rn)}`, Rn.ports['1'].x + 14, (Rn.ports['1'].y + Rn.ports['2'].y) / 2, { anchor: 'start' }),
 		label('from the inverter output', rnBottom.x + 10, rnBottom.y + 6, { anchor: 'start' }),
-		label(`Rd1 ${formatOhms(parts.rd1)}`, Rd1.ports['1'].x + 14, (Rd1.ports['1'].y + Rd1.ports['2'].y) / 2, { anchor: 'start' }),
-		label(`Rd2 ${formatOhms(parts.rd2)}`, Rd2.ports['1'].x + 14, (Rd2.ports['1'].y + Rd2.ports['2'].y) / 2, { anchor: 'start' }),
+		label(`Rd1 ${ohms(parts.rd1)}`, Rd1.ports['1'].x + 14, (Rd1.ports['1'].y + Rd1.ports['2'].y) / 2, { anchor: 'start' }),
+		label(`Rd2 ${ohms(parts.rd2)}`, Rd2.ports['1'].x + 14, (Rd2.ports['1'].y + Rd2.ports['2'].y) / 2, { anchor: 'start' }),
 		label(`parks at about ${(design.limiter.amplitudeActual ?? 0).toFixed(2)} V peak`, leftX + 14, rnBottom.y - 30, { anchor: 'start', cls: 'lbl note' })
 	];
 	const top = cRail - 40;
@@ -520,6 +582,7 @@ export function buildLimiterDiagram(design) {
 	const { limiter } = design;
 	const rf1 = limiter.rf1;
 	const rf2 = limiter.rf2;
+	const ohms = resistorLabeller(design);
 	const y0 = 150;
 	const net = createNet();
 	const R1 = placeSymbol('resistor_right', MARGIN + 110, y0, SCALE);
@@ -549,6 +612,11 @@ export function buildLimiterDiagram(design) {
 	net.wire({ x: a.x, y: dnY }, D2.ports['2']);
 	net.wire(D2.ports['1'], { x: b.x, y: dnY });
 	net.wire({ x: b.x, y: dnY }, b);
+	// Rf2's label starts under Rf2 like Rf1's, unless it would come within
+	// 10 px of the bridge on its right (two resistors in series): it is then
+	// centred under Rf2, midway between the two bridge points
+	const rf2Text = `Rf2 ${ohms(rf2)}`;
+	const rf2Centred = R2.ports['1'].x + textWidth(rf2Text) > b.x - 10;
 
 	const all = [
 		R1.svg,
@@ -559,8 +627,8 @@ export function buildLimiterDiagram(design) {
 		net.dots(portPoints(R1, R2, D1, D2)),
 		label('from Vout', left.x, rail - 16, { anchor: 'start' }),
 		label('to the - input', right.x + 8, rail + 4, { anchor: 'start' }),
-		label(`Rf1 ${formatOhms(rf1)}`, R1.ports['1'].x, rail + 26, { anchor: 'start' }),
-		label(`Rf2 ${formatOhms(rf2)}`, R2.ports['1'].x, rail + 26, { anchor: 'start' }),
+		label(`Rf1 ${ohms(rf1)}`, R1.ports['1'].x, rail + 26, { anchor: 'start' }),
+		label(rf2Text, rf2Centred ? cx : R2.ports['1'].x, rail + 26, { anchor: rf2Centred ? 'middle' : 'start' }),
 		label(limiter.amplitudeActual === null ? 'cannot regulate with these parts' : `settles at about ${limiter.amplitudeActual.toFixed(2)} V peak`, D2.ports['2'].x - 30, dnY + 34, { anchor: 'start', cls: 'lbl note' })
 	];
 	// wide enough for the right-hand label, 'to the - input'
@@ -591,6 +659,7 @@ export function hasLimiterDiagram(design) {
  */
 export function buildAgcDiagram(design) {
 	const { parts } = design;
+	const ohms = resistorLabeller(design);
 	const y0 = 220;
 	const net = createNet();
 	const svgs = [];
@@ -621,7 +690,7 @@ export function buildAgcDiagram(design) {
 		net.wire(Ra.ports['2'], tapNode);
 		svgs.push(Ra.svg);
 		symbols.push(Ra);
-		labels.push(label(`Ra ${formatOhms(parts.ra)}`, Ra.ports['1'].x, rail - 16, { anchor: 'start' }));
+		labels.push(label(`Ra ${ohms(parts.ra)}`, Ra.ports['1'].x, rail - 16, { anchor: 'start' }));
 	} else {
 		tapNode = { x: pk.x + 130, y: rail };
 		net.wire(pk, tapNode);
@@ -632,7 +701,7 @@ export function buildAgcDiagram(design) {
 	net.wire(Rb.ports['2'], gB.ports['1']);
 	svgs.push(Rb.svg, gB.svg);
 	symbols.push(Rb, gB);
-	labels.push(label(`Rb ${formatOhms(parts.rb)}`, Rb.ports['1'].x + 14, (Rb.ports['1'].y + Rb.ports['2'].y) / 2 + 8, { anchor: 'start' }));
+	labels.push(label(`Rb ${ohms(parts.rb)}`, Rb.ports['1'].x + 14, (Rb.ports['1'].y + Rb.ports['2'].y) / 2 + 8, { anchor: 'start' }));
 
 	// Rx2 on to the gate node; the JFET to its right with its gate on the rail
 	const Rx2 = placeSymbol('resistor_right', tapNode.x + 100, y0, SCALE);
@@ -660,9 +729,9 @@ export function buildAgcDiagram(design) {
 	svgs.push(Rx2.svg, jfet.svg, gS.svg, Rser.svg, Rx1.svg);
 	symbols.push(Rx2, jfet, gS, Rser, Rx1);
 	labels.push(
-		label(`Rx ${formatOhms(parts.rx)}`, Rx2.ports['1'].x, rail - 16, { anchor: 'start' }),
-		label(`Rx ${formatOhms(parts.rx)}`, Rx1.ports['1'].x - 14, (Rx1.ports['1'].y + Rx1.ports['2'].y) / 2, { anchor: 'end' }),
-		label(`Rser ${formatOhms(parts.rSeries)}`, Rser.ports['1'].x + 14, (Rser.ports['1'].y + Rser.ports['2'].y) / 2, { anchor: 'start' }),
+		label(`Rx ${ohms(parts.rx)}`, Rx2.ports['1'].x, rail - 16, { anchor: 'start' }),
+		label(`Rx ${ohms(parts.rx)}`, Rx1.ports['1'].x - 14, (Rx1.ports['1'].y + Rx1.ports['2'].y) / 2, { anchor: 'end' }),
+		label(`Rser ${ohms(parts.rSeries)}`, Rser.ports['1'].x + 14, (Rser.ports['1'].y + Rser.ports['2'].y) / 2, { anchor: 'start' }),
 		label('to the - input', legTop.x + 10, legTop.y - 6, { anchor: 'start' }),
 		label('channel resistance follows the gate', drain.x + 40, rail + 6, { anchor: 'start', cls: 'lbl note' })
 	);

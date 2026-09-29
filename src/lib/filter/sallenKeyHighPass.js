@@ -1,4 +1,4 @@
-import { capacitorCandidates, nearestCapacitor, nearestResistor } from './eseries';
+import { capacitorCandidates, nearestCapacitor, pairedResistor } from './eseries';
 
 /**
  * Sallen-Key high-pass, unity-gain simplified form: two equal capacitors C
@@ -40,7 +40,27 @@ function scoreSkHpResistors(Rtop, Rbottom) {
 	return Math.log(Rtop / SK_HP_R_SWEET) ** 2 + Math.log(Rbottom / SK_HP_R_SWEET) ** 2;
 }
 
-export function designSallenKeyHighPass(wn, q, { resistorSeries = 'E24', capacitors = null } = {}) {
+/**
+ * R_top and R_bottom rounded to stock, and the f0 and Q they give. With
+ * `pairs` each may be two resistors in series, kept only when that leaves
+ * the stage no further off than single parts, as in roundMfb (mfb.js). Here
+ * it never has to refuse: f0 and Q share the two resistors evenly, so the
+ * stage's larger miss is the mean of the two parts' own.
+ */
+function roundSallenKeyHp(Rtop, Rbottom, C, wn, q, resistorSeries, pairs) {
+	const round = (p) => {
+		const RtopN = pairedResistor(Rtop, resistorSeries, p);
+		const RbottomN = pairedResistor(Rbottom, resistorSeries, p);
+		return { RtopN, RbottomN, wn: 1 / (C * Math.sqrt(RtopN * RbottomN)), q: 0.5 * Math.sqrt(RbottomN / RtopN) };
+	};
+	const single = round(false);
+	if (!pairs) return single;
+	const paired = round(true);
+	const miss = (r) => Math.max(Math.abs(Math.log(r.wn / wn)), Math.abs(Math.log(r.q / q)));
+	return miss(paired) <= miss(single) ? paired : single;
+}
+
+export function designSallenKeyHighPass(wn, q, { resistorSeries = 'E24', capacitors = null, pairs = false } = {}) {
 	const caps = capacitorCandidates(capacitors);
 
 	let best = null;
@@ -51,17 +71,14 @@ export function designSallenKeyHighPass(wn, q, { resistorSeries = 'E24', capacit
 	}
 	if (!best) return null;
 
-	const RtopN = nearestResistor(best.Rtop, resistorSeries);
-	const RbottomN = nearestResistor(best.Rbottom, resistorSeries);
-	const wnActual = 1 / (best.C * Math.sqrt(RtopN * RbottomN));
-	const qActual = 0.5 * Math.sqrt(RbottomN / RtopN);
+	const r = roundSallenKeyHp(best.Rtop, best.Rbottom, best.C, wn, q, resistorSeries, pairs);
 
 	return {
 		topology: 'sallenKeyHp',
 		order: 2,
 		theoretical: { Rtop: best.Rtop, Rbottom: best.Rbottom, C1: best.C, C2: best.C, ratio: resistorRatioHp(q) },
-		components: { Rtop: RtopN, Rbottom: RbottomN, C1: best.C, C2: best.C },
-		actual: { wn: wnActual, q: qActual, gain: 1 },
+		components: { Rtop: r.RtopN, Rbottom: r.RbottomN, C1: best.C, C2: best.C },
+		actual: { wn: r.wn, q: r.q, gain: 1 },
 		steps: { ratio: resistorRatioHp(q), C: best.C, RtopTarget: best.Rtop, RbottomTarget: best.Rbottom, resistorSeries }
 	};
 }
@@ -71,13 +88,10 @@ export function designSallenKeyHighPass(wn, q, { resistorSeries = 'E24', capacit
  * match what is actually in stock) instead of searching a preferred
  * series for it. Always has a real solution.
  */
-export function designSallenKeyHighPassFromCap(wn, q, C, { resistorSeries = 'E24', capacitors = null } = {}) {
+export function designSallenKeyHighPassFromCap(wn, q, C, { resistorSeries = 'E24', capacitors = null, pairs = false } = {}) {
 	const { Rtop, Rbottom } = solveSkHpResistors(wn, q, C);
-	const RtopN = nearestResistor(Rtop, resistorSeries);
-	const RbottomN = nearestResistor(Rbottom, resistorSeries);
-	const wnActual = 1 / (C * Math.sqrt(RtopN * RbottomN));
-	const qActual = 0.5 * Math.sqrt(RbottomN / RtopN);
-	const outOfRange = !(RtopN > SK_HP_R_MIN && RtopN < SK_HP_R_MAX && RbottomN > SK_HP_R_MIN && RbottomN < SK_HP_R_MAX);
+	const r = roundSallenKeyHp(Rtop, Rbottom, C, wn, q, resistorSeries, pairs);
+	const outOfRange = !(r.RtopN > SK_HP_R_MIN && r.RtopN < SK_HP_R_MAX && r.RbottomN > SK_HP_R_MIN && r.RbottomN < SK_HP_R_MAX);
 
 	return {
 		ok: true,
@@ -85,8 +99,8 @@ export function designSallenKeyHighPassFromCap(wn, q, C, { resistorSeries = 'E24
 		topology: 'sallenKeyHp',
 		order: 2,
 		theoretical: { Rtop, Rbottom, C1: C, C2: C, ratio: resistorRatioHp(q) },
-		components: { Rtop: RtopN, Rbottom: RbottomN, C1: C, C2: C },
-		actual: { wn: wnActual, q: qActual, gain: 1 },
+		components: { Rtop: r.RtopN, Rbottom: r.RbottomN, C1: C, C2: C },
+		actual: { wn: r.wn, q: r.q, gain: 1 },
 		steps: { ratio: resistorRatioHp(q), C, RtopTarget: Rtop, RbottomTarget: Rbottom, resistorSeries },
 		outOfRange
 	};
