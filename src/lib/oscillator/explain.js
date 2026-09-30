@@ -308,3 +308,50 @@ export function explainOpampLimit(design) {
 	void lagRad;
 	return blocks;
 }
+
+/* ------------------------------------------------- the amplitude that comes out */
+
+/** How far from the amplitude asked for the limiter may land before the page says so. */
+export const AMPLITUDE_TOLERANCE = 0.1;
+
+/**
+ * What to say when a diode limiter, or the quadrature clamp, holds another
+ * amplitude than the one asked for; null when it lands within
+ * AMPLITUDE_TOLERANCE of it, when nothing is held at all (the page has its
+ * own flag for that), or for the lamp and the JFET control. Three cases,
+ * worded once here for the oscillator page and for the AM tool's carrier:
+ *   clips     the parts would hold it past the op-amp's swing
+ *   floor     the limiter could not be sized that low: its diodes barely
+ *             conduct there, so the parts are the fallback ones
+ *   rounding  the rounded resistors moved it
+ * Returns { kind, level: 'bad' | 'warn', text }.
+ */
+export function amplitudeRemark(design) {
+	const { limiter, amplitude, opamp } = design;
+	if (limiter.kind !== 'diodes' && limiter.kind !== 'clamp') return null;
+	const actual = limiter.amplitudeActual;
+	if (!(actual > 0) || limiter.regulates === false) return null;
+	const pairsHint = Array.isArray(design.resistorSeries) && !design.pairs ? '; two resistors in series get closer' : '';
+	let exact = '';
+	if (limiter.kind === 'clamp') {
+		if (limiter.rd1Target > 0) exact = ` Rd1 = ${formatOhms(limiter.rd1Target)} would land on it${pairsHint}.`;
+	} else if (limiter.sized) {
+		exact = ` Rf1 = ${formatOhms(limiter.rf1Target)} and Rf2 = ${formatOhms(limiter.rf2Target)} would land on it${pairsHint}.`;
+	}
+	if (!opamp.swingOk) {
+		const lead = `With these parts the limiter would only take hold at about ${formatVolts(actual)} peak, past the ${formatVolts(opamp.opampSwing)} the op-amp can swing, so the output clips on the rails first.`;
+		return { kind: 'clips', level: 'bad', text: amplitude > opamp.opampSwing ? `${lead} Ask for a smaller amplitude.` : `${lead} The ${formatVolts(amplitude)} asked for is within reach:${exact || ' the rounded parts miss it.'}` };
+	}
+	const lead = `The amplitude settles at about ${formatVolts(actual)} peak rather than the ${formatVolts(amplitude)} asked`;
+	if (limiter.kind === 'diodes' && !limiter.sized) {
+		return { kind: 'floor', level: 'warn', text: `${lead}: the limiter's diodes barely conduct at ${formatVolts(amplitude)} peak, so it cannot hold the amplitude there.` };
+	}
+	if (Math.abs(actual / amplitude - 1) <= AMPLITUDE_TOLERANCE) return null;
+	const why =
+		limiter.kind === 'clamp'
+			? 'Rd1 sets the level the clamp starts to conduct at, and its rounded value leaves it there.'
+			: 'it hangs on the small difference between Rf1 and what the loop needs, so rounding Rf1 and Rf2 moves it this far.';
+	// more asked than the op-amp swings: said here, since the parts as rounded stay inside it
+	const beyond = amplitude > opamp.opampSwing ? ` The ${formatVolts(amplitude)} asked is itself past the ${formatVolts(opamp.opampSwing)} the op-amp can swing.` : '';
+	return { kind: 'rounding', level: 'warn', text: `${lead}: ${why}${exact}${beyond}` };
+}

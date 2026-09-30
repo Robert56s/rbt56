@@ -104,7 +104,7 @@ export function buildJfetGainCellDiagram({ rb, ohms = formatOhms }) {
  * resistor's rail is routed below the triangle, so nothing crosses the Vin
  * wire that enters the + input above it.
  */
-export function buildGainStageDiagram({ rtop, rbottom }) {
+export function buildGainStageDiagram({ rtop, rbottom, ohms = formatOhms }) {
 	const y0 = 160;
 	const opamp = placeSymbol('opamp_no_power_right', MARGIN + 160, y0, SCALE);
 	const Vin = { x: MARGIN, y: opamp.ports.inp1.y };
@@ -113,7 +113,12 @@ export function buildGainStageDiagram({ rtop, rbottom }) {
 	const Rbottom = placeSymbol('resistor_down', negNode.x - 50, negNode.y + 80, SCALE);
 	const gnd = placeSymbol('ground_down', Rbottom.ports['2'].x - 0.01 * SCALE, Rbottom.ports['2'].y + 0.29 * SCALE, SCALE);
 
-	const Vout = { x: opamp.ports.out.x + 80, y: opamp.ports.out.y };
+	// Rtop sits midway along the feedback rail with its label starting over
+	// its left pin; a label longer than a single value (two in series) pushes
+	// the output column right so the label ends before it
+	const rtopLabel = `Rtop ${ohms(rtop)}`;
+	const half = placeSymbol('resistor_right', 0, 0, SCALE).ports['2'].x;
+	const Vout = { x: Math.max(opamp.ports.out.x + 80, negNode.x + 2 * (CHAR_W * rtopLabel.length + 5 - half)), y: opamp.ports.out.y };
 	const loopY = Rbottom.ports['2'].y + 40;
 	const Rtop = placeSymbol('resistor_right', (negNode.x + Vout.x) / 2, loopY, SCALE);
 
@@ -140,8 +145,8 @@ export function buildGainStageDiagram({ rtop, rbottom }) {
 		net.dots(portPoints(opamp, Rbottom, gnd, Rtop)),
 		label('Vin', Vin.x, Vin.y - 12, { anchor: 'start' }),
 		label('Vout', Vout.x + 34, Vout.y + 5, { anchor: 'start' }),
-		label(`Rtop ${formatOhms(rtop)}`, Rtop.ports['1'].x, loopY - 12, { anchor: 'start' }),
-		label(`Rbottom ${formatOhms(rbottom)}`, Rbottom.ports['1'].x - 12, (Rbottom.ports['1'].y + Rbottom.ports['2'].y) / 2, { anchor: 'end' })
+		label(rtopLabel, Rtop.ports['1'].x, loopY - 12, { anchor: 'start' }),
+		label(`Rbottom ${ohms(rbottom)}`, Rbottom.ports['1'].x - 12, (Rbottom.ports['1'].y + Rbottom.ports['2'].y) / 2, { anchor: 'end' })
 	];
 
 	const width = Vout.x + 30 + 60;
@@ -669,7 +674,7 @@ export function buildBiasSummerDiagram({ c, rac, rbias, rf }, { ohms = formatOhm
  * inverting cell's follower, likewise). With no divider needed (top 0) it
  * is a plain wire. `from` and `to` name the two ends.
  */
-export function buildCarrierDividerDiagram({ top, bottom, from = 'carrier source', to = 'to + input' }) {
+export function buildCarrierDividerDiagram({ top, bottom, from = 'carrier source', to = 'to + input', ohms = formatOhms }) {
 	const y0 = 90;
 	// the lead-in is long enough for the name under it to clear the node
 	const fromWidth = Math.ceil(6.6 * from.length);
@@ -710,8 +715,8 @@ export function buildCarrierDividerDiagram({ top, bottom, from = 'carrier source
 		net.dots(portPoints(Rtop, Rbot, gnd)),
 		label(from, Vin.x, rail + 22, { anchor: 'start' }),
 		label(to, out.x + 6, out.y - 8, { anchor: 'start' }),
-		label(`${formatOhms(top)}`, Rtop.ports['1'].x, rail - 22, { anchor: 'start' }),
-		label(`${formatOhms(bottom)}`, Rbot.ports['1'].x + 12, (Rbot.ports['1'].y + Rbot.ports['2'].y) / 2, { anchor: 'start' })
+		label(`${ohms(top)}`, Rtop.ports['1'].x, rail - 22, { anchor: 'start' }),
+		label(`${ohms(bottom)}`, Rbot.ports['1'].x + 12, (Rbot.ports['1'].y + Rbot.ports['2'].y) / 2, { anchor: 'start' })
 	];
 
 	const width = out.x + 6 + Math.ceil(6.6 * to.length) + 30;

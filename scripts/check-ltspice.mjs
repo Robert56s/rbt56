@@ -258,7 +258,9 @@ const amCases = [
 	['am-noninverting-wien', { design: designJfetModulator({ ...base, carrierSourceAmplitude: osc.limiter.amplitudeActual }), fmPreview: 1000, oscillator: osc }],
 	['am-inverting-source', { design: designJfetModulator({ ...base, topology: 'inverting' }), fmPreview: 1000, oscillator: null }],
 	['am-inverting-wien', { design: designJfetModulator({ ...base, topology: 'inverting', carrierSourceAmplitude: osc.limiter.amplitudeActual }), fmPreview: 1000, oscillator: osc }],
-	['am-inverting-nobuffer', { design: designJfetModulator({ ...base, topology: 'inverting', carrierBuffer: false }), fmPreview: 1000, oscillator: null }]
+	['am-inverting-nobuffer', { design: designJfetModulator({ ...base, topology: 'inverting', carrierBuffer: false }), fmPreview: 1000, oscillator: null }],
+	// the non-inverting cell followed by its optional output gain stage
+	['am-noninverting-postgain', { design: designJfetModulator({ ...base, outputStage: true, targetOutputAmplitude: 3 }), fmPreview: 1000, oscillator: null }]
 ];
 for (const [stem, opts] of amCases) {
 	const asc = join(dir, `${stem}.asc`);
@@ -280,6 +282,13 @@ for (const [stem, opts] of amCases) {
 	const d = opts.design;
 	check(`${stem}: index read from the peaks near the page's ${d.opamp.peakModulationIndex.toFixed(3)}`, Math.abs(m.index - d.opamp.peakModulationIndex) < 0.025, `${m.index.toFixed(3)}`);
 	check(`${stem}: carrier at ${opts.oscillator ? 'the oscillator\'s' : 'the source\'s'} frequency`, rel(m.carrier, opts.oscillator ? opts.oscillator.f0 : 55000, opts.oscillator ? 0.02 : 0.002), `${m.carrier.toFixed(0)} Hz`);
+	if (stem === 'am-noninverting-postgain') {
+		// the stage raises the level and leaves the envelope alone: the mean of crest and trough is what the
+		// cell gives there (its own loss at the crest and in the trough included) times the stage's fixed gain
+		const level = m.crest / (1 + m.index);
+		const expected = ((d.carrier.ac * (d.gainMax * d.opamp.factorCrest + d.gainMin * d.opamp.factorTrough)) / 2) * d.postGain.kActual * d.postGain.factor;
+		check(`${stem}: the stage is in the design and multiplies the cell's envelope by its ${d.postGain.kActual.toFixed(2)}, to about ${expected.toFixed(2)} V`, d.postGain?.needed === true && rel(level, expected, 0.05), `${level.toFixed(3)} V`);
+	}
 }
 
 /* ---------------------------------------------- diode + tank modulator */

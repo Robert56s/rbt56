@@ -78,13 +78,31 @@ function drawSummer(sheet, E, S, gate) {
 	sheet.label(run(sheet, foot, 'down', 48), 'vgate', 'right');
 }
 
-/** Non-inverting cell: + on top from vac, the channel as the lower leg under RB. */
+/**
+ * The fixed post-gain stage, non-inverting with its + input on top, fed
+ * from `from` (the cell's output): RPT back from the output to the - input's
+ * column, RPB from there to ground. Its output is vout.
+ */
+function drawPostGain(sheet, E, from) {
+	const inPlus = run(sheet, from, 'right', 96);
+	const UP = sheet.placeOpamp(E.UP, { x: inPlus.x + 64, y: inPlus.y + 16 }, { flip: true, labels: 'above' });
+	const VO = run(sheet, UP.pins[2], 'right', 96);
+	sheet.label(VO, 'vout', 'right');
+	const np = run(sheet, UP.pins[1], 'left', 32);
+	const JP = run(sheet, np, 'down', 80);
+	const rptRight = run(sheet, VO, 'down', 96);
+	sheet.wire(series(sheet, E.RPT, rptRight, 'left'), JP);
+	sheet.ground(sheet.placeFrom(E.RPB, JP, 'down').pins[1]);
+}
+
+/** Non-inverting cell: + on top from vac, the channel as the lower leg under RB; the post-gain stage after it when there is one. */
 function drawNonInvertingCell(sheet, E, vac) {
 	const inPlus = { x: 912, y: R };
 	sheet.wire(vac, inPlus);
 	const UC = sheet.placeOpamp(E.UC, { x: inPlus.x + 64, y: inPlus.y + 16 }, { flip: true, labels: 'above' });
 	const VO = run(sheet, UC.pins[2], 'right', 96);
-	sheet.label(VO, 'vout', 'right');
+	if (E.UP) drawPostGain(sheet, E, VO);
+	else sheet.label(VO, 'vout', 'right');
 	// the - input's column: down to JN, where RB comes back and the JFET hangs
 	const nc = run(sheet, UC.pins[1], 'left', 32);
 	const JN = run(sheet, nc, 'down', 80);
@@ -126,16 +144,7 @@ function drawInvertingCell(sheet, E, design, vac) {
 	const r2End = series(sheet, E.R2, r2Right, 'left');
 	sheet.route(r2End, { x: NCJ.x, y: r2Right.y }, NCJ);
 	if (design.postGain?.needed) {
-		// the fixed post-gain stage, non-inverting, + on top
-		const inPlus = run(sheet, VCELL, 'right', 96);
-		const UP = sheet.placeOpamp(E.UP, { x: inPlus.x + 64, y: inPlus.y + 16 }, { flip: true, labels: 'above' });
-		const VO = run(sheet, UP.pins[2], 'right', 96);
-		sheet.label(VO, 'vout', 'right');
-		const np = run(sheet, UP.pins[1], 'left', 32);
-		const JP = run(sheet, np, 'down', 80);
-		const rptRight = run(sheet, VO, 'down', 96);
-		sheet.wire(series(sheet, E.RPT, rptRight, 'left'), JP);
-		sheet.ground(sheet.placeFrom(E.RPB, JP, 'down').pins[1]);
+		drawPostGain(sheet, E, VCELL);
 	} else {
 		sheet.label(run(sheet, series(sheet, E.RLINK, VCELL, 'right'), 'right', 48), 'vout', 'right');
 	}

@@ -682,7 +682,7 @@ check('carrier: peak current is Ac times the largest conductance', near(d.carrie
 {
 	const { LAB_KIT } = await import('../src/lib/filter/eseries.js');
 	const { componentOptions } = await import('../src/lib/stock.js');
-	const { pairLabel, seriesPair } = await import('../src/lib/modulation/eseries.js');
+	const { nearestResistor, pairLabel, resistorNotBelow, seriesPair } = await import('../src/lib/modulation/eseries.js');
 	const { formatOhms } = await import('../src/lib/modulation/format.js');
 	const { generateDemodScript, generateDiodeScript, generateJfetScript } = await import('../src/lib/modulation/codegen.js');
 	const { generateDemodNetlist } = await import('../src/lib/modulation/spice.js');
@@ -782,8 +782,16 @@ check('carrier: peak current is Ac times the largest conductance', near(d.carrie
 			if (!d0 || !d1) continue;
 			designs++;
 			const [s0, s1] = [d0.conditioning.summer, d1.conditioning.summer];
-			for (const [k, v] of Object.entries({ rac: s1.rac, rbias: s1.rbias, rb: d1.rb })) madeOf(`jfet ${ln} ${k}`, v, list);
-			for (const [k, v] of Object.entries({ rf: s1.rf, r2: d1.r2, divTop: d1.carrier.divider.top, divBottom: d1.carrier.divider.bottom, rtop: d1.postGain?.rtop, rbottom: d1.postGain?.rbottom })) single(`jfet ${ln} ${k}`, v, list);
+			for (const [k, v] of Object.entries({ rac: s1.rac, rbias: s1.rbias, rb: d1.rb, divTop: d1.carrier.divider.top, rtop: d1.postGain?.rtop })) madeOf(`jfet ${ln} ${k}`, v, list);
+			for (const [k, v] of Object.entries({ rf: s1.rf, r2: d1.r2, divBottom: d1.carrier.divider.bottom, rbottom: d1.postGain?.rbottom })) single(`jfet ${ln} ${k}`, v, list);
+			// the carrier on the channel never passes its limit, with one part or two; with
+			// two the divider's top is no further above its target than the single value
+			for (const [tag, d] of [['single', d0], ['pairs', d1]]) {
+				if (d.carrier.divider.top > 0 && d.carrier.ac > d.carrier.acMax * (1 + 1e-9)) bad.push(`jfet ${ln} ${i} ${tag}: carrier ${d.carrier.ac.toFixed(4)} V above its limit ${d.carrier.acMax.toFixed(4)} V`);
+				if (d.carrier.divider.top > 0 && d.carrier.divider.top < d.carrier.divider.topTarget * (1 - 1e-9)) bad.push(`jfet ${ln} ${i} ${tag}: divider top under its target`);
+			}
+			if (d1.carrier.divider.top > resistorNotBelow(d1.carrier.divider.topTarget, list, false) * (1 + 1e-9)) bad.push(`jfet ${ln} ${i}: the pair is further above the divider target than the single value`);
+			if (d1.postGain?.needed && logMiss(d1.postGain.kActual, d1.postGain.kTarget) > logMiss(1 + nearestResistor((d1.postGain.kTarget - 1) * d1.postGain.rbottom, list) / d1.postGain.rbottom, d1.postGain.kTarget) + 1e-12) bad.push(`jfet ${ln} ${i}: post-gain further off with pairs`);
 			if (logMiss(-s1.biasActual, s1.biasTarget) > logMiss(-s0.biasActual, s0.biasTarget) + 1e-12) bad.push(`jfet ${ln} ${i}: bias further off`);
 			if (logMiss(s1.gainActual, s1.gainTarget) > logMiss(s0.gainActual, s0.gainTarget) + 1e-12) bad.push(`jfet ${ln} ${i}: gain further off`);
 			// the bias and swing within the summer's reach, and the coupling corner, where the single parts had them
@@ -795,7 +803,7 @@ check('carrier: peak current is Ac times the largest conductance', near(d.carrie
 				if (e1 < e0 - 1e-6) better++;
 			}
 		}
-		check(`pairs: ${designs} random JFET designs on three lists, every part on the list or two of it, R_f and the level parts single, bias, gain and n never further off, headroom and coupling corner never lost, no design lost`, bad.length === 0 && designs > 400, bad.length ? bad.slice(0, 3).join('; ') : `n closer in ${better}, ${rescued} designs only with pairs`);
+		check(`pairs: ${designs} random JFET designs on three lists, every part on the list or two of it, R_f, R_2 and the feet of the dividers single, the carrier never above its limit, bias, gain and n never further off, headroom and coupling corner never lost, no design lost`, bad.length === 0 && designs > 400, bad.length ? bad.slice(0, 3).join('; ') : `n closer in ${better}, ${rescued} designs only with pairs`);
 
 		// every check the diode panels make, as the page reads it
 		const DIODE_FLAGS = { indexOk: (x) => x.indexOk, tuneOk: (x) => x.tuneOk, rangeOk: (x) => x.rangeOk, cjOk: (x) => x.cjOk, sidebandsInBand: (x) => x.sidebandsInBand, currentOk: (x) => x.currentOk, leakOk: (x) => x.leakOk, swingOk: (x) => x.summer.swingOk, gbwOk: (x) => x.summer.gbwOk, slope: (x) => x.sidebandGain >= 0.9, underOne: (x) => x.modulationIndex <= 1 };
@@ -924,6 +932,144 @@ check('carrier: peak current is Ac times the largest conductance', near(d.carrie
 		const demodOk = /R1 = R2 = \d+ ohm \(\d+ \+ \d+ in series\)/.test(outs.demod[1]);
 		check('pairs: the downloaded scripts run with RESISTOR_PAIRS = true and print each pair, and print none with it false', constOk && crashed.length === 0 && offClean && jfetOk && diodeOk && demodOk, crashed.length ? crashed.map(([k, o]) => `${k}: ${o.find((x) => x.startsWith('CRASH'))}`).join('; ') : `jfet ${jfetOk}, diode ${diodeOk}, demod ${demodOk}, off clean ${offClean}`);
 	}
+	// (e) the carrier divider is rounded to the safe side: the carrier on the
+	// channel lands at or under the limit k sets, never a rounding step above
+	{
+		const bad = [];
+		let designs = 0;
+		let closest = 1;
+		const stocks = { E24: componentOptions('E24'), E96: componentOptions('E96'), lab: componentOptions('lab'), labR: componentOptions('labR'), 'lab+pairs': componentOptions('lab', '', '', true) };
+		for (const [name, parts] of Object.entries(stocks)) {
+			for (const model of [modelFromIdss(-4, 5e-3), modelFromRdsOn(-6.5, 30), measured]) {
+				for (const topology of ['noninverting', 'inverting']) {
+					for (const carrierSourceAmplitude of [0.02, 0.1, 0.2, 0.6, 1, 2.5, 5, 12]) {
+						for (const carrierMargin of [0.1, 0.15, 0.5, 1]) {
+							const d = designJfetModulator({ model, topology, swingFraction: 0.9, targetModulationIndex: 0.6, fp: 50000, vcc: 15, opampSwing: 13.5, carrierSourceAmplitude, carrierMargin, ...parts });
+							if (!d) continue;
+							designs++;
+							const c = d.carrier;
+							const tag = `${name} ${topology} ${carrierSourceAmplitude} V k ${carrierMargin}`;
+							if (carrierSourceAmplitude <= c.acMax) {
+								if (c.divider.top !== 0 || !near(c.ac, carrierSourceAmplitude, 1e-12)) bad.push(`${tag}: a divider where the source is already under the limit`);
+								continue;
+							}
+							if (!(c.divider.top > 0)) bad.push(`${tag}: no divider`);
+							if (c.ac > c.acMax * (1 + 1e-9)) bad.push(`${tag}: ${c.ac.toFixed(4)} V above ${c.acMax.toFixed(4)} V`);
+							if (!near(c.ac, (carrierSourceAmplitude * c.divider.bottom) / (c.divider.top + c.divider.bottom), 1e-12)) bad.push(`${tag}: A_c is not the divider's`);
+							closest = Math.min(closest, c.ac / c.acMax);
+						}
+					}
+				}
+			}
+		}
+		check(`divider: the carrier lands at or under its limit in ${designs} designs, every stock, both cells`, bad.length === 0 && designs > 400, bad.length ? bad.slice(0, 3).join('; ') : `lowest ${(100 * closest).toFixed(0)} % of the limit`);
+
+		// the case that showed it: a 5 V generator on the lab kit, 47 k was the nearest value and let 104 mV through for 96 mV
+		const gen = { ...bench, carrierSourceAmplitude: 5 };
+		const one = designJfetModulator({ ...gen, pairs: false });
+		const two = designJfetModulator({ ...gen, pairs: true });
+		const nearestWas = (d) => (5 * 1000) / (nearestResistor(d.carrier.divider.topTarget, LAB_KIT.resistors) + 1000);
+		check(
+			'divider: a 5 V generator on the lab kit gets the next value up where the nearest let too much through: 47 k for 33 k, or 47 k + 4.7 k for 47 k with two in series',
+			one.carrier.divider.top === 47000 && nearestResistor(one.carrier.divider.topTarget, LAB_KIT.resistors) === 33000 && nearestWas(one) > one.carrier.acMax && one.carrier.ac <= one.carrier.acMax &&
+				same(seriesPair(two.carrier.divider.top, LAB_KIT.resistors), [47000, 4700]) && nearestWas(two) > two.carrier.acMax && two.carrier.ac <= two.carrier.acMax && two.carrier.ac / two.carrier.acMax > 0.97,
+			`one part: ${one.carrier.divider.top} ohm, ${(1000 * one.carrier.ac).toFixed(1)} mV of ${(1000 * one.carrier.acMax).toFixed(1)} (the nearest gave ${(1000 * nearestWas(one)).toFixed(1)}); two: ${two.carrier.divider.top} ohm, ${(1000 * two.carrier.ac).toFixed(1)} mV of ${(1000 * two.carrier.acMax).toFixed(1)} (the nearest gave ${(1000 * nearestWas(two)).toFixed(1)})`
+		);
+		// a list with nothing large enough over a 1 k foot takes a smaller foot, and still holds the limit
+		const short = designJfetModulator({ ...bench, resistorSeries: LAB_KIT.resistors.filter((v) => v <= 47000), carrierSourceAmplitude: 12, carrierMargin: 0.05 });
+		check(
+			'divider: when no value on hand reaches the target over 1 k, a smaller foot keeps the carrier under its limit',
+			short && short.carrier.divider.top === 47000 && short.carrier.divider.bottom < 1000 && short.carrier.ac <= short.carrier.acMax && short.carrier.divider.top >= short.carrier.divider.topTarget * (1 - 1e-9),
+			short ? `${short.carrier.divider.top} / ${short.carrier.divider.bottom} ohm, ${(1000 * short.carrier.ac).toFixed(1)} mV of ${(1000 * short.carrier.acMax).toFixed(1)}` : 'no design'
+		);
+		check('divider: the round-up picker takes the value itself when it is on hand, and the next one up otherwise', resistorNotBelow(10000, LAB_KIT.resistors) === 10000 && resistorNotBelow(10001, LAB_KIT.resistors) === 15000 && resistorNotBelow(9220, 'E24') === 10000 && resistorNotBelow(9220, 'E96') === 9310 && resistorNotBelow(9220, LAB_KIT.resistors, true) === 9400);
+	}
+
+	// (f) the output gain stage after the non-inverting cell
+	{
+		const plain = designJfetModulator({ ...bench, pairs: true });
+		const off = designJfetModulator({ ...bench, pairs: true, outputStage: false, targetOutputAmplitude: 2 });
+		const on = designJfetModulator({ ...bench, pairs: true, outputStage: true, targetOutputAmplitude: 2 });
+		const pg = on.postGain;
+		check('output stage: off by default, and without it the design is the one from before', plain.postGain === null && same(plain, designJfetModulator({ ...bench, pairs: true, targetOutputAmplitude: 1 })) && off.postGain === null && off.opamp.opampCount === 2);
+		const topPair = seriesPair(pg.rtop, LAB_KIT.resistors);
+		const onePart = designJfetModulator({ ...bench, pairs: false, outputStage: true, targetOutputAmplitude: 2 }).postGain;
+		check(
+			'output stage: brings the bench cell to 2 V with R_top two in series (2 k + 390), one more op-amp, the cell itself untouched',
+			pg.needed && pg.rbottom === 1000 && same(topPair, [2000, 390]) && near(pg.kActual, pg.kTarget, 0.01 * pg.kTarget) && near(pg.outputAmplitude, 2, 0.02) && pg.swingOk && pg.slewOk && pg.factor > 0.999 && on.opamp.opampCount === 3 &&
+				on.rb === off.rb && on.modulationIndex === off.modulationIndex && on.carrier.ac === off.carrier.ac && on.opamp.thd === off.opamp.thd,
+			`K ${pg.kActual.toFixed(3)} for ${pg.kTarget.toFixed(3)}, R_top ${pg.rtop} ohm, output ${pg.outputAmplitude.toFixed(3)} V, envelope up to ${pg.envelopeMax.toFixed(2)} V, ${on.opamp.opampCount} op-amps`
+		);
+		check('output stage: with one part per resistor R_top is a single list value, a little further from the level asked', inList(onePart.rtop, LAB_KIT.resistors) && Math.abs(onePart.outputAmplitude - 2) >= Math.abs(pg.outputAmplitude - 2), `R_top ${onePart.rtop} ohm, output ${onePart.outputAmplitude.toFixed(3)} V`);
+		const small = designJfetModulator({ ...bench, outputStage: true, targetOutputAmplitude: 0.3 });
+		check('output stage: none when the cell already reaches the level asked for', small.postGain.needed === false && small.opamp.opampCount === 2 && small.postGain.outputAmplitude === small.carrier.carrierOut);
+		const hot = designJfetModulator({ ...bench, outputStage: true, targetOutputAmplitude: 12 });
+		check('output stage: a target whose envelope passes the op-amp swing is flagged', hot.postGain.needed && hot.postGain.swingOk === false);
+
+		// the files carry it: the cell's output becomes vcell, the stage gives vout
+		const els = buildModElements({ design: on, fmPreview: 1000 });
+		const byName = Object.fromEntries(els.filter((e) => e.name).map((e) => [e.name, e]));
+		const wired = same(byName.RB.nodes, ['vcell', 'ncell']) && same(byName.UC.nodes, ['vac', 'ncell', 'vcell']) && same(byName.UP.nodes, ['vcell', 'npg', 'vout']) && same(byName.RPT.nodes, ['vout', 'npg']) && same(byName.RPB.nodes, ['npg', '0']) && byName.RPT.value === pg.rtop && byName.RPB.value === pg.rbottom;
+		const before = buildModElements({ design: off, fmPreview: 1000 });
+		const plainWired = same(before.find((e) => e.name === 'RB').nodes, ['vout', 'ncell']) && !before.some((e) => e.name === 'UP');
+		check('output stage: the netlist has the cell on vcell and the stage on vout, and is unchanged without it', wired && plainWired);
+		const problems = [];
+		for (const opamp of ['ideal', 'TL082']) {
+			const asc = modSchematic({ design: on, fmPreview: 1000, oscillator: null, opamp, resistorSeries: LAB_KIT.resistors, pairs: true });
+			const cir = modNetlist({ design: on, fmPreview: 1000, oscillator: null, opamp, resistorSeries: LAB_KIT.resistors, pairs: true });
+			const { elements: got, clashes, dangling } = parseSchematic(asc);
+			if (clashes.length || dangling.length) problems.push(`${opamp}: ${[...clashes, ...dangling][0]}`);
+			for (const w of els.filter((e) => (e.kind === 'R' || e.kind === 'C') && typeof e.value === 'number')) {
+				const g = got.find((e) => e.name === w.name);
+				if (!g || g.value !== spiceValue(w.value)) problems.push(`${opamp}: ${w.name} reads ${g?.value}`);
+			}
+			const issues = audit(asc);
+			if (issues.length) problems.push(`${opamp}: ${issues[0].kind}: ${issues[0].detail}`);
+			// the two level parts that are pairs here are named in the file's notes
+			const divPair = seriesPair(on.carrier.divider.top, LAB_KIT.resistors);
+			if (!divPair) problems.push(`${opamp}: the divider top is not a pair in this case`);
+			for (const note of [`RPT = ${spiceValue(topPair[0])} + ${spiceValue(topPair[1])} in series`, divPair ? `RDT = ${spiceValue(divPair[0])} + ${spiceValue(divPair[1])} in series` : 'RDT = '])
+				if (!cir.includes(note) || !asc.includes(note)) problems.push(`${opamp}: no "${note}" note`);
+		}
+		check('output stage: the drawn .asc carries the stage, wired as the netlist, drawn clean, with its pair notes', problems.length === 0, problems.slice(0, 3).join('; '));
+
+		// the comparison table and the script follow
+		const rowsOn = compareTopologies({ ...bench, pairs: true, outputStage: true, targetOutputAmplitude: 2 });
+		check('output stage: the comparison row gives the final output and the op-amp count', near(rowsOn[0].carrierOut, pg.outputAmplitude, 1e-12) && rowsOn[0].opampCount === 3);
+		const dir = mkdtempSync(join(tmpdir(), 'rbt56-am-stage-'));
+		const file = join(dir, 'jfet-stage.js');
+		writeFileSync(
+			file,
+			generateJfetScript({ mode: 'measured', vp: measured.vp, idss: measured.idss, rdsOn: measured.rdsOn, measurements: measured.points.map((pt) => [pt.vgs, pt.rds]), windowLow: -7, windowHigh: 0, topology: 'noninverting', targetOutputAmplitude: 2, outputStage: true, carrierBuffer: true, swingFraction: 0.9, targetModulationIndex: 0.7, rb: null, sourceAmplitude: 1, fmMin: 100, vcc: 15, fp: 50000, carrierSourceAmplitude: 0.6, carrierMargin: 0.15, opampSwing: 13.5, gbw: 4e6, slewRate: 16e6, resistorSeries: LAB_KIT.resistors, capacitors: kit, pairs: true })
+		);
+		let out;
+		try {
+			out = execFileSync(process.execPath, [file], { encoding: 'utf8', stdio: 'pipe' });
+		} catch (e) {
+			out = `CRASH ${String(e.stderr || e.message).split(String.fromCharCode(10)).slice(0, 3).join(' / ')}`;
+		}
+		check(
+			'output stage: the downloaded script designs it with OUTPUT_STAGE = true and prints the stage and the divider with their pairs',
+			out.includes(`post-gain stage: K = ${pg.kActual.toFixed(2)} (Rtop ${pg.rtop} ohm (${topPair[0]} + ${topPair[1]} in series), Rbottom 1000 ohm)`) && out.includes(`carrier divider: ${on.carrier.divider.top} ohm (`) && out.includes('at or under the limit') && out.includes('op-amps in the modulator: 3'),
+			out.startsWith('CRASH') ? out : out.split(String.fromCharCode(10)).find((l) => l.startsWith('post-gain stage')) ?? 'no post-gain line'
+		);
+
+		// the explanation says what the stage is for, and the equations render
+		const blocks = explainJfetGainCell(on);
+		let tex = 0;
+		let broken = 0;
+		for (const b of blocks.filter((x) => x.type === 'eq')) {
+			tex++;
+			try {
+				katex.renderToString(b.tex, { throwOnError: true, strict: 'error', displayMode: true });
+			} catch {
+				broken++;
+			}
+		}
+		const words = blocks.filter((x) => x.type === 'p').map((x) => x.text).join(' ');
+		check('output stage: the cell explanation covers it, in clean text, and its equations render', words.includes('The output stage.') && !words.includes('undefined') && !words.includes('NaN') && broken === 0 && tex > explainJfetGainCell(off).filter((x) => x.type === 'eq').length, `${tex} equations, ${broken} broken`);
+	}
+
 }
 
 console.log(fails === 0 ? 'am checks clean' : `${fails} failure(s)`);

@@ -528,14 +528,15 @@ console.log();
 								const cin = osc?.limiter.amplitudeActual ?? amp;
 								// n = 0.6, and the page's default 0.85, which asks for a larger R_b and longer pairs
 								for (const targetN of [0.6, 0.85]) {
-									const d = designJfetModulator({ model, topology, carrierBuffer, targetModulationIndex: targetN, swingFraction: 0.9, sourceAmplitude: 1, fmMin: 100, vcc: 12, fp, carrierSourceAmplitude: cin, targetOutputAmplitude: 1, ...parts });
+									// the non-inverting cell with its optional output stage, so that drawing is swept too
+									const d = designJfetModulator({ model, topology, carrierBuffer, targetModulationIndex: targetN, swingFraction: 0.9, sourceAmplitude: 1, fmMin: 100, vcc: 12, fp, carrierSourceAmplitude: cin, targetOutputAmplitude: topology === 'inverting' ? 1 : 2, outputStage: true, ...parts });
 									if (!d) continue;
 									const tag = `${sn} ${topology} buf=${carrierBuffer} ${fp} ${wien ? 'wien' : 'gen'} ${amp}V n=${targetN}`;
 									if (topology === 'inverting') add(`am/inverting cell ${tag}`, () => modulation.buildJfetInvertingCellDiagram({ r2: d.r2, follower: d.buffer.enabled, ohms }));
 									else add(`am/gain cell ${tag}`, () => modulation.buildJfetGainCellDiagram({ rb: d.rb, ohms }));
-									if (d.postGain?.needed) add(`am/post-gain ${tag}`, () => modulation.buildGainStageDiagram({ rtop: d.postGain.rtop, rbottom: d.postGain.rbottom }));
+									if (d.postGain?.needed) add(`am/post-gain ${tag}`, () => modulation.buildGainStageDiagram({ rtop: d.postGain.rtop, rbottom: d.postGain.rbottom, ohms }));
 									add(`am/divider ${tag}`, () =>
-										modulation.buildCarrierDividerDiagram({ ...d.carrier.divider, from: osc ? 'from the Wien oscillator' : 'carrier source', to: topology === 'inverting' ? (d.buffer.enabled ? 'to the follower' : 'to the drain') : 'to + input' })
+										modulation.buildCarrierDividerDiagram({ ...d.carrier.divider, from: osc ? 'from the Wien oscillator' : 'carrier source', to: topology === 'inverting' ? (d.buffer.enabled ? 'to the follower' : 'to the drain') : 'to + input', ohms })
 									);
 									add(`am/gate summer ${tag}`, () => modulation.buildBiasSummerDiagram(d.conditioning.summer, { ohms }));
 									if (osc) add(`am/wien ${tag}`, () => buildOscillatorDiagram(osc));

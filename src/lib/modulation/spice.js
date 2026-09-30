@@ -127,21 +127,31 @@ export function buildElements({ design, fmPreview = 1000, oscillator = null }) {
 			out.push({ kind: 'R', name: 'RLINK', nodes: ['vcell', 'vout'], value: 1 });
 		}
 	} else {
+		// with a post-gain stage behind it, the cell's own output is vcell
+		const cellOut = design.postGain?.needed ? 'vcell' : 'vout';
 		out.push({ kind: 'LABEL', text: 'the gain cell: the channel is the lower leg of the feedback divider' });
 		out.push({ kind: 'J', name: 'J1', nodes: ['ncell', 'vgate', '0'], model: 'JMOD' });
-		out.push({ kind: 'R', name: 'RB', nodes: ['vout', 'ncell'], value: design.rb });
-		out.push({ kind: 'OP', name: 'UC', nodes: ['vac', 'ncell', 'vout'] });
+		out.push({ kind: 'R', name: 'RB', nodes: [cellOut, 'ncell'], value: design.rb });
+		out.push({ kind: 'OP', name: 'UC', nodes: ['vac', 'ncell', cellOut] });
+		if (design.postGain?.needed) {
+			out.push({ kind: 'LABEL', text: 'fixed post-gain: brings the cell output up to the level asked for' });
+			out.push({ kind: 'R', name: 'RPB', nodes: ['npg', '0'], value: design.postGain.rbottom });
+			out.push({ kind: 'R', name: 'RPT', nodes: ['vout', 'npg'], value: design.postGain.rtop });
+			out.push({ kind: 'OP', name: 'UP', nodes: ['vcell', 'npg', 'vout'] });
+		}
 	}
 	return out;
 }
 
 /**
  * The JFET modulator's resistors that may be pairs: R_ac, R_bias and R_b,
- * and the resistors of an on-board oscillator built from the list.
+ * the top of the carrier divider and of the post-gain stage, and the
+ * resistors of an on-board oscillator built from the list.
  */
+const MODULATOR_PAIRS = ['RAC', 'RBIAS', 'RB', 'RDT', 'RPT'];
 function modulatorPairs(elements, oscillator, stock, tail) {
 	const fromList = oscillator && !oscillator.stockShortfall;
-	return pairNotes(elements, (name) => name === 'RAC' || name === 'RBIAS' || name === 'RB' || (fromList && name.endsWith('O')), stock, tail);
+	return pairNotes(elements, (name) => MODULATOR_PAIRS.includes(name) || (fromList && name.endsWith('O')), stock, tail);
 }
 
 function meta(design, oscillator, opampChoice = 'ideal') {

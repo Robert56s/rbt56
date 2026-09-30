@@ -1,4 +1,4 @@
-import { largestResistorNotAbove, nearestResistor, nearestValue, pairedResistor, resistorValues, stockList, stockName } from './eseries';
+import { largestResistorNotAbove, nearestResistor, nearestValue, pairedResistor, resistorNotBelow, resistorValues, stockList, stockName } from './eseries';
 import { modelFromIdss } from './jfetModel';
 
 /**
@@ -124,7 +124,8 @@ export function designJfetModulator({
 	targetModulationIndex = 0.9,
 	rb, // non-inverting cell: feedback resistor override (n then follows from it)
 	r2, // inverting cell: feedback resistor override (x then follows from it)
-	targetOutputAmplitude = 1, // inverting cell: what the post-gain stage brings the carrier up to, V
+	targetOutputAmplitude = 1, // what the post-gain stage brings the carrier up to, V
+	outputStage = false, // non-inverting cell: add that post-gain stage (the inverting cell has it whenever its small output needs it)
 	carrierBuffer = true, // inverting cell: a follower between the carrier divider and the channel
 	bufferOutputImpedance = 5, // ohm, what a small op-amp follower looks like at the carrier frequency
 	sourceAmplitude = 1,
@@ -138,7 +139,7 @@ export function designJfetModulator({
 	slewRate = 13e6,
 	resistorSeries = 'E24', // a series name, or a list of the resistors on hand (ohms)
 	capacitors = null, // null for the usual values, or a list of the capacitors on hand (farads)
-	pairs = false, // with a list: R_ac, R_bias and R_b may each be two resistors in series (pairedResistor)
+	pairs = false, // with a list: R_ac, R_bias, R_b, the carrier divider's top and the post-gain's R_top may each be two resistors in series
 	onFail = null // told why when no design comes back: 'pinchoff' or 'depth'
 } = {}) {
 	const m = model ?? modelFromIdss(vp, idss);
@@ -161,9 +162,7 @@ export function designJfetModulator({
 	// parallel to move it. It is designed first because its rounded parts
 	// deliver a bias and a swing a few percent off the targets, and every
 	// number below (conductance depth, modulation index, triode margin) is
-	// worth stating for the gate drive the circuit actually gets. The
-	// carrier divider and the post-gain stage only set levels, so they stay
-	// single parts whatever `pairs` says.
+	// worth stating for the gate drive the circuit actually gets.
 	const stock = resistorSeries;
 	const gainTarget = swingTarget / sourceAmplitude;
 	const biasTarget = Math.abs(vcTarget);
@@ -347,10 +346,23 @@ export function designJfetModulator({
 	// resistive divider from the carrier source. Non-inverting: it drives
 	// the op-amp's + input, which draws no current, so no buffer is needed.
 	// Inverting: it would drive the channel itself, see the buffer below.
-	const divBottom = nearestResistor(1_000, stock);
+	// Its top resistor is rounded to the safe side, the smallest stocked
+	// value at or above the target (two in series with `pairs`, under the
+	// usual rule), so the carrier on the channel never passes the limit just
+	// worked out: the nearest value could land it a step above.
+	let divBottom = nearestResistor(1_000, stock);
 	const ratio = Math.min(1, acMax / carrierSourceAmplitude);
-	const divTopTarget = ratio >= 1 ? 0 : divBottom * (1 / ratio - 1);
-	const divTop = divTopTarget > 0 ? nearestResistor(divTopTarget, stock) : 0;
+	let divTopTarget = ratio >= 1 ? 0 : divBottom * (1 / ratio - 1);
+	const divTop = divTopTarget > 0 ? resistorNotBelow(divTopTarget, stock, pairs) : 0;
+	if (divTop > 0 && divTop < divTopTarget * (1 - 1e-9)) {
+		// a list with nothing large enough over a 1 k foot: under the largest
+		// value it has, a smaller foot still keeps the carrier under the limit
+		const foot = largestResistorNotAbove(divTop / (1 / ratio - 1), stock);
+		if (foot) {
+			divBottom = foot;
+			divTopTarget = divBottom * (1 / ratio - 1);
+		}
+	}
 	const ac = (carrierSourceAmplitude * divBottom) / (divTop + divBottom);
 	const dividerImpedance = divTop > 0 ? (divTop * divBottom) / (divTop + divBottom) : 0;
 	const carrierOut = nominalGain * ac; // the cell's output carrier amplitude
@@ -360,13 +372,12 @@ export function designJfetModulator({
 	const tone2fp = (feedback * beta * ac * ac) / 4; // also the DC offset the VDS^2 term adds
 	const tone2fpDbc = 20 * Math.log10(tone2fp / carrierOut);
 
-	// --- inverting cell only: what feeds the channel, and the post-gain stage ---
+	// --- inverting cell only: what feeds the channel ---
 	// The channel is the input resistor, so whatever impedance sits in front
 	// of it adds to r_DS and the gain becomes R2/(r_DS + Z_s): a Z_s that is
 	// not negligible against r_DS(min) compresses the crest. A follower makes
 	// Z_s a few ohms; the bare divider would be several hundred.
 	let buffer = null;
-	let postGain = null;
 	let sourceImpedance = 0;
 	if (inverting) {
 		const zWith = bufferOutputImpedance;
@@ -381,13 +392,21 @@ export function designJfetModulator({
 			withoutBuffer: loaded(zWithout),
 			crestErrorWithout: zWithout / r1Min // fraction of r_DS(min) the divider adds at the crest
 		};
-		// bring the small cell output up to line level with a fixed
-		// non-inverting stage; its loss at fp is the same at every point of
-		// the message, so it changes the level, not the envelope
+	}
+
+	// --- the post-gain stage: the cell output brought up to the level asked ---
+	// A fixed non-inverting stage; its loss at fp is the same at every point
+	// of the message, so it changes the level, not the envelope. The
+	// inverting cell gets it whenever its small output needs it; the
+	// non-inverting cell only when asked (outputStage), one op-amp being its
+	// point. R_top sets the level, so with `pairs` it may be two in series.
+	let postGain = null;
+	if (inverting || outputStage) {
 		const kTarget = targetOutputAmplitude / carrierOut;
 		if (kTarget > 1.05) {
 			const rbottom = nearestResistor(1_000, stock);
-			const rtop = nearestResistor((kTarget - 1) * rbottom, stock);
+			const rtopTarget = (kTarget - 1) * rbottom;
+			const rtop = pairedResistor(rtopTarget, stock, pairs);
 			const kActual = 1 + rtop / rbottom;
 			const factor = bandwidthFactor(kActual);
 			const outMax = kActual * envelopeMax;
@@ -396,6 +415,7 @@ export function designJfetModulator({
 				target: targetOutputAmplitude,
 				kTarget,
 				rtop,
+				rtopTarget,
 				rbottom,
 				kActual,
 				factor,
@@ -439,7 +459,7 @@ export function designJfetModulator({
 	// slew rate: the cell's output is a sine of amplitude up to K_max Ac
 	const slewNeeded = 2 * Math.PI * fp * envelopeMax;
 	const slewOk = slewNeeded <= slewRate / 2;
-	const opampCount = 1 + 1 + (inverting ? (carrierBuffer ? 1 : 0) + (postGain?.needed ? 1 : 0) : 0); // summer + cell + extras
+	const opampCount = 1 + 1 + (inverting && carrierBuffer ? 1 : 0) + (postGain?.needed ? 1 : 0); // summer + cell + extras
 
 	return {
 		topology,

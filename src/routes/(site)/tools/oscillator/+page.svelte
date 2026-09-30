@@ -13,7 +13,7 @@
 	import { formatFarads, formatHz, formatOhms, formatVolts } from '$lib/modulation/format';
 	import { oscillatorBasics } from '$lib/oscillator/basics';
 	import { buildAgcDiagram, buildClampDiagram, buildLimiterDiagram, buildOscillatorDiagram, hasLimiterDiagram } from '$lib/oscillator/circuits';
-	import { explainBarkhausen, explainOpampLimit, explainStabilizer, explainTopology } from '$lib/oscillator/explain';
+	import { amplitudeRemark, explainBarkhausen, explainOpampLimit, explainStabilizer, explainTopology } from '$lib/oscillator/explain';
 	import { DIODES, JFETS } from '$lib/oscillator/limiter';
 	import { generateNetlist, generateSchematic } from '$lib/oscillator/spice';
 	import { DEFAULT_OPAMP, OPAMP_MODELS } from '$lib/spice/opamps';
@@ -78,18 +78,22 @@
 		...parts
 	});
 	// a restricted stock that cannot build this oscillator, or builds one
-	// that does not start or hold its amplitude, falls back to E24 and the
-	// usual capacitors, one resistor per part, flagged, rather than showing
-	// nothing
+	// that does not start or hold its amplitude (one the op-amp can swing: a
+	// limiter that only takes hold past the rails holds nothing), falls back
+	// to E24 and the usual capacitors, one resistor per part, flagged, rather
+	// than showing nothing
+	const works = (d) => d && d.starts && d.limiter.regulates !== false && d.opamp.swingOk;
 	const design = $derived.by(() => {
 		if (!valid) return null;
 		const own = designOscillator({ ...params, topology });
-		if (!restricted || (own && own.starts && own.limiter.regulates !== false)) return own;
+		if (!restricted || works(own)) return own;
 		const fallback = designOscillator({ ...params, topology, resistorSeries: 'E24', capacitors: null, pairs: false });
 		if (!fallback) return own;
-		if (own && !(fallback.starts && fallback.limiter.regulates !== false)) return own;
+		if (own && !works(fallback)) return own;
 		return { ...fallback, stockShortfall: true };
 	});
+	// what to say when the limiter holds another amplitude than the one asked for
+	const remark = $derived(design ? amplitudeRemark(design) : null);
 	const rows = $derived(valid ? compareOscillators(params) : []);
 	const wienRow = $derived(rows.find((r) => r.id === 'wien'));
 	const currentRow = $derived(rows.find((r) => r.id === topology));
@@ -311,7 +315,9 @@
 						<tr><td>Diode</td><td>{DIODES[design.diode].label}</td></tr>
 					</tbody>
 				</table>
-				{#if design.limiter.regulates}
+				{#if design.limiter.regulates && remark}
+					<p class="flag {remark.level}">{remark.text}</p>
+				{:else if design.limiter.regulates}
 					<p class="flag ok">
 						The gain straddles what the loop needs, so the amplitude settles at about {formatVolts(design.limiter.amplitudeActual)} peak
 						instead of clipping. That figure comes from the diode's real exponential curve, averaged over a cycle, which is
@@ -380,6 +386,9 @@
 						The clamp only conducts above the divider's threshold, so the amplitude parks at about {formatVolts(design.limiter.amplitudeActual)} peak,
 						where its damping cancels Rn's. Gain compression could never do this in a two-integrator loop: only damping moves its poles.
 					</p>
+					{#if remark}
+						<p class="flag {remark.level}">{remark.text}</p>
+					{/if}
 				{:else}
 					<p class="flag bad">No clamp divider reaches this amplitude. Try a larger amplitude or a smaller start-up growth.</p>
 				{/if}
@@ -403,7 +412,7 @@
 					<tr><td>Closed-loop bandwidth of the gain stage</td><td>{formatHz(design.opamp.closedLoopBw)} (noise gain {design.opamp.noiseGain.toFixed(1)})</td></tr>
 					<tr><td>Where the textbook values would be 10 % low with this op-amp</td><td>{Number.isFinite(design.opamp.fMax) ? formatHz(design.opamp.fMax) : 'beyond 1 GHz'}</td></tr>
 					<tr><td>Slew needed / available</td><td>{(design.opamp.slewNeeded / 1e6).toFixed(2)} V/us / {(design.opamp.slewRate / 1e6).toFixed(0)} V/us</td></tr>
-					<tr><td>Output swing needed / available</td><td>{formatVolts(amplitude)} / {formatVolts(design.opamp.opampSwing)}</td></tr>
+					<tr><td>Output swing needed / available</td><td>{formatVolts(design.amplitudeHeld)} / {formatVolts(design.opamp.opampSwing)}</td></tr>
 				</tbody>
 			</table>
 			{#if design.opamp.opampOk}
@@ -434,7 +443,10 @@
 				<p class="flag bad">Slew rate: the output needs more than half of what this op-amp can do. Lower the amplitude or the frequency.</p>
 			{/if}
 			{#if !design.opamp.swingOk}
-				<p class="flag bad">The amplitude asked for is beyond the op-amp's output swing on this supply.</p>
+				<p class="flag bad">
+					{amplitude > design.opamp.opampSwing ? 'The amplitude asked for is' : `The amplitude these parts would hold, about ${formatVolts(design.amplitudeHeld)} peak, is`}
+					beyond the op-amp's output swing on this supply.
+				</p>
 			{/if}
 			<MathPanel blocks={explainOpampLimit(design)} summary="Show the math for the op-amp in the loop" />
 		</section>

@@ -23,7 +23,7 @@
 import { readFileSync } from 'node:fs';
 import katex from 'katex';
 import { LAB_KIT, seriesPair } from '../src/lib/filter/eseries.js';
-import { explainBarkhausen, explainOpampLimit, explainStabilizer, explainTopology } from '../src/lib/oscillator/explain.js';
+import { AMPLITUDE_TOLERANCE, amplitudeRemark, explainBarkhausen, explainOpampLimit, explainStabilizer, explainTopology } from '../src/lib/oscillator/explain.js';
 import { DIODES, feedbackLimiterAmplitude } from '../src/lib/oscillator/limiter.js';
 import { openLoop, retune, solveBalance, solvePole, zeroPhase } from '../src/lib/oscillator/loop.js';
 import { buildElements, generateNetlist, generateSchematic, pairNotes } from '../src/lib/oscillator/spice.js';
@@ -536,6 +536,104 @@ const WT = 2 * Math.PI * 3e6;
 			if (issues.length) problems.push(`${tag}: ${issues[0].kind}: ${issues[0].detail}`);
 		}
 		check('pairs: every drawing with a pair shows the sums, wired as the netlist and drawn clean', problems.length === 0 && drawn > 10, problems.length ? problems.slice(0, 3).join('; ') : `${drawn} drawings`);
+	}
+}
+
+/* ------------------------------ the amplitude that comes out, not the one asked for */
+{
+	const { componentOptions } = await import('../src/lib/stock.js');
+	const lab = componentOptions('lab');
+	const labPairs = componentOptions('lab', '', '', true);
+
+	// the op-amp's swing and slew are judged on the amplitude the limiter holds
+	const e24 = designOscillator({ topology: 'wien', frequency: 1000, amplitude: 3 });
+	check(
+		'amplitude: the slew and the tap follow the amplitude the limiter holds',
+		e24.amplitudeHeld === e24.limiter.amplitudeActual && Math.abs(e24.opamp.slewNeeded - 2 * Math.PI * e24.f0 * e24.amplitudeHeld) < 1e-9 && e24.tapAmplitude === e24.amplitudeHeld,
+		`${e24.amplitudeHeld.toFixed(3)} V held for 3 V asked`
+	);
+	check('amplitude: a limiter within a tenth of the amplitude asked gets no remark', amplitudeRemark(e24) === null && Math.abs(e24.amplitudeHeld / 3 - 1) <= AMPLITUDE_TOLERANCE);
+
+	// under what the diodes can hold: the design says where it settles, and why
+	const low = designOscillator({ topology: 'wien', frequency: 50000, amplitude: 0.2, gbw: 4e6, slewRate: 16e6, opampSwing: 13.5 });
+	const lowRemark = amplitudeRemark(low);
+	check(
+		'amplitude: 0.2 V asked of a diode-limited Wien bridge is flagged as under what the diodes hold',
+		low.limiter.sized === false && lowRemark?.kind === 'floor' && lowRemark.level === 'warn' && low.amplitudeHeld > 0.4 && /200 mV/.test(lowRemark.text) && lowRemark.text.includes(`${(1000 * low.amplitudeHeld).toFixed(0)} mV`),
+		lowRemark?.text
+	);
+
+	// a short list of parts can leave the limiter far from the amplitude asked
+	const off = designOscillator({ topology: 'wien', frequency: 1000, amplitude: 5, ...lab });
+	const offRemark = amplitudeRemark(off);
+	check(
+		'amplitude: rounded parts that move it more than a tenth are flagged, with the exact values and the two-in-series hint',
+		offRemark?.kind === 'rounding' && Math.abs(off.amplitudeHeld / 5 - 1) > AMPLITUDE_TOLERANCE && /Rf1 = .* and Rf2 = .* would land on it; two resistors in series get closer\.$/.test(offRemark.text),
+		offRemark?.text
+	);
+	const offPaired = designOscillator({ topology: 'wien', frequency: 1000, amplitude: 5, ...labPairs });
+	check('amplitude: the same oscillator with two in series lands within a tenth and gets no remark', amplitudeRemark(offPaired) === null && Math.abs(offPaired.amplitudeHeld / 5 - 1) <= AMPLITUDE_TOLERANCE, `${offPaired.amplitudeHeld.toFixed(2)} V`);
+
+	// past the op-amp's swing the limiter holds nothing: the output clips
+	const clip = designOscillator({ topology: 'phaseShift', frequency: 1000, amplitude: 0.4, ...lab });
+	const clipRemark = amplitudeRemark(clip);
+	check(
+		'amplitude: a limiter that would only take hold past the rails fails the swing check and is flagged as clipping',
+		clip.amplitudeHeld > clip.opamp.opampSwing && clip.opamp.swingOk === false && clipRemark?.kind === 'clips' && clipRemark.level === 'bad',
+		`${clip.amplitudeHeld.toFixed(1)} V against ${clip.opamp.opampSwing} V`
+	);
+	const tooMuch = designOscillator({ topology: 'wien', frequency: 1000, amplitude: 12 });
+	check('amplitude: more asked than the op-amp swings is flagged, with the advice to ask for less', tooMuch.opamp.swingOk === false && /Ask for a smaller amplitude\.$/.test(amplitudeRemark(tooMuch)?.text ?? ''));
+
+	// the lamp and the JFET control have their own notes
+	check(
+		'amplitude: no remark for a lamp or a JFET control',
+		amplitudeRemark(designOscillator({ topology: 'wien', stabilizer: 'lamp', frequency: 1000, amplitude: 3 })) === null &&
+			amplitudeRemark(designOscillator({ topology: 'wien', stabilizer: 'jfet', frequency: 1000, amplitude: 3 })) === null
+	);
+
+	// every remark is site text: no dash, no second person, and it names both amplitudes
+	{
+		const bad = [];
+		let seen = 0;
+		const kinds = new Set();
+		for (const parts of [{}, lab, labPairs]) {
+			for (const t of TOPOLOGIES) {
+				for (const frequency of [50, 1000, 20000, 55000]) {
+					for (const amplitude of [0.1, 0.3, 1, 3, 8, 12]) {
+						const d = designOscillator({ topology: t.id, stabilizer: 'diodes', frequency, amplitude, ...parts });
+						const r = d && amplitudeRemark(d);
+						if (!r) continue;
+						seen++;
+						kinds.add(r.kind);
+						if (/[–—]|\byou\b|\byour\b|undefined|NaN/i.test(r.text)) bad.push(`${t.id} ${frequency} ${amplitude}: ${r.text}`);
+						if (r.level !== (r.kind === 'clips' ? 'bad' : 'warn')) bad.push(`${t.id} ${frequency} ${amplitude}: level ${r.level} for ${r.kind}`);
+						// the swing check and the remark agree
+						if ((r.kind === 'clips') !== !d.opamp.swingOk) bad.push(`${t.id} ${frequency} ${amplitude}: ${r.kind} with swingOk ${d.opamp.swingOk}`);
+					}
+				}
+			}
+		}
+		check('amplitude: the remarks read cleanly and agree with the swing check across topologies and stocks', bad.length === 0 && kinds.size === 3, bad.length ? bad.slice(0, 3).join(' | ') : `${seen} remarks, ${[...kinds].join(', ')}`);
+	}
+
+	// two in series never trade a held amplitude for a clipped one
+	{
+		const worse = [];
+		let compared = 0;
+		for (const t of TOPOLOGIES) {
+			for (const frequency of [50, 1000, 5000, 55000]) {
+				for (const amplitude of [0.3, 1, 3, 5, 8]) {
+					const single = designOscillator({ topology: t.id, stabilizer: 'diodes', frequency, amplitude, ...lab });
+					const paired = designOscillator({ topology: t.id, stabilizer: 'diodes', frequency, amplitude, ...labPairs });
+					if (!single || !paired) continue;
+					compared++;
+					const holds = (d) => d.limiter.regulates !== false && d.opamp.swingOk;
+					if (holds(single) && !holds(paired)) worse.push(`${t.id} ${frequency} Hz ${amplitude} V`);
+				}
+			}
+		}
+		check('amplitude: with two in series no oscillator clips where the single-part one holds', worse.length === 0 && compared > 50, worse.length ? worse.slice(0, 4).join('; ') : `${compared} designs`);
 	}
 }
 

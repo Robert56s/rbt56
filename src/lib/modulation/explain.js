@@ -235,8 +235,20 @@ export function explainJfetPhysics(design) {
 	];
 }
 
+/** The post-gain stage's two equations: its gain from the level asked for, then its loss at the carrier and what comes out. */
+function postGainEquations(postGain, carrier) {
+	return [
+		eq(
+			`K_{post} = \\dfrac{${formatVolts(postGain.target)}}{${formatVolts(carrier.carrierOut)}} = ${n2(postGain.kTarget)} \\ \\Rightarrow\\ R_{top} = (K_{post} - 1)\\,R_{bottom} = ${formatOhms((postGain.kTarget - 1) * postGain.rbottom)} \\rightarrow ${formatOhms(postGain.rtop)}, \\quad K_{post} = 1 + \\dfrac{${formatOhms(postGain.rtop)}}{${formatOhms(postGain.rbottom)}} = ${n2(postGain.kActual)}`
+		),
+		eq(
+			`|H_{post}(f_p)| = \\dfrac{1}{\\sqrt{1 + (f_p K_{post}/GBW)^2}} = ${n4(postGain.factor)}, \\qquad \\text{output } ${formatVolts(postGain.outputAmplitude)}, \\quad \\text{envelope up to } ${formatVolts(postGain.envelopeMax)}${postGain.swingOk ? '' : ' \\ (\\text{OVER the op-amp swing})'}`
+		)
+	];
+}
+
 export function explainJfetGainCell(design) {
-	const { r1AtCenter, rb, x, swingFraction, gDepth, modulationIndex, nominalGain, gainMin, gainMax, vgsPeakSwing, vc, vp, model, feedbackTarget, xTarget } = design;
+	const { r1AtCenter, rb, x, swingFraction, gDepth, modulationIndex, nominalGain, gainMin, gainMax, vgsPeakSwing, vc, vp, model, feedbackTarget, xTarget, postGain, carrier } = design;
 	const stock = design.stockName ?? 'E24';
 	const measured = model.mode === 'measured';
 	return [
@@ -280,7 +292,18 @@ export function explainJfetGainCell(design) {
 		eq(`K_0 = 1 + ${n3(x)} = ${n3(nominalGain)}, \\qquad n = ${n3(gDepth)} \\times \\dfrac{${n3(x)}}{1 + ${n3(x)}} = ${n3(modulationIndex)}`),
 		p(
 			`Over one message cycle the gate swings by ±${formatVolts(vgsPeakSwing)} around V_C and the gain moves between ${n3(gainMin)} and ${n3(gainMax)}: the carrier comes out ${n2(gainMax / gainMin)} times larger at the crest of the message than in its trough, which is the ratio (1+n)/(1-n) of the envelope.`
-		)
+		),
+		// the optional output stage: the level is made up after the cell, not with a larger carrier on the channel
+		...(postGain
+			? postGain.needed
+				? [
+						p(
+							`The output stage. The cell's carrier comes out at K_0 A_c = ${formatVolts(carrier.carrierOut)}, under the ${formatVolts(postGain.target)} asked for, so a fixed non-inverting stage follows it. A larger carrier on the channel would cost op-amp current and the straight line the design rests on; a gain after the cell costs neither. Its gain does not move with the message, so its loss at the carrier frequency is the same at the crest and in the trough: it raises the level and cannot bend the envelope.`
+						),
+						...postGainEquations(postGain, carrier)
+					]
+				: [p(`The output stage. The cell's carrier already comes out at ${formatVolts(carrier.carrierOut)}, which reaches the ${formatVolts(postGain.target)} asked for, so no stage follows.`)]
+			: [])
 	];
 }
 
@@ -355,16 +378,7 @@ export function explainInvertingCell(design) {
 					: `That already reaches the ${formatVolts(postGain.target)} wanted, so no stage follows.`
 			}`
 		),
-		...(postGain.needed
-			? [
-					eq(
-						`K_{post} = \\dfrac{${formatVolts(postGain.target)}}{${formatVolts(carrier.carrierOut)}} = ${n2(postGain.kTarget)} \\ \\Rightarrow\\ R_{top} = (K_{post} - 1)\\,R_{bottom} = ${formatOhms((postGain.kTarget - 1) * postGain.rbottom)} \\rightarrow ${formatOhms(postGain.rtop)}, \\quad K_{post} = 1 + \\dfrac{${formatOhms(postGain.rtop)}}{${formatOhms(postGain.rbottom)}} = ${n2(postGain.kActual)}`
-					),
-					eq(
-						`|H_{post}(f_p)| = \\dfrac{1}{\\sqrt{1 + (f_p K_{post}/GBW)^2}} = ${n4(postGain.factor)}, \\qquad \\text{output } ${formatVolts(postGain.outputAmplitude)}, \\quad \\text{envelope up to } ${formatVolts(postGain.envelopeMax)}${postGain.swingOk ? '' : ' \\ (\\text{OVER the op-amp swing})'}`
-					)
-				]
-			: []),
+		...(postGain.needed ? postGainEquations(postGain, carrier) : []),
 		p(
 			`Count of op-amps: the gate-drive summer, the follower, the cell${postGain.needed ? ', the post-gain stage' : ''}: ${opamp.opampCount}, against 2 for the non-inverting cell. The output is inverted, which changes nothing for an AM envelope. The triode limit on the carrier is the same as before, since V_DS is still the carrier: the channel sits between the drain at x_p and the source at 0 V.`
 		)
@@ -392,7 +406,7 @@ export function explainCarrierPath(design) {
 		),
 		eq(`A_{c,opamp} = \\dfrac{V_{out,max}}{K_{max}} = \\dfrac{${formatVolts(design.opamp.opampSwing)}}{${n2(gainMax)}} = ${formatVolts(c.acOpamp)}`),
 		p(
-			`The smaller of the two wins: A_c = ${formatVolts(c.acMax)}, set by the ${c.limit === 'triode' ? 'triode region' : 'op-amp swing'}. The source delivers ${formatVolts(c.sourceAmplitude)}, so a resistive divider brings it down. ${
+			`The smaller of the two wins: A_c = ${formatVolts(c.acMax)}, set by the ${c.limit === 'triode' ? 'triode region' : 'op-amp swing'}. The source delivers ${formatVolts(c.sourceAmplitude)}, so a resistive divider brings it down. Its top resistor is rounded up, to the next value on hand, so that A_c lands at or just under the limit and never above it. ${
 				inverting
 					? 'It feeds the follower\'s + input, which draws no current, so its ratio is exact; the follower then drives the channel from a few ohms (the cell\'s math shows what happens without it):'
 					: 'It feeds the op-amp\'s + input, which draws no current, so the divider needs no buffer and its ratio is exact:'
@@ -400,7 +414,7 @@ export function explainCarrierPath(design) {
 		),
 		eq(
 			c.divider.top > 0
-				? `\\dfrac{R_{bot}}{R_{top} + R_{bot}} = \\dfrac{A_c}{A_{src}} \\ \\Rightarrow\\ R_{top} = R_{bot}\\left(\\dfrac{A_{src}}{A_c} - 1\\right) = ${formatOhms(c.divider.topTarget)} \\rightarrow \\text{${design.stockName ?? 'E24'}: } ${formatOhms(c.divider.top)}, \\quad A_c = ${formatVolts(c.sourceAmplitude)} \\times \\dfrac{${formatOhms(c.divider.bottom)}}{${formatOhms(c.divider.top + c.divider.bottom)}} = ${formatVolts(c.ac)}`
+				? `\\dfrac{R_{bot}}{R_{top} + R_{bot}} = \\dfrac{A_c}{A_{src}} \\ \\Rightarrow\\ R_{top} = R_{bot}\\left(\\dfrac{A_{src}}{A_c} - 1\\right) = ${formatOhms(c.divider.topTarget)} \\rightarrow \\text{${design.stockName ?? 'E24'}, rounded up: } ${formatOhms(c.divider.top)}, \\quad A_c = ${formatVolts(c.sourceAmplitude)} \\times \\dfrac{${formatOhms(c.divider.bottom)}}{${formatOhms(c.divider.top + c.divider.bottom)}} = ${formatVolts(c.ac)}`
 				: `A_{src} \\le A_{c,max}: \\text{ no divider needed, } A_c = ${formatVolts(c.ac)}`
 		),
 		p('What comes out, from the gain at the bias point and at the two extremes of the message:'),

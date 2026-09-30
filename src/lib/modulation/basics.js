@@ -215,7 +215,7 @@ function readingN(ctx) {
 		const post = design?.postGain;
 		// the figure is drawn at the final output: after the post-gain stage when there is one
 		where =
-			topology === 'inverting' && post?.needed && pos(post.envelopeMax)
+			post?.needed && pos(post.envelopeMax)
 				? `The carrier path table lists this envelope maximum and minimum at the cell's output. The post-gain stage scales both alike and leaves the ratio alone, so the figure above, drawn at the final output, peaks at ${volts(post.envelopeMax)} as the post-gain table does, with the same n. `
 				: 'The carrier path table lists this envelope maximum and minimum for the design, and the figure above prints the same two values for its sliders. ';
 	}
@@ -325,7 +325,9 @@ function nonInvertingCell({ design, fp }) {
 		p(
 			'The JFET is the lower leg of the divider that sets the gain, under the feedback resistor R_b, and the carrier goes into the + input. One chip does the whole job.' +
 				(d
-					? ` The ${volts(d.carrier.ac)} of carrier that the divider delivers comes out as ${volts(d.carrier.carrierOut)} at rest. The message swings the gate ${pct(d.gDepth)} % of the way to each end of its line, so the gain swings from ${sig(d.gainMin)} to ${sig(d.gainMax)} and the envelope follows.`
+					? ` The ${volts(d.carrier.ac)} of carrier that the divider delivers comes out as ${volts(d.carrier.carrierOut)} at rest. The message swings the gate ${pct(d.gDepth)} % of the way to each end of its line, so the gain swings from ${sig(d.gainMin)} to ${sig(d.gainMax)} and the envelope follows.${
+							d.postGain?.needed && all(d.postGain.kActual, d.postGain.target) ? ` A second op-amp, a fixed gain of ${sig(d.postGain.kActual)}, then brings the output up to the ${volts(d.postGain.target)} asked for; its gain never moves, so it changes the size and leaves the envelope alone.` : ''
+						}`
 					: ' The message swings the gate along its line, so the gain swings with it and the envelope follows.')
 		),
 		p(
@@ -433,7 +435,7 @@ function jfetNumbers({ design, fp }) {
 }
 
 function jfetRest({ design, topology, carrierFrom }) {
-	const post = topology === 'inverting' && design?.postGain?.needed ? ' and its post-gain stage' : '';
+	const post = design?.postGain?.needed ? ' and its post-gain stage' : '';
 	const osc = carrierFrom === 'wien' ? ', the carrier oscillator' : '';
 	return [
 		h('Reading the rest of the page'),

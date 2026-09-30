@@ -384,15 +384,16 @@ export const PAIRS_FREQUENCY_SLACK = 5e-4;
 /**
  * Whether the design with two resistors in series may replace the one with
  * a single resistor per part: it must start whenever that one starts and
- * hold its amplitude whenever that one does; one that does better there
- * (starts, or holds, where the other does not) is taken; otherwise it must
- * land no further from the frequency, |ln(f0 / f)|, the rule the filter and
- * AM tools use too, give or take PAIRS_FREQUENCY_SLACK.
+ * hold its amplitude whenever that one does (inside the op-amp's swing: an
+ * amplitude past it is a clipped output, not a held one); one that does
+ * better there (starts, or holds, where the other does not) is taken;
+ * otherwise it must land no further from the frequency, |ln(f0 / f)|, the
+ * rule the filter and AM tools use too, give or take PAIRS_FREQUENCY_SLACK.
  */
 function pairsDoNoHarm(paired, single) {
 	if (!paired) return false;
 	if (!single) return true;
-	const outcome = (d) => [d.starts, d.limiter.regulates !== false];
+	const outcome = (d) => [d.starts, d.limiter.regulates !== false && d.opamp.swingOk];
 	const s = outcome(single);
 	const p = outcome(paired);
 	if ((s[0] && !p[0]) || (s[1] && !p[1])) return false;
@@ -568,7 +569,12 @@ function designWith({
 	// section of a phase-shift loop attenuates, so a tap after one is
 	// smaller than the amplifier's own output
 	const sectionLoss = { phaseShift: 1 / 29, bufferedPhaseShift: 1 / 8, bubba: 1 / 4, quadrature: 1, wien: 1 }[topology];
-	const tapAmplitude = amplitude * sectionLoss;
+	// the wave that really comes out: the limiter's rounded parts hold an
+	// amplitude of their own, a few percent from the one asked with a full
+	// series and sometimes far from it with a short list of parts, and what
+	// the taps carry and the op-amp has to swing and slew is that one
+	const amplitudeHeld = limiter.amplitudeActual > 0 ? limiter.amplitudeActual : amplitude;
+	const tapAmplitude = amplitudeHeld * sectionLoss;
 
 	/* ---- what the op-amp is asked for, and what it does to the loop */
 	// the gain the stage runs at once the wave has settled: a lamp or a JFET
@@ -588,9 +594,9 @@ function designWith({
 	// and a real part do (a single phase shift at 55 kHz on a 3 MHz op-amp
 	// lands 4.5 % high and 40 % large in LTspice)
 	const opampOk = Number.isFinite(uncompensatedError) && uncompensatedError > -0.2 && starts && lagDeg <= 25;
-	const slewNeeded = TWO_PI * f0 * amplitude;
+	const slewNeeded = TWO_PI * f0 * amplitudeHeld;
 	const slewOk = slewNeeded <= slewRate / 2;
-	const swingOk = amplitude <= opampSwing;
+	const swingOk = amplitudeHeld <= opampSwing;
 
 	/* ---- distortion */
 	const measured = MEASURED_THD[topology];
@@ -621,6 +627,7 @@ function designWith({
 		jfet: jfet.id,
 		frequency,
 		amplitude,
+		amplitudeHeld,
 		f0,
 		f0Error: f0 / frequency - 1,
 		fIdeal,

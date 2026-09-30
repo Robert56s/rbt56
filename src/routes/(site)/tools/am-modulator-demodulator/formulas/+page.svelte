@@ -229,7 +229,26 @@
 			<Equation tex={`\\text{output carrier } K_0 A_c, \\quad \\text{envelope } K_{min}A_c \\ldots K_{max}A_c, \\quad I_{peak} = \\dfrac{A_c}{r_{DS,min}}, \\quad 2f_p \\text{ tone } = \\dfrac{R_b \\beta A_c^2}{4}`} />
 			<p class="note">
 				<strong>How to use:</strong> k = 0.5 is a comfortable margin. I_peak flows through R_b out
-				of the op-amp; keep it under about 10 mA for a small op-amp.
+				of the op-amp; keep it under about 10 mA for a small op-amp. Round R_top up, to the next
+				value on hand, so that A_c lands at or just under the limit and never above it.
+			</p>
+		</div>
+
+		<div class="formula">
+			<h3>Output gain stage</h3>
+			<p class="note">
+				When the cell's carrier K_0 A_c is smaller than the level wanted, a fixed non-inverting
+				stage after the cell makes up the difference. Its gain does not move with the message, so
+				its loss at f_p is the same at the crest and in the trough: it changes the level and
+				leaves the envelope, and n, alone. A larger carrier on the JFET would give the same level,
+				but at the cost of I_peak and of the channel's straight line.
+			</p>
+			<Equation tex={`K_{post} = \\dfrac{V_{target}}{K_0 A_c} = 1 + \\dfrac{R_{top}}{R_{bottom}}, \\qquad |H_{post}(f_p)| = \\dfrac{1}{\\sqrt{1 + (f_p K_{post}/GBW)^2}}`} />
+			<Equation tex={`K_{post}\\,K_{max}\\,A_c \\le V_{out,max}, \\qquad 2\\pi f_p\\,K_{post}\\,K_{max}\\,A_c \\le \\dfrac{SR}{2}`} />
+			<p class="note">
+				<strong>How to use:</strong> pick R_bottom near 1 kΩ and R_top = (K_post - 1) R_bottom. The
+				inverting cell always has this stage when its small output needs it; for the non-inverting
+				cell it is an option, one more op-amp.
 			</p>
 		</div>
 

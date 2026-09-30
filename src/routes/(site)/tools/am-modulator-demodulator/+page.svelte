@@ -57,6 +57,7 @@
 		generateSchematic as generateModSchematic
 	} from '$lib/modulation/spice';
 	import { buildOscillatorDiagram } from '$lib/oscillator/circuits';
+	import { amplitudeRemark } from '$lib/oscillator/explain';
 	import { DEFAULT_OPAMP, OPAMP_MODELS } from '$lib/spice/opamps';
 	import { DIODES } from '$lib/oscillator/limiter';
 	import { designOscillator } from '$lib/oscillator/topologies';
@@ -111,41 +112,48 @@
 	// ------------------------------------------------------------------
 	// JFET modulator
 	// ------------------------------------------------------------------
-	let jfetMode = $state('idss'); // 'idss' | 'rdson' | 'measured'
+	// the page opens on a bench case: a low-resistance JFET read point by
+	// point (about 13 to 21 ohm from -0.5 V to -3 V), a 50 kHz carrier from a
+	// Wien bridge on the board, a 4 MHz, 16 V/us op-amp on +/-15 V rails
+	let jfetMode = $state('measured'); // 'idss' | 'rdson' | 'measured'
 	let vp = $state(-4);
 	let idssMa = $state(5);
 	let rdsOn = $state(400);
 	let measurementText = $state(
-		['-0.5  0.2  0.0627  1000', '-1.0  0.2  0.0695  1000', '-1.5  0.2  0.0780  1000', '-2.0  0.2  0.0889  1000', '-2.5  0.2  0.1032  1000', '-3.0  0.2  0.1231  1000', '-3.5  0.2  0.1524  1000'].join(String.fromCharCode(10))
+		['-0.5  0.2  0.0026  1000', '-1.0  0.2  0.0029  1000', '-1.5  0.2  0.0031  1000', '-2.0  0.2  0.0034  1000', '-2.5  0.2  0.0037  1000', '-3.0  0.2  0.0041  1000'].join(String.fromCharCode(10))
 	);
-	let windowLow = $state(-3.5);
-	let windowHigh = $state(-0.5);
+	let windowLow = $state(-7.2);
+	let windowHigh = $state(0);
 	let presetNote = $state('');
 	let presetValues = $state(null);
 	// the guide to V_P, I_DSS and r_DS(on) is the same for every design
 	const jfetSourcing = explainJfetSourcing();
 	let swingFraction = $state(0.9);
-	let targetN = $state(0.85);
+	let targetN = $state(0.75);
 	let sourceAmplitude = $state(1);
 	let fmMin = $state(100);
-	let vcc = $state(12);
+	let vcc = $state(15);
 	// carrier and op-amp: these decide whether the cell works at all, so
 	// they are design inputs, not preview settings
-	let fp = $state(55000);
+	let fp = $state(50000);
 	// which cell: the JFET in the feedback divider (one op-amp, n diluted by
 	// 1/(1+x)) or as the input resistor (n = s exactly, small x, more op-amps)
 	let topology = $state('noninverting');
 	let targetOutputAmplitude = $state(1);
+	// non-inverting cell: a fixed gain stage after the cell that brings the
+	// carrier up to the target amplitude (the inverting cell has it whenever
+	// its small output needs it)
+	let outputStage = $state(false);
 	let carrierBuffer = $state(true);
 	// the carrier can come from a generator on the bench, or from an
 	// oscillator built onto the same board; the Wien bridge is the one that
 	// asks least of the op-amp, which is what matters at a fast carrier
-	let carrierFrom = $state('source'); // 'source' | 'wien'
+	let carrierFrom = $state('wien'); // 'source' | 'wien'
 	let carrierSourceAmplitude = $state(1);
-	let carrierMargin = $state(0.5);
-	let opampSwing = $state(10.5);
-	let gbwMhz = $state(3);
-	let slewRateVus = $state(13);
+	let carrierMargin = $state(0.15);
+	let opampSwing = $state(13.5);
+	let gbwMhz = $state(4);
+	let slewRateVus = $state(16);
 	let fmPreview = $state(1000);
 
 	const idss = $derived(idssMa / 1000);
@@ -175,6 +183,7 @@
 		model: jfetModel,
 		topology,
 		targetOutputAmplitude,
+		outputStage,
 		carrierBuffer,
 		swingFraction,
 		targetModulationIndex: targetN,
@@ -198,6 +207,9 @@
 		return reason;
 	});
 
+	// an oscillator that starts and holds its amplitude, inside what the
+	// op-amp can swing: a limiter that only takes hold past the rails holds nothing
+	const oscillatorWorks = (o) => Boolean(o && o.starts && o.limiter.regulates && o.opamp.swingOk);
 	// when the carrier is generated on board, it is designed at the same
 	// frequency and amplitude the modulator expects to be fed; a restricted
 	// stock that cannot build it falls back to E24 and E6, flagged
@@ -205,13 +217,14 @@
 		if (!(carrierFrom === 'wien' && jfetValid)) return null;
 		const osc = (p) => designOscillator({ topology: 'wien', stabilizer: 'diodes', frequency: fp, amplitude: carrierSourceAmplitude, gbw: gbwMhz * 1e6, slewRate: slewRateVus * 1e6, opampSwing, ...p });
 		const own = osc(parts);
-		const works = (o) => o && o.starts && o.limiter.regulates;
-		if (!restricted || works(own)) return own;
+		if (!restricted || oscillatorWorks(own)) return own;
 		const fallback = osc(E24_PARTS);
-		return works(fallback) || !own ? fallback && { ...fallback, stockShortfall: true } : own;
+		return oscillatorWorks(fallback) || !own ? fallback && { ...fallback, stockShortfall: true } : own;
 	});
 	// the oscillator the files and the divider really get: one that starts and holds its amplitude
-	const workingOscillator = $derived(carrierOscillator && carrierOscillator.starts && carrierOscillator.limiter.regulates ? carrierOscillator : null);
+	const workingOscillator = $derived(oscillatorWorks(carrierOscillator) ? carrierOscillator : null);
+	// what to say when its limiter holds another amplitude than the one asked for
+	const carrierRemark = $derived(carrierOscillator ? amplitudeRemark(carrierOscillator) : null);
 	// its resistors as the tables print them: never as pairs when it fell back to E24
 	const oscOhms = (value) => ohms(value, !carrierOscillator?.stockShortfall);
 	// the phase-shift oscillator at the same carrier, for the comparison the carrier panel makes
@@ -225,7 +238,7 @@
 	);
 	// the carrier the divider gets: what the on-board oscillator's limiter
 	// settles at, which is not quite the amplitude asked of it, or the generator
-	const carrierIn = $derived(carrierFrom === 'wien' && carrierOscillator?.limiter.amplitudeActual ? carrierOscillator.limiter.amplitudeActual : carrierSourceAmplitude);
+	const carrierIn = $derived(carrierFrom === 'wien' && workingOscillator?.limiter.amplitudeActual ? workingOscillator.limiter.amplitudeActual : carrierSourceAmplitude);
 
 	// both cells on the same JFET, carrier and op-amp, for the side-by-side table
 	const topologyRows = $derived.by(() =>
@@ -233,6 +246,7 @@
 			? compareTopologies({
 					model: jfetModel,
 					targetOutputAmplitude,
+					outputStage,
 					carrierBuffer,
 					swingFraction,
 					targetModulationIndex: targetN,
@@ -251,7 +265,7 @@
 	);
 	// the largest voltage any of the modulator's op-amps puts out
 	const jfetPeakOut = $derived(
-		jfetDesign ? Math.max(jfetDesign.carrier.envelopeMax, jfetDesign.postGain?.envelopeMax ?? 0, Math.abs(jfetDesign.conditioning.summer.outMin), carrierOscillator?.limiter.amplitudeActual ?? 0) : 0
+		jfetDesign ? Math.max(jfetDesign.carrier.envelopeMax, jfetDesign.postGain?.envelopeMax ?? 0, Math.abs(jfetDesign.conditioning.summer.outMin), workingOscillator?.limiter.amplitudeActual ?? 0) : 0
 	);
 
 	// the preview shows what the last op-amp actually delivers: the carrier
@@ -288,6 +302,7 @@
 				windowHigh,
 				topology,
 				targetOutputAmplitude,
+				outputStage,
 				carrierBuffer,
 				swingFraction,
 				targetModulationIndex: targetN,
@@ -636,7 +651,7 @@
 			<div class="panel-head">
 				<span class="num">02</span>
 				<h2>Sources and op-amp</h2>
-				<span class="hint">TL08x: 3 MHz, 13 V/us</span>
+				<span class="hint">TL08x: 3 to 4 MHz, 13 to 16 V/us</span>
 			</div>
 			<div class="grid">
 				<div class="field">
@@ -685,7 +700,7 @@
 				<div class="field">
 					<label for="topo">Gain cell topology</label>
 					<select id="topo" bind:value={topology}>
-						<option value="noninverting">Non-inverting (1 op-amp)</option>
+						<option value="noninverting">Non-inverting (1 or 2 op-amps)</option>
 						<option value="inverting">Inverting (1 to 3 op-amps)</option>
 					</select>
 				</div>
@@ -701,12 +716,28 @@
 							<option value={false}>No, the divider drives it</option>
 						</select>
 					</div>
+				{:else}
+					<div class="field">
+						<label for="ostage">Output gain stage</label>
+						<select id="ostage" bind:value={outputStage}>
+							<option value={false}>No, the cell output as it is</option>
+							<option value={true}>Yes, up to a target amplitude</option>
+						</select>
+					</div>
+					{#if outputStage}
+						<div class="field">
+							<label for="vtarget">Target output amplitude (V)</label>
+							<input id="vtarget" type="number" step="0.1" min="0.05" bind:value={targetOutputAmplitude} />
+						</div>
+					{/if}
 				{/if}
 			</div>
 			<StockPicker id="stockJfet" bind:stock bind:resistorText bind:capacitorText bind:pairs />
 			{#if restricted}
 				<p class="note">
-					{stock === 'labR' ? 'Every resistor below is rounded to the lab resistors, the capacitors to the usual values,' : 'Every resistor and capacitor below is rounded to those values only,'} and the figures are worked out from the rounded parts.
+					{stock === 'labR'
+						? `Every resistor below is rounded to the lab resistors${parts.pairs ? ' (or two of them in series)' : ''}, the capacitors to the usual values,`
+						: `Every resistor and capacitor below is rounded to those values ${parts.pairs ? '(or, for a resistor, to two of them in series)' : 'only'},`} and the figures are worked out from the rounded parts.
 				</p>
 			{/if}
 			<p class="note">
@@ -716,6 +747,8 @@
 				non-inverting cell needs a large x to reach a deep modulation, which is what the op-amp
 				struggles with at a fast carrier; the inverting cell reaches n = s with a small x, at the
 				cost of up to two more op-amps. The comparison table below puts the two side by side.
+				An output gain stage after the non-inverting cell brings the carrier up to a target amplitude
+				without asking the JFET for a larger carrier, which would cost current and linearity.
 			</p>
 		</section>
 
@@ -757,6 +790,11 @@
 						{/if}
 					</p>
 				{/if}
+				{#if jfetDesign.topology !== 'inverting' && jfetDesign.postGain && !jfetDesign.postGain.needed}
+					<p class="note">
+						No output stage is added: the cell already gives {formatVolts(jfetDesign.carrier.carrierOut)} of carrier, which reaches the {formatVolts(jfetDesign.postGain.target)} asked for.
+					</p>
+				{/if}
 				<MathPanel blocks={[...explainJfetPhysics(jfetDesign), ...(jfetDesign.topology === 'inverting' ? explainInvertingCell(jfetDesign) : explainJfetGainCell(jfetDesign))]} />
 			</section>
 
@@ -767,11 +805,11 @@
 						<h2>Post-gain stage</h2>
 						<span class="hint">fixed gain {jfetDesign.postGain.kActual.toFixed(2)}, level only</span>
 					</div>
-					<DiagramView diagram={buildGainStageDiagram({ rtop: jfetDesign.postGain.rtop, rbottom: jfetDesign.postGain.rbottom })} label="post-gain stage" />
+					<DiagramView diagram={buildGainStageDiagram({ rtop: jfetDesign.postGain.rtop, rbottom: jfetDesign.postGain.rbottom, ohms: diagramOhms() })} label="post-gain stage" />
 					<table>
 						<tbody>
 							<tr><td>Cell output carrier K_0 A_c</td><td>{formatVolts(jfetDesign.carrier.carrierOut)}</td></tr>
-							<tr><td>Gain needed for {formatVolts(jfetDesign.postGain.target)}</td><td>{jfetDesign.postGain.kTarget.toFixed(2)}, R_top {formatOhms(jfetDesign.postGain.rtop)} / R_bottom {formatOhms(jfetDesign.postGain.rbottom)} gives {jfetDesign.postGain.kActual.toFixed(2)}</td></tr>
+							<tr><td>Gain needed for {formatVolts(jfetDesign.postGain.target)}</td><td>{jfetDesign.postGain.kTarget.toFixed(2)}, R_top {ohms(jfetDesign.postGain.rtop)} / R_bottom {formatOhms(jfetDesign.postGain.rbottom)} gives {jfetDesign.postGain.kActual.toFixed(2)}</td></tr>
 							<tr><td>Loss at f_p (constant, no envelope effect)</td><td>{jfetDesign.postGain.factor.toFixed(4)}, f_p K / GBW = {jfetDesign.postGain.gbwRatio.toFixed(2)}</td></tr>
 							<tr><td>Output carrier / envelope max</td><td>{formatVolts(jfetDesign.postGain.outputAmplitude)} / {formatVolts(jfetDesign.postGain.envelopeMax)}</td></tr>
 							<tr><td>Slew needed</td><td>{(jfetDesign.postGain.slewNeeded / 1e6).toFixed(2)} V/us</td></tr>
@@ -796,7 +834,8 @@
 					diagram={buildCarrierDividerDiagram({
 						...jfetDesign.carrier.divider,
 						from: workingOscillator ? 'from the Wien oscillator' : 'carrier source',
-						to: jfetDesign.topology === 'inverting' ? (jfetDesign.buffer.enabled ? 'to the follower' : 'to the drain') : 'to + input'
+						to: jfetDesign.topology === 'inverting' ? (jfetDesign.buffer.enabled ? 'to the follower' : 'to the drain') : 'to + input',
+						ohms: diagramOhms()
 					})}
 					label="carrier attenuator"
 				/>
@@ -804,7 +843,7 @@
 					<tbody>
 						<tr><td>Triode limit V_GS,min - V_P</td><td>{formatVolts(jfetDesign.carrier.vdsSat)} (carrier at most {formatVolts(jfetDesign.carrier.acTriode)} with margin k = {jfetDesign.carrier.margin})</td></tr>
 						<tr><td>Op-amp limit V_out,max / K_max</td><td>{formatVolts(jfetDesign.carrier.acOpamp)}</td></tr>
-						<tr><td>Carrier amplitude A_c delivered</td><td>{formatVolts(jfetDesign.carrier.ac)} from {formatVolts(jfetDesign.carrier.sourceAmplitude)}{jfetDesign.carrier.divider.top > 0 ? `, divider ${formatOhms(jfetDesign.carrier.divider.top)} / ${formatOhms(jfetDesign.carrier.divider.bottom)}` : ', no divider needed'}</td></tr>
+						<tr><td>Carrier amplitude A_c delivered</td><td>{formatVolts(jfetDesign.carrier.ac)} from {formatVolts(jfetDesign.carrier.sourceAmplitude)}{jfetDesign.carrier.divider.top > 0 ? `, divider ${ohms(jfetDesign.carrier.divider.top)} / ${formatOhms(jfetDesign.carrier.divider.bottom)}, rounded to stay at or under the limit` : ', no divider needed'}</td></tr>
 						<tr><td>Output carrier K_0 A_c</td><td>{formatVolts(jfetDesign.carrier.carrierOut)}</td></tr>
 						<tr><td>Envelope min / max</td><td>{formatVolts(jfetDesign.carrier.envelopeMin)} / {formatVolts(jfetDesign.carrier.envelopeMax)}</td></tr>
 						<tr><td>JFET and op-amp peak current</td><td>{(jfetDesign.carrier.jfetPeakCurrent * 1000).toFixed(2)} mA</td></tr>
@@ -812,7 +851,9 @@
 					</tbody>
 				</table>
 				{#if jfetDesign.carrier.jfetPeakCurrent > 0.01}
-					<p class="flag warn">Peak output current above 10 mA: lower the carrier margin or use a JFET with a smaller I_DSS.</p>
+					<p class="flag warn">
+						Peak output current above 10 mA: lower the carrier margin{jfetDesign.topology === 'inverting' ? '' : ' (the output gain stage makes up the level without this current)'} or use a JFET with a smaller I_DSS.
+					</p>
 				{/if}
 				<MathPanel blocks={explainCarrierPath(jfetDesign)} />
 			</section>
@@ -912,6 +953,11 @@
 							they set does not straddle the {carrierOscillator.requiredGain.toFixed(2)} the loop needs. Until then the carrier comes from a generator in the
 							figures above and in the files.
 						</p>
+					{:else if !carrierOscillator.opamp.swingOk}
+						<p class="flag bad">
+							{carrierRemark?.text ?? 'The amplitude asked of the oscillator is beyond the op-amp output swing.'}
+							Until then the carrier comes from a generator in the figures above and in the files.
+						</p>
 					{:else if carrierOscillator.opamp.opampOk}
 						<p class="flag ok">
 							The Wien bridge is the right choice here for one reason: it needs a gain of only 3, so at
@@ -924,6 +970,12 @@
 						<p class="flag warn">
 							At {formatHz(fp)} even a Wien bridge is past what this op-amp holds{Number.isFinite(carrierOscillator.opamp.fMax) ? ` (the textbook values would land 10 % low at ${formatHz(carrierOscillator.opamp.fMax)})` : ''}.
 							Use a faster part for the oscillator, or feed the carrier from a generator.
+						</p>
+					{/if}
+					{#if workingOscillator && carrierRemark}
+						<p class="flag warn">
+							{carrierRemark.text}
+							The divider above is sized for the amplitude the oscillator gives, so the carrier reaching the JFET stays the same.
 						</p>
 					{/if}
 					<p class="note">

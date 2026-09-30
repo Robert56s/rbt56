@@ -54,7 +54,8 @@ const WINDOW = { low: ${p.windowLow ?? 'null'}, high: ${p.windowHigh ?? 'null'} 
 // 'inverting': JFET as the input resistor behind a follower, n = s exactly,
 // small x, a post-gain stage brings the output up to TARGET_OUTPUT_AMPLITUDE.
 const TOPOLOGY = ${JSON.stringify(p.topology ?? 'noninverting')};
-const TARGET_OUTPUT_AMPLITUDE = ${p.targetOutputAmplitude ?? 1}; // V, inverting cell only
+const TARGET_OUTPUT_AMPLITUDE = ${p.targetOutputAmplitude ?? 1}; // V, what the post-gain stage brings the carrier up to (inverting cell, or OUTPUT_STAGE below)
+const OUTPUT_STAGE = ${p.outputStage ? 'true' : 'false'};           // non-inverting cell only: add that post-gain stage after the cell (one more op-amp)
 const CARRIER_BUFFER = ${p.carrierBuffer === false ? 'false' : 'true'};          // inverting cell only: follower between the divider and the channel
 const SWING_FRACTION = ${p.swingFraction};        // fraction of the |VP|/2 gate swing to use (<=1)
 const TARGET_MODULATION_INDEX = ${p.targetModulationIndex}; // used to solve for Rb (ignored if RB is set below)
@@ -110,7 +111,7 @@ console.log();
 let failure = null;
 const design = designJfetModulator({
 	onFail: (reason) => (failure = reason),
-	model: jfetModel, topology: TOPOLOGY, targetOutputAmplitude: TARGET_OUTPUT_AMPLITUDE, carrierBuffer: CARRIER_BUFFER, swingFraction: SWING_FRACTION,
+	model: jfetModel, topology: TOPOLOGY, targetOutputAmplitude: TARGET_OUTPUT_AMPLITUDE, outputStage: OUTPUT_STAGE, carrierBuffer: CARRIER_BUFFER, swingFraction: SWING_FRACTION,
 	targetModulationIndex: TARGET_MODULATION_INDEX, rb: RB,
 	sourceAmplitude: SOURCE_AMPLITUDE, fmMin: FM_MIN, vcc: VCC,
 	fp: FP, carrierSourceAmplitude: CARRIER_SOURCE_AMPLITUDE, carrierMargin: CARRIER_MARGIN,
@@ -138,7 +139,7 @@ if (!design) {
 	}
 	if (design.postGain && design.postGain.needed) {
 		const pg = design.postGain;
-		console.log(\`post-gain stage: K = \${pg.kActual.toFixed(2)} (Rtop \${pg.rtop} ohm, Rbottom \${pg.rbottom} ohm), loss at fp \${pg.factor.toFixed(4)} (constant), output \${pg.outputAmplitude.toFixed(3)} V, envelope max \${pg.envelopeMax.toFixed(2)} V \${pg.swingOk ? '' : '(OVER THE SWING) '}slew \${(pg.slewNeeded / 1e6).toFixed(2)} V/us \${pg.slewOk ? '' : '(TOO FAST)'}\`);
+		console.log(\`post-gain stage: K = \${pg.kActual.toFixed(2)} (Rtop \${ohmsLabel(pg.rtop)}, Rbottom \${pg.rbottom} ohm), loss at fp \${pg.factor.toFixed(4)} (constant), output \${pg.outputAmplitude.toFixed(3)} V, envelope max \${pg.envelopeMax.toFixed(2)} V \${pg.swingOk ? '' : '(OVER THE SWING) '}slew \${(pg.slewNeeded / 1e6).toFixed(2)} V/us \${pg.slewOk ? '' : '(TOO FAST)'}\`);
 	}
 
 	console.log();
@@ -147,7 +148,7 @@ if (!design) {
 	console.log('='.repeat(72));
 	const c = design.carrier;
 	console.log(\`triode limit VGS_min - VP = \${c.vdsSat.toFixed(3)} V -> carrier at most \${c.acTriode.toFixed(3)} V (margin \${c.margin}); op-amp limit \${c.acOpamp.toFixed(3)} V; limiting: \${c.limit}\`);
-	console.log(c.divider.top > 0 ? \`carrier divider: \${c.divider.top} ohm / \${c.divider.bottom} ohm -> Ac = \${c.ac.toFixed(4)} V (drives the + input, no buffer)\` : \`no divider needed, Ac = \${c.ac.toFixed(4)} V\`);
+	console.log(c.divider.top > 0 ? \`carrier divider: \${ohmsLabel(c.divider.top)} / \${c.divider.bottom} ohm -> Ac = \${c.ac.toFixed(4)} V, at or under the limit (drives the + input, no buffer)\` : \`no divider needed, Ac = \${c.ac.toFixed(4)} V\`);
 	console.log(\`output carrier K0*Ac = \${c.carrierOut.toFixed(3)} V, envelope \${c.envelopeMin.toFixed(3)} .. \${c.envelopeMax.toFixed(3)} V, peak current \${(c.jfetPeakCurrent * 1000).toFixed(2)} mA\`);
 	console.log(\`VDS^2 term: DC offset and 2fp tone of \${(c.tone2fp * 1000).toFixed(1)} mV (\${c.tone2fpDbc.toFixed(1)} dBc) at \${c.tone2fpHz} Hz, no envelope distortion\`);
 

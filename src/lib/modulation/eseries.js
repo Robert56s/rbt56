@@ -190,6 +190,29 @@ export function pairLabel(value, option, format, pairs = true) {
 }
 
 
+/**
+ * The smallest stocked resistor at or above the target, for a part that
+ * has to err on the large side (the top of a divider that may pass no more
+ * than its limit). With `pairs` on and a list, two in series stand in
+ * under the rule pairedResistor follows: only where the single value
+ * overshoots by more than 2 %, and only when the pair at least halves
+ * that. When nothing on hand reaches the target, the largest value (or
+ * the pair that does reach it) is returned.
+ */
+export function resistorNotBelow(target, option, pairs = false, decadeMin = 0, decadeMax = 7) {
+	const values = resistorValues(option, decadeMin, decadeMax);
+	if (!values.length) return nearestResistor(target, option);
+	const floor = target * (1 - 1e-9);
+	const single = values.find((v) => v >= floor) ?? values[values.length - 1];
+	if (!pairs || !Array.isArray(option) || !(target > 0)) return single;
+	const miss = Math.log(single / target);
+	if (miss >= 0 && miss <= Math.log(1 + PAIR_TRIGGER)) return single;
+	const table = pairTable(option);
+	const pair = table[firstPairAtOrAbove(table, floor)];
+	if (!pair) return single;
+	return miss < 0 || Math.log(pair.sum / target) <= miss / 2 ? pair.sum : single;
+}
+
 /** A value in the short form a drawing uses: 2.2k, 680, 1M. */
 function shortOhms(v) {
 	const trim = (x) => String(Number(x.toPrecision(3)));
