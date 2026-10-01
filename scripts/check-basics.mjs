@@ -381,7 +381,7 @@ function checkText(where, text) {
 	for (const rectifierType of ['full', 'half']) {
 		for (const response of ['butterworth', 'chebyshev', 'legendre', 'bessel', 'inverseChebyshev', 'elliptic']) {
 			for (const [fp, fm, amaxDb, aminDb, demoModIndex] of [
-				[40000, 1000, 1, 40, 0.9],
+				[50000, 1000, 1, 40, 0.75],
 				[55000, 2000, 0.5, 60, 0.5],
 				[100000, 500, 3, 20, 1]
 			]) {
@@ -430,12 +430,12 @@ function checkText(where, text) {
 		const ideal = dd.idealIndex.toFixed(2);
 		check(`modulation basics: the diode defaults give the engine's f_0 = ${f0k} kHz, Q = 6.67 and the ideal-switch index ${ideal}`, eqs('diode/40000/1000').includes(`${f0k}\\ \\text{kHz}`) && eqs('diode/40000/1000').includes('= 6.67') && eqs('diode/40000/1000').includes(`= ${ideal}`) && words('diode/40000/1000').includes(`n = ${dd.modulationIndex.toFixed(2)}`));
 	}
-	check('modulation basics: the demodulator defaults give f_c = 2.12 kHz and order 2', eqs('demod/full/butterworth/40000/1000').includes('2.12\\ \\text{kHz}') && words('demod/full/butterworth/40000/1000').includes('order 2 here'));
+	check('modulation basics: the demodulator defaults (50 kHz) give f_c = 2.65 kHz and order 2', eqs('demod/full/butterworth/50000/1000').includes('2.65\\ \\text{kHz}') && words('demod/full/butterworth/50000/1000').includes('order 2 here'));
 	{
 		// the MFB filter: its stage told by its parts, and what its count of stages does to the sign
 		const one = words('demod/full/butterworth/mfb/40000/40');
 		const two = words('demod/full/butterworth/mfb/10000/80');
-		const sk = words('demod/full/butterworth/40000/1000');
+		const sk = words('demod/full/butterworth/50000/1000');
 		check(
 			'modulation basics: an MFB filter is told by its three resistors, inverted with one stage, upright with two',
 			one.includes('each MFB stage, one op-amp with three resistors and two capacitors, is order 2') && one.includes('comes out inverted') && two.includes('order 4 here') && two.includes('comes out upright') && sk.includes('each Sallen-Key stage, one op-amp with two resistors and two capacitors') && !sk.includes('upside down'),

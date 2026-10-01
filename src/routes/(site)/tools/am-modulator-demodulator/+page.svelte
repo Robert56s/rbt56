@@ -385,7 +385,7 @@
 	// Demodulator (rectifier + envelope low-pass)
 	// ------------------------------------------------------------------
 	let rectifierType = $state('full');
-	let fpCarrierDemod = $state(40000);
+	let fpCarrierDemod = $state(50000);
 	let fmMaxDemod = $state(1000);
 	let amaxDb = $state(1);
 	let aminDb = $state(40);
@@ -393,7 +393,7 @@
 	// the envelope filter's stages: unity-gain Sallen-Key, or MFB (gain -1 each)
 	let envelopeTopology = $state('sallenKey');
 	let orderOverride = $state(null);
-	let demoModIndex = $state(0.9);
+	let demoModIndex = $state(0.75);
 
 	const rippleHz = $derived(rectifierType === 'full' ? 2 * fpCarrierDemod : fpCarrierDemod);
 	// the ripple carries the message as sidebands, the nearest at the ripple
