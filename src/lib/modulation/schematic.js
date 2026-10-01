@@ -1,6 +1,6 @@
 import { drawChain } from '../filter/sheet';
 import { drawOscillatorInto } from '../oscillator/schematic';
-import { createSheet, groundInput, hang, run, series } from '../spice/draw';
+import { createSheet, groundInput, hang, run, series, span } from '../spice/draw';
 import { buildDemodElements, buildDiodeElements, buildElements } from './spice';
 
 /**
@@ -221,8 +221,11 @@ function drawPrecisionRectifier(sheet, E, inp) {
  * The demodulator drawn as an LTspice schematic: the AM test source on the
  * left (its long expression written on its left), the rectifier, then the
  * envelope filter's stages, drawn by the Active Filter Design tool's own
- * stage drawer so they look the same in both tools. Named nets: vam (the
- * AM wave), vrect (after the rectifier) and vout.
+ * stage drawer so they look the same in both tools; then the coupling
+ * capacitor along the line, laid from its + plate's side so the polcap
+ * symbol shows the + where it belongs, and the load hanging to ground.
+ * Named nets: vam (the AM wave), vrect (after the rectifier), vout, and
+ * vload when there is a load.
  */
 export function drawDemodulator(opts, { comments = [], directives = [], gbw = '3Meg', opamp = 'ideal' }) {
 	const E = byName(buildDemodElements(opts));
@@ -242,7 +245,19 @@ export function drawDemodulator(opts, { comments = [], directives = [], gbw = '3
 	const vr = run(sheet, rectOut, 'right', 48);
 	sheet.label(run(sheet, vr, 'up', 64), 'vrect', 'right');
 	const out = drawChain(sheet, opts.envelope.realized, run(sheet, vr, 'right', 48), 1);
-	sheet.label(out, 'vout', 'right');
+	if (E.COUT) {
+		const vo = run(sheet, out, 'right', 48);
+		sheet.label(run(sheet, vo, 'up', 64), 'vout', 'right');
+		const a = run(sheet, vo, 'right', 48);
+		const b = { x: a.x + span('C'), y: a.y };
+		if (E.COUT.nodes[0] === 'vout') sheet.placeFrom(E.COUT, a, 'right');
+		else sheet.placeFrom(E.COUT, b, 'left');
+		const vl = run(sheet, b, 'right', 64);
+		sheet.ground(hang(sheet, E.RLOAD, vl).pins[1]);
+		sheet.label(run(sheet, vl, 'right', 96), 'vload', 'right');
+	} else {
+		sheet.label(out, 'vout', 'right');
+	}
 	sheet.notes({ comments, directives });
 	return sheet.render();
 }

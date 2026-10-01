@@ -507,6 +507,23 @@
 				response is the Sallen-Key's.
 			</p>
 		</div>
+
+		<div class="formula">
+			<h3>Output coupling capacitor</h3>
+			<p class="note">
+				The filter hands the message back on a DC level, the rectifier's average of the carrier. A
+				capacitor in series with the load blocks it; with the load R_L it is a first-order high-pass.
+			</p>
+			<Equation tex={`H(s) = \\dfrac{sR_LC}{1 + sR_LC}, \\qquad f_c = \\dfrac{1}{2\\pi R_L C}, \\qquad |H(f)| = \\dfrac{1}{\\sqrt{1 + (f_c/f)^2}}`} />
+			<Equation tex={`f_c \\le f_{m,min}\\sqrt{10^{A_{max}/10} - 1} \\ \\Rightarrow\\ C \\ge \\dfrac{1}{2\\pi R_L f_c}, \\qquad I_{peak} = \\dfrac{V_{tone}}{R_L}`} />
+			<p class="note">
+				<strong>How to use:</strong> size C for at most Amax lost at the lowest message frequency, the
+				same spec the low-pass meets at the highest, and round it up. At that size it is an
+				electrolytic: its + plate goes to the side that sits higher in DC, the filter's output when
+				its level is positive, the load (at 0 V) when an odd count of MFB stages made it negative.
+				Earphones (16 to 32 Ω) draw tens of mA: past about 10 mA an audio amplifier goes between.
+			</p>
+		</div>
 	</section>
 </article>
 

@@ -453,6 +453,8 @@ const CASES = [
 	['modulation/buildHalfWaveDiagram', () => modulation.buildHalfWaveDiagram({ rl: 1000 })],
 	['modulation/buildEnvelopeLowPassDiagram', () => modulation.buildEnvelopeLowPassDiagram({ R1: 11000, R2: 11000, Ctop: 2.2e-8, Cbottom: 1e-8 })],
 	['modulation/buildEnvelopeMfbDiagram', () => modulation.buildEnvelopeMfbDiagram({ R1: 10000, R2: 10000, R3: 10000, C1: 2.2e-8, C2: 4.7e-9 })],
+	['modulation/buildOutputCouplingDiagram(+ to the load)', () => modulation.buildOutputCouplingDiagram({ c: 1e-4, rLoad: 32, plusToward: 'load' })],
+	['modulation/buildOutputCouplingDiagram(+ to the filter)', () => modulation.buildOutputCouplingDiagram({ c: 3.3e-7, rLoad: 10000, plusToward: 'filter' })],
 	['karnaugh/sop 2 terms (B\'D\' + BD)', () => karnaughCase(4, [0, 2, 5, 7, 8, 10, 13, 15], [], 'sop')],
 	['karnaugh/pos 2 terms', () => karnaughCase(4, [0, 2, 5, 7, 8, 10, 13, 15], [], 'pos')],
 	['karnaugh/sop with don\'t-cares', () => karnaughCase(4, [1, 3, 7, 11, 15], [0, 2, 5], 'sop')],
@@ -567,6 +569,12 @@ console.log();
 					const build = topology === 'mfb' ? modulation.buildEnvelopeMfbDiagram : modulation.buildEnvelopeLowPassDiagram;
 					env.realized.forEach((s, i) => add(`am/envelope ${topology} ${sn} ${response} ${fm}/${fs} stage ${i + 1}`, () => build(s.components, { ohms: ohmsFor(!s.stockShortfall) })));
 				}
+			}
+		}
+		// the output into a load: either way round, from earphones to an amplifier's input
+		for (const plusToward of ['filter', 'load']) {
+			for (const rLoad of [8, 32, 600, 10000, 47000]) {
+				for (const c of [1e-6, 100e-6, 2.2e-3]) add(`am/output ${plusToward} ${rLoad} ${c}`, () => modulation.buildOutputCouplingDiagram({ c, rLoad, plusToward }));
 			}
 		}
 		for (const t of TOPOLOGIES) {

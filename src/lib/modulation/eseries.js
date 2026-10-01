@@ -109,6 +109,19 @@ export function capacitorCandidates(option = null) {
 	return seriesValues(E6, -12, -6);
 }
 
+/**
+ * The smallest capacitor at or above `target`, for a part that must not
+ * come out smaller (the output coupling capacitor): from the list when one
+ * is given, null when nothing on it reaches; otherwise the E6 steps from
+ * 1 pF to 68 mF, the ones electrolytics come in.
+ */
+export function capacitorNotBelow(target, option = null) {
+	const values = Array.isArray(option) ? stockList(option) : seriesValues(E6, -12, -2);
+	let best = null;
+	for (const v of values) if (v >= target * (1 - 1e-9) && (best === null || v < best)) best = v;
+	return best;
+}
+
 
 /* ---------------------------------------------- two resistors in series */
 

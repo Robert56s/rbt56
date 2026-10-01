@@ -33,6 +33,7 @@ import { designTowThomasHighPass, designTowThomasLowPass, designTowThomasNotch }
 import { designDiodeMixerModulator } from '../src/lib/modulation/diodeMixerModulator.js';
 import { designEnvelopeLowPass } from '../src/lib/modulation/envelopeFilter.js';
 import { designJfetModulator } from '../src/lib/modulation/jfetModulator.js';
+import { designOutputCoupling } from '../src/lib/modulation/outputCoupling.js';
 import { designHalfWaveRectifier, designPrecisionRectifier } from '../src/lib/modulation/rectifier.js';
 import {
 	demodExpectation,
@@ -380,6 +381,51 @@ for (const [topology, rectifierType, response] of ['sallenKey', 'mfb'].flatMap((
 		check(`${stem}: the log's mean near the page's ${ex.mean.toFixed(3)} V`, Number.isFinite(vavg) && rel(vavg, ex.mean, tolMean), Number.isFinite(vavg) ? `${vavg.toFixed(4)} V` : 'no .meas vavg in the log');
 		check(`${stem}: the recovered tone near the page's ${ex.tone.toFixed(3)} V`, rel(tone, ex.tone, tolTone), `${tone.toFixed(4)} V`);
 	}
+}
+
+// The output into a load: LTspice netlists the polcap pin by pin, so the
+// netlist match also says its + plate is drawn where the page puts it.
+// The load must get the tone with the DC level gone, and the filter's own
+// output keep its level.
+for (const [topology, rectifierType, rLoad] of [
+	['sallenKey', 'full', 32],
+	['mfb', 'full', 32],
+	['mfb', 'half', 1000]
+]) {
+	const fp = 40000;
+	const fm = 1000;
+	const envelope = designEnvelopeLowPass({ response: 'butterworth', amaxDb: 1, aminDb: 40, fp: fm, fs: rectifierType === 'full' ? 2 * fp : fp, order: null, topology });
+	const rectifier = rectifierType === 'full' ? designPrecisionRectifier() : designHalfWaveRectifier();
+	const base = { rectifierType, rectifier, envelope, fp, fm, index: 0.9 };
+	const ex = demodExpectation(base);
+	const coupling = designOutputCoupling({ rLoad, fmMin: 100, fm, amaxDb: 1, level: ex.mean, tone: ex.tone });
+	const opts = { ...base, coupling };
+	const stem = `demod-load-${topology}-${rectifierType}`;
+	const asc = join(dir, `${stem}.asc`);
+	const cir = join(dir, `${stem}.cir`);
+	writeFileSync(asc, demodSchematic(opts));
+	writeFileSync(cir, demodNetlist(opts));
+	run(['-netlist', asc], 60000);
+	const netFile = join(dir, `${stem}.net`);
+	const problems = existsSync(netFile) ? sameCircuit(readFileSync(cir, 'utf8'), readFileSync(netFile, 'latin1')) : ['LTspice wrote no netlist'];
+	check(`${stem}: LTspice netlists the drawn .asc into our .cir, C_out's + toward the ${coupling.plusToward}`, problems.length === 0, problems.slice(0, 3).join('; '));
+	run(['-b', '-ascii', cir]);
+	const rawFile = join(dir, `${stem}.raw`);
+	const logText = existsSync(join(dir, `${stem}.log`)) ? readFileSync(join(dir, `${stem}.log`), 'latin1').replace(/\0/g, '') : '';
+	if (!existsSync(rawFile)) {
+		check(`${stem}: simulates`, false);
+		continue;
+	}
+	const { t, trace } = readRaw(rawFile);
+	const toneLoad = toneOf(t, trace('V(vload)'), fm, t[0], t[t.length - 1]);
+	const loadAvg = Number((/vloadavg: AVG\(V\(vload\)\)=([-+0-9.e]+)/i.exec(logText) ?? [])[1]);
+	const vavg = Number((/vavg: AVG\(V\(vout\)\)=([-+0-9.e]+)/i.exec(logText) ?? [])[1]);
+	const tol = rectifierType === 'full' ? 0.015 : 0.05;
+	check(
+		`${stem}: the load gets the page's ${coupling.toneAtLoad.toFixed(3)} V tone with the DC level gone, the filter keeps its ${ex.mean.toFixed(3)} V`,
+		rel(toneLoad, coupling.toneAtLoad, tol) && Number.isFinite(loadAvg) && Math.abs(loadAvg) < 0.02 * coupling.toneAtLoad && Number.isFinite(vavg) && rel(vavg, ex.mean, rectifierType === 'full' ? 0.015 : 0.03),
+		`tone ${toneLoad.toFixed(4)} V, mean at the load ${Number.isFinite(loadAvg) ? (1000 * loadAvg).toFixed(2) : '?'} mV, filter ${Number.isFinite(vavg) ? vavg.toFixed(4) : '?'} V`
+	);
 }
 
 /* ------------------------------------------------------------- filters */

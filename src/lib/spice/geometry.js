@@ -35,6 +35,8 @@ const circle = (cx, cy) => [
 export const SHAPES = {
 	res: { body: [[0, 24, 32, 88]], pins: [[16, 16], [16, 96]], windows: { 0: [36, 40, 'Left'], 3: [36, 76, 'Left'] } },
 	cap: { body: [[0, 26, 32, 38]], pins: [[16, 0], [16, 64]], windows: { 0: [24, 8, 'Left'], 3: [24, 56, 'Left'] } },
+	// the flat plate, the curved one under it, and the + sign by the first pin
+	polcap: { body: [[0, 26, 32, 42], [4, 12, 12, 20]], pins: [[16, 0], [16, 64]], windows: { 0: [24, 8, 'Left'], 3: [24, 57, 'Left'] } },
 	ind: { body: [[0, 16, 32, 96]], pins: [[16, 16], [16, 96]], windows: { 0: [36, 40, 'Left'], 3: [36, 80, 'Left'] } },
 	voltage: { body: circle(0, 56), pins: [[0, 16], [0, 96]], windows: { 0: [24, 16, 'Left'], 3: [24, 96, 'Left'] } },
 	bi: { body: circle(0, 40), pins: [[0, 0], [0, 80]], windows: { 0: [24, 0, 'Left'], 3: [24, 80, 'Left'] } },
@@ -79,6 +81,14 @@ export const CANONICAL = {
 		M180: { 0: [36, 76, 'Left'], 3: [36, 40, 'Left'] }
 	},
 	cap: {
+		R90: { 0: [0, 32, 'VBottom'], 3: [32, 32, 'VTop'] },
+		M90: { 0: [0, 32, 'VBottom'], 3: [32, 32, 'VTop'] },
+		R270: { 0: [32, 32, 'VTop'], 3: [0, 32, 'VBottom'] },
+		M270: { 0: [32, 32, 'VTop'], 3: [0, 32, 'VBottom'] },
+		R180: { 0: [24, 56, 'Left'], 3: [24, 8, 'Left'] },
+		M180: { 0: [24, 56, 'Left'], 3: [24, 8, 'Left'] }
+	},
+	polcap: {
 		R90: { 0: [0, 32, 'VBottom'], 3: [32, 32, 'VTop'] },
 		M90: { 0: [0, 32, 'VBottom'], 3: [32, 32, 'VTop'] },
 		R270: { 0: [32, 32, 'VTop'], 3: [0, 32, 'VBottom'] },

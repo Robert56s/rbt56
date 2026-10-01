@@ -869,3 +869,50 @@ export function buildJfetInvertingCellDiagram({ r2, follower: withFollower = tru
 export function buildEnvelopeMfbDiagram(components, { ohms = formatOhms } = {}) {
 	return buildMfbDiagram(components, { ohms });
 }
+
+/**
+ * The demodulator's output into its load: the coupling capacitor along the
+ * line, an electrolytic drawn with its + toward `plusToward` ('filter' or
+ * 'load', the side that sits higher in DC), then the load R_L hanging to
+ * ground. The + is also written over its plate, since the symbol's own is
+ * too small to read. `ohms` writes the load's value.
+ */
+export function buildOutputCouplingDiagram({ c, rLoad, plusToward, from = 'from the low-pass', ohms = formatOhms }) {
+	const y0 = 90;
+	const fromWidth = Math.ceil(CHAR_W * from.length);
+	const C = placeSymbol(plusToward === 'load' ? 'capacitor_polarized_left' : 'capacitor_polarized_right', MARGIN + Math.max(110, fromWidth + 50), y0, SCALE);
+	const [left, right] = [C.ports['1'], C.ports['2']].sort((a, b) => a.x - b.x);
+	const plus = plusToward === 'load' ? right : left;
+	const rail = left.y;
+	const Vin = { x: MARGIN, y: rail };
+	const node = { x: right.x + 70, y: rail };
+	// R_L hangs a short wire below the rail, so the tee reads as one, dot and all
+	const RL = placeSymbol('resistor_down', node.x, node.y + 0.51 * SCALE + 14, SCALE);
+	const gnd = placeSymbol('ground_down', RL.ports['2'].x - 0.01 * SCALE, RL.ports['2'].y + 0.29 * SCALE, SCALE);
+	const out = { x: node.x + 60, y: rail };
+
+	const net = createNet();
+	net.wire(Vin, left);
+	net.wire(right, node);
+	net.wire(node, RL.ports['1']);
+	net.wire(RL.ports['2'], gnd.ports['1']);
+	net.wire(node, out);
+
+	const rText = `R_L ${ohms(rLoad)}, the load`;
+	const parts = [
+		C.svg,
+		RL.svg,
+		gnd.svg,
+		net.svg(),
+		net.dots(portPoints(C, RL, gnd)),
+		label(from, Vin.x, rail + 22, { anchor: 'start' }),
+		// just outside the + plate's lead, clear of the symbol's own small sign
+		label('+', plus.x + (plusToward === 'load' ? 10 : -10), rail - 10, { anchor: 'middle' }),
+		label(`C_out ${formatFarads(c)}`, left.x, rail + 26, { anchor: 'start' }),
+		label(rText, RL.ports['1'].x + 12, (RL.ports['1'].y + RL.ports['2'].y) / 2, { anchor: 'start' }),
+		label('V_load', out.x + 6, out.y - 8, { anchor: 'start' })
+	];
+
+	const width = Math.max(out.x + 6 + CHAR_W * 'V_load'.length, RL.ports['1'].x + 12 + CHAR_W * rText.length) + 30;
+	return { svg: parts.join(''), viewBox: `0 50 ${width} ${gnd.ports['1'].y + 30 - 50}` };
+}

@@ -8,6 +8,7 @@ import jfetModelSrc from './jfetModel.js?raw';
 import jfetModulatorSrc from './jfetModulator.js?raw';
 import mfbLowPassSrc from './mfbLowPass.js?raw';
 import orderSrc from './order.js?raw';
+import outputCouplingSrc from './outputCoupling.js?raw';
 import rectifierSrc from './rectifier.js?raw';
 import sallenKeyLowPassSrc from './sallenKeyLowPass.js?raw';
 
@@ -271,6 +272,9 @@ const ORDER = ${p.order ?? 'null'};                  // null: the minimum even o
 const RESPONSE = ${JSON.stringify(p.response)};      // 'butterworth' or 'chebyshev'
 const FILTER_TOPOLOGY = ${JSON.stringify(p.topology ?? 'sallenKey')}; // 'sallenKey' (unity gain) or 'mfb' (multiple feedback, a DC gain of -1 per stage)
 const TEST_INDEX = ${p.index ?? 0.9};              // modulation index of the 1 V test wave the last lines use
+const OUTPUT_COUPLING = ${p.outputCoupling === false ? 'false' : 'true'};        // true: a capacitor between the filter and the load blocks the DC level
+const LOAD_OHMS = ${p.loadOhms ?? 32};                // ohm, the load: earphones 16 to 32, an amplifier's input about 10k
+const FM_MIN = ${p.fmMin ?? 100};                 // Hz, the lowest message frequency the capacitor passes, at most AMAX_DB lost there
 // The values the parts are rounded to: 'E24' or 'E96' for a full series, or
 // an array of the resistors on hand in ohms; CAPACITORS is null for the usual
 // values, or an array of the capacitors on hand in farads.
@@ -335,6 +339,22 @@ const out = recoveredEnvelope({ rectifierType: RECTIFIER_TYPE, rectifier, envelo
 console.log(\`output mean \${out.mean.toFixed(4)} V, recovered tone \${out.tone.toFixed(4)} V (the filter's \${out.gainDb.toFixed(2)} dB at \${FM_MAX} Hz included)\`);
 if (out.sign < 0) console.log('the MFB stages invert, an odd count of them: the message comes out upside down, its DC level negative');
 if (!out.exact) console.log(\`an ideal rectifier would give \${out.ideal.mean.toFixed(4)} V and \${out.ideal.tone.toFixed(4)} V: the bare diode loses its drop on every crest\`);
+
+if (OUTPUT_COUPLING) {
+	if (!(LOAD_OHMS > 0 && FM_MIN > 0 && FM_MIN < FM_MAX)) {
+		console.log('Check the output: LOAD_OHMS > 0 and 0 < FM_MIN < FM_MAX.');
+		process.exit(1);
+	}
+	const cp = designOutputCoupling({ rLoad: LOAD_OHMS, fmMin: FM_MIN, fm: FM_MAX, amaxDb: AMAX_DB, level: out.mean, tone: out.tone, capacitors: CAPACITORS });
+	console.log();
+	console.log('='.repeat(72));
+	console.log('OUTPUT TO THE LOAD (coupling capacitor)');
+	console.log('='.repeat(72));
+	console.log(\`C_out = \${cp.c.toExponential(3)} F, an electrolytic\${cp.stockShortfall ? ' (not on the list: the next E6 value)' : ''}, at least \${cp.cTarget.toExponential(3)} F, rated 16 V or more\`);
+	console.log(\`its + plate toward \${cp.plusToward === 'load' ? 'the load' : 'the filter'}: the filter output sits at \${cp.level.toFixed(4)} V for a 1 V carrier, the load at 0 V\`);
+	console.log(\`corner \${cp.fc.toFixed(2)} Hz: \${cp.lossAtFmMin.toFixed(2)} dB lost at \${FM_MIN} Hz (AMAX_DB \${AMAX_DB})\`);
+	console.log(\`tone across \${LOAD_OHMS} ohm: \${cp.toneAtLoad.toFixed(4)} V, \${(1000 * cp.peakCurrent).toFixed(2)} mA at its crest\${cp.currentOk ? '' : ': past the 10 mA a TL08x drives cleanly, so an audio amplifier goes between them'}\`);
+}
 `;
 }
 
@@ -350,6 +370,7 @@ const ENGINE = [
 	diodeLawSrc,
 	diodeMixerModulatorSrc,
 	rectifierSrc,
+	outputCouplingSrc,
 	amMathSrc
 ]
 	.map(inline)

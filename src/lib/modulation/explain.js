@@ -686,3 +686,32 @@ export function explainEnvelopeFilter(design) {
 		...mfbSignBlocks(realized)
 	];
 }
+
+/**
+ * The output panel's derivation: why the DC level has to go, the
+ * high-pass the capacitor makes with the load, its size from the passband
+ * spec, which way round it goes, and what the load draws.
+ */
+export function explainOutputCoupling(cp) {
+	const { rLoad, fmMin, fm, amaxDb, fcMax, cTarget, c, fc, lossAtFmMin, gainAtFm, level, toneAtLoad, plusToward, dcCurrentBlocked, peakCurrent } = cp;
+	const ma = (a) => `${n1(1000 * a)}\\ \\text{mA}`;
+	const k = Math.sqrt(10 ** (amaxDb / 10) - 1);
+	return [
+		p(
+			`The filter hands the message back riding on a DC level, the rectifier's average of the carrier: ${formatVolts(level)} for the page's 1 V test carrier. A load wired straight to it would take that level as a steady current, ${n1(1000 * dcCurrentBlocked)} mA through ${formatOhms(rLoad)}: earphones would hold their membrane off centre with it, and the op-amp would have to supply it on top of the message. A capacitor in series blocks the DC and lets the message through.`
+		),
+		p("With the load it makes a divider between the capacitor's impedance 1/(sC) and R_L, a first-order high-pass:"),
+		eq('H(s) = \\dfrac{R_L}{R_L + \\dfrac{1}{sC}} = \\dfrac{sR_LC}{1 + sR_LC}, \\qquad f_c = \\dfrac{1}{2\\pi R_L C}, \\qquad |H(f)| = \\dfrac{1}{\\sqrt{1 + (f_c/f)^2}}'),
+		p(
+			`It is sized on the passband spec the low-pass already meets at the top of the band: at most Amax = ${n2(amaxDb)} dB lost at the lowest message frequency, ${formatHz(fmMin)} here. That caps the corner, and so sets the smallest C:`
+		),
+		eq(`f_c \\le f_{m,min}\\sqrt{10^{A_{max}/10} - 1} = ${n1(fmMin)} \\times ${n4(k)} = ${n2(fcMax)}\\ \\text{Hz}, \\qquad C \\ge \\dfrac{1}{2\\pi R_L f_c} = \\dfrac{1}{2\\pi \\times ${formatOhms(rLoad)} \\times ${n2(fcMax)}} = ${formatFarads(cTarget)}`),
+		p(`Rounded up, never down, to ${formatFarads(c)}: a larger C only makes the low end flatter. With it the corner and the losses at both ends of the message band are:`),
+		eq(`f_c = ${n2(fc)}\\ \\text{Hz}, \\qquad \\text{at } ${formatHz(fmMin)}:\\ ${n2(-lossAtFmMin)}\\ \\text{dB}, \\qquad \\text{at } ${formatHz(fm)}:\\ ${n2(20 * Math.log10(gainAtFm))}\\ \\text{dB}`),
+		p(
+			`At that size the capacitor is an electrolytic, and an electrolytic has to sit with its + plate above its - plate in DC, or it leaks and wears out. The load side sits at 0 V, held there through R_L; the filter's output sits at ${formatVolts(level)}. So the + plate goes ${plusToward === 'load' ? 'to the load: the filter side is the lower one, since the MFB stages turned the level negative.' : "to the filter's output, the higher side."} A voltage rating of 16 V or more covers anything an op-amp on 15 V rails can put across it.`
+		),
+		p(`What the load gets is the message alone: ${formatVolts(toneAtLoad)} peak across ${formatOhms(rLoad)} for the 1 V test carrier, and in proportion to the carrier beyond it. The current at its crest:`),
+		eq(`I_{peak} = \\dfrac{V_{tone}}{R_L} = \\dfrac{${formatVolts(toneAtLoad)}}{${formatOhms(rLoad)}} = ${ma(peakCurrent)}`)
+	];
+}

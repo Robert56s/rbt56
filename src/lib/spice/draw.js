@@ -148,6 +148,9 @@ export function createSheet({ gbw = '3Meg', aol = '1Meg', opamp = 'ideal' } = {}
 	let offset = { x: 0, y: 0 };
 	let nameMap = (n) => n;
 	const sh = (p) => ({ x: p.x + offset.x, y: p.y + offset.y });
+	// the symbol an element is drawn with: the five-pin op-amp for a real
+	// part, polcap for a polarized capacitor, else the kind's own
+	const symbolOf = (e) => SYMBOLS[e.kind === 'OP' && model.real ? 'OP2' : e.kind === 'C' && e.polarized ? 'CP' : e.kind];
 
 	/** Runs `fn` with every coordinate shifted by (dx, dy) and every flag name passed through `names`. */
 	function block({ dx = 0, dy = 0, names = (n) => n }, fn) {
@@ -174,8 +177,7 @@ export function createSheet({ gbw = '3Meg', aol = '1Meg', opamp = 'ideal' } = {}
 	 * first in `nodes` whatever the symbol's SpiceOrder.
 	 */
 	function place(e, x, y, orient = 'R0', { labels } = {}) {
-		// an op-amp is the five-pin symbol when the sheet uses a real part
-		const sym = SYMBOLS[e.kind === 'OP' && model.real ? 'OP2' : e.kind];
+		const sym = symbolOf(e);
 		if (!sym) throw new Error(`no LTspice symbol for kind ${e.kind}`);
 		onGrid(x, 'x');
 		onGrid(y, 'y');
@@ -194,7 +196,7 @@ export function createSheet({ gbw = '3Meg', aol = '1Meg', opamp = 'ideal' } = {}
 	 * pin spacing, in the orientation LTspice's editor would give it.
 	 */
 	function placeFrom(e, from, dir, opts = {}) {
-		const sym = SYMBOLS[e.kind];
+		const sym = symbolOf(e);
 		const orient = TWO_PIN_ORIENT[dir];
 		if (!orient) throw new Error(`no direction ${dir}`);
 		const a = sym.pins[sym.order.indexOf(0)];

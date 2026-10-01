@@ -70,6 +70,10 @@ export const SYMBOLS = {
 	BV: { name: 'bv', prefix: 'B', pins: [{ dx: 0, dy: 16 }, { dx: 0, dy: 96 }], order: [0, 1] },
 	// anode first (SpiceOrder 1 is the "+" pin)
 	D: { name: 'diode', prefix: 'D', pins: [{ dx: 16, dy: 0 }, { dx: 16, dy: 64 }], order: [0, 1] },
+	// a polarized capacitor (a C with polarized: true): LTspice's polcap, its
+	// + by the first pin (SpiceOrder 1, on top), so our first node is the +
+	// plate; it reads back as a plain C
+	CP: { name: 'polcap', prefix: 'C', kind: 'C', pins: [{ dx: 16, dy: 0 }, { dx: 16, dy: 64 }], order: [0, 1] },
 	// njf: D(48,0), G(0,64), S(48,96); our order is drain, gate, source already
 	J: { name: 'njf', prefix: '', pins: [{ dx: 48, dy: 0 }, { dx: 0, dy: 64 }, { dx: 48, dy: 96 }], order: [0, 1, 2] },
 	// Opamps\opamp is the ideal single-pole op-amp: three pins, with Aol and
@@ -214,7 +218,7 @@ export function renderNetlist({ elements, title, comments = [], params = [], dir
 
 /* ------------------------------------------------------- verification */
 
-const ASC_PINS = Object.fromEntries(Object.entries(SYMBOLS).map(([kind, s]) => [s.name, { kind, pins: s.pins, order: s.order }]));
+const ASC_PINS = Object.fromEntries(Object.entries(SYMBOLS).map(([kind, s]) => [s.name, { kind: s.kind ?? kind, pins: s.pins, order: s.order }]));
 
 /**
  * Rebuilds the circuit a .asc actually describes: nets come from the wires

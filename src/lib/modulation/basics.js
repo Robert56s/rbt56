@@ -691,7 +691,7 @@ function demodRest({ rectifierType }) {
 	return [
 		h('Reading the rest of the page'),
 		p(
-			`The first panel holds the rectifier choice, the carrier, the highest message frequency, Amax, Amin, the response, the filter topology and the preview index. The rectifier panel ${full ? 'draws the precision rectifier and its parts' : 'names the single diode'}; the envelope low-pass panel lists each stage with its parts; the preview shows the wave before and after the rectifier. The rectifier and filter panels each have a Show the math section, the download gives a script that holds the whole design, and the formula sheet collects every formula.`
+			`The first panel holds the rectifier choice, the carrier, the highest message frequency, Amax, Amin, the response, the filter topology, the preview index and the output, a capacitor into a load such as earphones, which keeps the DC level off them. The rectifier panel ${full ? 'draws the precision rectifier and its parts' : 'names the single diode'}; the envelope low-pass panel lists each stage with its parts; the preview shows the wave before and after the rectifier. The rectifier and filter panels each have a Show the math section, the download gives a script that holds the whole design, and the formula sheet collects every formula.`
 		)
 	];
 }

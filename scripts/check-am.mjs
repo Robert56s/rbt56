@@ -307,37 +307,37 @@ check('carrier: peak current is Ac times the largest conductance', near(d.carrie
 	check('spice: its other nodes are all prefixed, so nothing collides', [...oscNodes].every((n) => n === '0' || n === 'vcar' || n.startsWith('osc_')));
 }
 
+// the .asc must describe the .cir: same parts, same values, same partition of pins into nets
+const sameAsNetlist = (wanted, asc) => {
+	const { elements: got, clashes, dangling, directives } = parseSchematic(asc);
+	const problems = [...clashes, ...dangling];
+	if (got.length !== wanted.length) problems.push(`${got.length} symbols for ${wanted.length} elements`);
+	const netOf = new Map();
+	const nodeOf = new Map();
+	for (const w of wanted) {
+		const g = got.find((e) => e.name === w.name);
+		if (!g) {
+			problems.push(`${w.name} missing`);
+			continue;
+		}
+		if (g.kind !== w.kind) problems.push(`${w.name} is a ${g.kind}, expected ${w.kind}`);
+		g.nodes.forEach((net, i) => {
+			const node = w.nodes[i];
+			if (netOf.has(net) && netOf.get(net) !== node) problems.push(`${w.name} pin ${i}: drawn net joins ${netOf.get(net)} and ${node}`);
+			if (nodeOf.has(node) && nodeOf.get(node) !== net) problems.push(`${w.name} pin ${i}: node ${node} is split in the drawing`);
+			netOf.set(net, node);
+			nodeOf.set(node, net);
+			if (!net.startsWith('_n') && net !== node) problems.push(`${w.name} pin ${i}: labelled ${net}, expected ${node}`);
+		});
+		if ((w.kind === 'R' || w.kind === 'C' || w.kind === 'L') && typeof w.value === 'number' && g.value !== spiceValue(w.value)) problems.push(`${w.name} reads ${g.value}, expected ${spiceValue(w.value)}`);
+	}
+	for (const m of new Set(wanted.filter((e) => e.model).map((e) => e.model))) if (!directives.some((l) => l.startsWith(`.model ${m} `))) problems.push(`no .model ${m} in the .asc`);
+	if (wanted.some((e) => e.kind === 'OP') && !directives.includes('.lib opamp.sub')) problems.push('no .lib opamp.sub');
+	return problems;
+};
+
 /* --------------------------------- diode + tank modulator, demodulator */
 {
-	// the .asc must describe the .cir: same parts, same values, same partition of pins into nets
-	const sameAsNetlist = (wanted, asc) => {
-		const { elements: got, clashes, dangling, directives } = parseSchematic(asc);
-		const problems = [...clashes, ...dangling];
-		if (got.length !== wanted.length) problems.push(`${got.length} symbols for ${wanted.length} elements`);
-		const netOf = new Map();
-		const nodeOf = new Map();
-		for (const w of wanted) {
-			const g = got.find((e) => e.name === w.name);
-			if (!g) {
-				problems.push(`${w.name} missing`);
-				continue;
-			}
-			if (g.kind !== w.kind) problems.push(`${w.name} is a ${g.kind}, expected ${w.kind}`);
-			g.nodes.forEach((net, i) => {
-				const node = w.nodes[i];
-				if (netOf.has(net) && netOf.get(net) !== node) problems.push(`${w.name} pin ${i}: drawn net joins ${netOf.get(net)} and ${node}`);
-				if (nodeOf.has(node) && nodeOf.get(node) !== net) problems.push(`${w.name} pin ${i}: node ${node} is split in the drawing`);
-				netOf.set(net, node);
-				nodeOf.set(node, net);
-				if (!net.startsWith('_n') && net !== node) problems.push(`${w.name} pin ${i}: labelled ${net}, expected ${node}`);
-			});
-			if ((w.kind === 'R' || w.kind === 'C' || w.kind === 'L') && typeof w.value === 'number' && g.value !== spiceValue(w.value)) problems.push(`${w.name} reads ${g.value}, expected ${spiceValue(w.value)}`);
-		}
-		for (const m of new Set(wanted.filter((e) => e.model).map((e) => e.model))) if (!directives.some((l) => l.startsWith(`.model ${m} `))) problems.push(`no .model ${m} in the .asc`);
-		if (wanted.some((e) => e.kind === 'OP') && !directives.includes('.lib opamp.sub')) problems.push('no .lib opamp.sub');
-		return problems;
-	};
-
 	// an independent envelope: the diode law solved by Newton on the
 	// junction voltage at every instant (no table), the tank's answer by a
 	// relaxed fixed point, the index as the envelope's fundamental over its
@@ -1298,6 +1298,172 @@ check('carrier: peak current is Ac times the largest conductance', near(d.carrie
 			}
 		}
 		check(`formula sheet: ${found.length} equations render under strict KaTeX, the MFB stage among them`, found.length > 40 && sheetBad === 0 && src.includes('MFB low-pass (gain -1)') && src.includes('8Q^2'), `${sheetBad} failures`);
+	}
+}
+
+/* ---------------------------------- the demodulator's output into a load */
+{
+	const { designOutputCoupling, couplingGainAt, LOAD_CURRENT_LIMIT } = await import('../src/lib/modulation/outputCoupling.js');
+	const { capacitorNotBelow } = await import('../src/lib/modulation/eseries.js');
+	const { explainOutputCoupling } = await import('../src/lib/modulation/explain.js');
+	const { generateDemodNetlist } = await import('../src/lib/modulation/spice.js');
+	const { generateDemodScript } = await import('../src/lib/modulation/codegen.js');
+	const { execFileSync } = await import('node:child_process');
+	const { mkdtempSync, writeFileSync } = await import('node:fs');
+	const { tmpdir } = await import('node:os');
+	const { join } = await import('node:path');
+	const spec = { response: 'butterworth', amaxDb: 1, aminDb: 40, fp: 1000, fs: 99000, order: null };
+	const full = (envelope) => recoveredEnvelope({ rectifierType: 'full', rectifier: designPrecisionRectifier(), envelope, fm: 1000, index: 0.75 });
+	const couple = (ex, extra = {}) => designOutputCoupling({ rLoad: 32, fmMin: 100, fm: 1000, amaxDb: 1, level: ex.mean, tone: ex.tone, ...extra });
+	const sk = designEnvelopeLowPass(spec);
+	const mfb = designEnvelopeLowPass({ ...spec, topology: 'mfb' });
+	const mfb4 = designEnvelopeLowPass({ ...spec, aminDb: 80, fs: 20000, topology: 'mfb' });
+	const exSk = full(sk);
+	const exMfb = full(mfb);
+	const cSk = couple(exSk);
+	const cMfb = couple(exMfb);
+
+	// (a) the bench: 32 ohm earphones, a message from 100 Hz, 1 dB
+	check(
+		'output: 32 ohm earphones and a message from 100 Hz with Amax 1 dB want at least 97.7 uF, rounded up to 100 uF, 0.96 dB at 100 Hz',
+		near(cSk.cTarget, 97.74e-6, 0.01e-6) && near(cSk.c, 100e-6, 1e-12) && near(cSk.fc, 49.74, 0.01) && near(cSk.lossAtFmMin, 0.96, 0.005) && cSk.lossAtFmMin <= 1 && !cSk.stockShortfall,
+		`C ${cSk.c} F for ${cSk.cTarget.toExponential(4)}, f_c ${cSk.fc.toFixed(2)} Hz, ${cSk.lossAtFmMin.toFixed(3)} dB`
+	);
+
+	// (b) the + plate goes to the side that sits higher in DC
+	const half = recoveredEnvelope({ rectifierType: 'half', rectifier: designHalfWaveRectifier(), envelope: designEnvelopeLowPass({ ...spec, fs: 19000, topology: 'mfb' }), fm: 1000, index: 0.75 });
+	check(
+		'output: the + plate faces the filter after a Sallen-Key or two MFB stages, the load after one MFB stage, full-wave or half',
+		cSk.plusToward === 'filter' && cMfb.plusToward === 'load' && couple(full(mfb4)).plusToward === 'filter' && couple(half).plusToward === 'load' && near(cMfb.level, -2 / Math.PI, 1e-12),
+		`${cSk.plusToward}, ${cMfb.plusToward}, ${couple(full(mfb4)).plusToward}, ${couple(half).plusToward}`
+	);
+
+	// (c) the stock: the smallest value at or above, never below; a list without one falls back to E6, flagged
+	{
+		const bad = [];
+		const e6 = [1, 1.5, 2.2, 3.3, 4.7, 6.8];
+		for (let i = 0; i < 400; i++) {
+			const t = 10 ** (-11 + (9 * i) / 400);
+			const c = capacitorNotBelow(t);
+			// the E6 value just under c, which has to be under t
+			const k = Math.floor(Math.log10(c) + 1e-9);
+			const m = c / 10 ** k;
+			const j = e6.findIndex((x) => Math.abs(x - m) < 1e-6);
+			const below = j > 0 ? e6[j - 1] * 10 ** k : 6.8 * 10 ** (k - 1);
+			if (!(c >= t * (1 - 1e-9)) || !(below < t)) bad.push(`${t.toExponential(3)} -> ${c}`);
+		}
+		const list = couple(exSk, { capacitors: [10e-6, 100e-6, 470e-6] });
+		const short = couple(exSk, { capacitors: [10e-9, 100e-9, 10e-6] });
+		const big = couple(exSk, { rLoad: 16, capacitors: [10e-6, 100e-6, 470e-6] });
+		check(
+			'output: C is the smallest value at or above its floor, from the list when it has one, else E6 and flagged',
+			bad.length === 0 && near(list.c, 100e-6, 1e-12) && !list.stockShortfall && short.stockShortfall && near(short.c, 100e-6, 1e-12) && near(big.c, 470e-6, 1e-12) && capacitorNotBelow(1e-3, [10e-6]) === null,
+			bad.length ? bad.slice(0, 3).join('; ') : `list ${list.c}, short ${short.c} (flagged ${short.stockShortfall}), 16 ohm ${big.c}`
+		);
+	}
+
+	// (d) the low end never loses more than Amax, whatever the load, the frequency or the spec
+	{
+		const bad = [];
+		for (const rLoad of [8, 16, 32, 300, 600, 10000, 47000])
+			for (const fmMin of [20, 50, 100, 300])
+				for (const amaxDb of [0.1, 0.5, 1, 3]) {
+					const cp = couple(exSk, { rLoad, fmMin, amaxDb });
+					if (cp.lossAtFmMin > amaxDb + 1e-9 || cp.c < cp.cTarget * (1 - 1e-9) || Math.abs(couplingGainAt(cp, 1000) - cp.gainAtFm) > 1e-12) bad.push(`${rLoad} ohm ${fmMin} Hz ${amaxDb} dB: ${cp.lossAtFmMin.toFixed(3)} dB`);
+				}
+		check('output: at most Amax lost at the lowest frequency for every load, frequency and Amax', bad.length === 0, bad.length ? bad.slice(0, 3).join('; ') : '112 designs');
+	}
+
+	// (e) what the load draws: earphones past the 10 mA a TL08x drives cleanly, an amplifier's input far under
+	{
+		const amp = couple(exSk, { rLoad: 10000 });
+		check(
+			'output: 32 ohm earphones draw past 10 mA at the crest and are flagged, a 10 k input is not',
+			!cSk.currentOk && near(cSk.peakCurrent, cSk.toneAtLoad / 32, 1e-15) && cSk.peakCurrent > LOAD_CURRENT_LIMIT && amp.currentOk && near(cSk.dcCurrentBlocked, (2 / Math.PI) / 32, 1e-12),
+			`${(1000 * cSk.peakCurrent).toFixed(1)} mA and ${(1000 * amp.peakCurrent).toFixed(3)} mA, ${(1000 * cSk.dcCurrentBlocked).toFixed(1)} mA of DC kept off`
+		);
+	}
+
+	// (f) the files: COUT with its + plate first, the load, its measurements, time to charge, the drawing clean
+	{
+		const messy = [];
+		for (const [label, envelope, rectifierType] of [
+			['sallen-key full', sk, 'full'],
+			['mfb full', mfb, 'full'],
+			['mfb half', designEnvelopeLowPass({ ...spec, fs: 49000, topology: 'mfb' }), 'half'],
+			['mfb order 4', mfb4, 'full']
+		]) {
+			const rectifier = rectifierType === 'full' ? designPrecisionRectifier() : designHalfWaveRectifier();
+			const base = { rectifierType, rectifier, envelope, fp: 50000, fm: 1000, index: 0.75 };
+			const ex = recoveredEnvelope({ ...base, fm: 1000 });
+			const coupling = designOutputCoupling({ rLoad: 32, fmMin: 100, fm: 1000, amaxDb: 1, level: ex.mean, tone: ex.tone });
+			const opts = { ...base, coupling };
+			const els = buildDemodElements(opts);
+			const cout = els.find((e) => e.name === 'COUT');
+			const plusNode = coupling.plusToward === 'load' ? 'vload' : 'vout';
+			if (!cout || cout.nodes[0] !== plusNode || !cout.polarized) messy.push(`${label}: COUT ${cout?.nodes.join(' ')}`);
+			if (!els.some((e) => e.name === 'RLOAD' && e.nodes.join() === 'vload,0' && e.value === 32)) messy.push(`${label}: no RLOAD from vload to ground`);
+			const cir = generateDemodNetlist(opts);
+			const tran = /\.tran 0 (\S+) (\S+)/.exec(cir);
+			if (!cir.includes('.meas TRAN vloadavg AVG V(vload)') || !cir.includes('.meas TRAN vloadpp PP V(vload)')) messy.push(`${label}: no vload measurements`);
+			if (!tran || Number(tran[2]) < 8 * coupling.timeConstant * (1 - 1e-3)) messy.push(`${label}: saved from ${tran?.[2]} s, before eight R_L C`);
+			const asc = generateDemodSchematic(opts);
+			const problems = sameAsNetlist(els.filter((e) => e.kind !== 'LABEL'), asc);
+			const issues = audit(asc);
+			if (!asc.includes('SYMBOL polcap')) problems.push('COUT not drawn as a polcap');
+			if (problems.length || issues.length) messy.push(`${label}: ${problems[0] ?? `${issues[0].kind}: ${issues[0].detail}`}`);
+			for (const part of ['TL082', 'LM741']) {
+				const r = realOpampProblems(asc, generateDemodSchematic({ ...opts, opamp: part }), part);
+				if (r.problems.length || r.issues.length) messy.push(`${label} ${part}: ${r.problems[0] ?? `${r.issues[0].kind}: ${r.issues[0].detail}`}`);
+			}
+		}
+		check('output: the files carry COUT with its + plate first and drawn as a polcap, the load, its measurements and time to charge, every drawing clean', messy.length === 0, messy.length ? messy.slice(0, 3).join('; ') : 'four demodulators, ideal and real op-amps');
+	}
+
+	// (g) the downloaded script prints the output, and nothing of it when it is off
+	{
+		const dir = mkdtempSync(join(tmpdir(), 'rbt56-am-output-'));
+		const run = (name, code) => {
+			const file = join(dir, name);
+			writeFileSync(file, code);
+			try {
+				return execFileSync(process.execPath, [file], { encoding: 'utf8', stdio: 'pipe' });
+			} catch (e) {
+				return `CRASH ${String(e.stderr || e.message).split(String.fromCharCode(10)).slice(0, 3).join(' / ')}`;
+			}
+		};
+		const params = { rectifierType: 'full', fpCarrier: 50000, fmMax: 1000, amaxDb: 1, aminDb: 40, order: null, response: 'butterworth', topology: 'mfb', index: 0.75, loadOhms: 32, fmMin: 100 };
+		const on = run('on.js', generateDemodScript({ ...params, outputCoupling: true }));
+		const off = run('off.js', generateDemodScript({ ...params, outputCoupling: false }));
+		check(
+			'output: the downloaded script sizes C_out with OUTPUT_COUPLING = true, says which way round it goes and what the load draws',
+			on.includes('C_out = 1.000e-4 F, an electrolytic') && on.includes('its + plate toward the load') && on.includes('corner 49.74 Hz') && on.includes('past the 10 mA') && !off.includes('C_out') && !off.startsWith('CRASH'),
+			[on, off].find((o) => o.startsWith('CRASH')) ?? on.split(String.fromCharCode(10)).find((l) => l.startsWith('C_out')) ?? 'no C_out line'
+		);
+	}
+
+	// (h) the explanation: plain text, every equation under strict KaTeX
+	{
+		let tex = 0;
+		let broken = 0;
+		const words = [];
+		for (const cp of [cSk, cMfb, couple(exSk, { rLoad: 10000, fmMin: 50, amaxDb: 0.5 })]) {
+			const blocks = explainOutputCoupling(cp);
+			for (const b of blocks.filter((x) => x.type === 'eq')) {
+				tex++;
+				try {
+					katex.renderToString(b.tex, { throwOnError: true, strict: 'error', displayMode: true });
+				} catch {
+					broken++;
+				}
+			}
+			words.push(blocks.filter((x) => x.type === 'p').map((x) => x.text).join(' '));
+		}
+		check(
+			'output: the explanation sizes C, says which way round it goes and what the load draws, plain text, every equation renders',
+			broken === 0 && words[0].includes("to the filter's output, the higher side") && words[1].includes('to the load') && !/undefined|NaN/.test(words.join(' ')),
+			`${tex} equations, ${broken} broken`
+		);
 	}
 }
 
