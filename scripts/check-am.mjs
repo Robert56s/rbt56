@@ -454,25 +454,27 @@ check('carrier: peak current is Ac times the largest conductance', near(d.carrie
 	{
 		const messy = [];
 		let drawn = 0;
-		for (const rectifierType of ['full', 'half']) {
-			for (const response of ['butterworth', 'chebyshev']) {
-				for (const [fp, fm, aminDb] of [
-					[40000, 1000, 40],
-					[55000, 3000, 60],
-					[10000, 300, 30]
-				]) {
-					const envelope = designEnvelopeLowPass({ response, amaxDb: 1, aminDb, fp: fm, fs: rectifierType === 'full' ? 2 * fp : fp, order: null });
-					const rectifier = rectifierType === 'full' ? designPrecisionRectifier() : designHalfWaveRectifier();
-					const opts = { rectifierType, rectifier, envelope, fp, fm, index: 0.9 };
-					drawn++;
-					const asc = generateDemodSchematic(opts);
-					const problems = sameAsNetlist(buildDemodElements(opts).filter((e) => e.kind !== 'LABEL'), asc);
-					const issues = audit(asc);
-					if (problems.length || issues.length) messy.push(`${rectifierType} ${response} ${fp}/${fm}: ${problems[0] ?? `${issues[0].kind}: ${issues[0].detail}`}`);
+		for (const topology of ['sallenKey', 'mfb']) {
+			for (const rectifierType of ['full', 'half']) {
+				for (const response of ['butterworth', 'chebyshev']) {
+					for (const [fp, fm, aminDb] of [
+						[40000, 1000, 40],
+						[55000, 3000, 60],
+						[10000, 300, 30]
+					]) {
+						const envelope = designEnvelopeLowPass({ response, amaxDb: 1, aminDb, fp: fm, fs: rectifierType === 'full' ? 2 * fp : fp, order: null, topology });
+						const rectifier = rectifierType === 'full' ? designPrecisionRectifier() : designHalfWaveRectifier();
+						const opts = { rectifierType, rectifier, envelope, fp, fm, index: 0.9 };
+						drawn++;
+						const asc = generateDemodSchematic(opts);
+						const problems = sameAsNetlist(buildDemodElements(opts).filter((e) => e.kind !== 'LABEL'), asc);
+						const issues = audit(asc);
+						if (problems.length || issues.length) messy.push(`${topology} ${rectifierType} ${response} ${fp}/${fm}: ${problems[0] ?? `${issues[0].kind}: ${issues[0].detail}`}`);
+					}
 				}
 			}
 		}
-		check('demodulator export: every .asc is its .cir, drawn clean', messy.length === 0 && drawn === 12, messy.length ? messy.slice(0, 3).join('; ') : `${drawn} designs`);
+		check('demodulator export: every .asc is its .cir, drawn clean, Sallen-Key and MFB', messy.length === 0 && drawn === 24, messy.length ? messy.slice(0, 3).join('; ') : `${drawn} designs`);
 		const envelope = designEnvelopeLowPass({ response: 'butterworth', amaxDb: 1, aminDb: 40, fp: 1000, fs: 80000, order: null });
 		const full = buildDemodElements({ rectifierType: 'full', rectifier: designPrecisionRectifier(), envelope });
 		const byName = Object.fromEntries(full.filter((e) => e.name).map((e) => [e.name, e]));
@@ -502,11 +504,13 @@ check('carrier: peak current is Ac times the largest conductance', near(d.carrie
 			const design = designDiodeMixerModulator({ fp: 40000, fmMax: 1000, ...extra });
 			exports.push([`diode ${JSON.stringify(extra)}`, (opamp) => generateDiodeSchematic({ design, opamp })]);
 		}
-		for (const rectifierType of ['full', 'half']) {
-			for (const response of ['butterworth', 'chebyshev']) {
-				const envelope = designEnvelopeLowPass({ response, amaxDb: 1, aminDb: 40, fp: 1000, fs: rectifierType === 'full' ? 80000 : 40000, order: null });
-				const opts = { rectifierType, rectifier: rectifierType === 'full' ? designPrecisionRectifier() : designHalfWaveRectifier(), envelope, fp: 40000, fm: 1000, index: 0.9 };
-				exports.push([`demod ${rectifierType} ${response}`, (opamp) => generateDemodSchematic({ ...opts, opamp })]);
+		for (const topology of ['sallenKey', 'mfb']) {
+			for (const rectifierType of ['full', 'half']) {
+				for (const response of ['butterworth', 'chebyshev']) {
+					const envelope = designEnvelopeLowPass({ response, amaxDb: 1, aminDb: 40, fp: 1000, fs: rectifierType === 'full' ? 80000 : 40000, order: null, topology });
+					const opts = { rectifierType, rectifier: rectifierType === 'full' ? designPrecisionRectifier() : designHalfWaveRectifier(), envelope, fp: 40000, fm: 1000, index: 0.9 };
+					exports.push([`demod ${topology} ${rectifierType} ${response}`, (opamp) => generateDemodSchematic({ ...opts, opamp })]);
+				}
 			}
 		}
 		for (const [label, draw] of exports) {
@@ -517,7 +521,7 @@ check('carrier: peak current is Ac times the largest conductance', near(d.carrie
 				if (problems.length || issues.length) messy.push(`${label} ${part}: ${problems[0] ?? `${issues[0].kind}: ${issues[0].detail}`}`);
 			}
 		}
-		check('real op-amps: every AM drawing wired as the ideal one, on v++ and v--, drawn clean', messy.length === 0 && drawn === 22, messy.length ? messy.slice(0, 3).join('; ') : `${drawn} drawings`);
+		check('real op-amps: every AM drawing wired as the ideal one, on v++ and v--, drawn clean', messy.length === 0 && drawn === 30, messy.length ? messy.slice(0, 3).join('; ') : `${drawn} drawings`);
 	}
 }
 
@@ -1070,6 +1074,231 @@ check('carrier: peak current is Ac times the largest conductance', near(d.carrie
 		check('output stage: the cell explanation covers it, in clean text, and its equations render', words.includes('The output stage.') && !words.includes('undefined') && !words.includes('NaN') && broken === 0 && tex > explainJfetGainCell(off).filter((x) => x.type === 'eq').length, `${tex} equations, ${broken} broken`);
 	}
 
+}
+
+/* ------------------------------- the envelope filter built from MFB stages */
+{
+	const { LAB_KIT } = await import('../src/lib/filter/eseries.js');
+	const { componentOptions } = await import('../src/lib/stock.js');
+	const { seriesPair } = await import('../src/lib/modulation/eseries.js');
+	const { envelopeGainAt, envelopeGainDb, envelopeSign } = await import('../src/lib/modulation/envelopeFilter.js');
+	const { explainEnvelopeFilter } = await import('../src/lib/modulation/explain.js');
+	const { generateDemodNetlist } = await import('../src/lib/modulation/spice.js');
+	const { generateDemodScript } = await import('../src/lib/modulation/codegen.js');
+	const { execFileSync } = await import('node:child_process');
+	const { mkdtempSync, writeFileSync } = await import('node:fs');
+	const { tmpdir } = await import('node:os');
+	const { join } = await import('node:path');
+	const inList = (v, list) => list.some((x) => Math.abs(x / v - 1) < 1e-9);
+	const stageMiss = (r, t) => Math.max(Math.abs(Math.log(r.actual.wn / t.wn)), Math.abs(Math.log(r.actual.q / t.q)));
+
+	const specs = [];
+	for (const response of ['butterworth', 'chebyshev']) {
+		for (const [fm, fs, aminDb, amaxDb] of [
+			[1000, 99000, 40, 1],
+			[1000, 79000, 40, 1],
+			[3000, 107000, 60, 1],
+			[300, 19700, 40, 0.5],
+			[1000, 9000, 40, 1],
+			[1000, 20000, 80, 1],
+			[1000, 5000, 60, 0.5]
+		]) {
+			specs.push({ response, amaxDb, aminDb, fp: fm, fs, order: null, maxOrder: 8 });
+		}
+	}
+
+	// (a) every stage an MFB with R3 = R1 and C1/C2 past 8 Q^2, its parts on the stock,
+	// close to its target, and the stopband still at least Amin down
+	{
+		const limits = { E24: 0.07, E96: 0.02, lab: 0.16, labR: 0.16, 'lab pairs': 0.03, 'labR pairs': 0.03 };
+		const bad = [];
+		let stages = 0;
+		for (const [name, stock, pairs] of [
+			['E24', 'E24', false],
+			['E96', 'E96', false],
+			['lab', 'lab', false],
+			['labR', 'labR', false],
+			['lab pairs', 'lab', true],
+			['labR pairs', 'labR', true]
+		]) {
+			const parts = componentOptions(stock, '', '', pairs);
+			for (const spec of specs) {
+				const e = designEnvelopeLowPass({ ...spec, topology: 'mfb', ...parts });
+				const tag = `${name} ${spec.response} ${spec.fp}/${spec.fs}`;
+				if (e.tooHigh || e.topology !== 'mfb') {
+					bad.push(`${tag}: no MFB design`);
+					continue;
+				}
+				e.realized.forEach((r, i) => {
+					stages++;
+					const t = e.stages[i];
+					const c = r.components;
+					if (r.topology !== 'mfb' || r.actual.gain !== -1) bad.push(`${tag} stage ${i + 1}: not an MFB with a gain of -1`);
+					if (c.R3 !== c.R1) bad.push(`${tag} stage ${i + 1}: R3 ${c.R3} is not R1 ${c.R1}`);
+					if (c.C1 / c.C2 < 8 * t.q * t.q) bad.push(`${tag} stage ${i + 1}: C1/C2 ${(c.C1 / c.C2).toFixed(1)} under 8 Q^2`);
+					if (r.stockShortfall) bad.push(`${tag} stage ${i + 1}: the stock could not build it`);
+					const list = Array.isArray(parts.resistorSeries) ? parts.resistorSeries : null;
+					for (const v of [c.R1, c.R2]) if (list && !inList(v, list) && !(parts.pairs && seriesPair(v, list))) bad.push(`${tag} stage ${i + 1}: ${v} ohm is neither on the list nor two of it`);
+					for (const v of [c.C1, c.C2]) if (parts.capacitors && !inList(v, parts.capacitors)) bad.push(`${tag} stage ${i + 1}: ${v} F is not on the list`);
+					if (stageMiss(r, t) > limits[name]) bad.push(`${tag} stage ${i + 1}: ${(100 * stageMiss(r, t)).toFixed(1)} % off its f0 or Q`);
+				});
+				if (-envelopeGainDb(e, spec.fs) < spec.aminDb - 0.1) bad.push(`${tag}: only ${(-envelopeGainDb(e, spec.fs)).toFixed(1)} dB at fs`);
+			}
+		}
+		check('mfb: every stage an MFB, R3 = R1, C1/C2 past 8 Q^2, its parts on the stock (or two of it), near its f0 and Q, Amin kept', bad.length === 0 && stages > 100, bad.length ? bad.slice(0, 3).join('; ') : `${stages} stages on six stocks`);
+	}
+
+	// (b) the same order and the same ideal stages as the Sallen-Key: only the sign differs
+	{
+		const bad = [];
+		for (const spec of specs) {
+			const m = designEnvelopeLowPass({ ...spec, topology: 'mfb', resistorSeries: 'E96' });
+			const s = designEnvelopeLowPass({ ...spec, topology: 'sallenKey', resistorSeries: 'E96' });
+			const tag = `${spec.response} ${spec.fp}/${spec.fs}`;
+			if (m.n !== s.n || JSON.stringify(m.stages) !== JSON.stringify(s.stages)) bad.push(`${tag}: other stages than the Sallen-Key's`);
+			if (envelopeSign(m) !== (-1) ** (m.n / 2) || envelopeSign(s) !== 1) bad.push(`${tag}: sign ${envelopeSign(m)} for order ${m.n}`);
+		}
+		const two = designEnvelopeLowPass({ ...specs[0], topology: 'mfb' });
+		const four = designEnvelopeLowPass({ ...specs[5], topology: 'mfb' });
+		check('mfb: the same order and target stages as the Sallen-Key, the sign (-1)^(n/2): inverted at order 2, upright at order 4', bad.length === 0 && two.n === 2 && envelopeSign(two) === -1 && four.n === 4 && envelopeSign(four) === 1, bad.length ? bad.slice(0, 3).join('; ') : `${specs.length} specs`);
+	}
+
+	// (c) what comes out: the precision rectifier's 2/pi with the filter's sign, the
+	// tone its size; the bare diode loaded by R1 as well, so a little less than with a Sallen-Key
+	{
+		const two = designEnvelopeLowPass({ response: 'butterworth', amaxDb: 1, aminDb: 40, fp: 1000, fs: 99000, order: null, topology: 'mfb' });
+		const four = designEnvelopeLowPass({ response: 'butterworth', amaxDb: 1, aminDb: 80, fp: 1000, fs: 20000, order: null, topology: 'mfb' });
+		const full2 = recoveredEnvelope({ rectifierType: 'full', rectifier: designPrecisionRectifier(), envelope: two, fm: 1000, index: 0.75 });
+		const full4 = recoveredEnvelope({ rectifierType: 'full', rectifier: designPrecisionRectifier(), envelope: four, fm: 1000, index: 0.75 });
+		check(
+			'mfb: the precision rectifier gives -2/pi through one MFB stage, +2/pi through two, the tone 2/pi n |H(fm)| either way',
+			near(full2.mean, -2 / Math.PI, 1e-12) && full2.sign === -1 && near(full4.mean, 2 / Math.PI, 1e-12) && full4.sign === 1 && near(full2.tone, (2 / Math.PI) * 0.75 * envelopeGainAt(two, 1000), 1e-12) && full2.tone > 0,
+			`${full2.mean.toFixed(4)} V and ${full4.mean.toFixed(4)} V, tone ${full2.tone.toFixed(4)} V`
+		);
+		// a 20 kHz carrier: the half-wave ripple's nearest sideband at 19 kHz, an order-2 filter, one stage
+		const halfMfb = designEnvelopeLowPass({ response: 'butterworth', amaxDb: 1, aminDb: 40, fp: 1000, fs: 19000, order: null, topology: 'mfb' });
+		const halfSk = designEnvelopeLowPass({ response: 'butterworth', amaxDb: 1, aminDb: 40, fp: 1000, fs: 19000, order: null });
+		const bareMfb = recoveredEnvelope({ rectifierType: 'half', rectifier: designHalfWaveRectifier(), envelope: halfMfb, fm: 1000, index: 0.9 });
+		const bareSk = recoveredEnvelope({ rectifierType: 'half', rectifier: designHalfWaveRectifier(), envelope: halfSk, fm: 1000, index: 0.9 });
+		check(
+			"mfb: the bare diode's mean comes out negative through one MFB stage, a little smaller than with a Sallen-Key (R1 takes DC too)",
+			halfMfb.n === 2 && bareMfb.mean < 0 && -bareMfb.mean < bareSk.mean && -bareMfb.mean > 0.85 * bareSk.mean && bareMfb.ideal.mean < 0 && !bareMfb.exact,
+			`${bareMfb.mean.toFixed(4)} V against ${bareSk.mean.toFixed(4)} V, R1 ${halfMfb.realized[0].components.R1} ohm next to R_L 1 k`
+		);
+	}
+
+	// (d) the netlist: the stage wired as the filter tool's MFB, named in the files, pairs noted on R1, R2 and R3
+	{
+		const envelope = designEnvelopeLowPass({ response: 'butterworth', amaxDb: 1, aminDb: 40, fp: 1000, fs: 99000, order: null, topology: 'mfb' });
+		const opts = { rectifierType: 'full', rectifier: designPrecisionRectifier(), envelope, fp: 50000, fm: 1000, index: 0.75 };
+		const els = buildDemodElements(opts);
+		const by = Object.fromEntries(els.filter((e) => e.name).map((e) => [e.name, e]));
+		const wired =
+			by.R11?.nodes.join() === 'vrect,s1a' &&
+			by.C11?.nodes.join() === 's1a,0' &&
+			by.R21?.nodes.join() === 's1a,s1n' &&
+			by.R31?.nodes.join() === 'vout,s1a' &&
+			by.C21?.nodes.join() === 's1n,vout' &&
+			by.U1?.nodes.join() === '0,s1n,vout' &&
+			by.R31.value === by.R11.value;
+		const cir = generateDemodNetlist(opts);
+		check(
+			'mfb: the netlist wires R1, C1, R2, R3, C2 around a grounded + input, and says the stage inverts and the level reads negative',
+			wired && cir.includes('order-2 Butterworth MFB low-pass') && cir.includes('1 MFB stage, each with a DC gain of -1') && cir.includes('DC level of -2 Ac/pi = -0.637 V') && cir.includes('comes out upside down'),
+			wired ? 'wired as drawn' : els.filter((e) => /^(R|C)\d|^U1$/.test(e.name)).map((e) => `${e.name} ${e.nodes.join(' ')}`).join('; ')
+		);
+		const lab = componentOptions('labR', '', '', true);
+		const envPairs = designEnvelopeLowPass({ response: 'butterworth', amaxDb: 1, aminDb: 40, fp: 1000, fs: 99000, order: null, topology: 'mfb', ...lab });
+		const dm = { ...opts, envelope: envPairs, rectifier: designPrecisionRectifier({ resistorSeries: lab.resistorSeries }), resistorSeries: lab.resistorSeries, pairs: true };
+		const pCir = generateDemodNetlist(dm);
+		const pAsc = generateDemodSchematic(dm);
+		const r1Pair = seriesPair(envPairs.realized[0].components.R1, LAB_KIT.resistors);
+		const note = r1Pair ? `R11 = ${spiceValue(r1Pair[0])} + ${spiceValue(r1Pair[1])} in series` : null;
+		const note3 = r1Pair ? `R31 = ${spiceValue(r1Pair[0])} + ${spiceValue(r1Pair[1])} in series` : null;
+		check('mfb: with two in series the files note R1 and R3 (the same pair), and the drawing stays clean', note !== null && pCir.includes(note) && pCir.includes(note3) && pAsc.includes(note3) && audit(pAsc).length === 0, note ?? 'R1 is not a pair here');
+	}
+
+	// (e) a list with nothing that reaches C1/C2 >= 8 Q^2 falls back to the usual values, flagged
+	{
+		const e = designEnvelopeLowPass({ response: 'butterworth', amaxDb: 1, aminDb: 40, fp: 1000, fs: 99000, order: null, topology: 'mfb', resistorSeries: [1000, 10000, 100000], capacitors: [10e-9] });
+		const r = e.realized[0];
+		check('mfb: one capacitor value cannot set C1/C2, so the stage comes from E24 and E6 and is flagged', r?.stockShortfall === true && r.topology === 'mfb' && e.shortfallStages.join() === '1' && r.components.C1 / r.components.C2 >= 8 * e.stages[0].q ** 2, r ? `C1 ${r.components.C1}, C2 ${r.components.C2}` : 'no stage');
+	}
+
+	// (f) the explanation: the MFB derivation for each stage and the sign, in clean text, the equations under strict KaTeX
+	{
+		let tex = 0;
+		let broken = 0;
+		const words = [];
+		const designs = [specs[0], specs[5], specs[7], specs[12]].map((spec) => designEnvelopeLowPass({ ...spec, topology: 'mfb', ...componentOptions('labR', '', '', true) }));
+		for (const e of designs) {
+			const blocks = explainEnvelopeFilter(e);
+			for (const b of blocks.filter((x) => x.type === 'eq')) {
+				tex++;
+				try {
+					katex.renderToString(b.tex, { throwOnError: true, strict: 'error', displayMode: true });
+				} catch {
+					broken++;
+				}
+			}
+			words.push(blocks.filter((x) => x.type === 'p').map((x) => x.text).join(' '));
+		}
+		const all = words.join(' ');
+		const sk = explainEnvelopeFilter(designEnvelopeLowPass({ ...specs[0] })).map((b) => b.text ?? '').join(' ');
+		check(
+			'mfb: the explanation derives each MFB stage and says what the sign does, plain text, every equation renders',
+			broken === 0 && all.includes('MFB components') && all.includes('The sign of what comes out') && words[0].includes('upside down') && words[1].includes('upright') && !/undefined|NaN/.test(all) && !sk.includes('The sign of what comes out'),
+			`${tex} equations, ${broken} broken`
+		);
+	}
+
+	// (g) the downloaded script builds the MFB filter and says the output is inverted
+	{
+		const dir = mkdtempSync(join(tmpdir(), 'rbt56-am-mfb-'));
+		const run = (name, code) => {
+			const file = join(dir, name);
+			writeFileSync(file, code);
+			try {
+				return execFileSync(process.execPath, [file], { encoding: 'utf8', stdio: 'pipe' });
+			} catch (e) {
+				return `CRASH ${String(e.stderr || e.message).split(String.fromCharCode(10)).slice(0, 3).join(' / ')}`;
+			}
+		};
+		const script = (pairs) => generateDemodScript({ rectifierType: 'full', fpCarrier: 50000, fmMax: 1000, amaxDb: 1, aminDb: 40, order: null, response: 'butterworth', topology: 'mfb', index: 0.75, resistorSeries: LAB_KIT.resistors, capacitors: null, pairs });
+		const off = run('mfb-off.js', script(false));
+		const on = run('mfb-on.js', script(true));
+		const sk = run('sk.js', generateDemodScript({ rectifierType: 'full', fpCarrier: 50000, fmMax: 1000, amaxDb: 1, aminDb: 40, order: null, response: 'butterworth', index: 0.75 }));
+		check(
+			'mfb: the downloaded script runs with FILTER_TOPOLOGY = mfb, prints R1 = R3, R2, C1, C2, the pairs, and the negative mean',
+			script(false).includes('const FILTER_TOPOLOGY = "mfb";') &&
+				off.includes('stage 1 (MFB, DC gain -1)') &&
+				/R1 = R3 = 10000 ohm, R2 = 10000 ohm, C1 = 2\.2000e-8 F, C2 = 4\.7000e-9 F/.test(off) &&
+				off.includes('output mean -0.6366 V') &&
+				off.includes('upside down') &&
+				/R1 = R3 = \d+ ohm \(\d+ \+ \d+ in series\)/.test(on) &&
+				sk.includes('stage 1 (Sallen-Key, unity gain)') &&
+				sk.includes('output mean 0.6366 V') &&
+				!sk.includes('upside down'),
+			[off, on, sk].find((o) => o.startsWith('CRASH')) ?? off.split(String.fromCharCode(10)).find((l) => l.includes('R1 = R3')) ?? 'no R1 = R3 line'
+		);
+	}
+
+	// (h) the formula sheet: every equation renders under strict KaTeX, the MFB stage among them
+	{
+		const { readFileSync } = await import('node:fs');
+		const src = readFileSync(new URL('../src/routes/(site)/tools/am-modulator-demodulator/formulas/+page.svelte', import.meta.url), 'utf8');
+		const found = [...src.matchAll(/tex=\{`([\s\S]*?)`\}/g)].map((m) => m[1].replace(/\\\\/g, '\\'));
+		let sheetBad = 0;
+		for (const tex of found) {
+			try {
+				katex.renderToString(tex, { throwOnError: true, strict: 'error' });
+			} catch (e) {
+				sheetBad++;
+				console.log('KATEX FAIL (sheet)', tex.slice(0, 90), e.message);
+			}
+		}
+		check(`formula sheet: ${found.length} equations render under strict KaTeX, the MFB stage among them`, found.length > 40 && sheetBad === 0 && src.includes('MFB low-pass (gain -1)') && src.includes('8Q^2'), `${sheetBad} failures`);
+	}
 }
 
 console.log(fails === 0 ? 'am checks clean' : `${fails} failure(s)`);

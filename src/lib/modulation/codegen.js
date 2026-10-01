@@ -6,6 +6,7 @@ import eseriesSrc from './eseries.js?raw';
 import formatSrc from './format.js?raw';
 import jfetModelSrc from './jfetModel.js?raw';
 import jfetModulatorSrc from './jfetModulator.js?raw';
+import mfbLowPassSrc from './mfbLowPass.js?raw';
 import orderSrc from './order.js?raw';
 import rectifierSrc from './rectifier.js?raw';
 import sallenKeyLowPassSrc from './sallenKeyLowPass.js?raw';
@@ -268,6 +269,7 @@ const AMAX_DB = ${p.amaxDb};                // dB, max attenuation allowed up to
 const AMIN_DB = ${p.aminDb};                // dB, min attenuation required from the ripple's nearest sideband (ripple minus FM_MAX) up
 const ORDER = ${p.order ?? 'null'};                  // null: the minimum even order that meets the spec; an odd order is rounded up (second-order stages only)
 const RESPONSE = ${JSON.stringify(p.response)};      // 'butterworth' or 'chebyshev'
+const FILTER_TOPOLOGY = ${JSON.stringify(p.topology ?? 'sallenKey')}; // 'sallenKey' (unity gain) or 'mfb' (multiple feedback, a DC gain of -1 per stage)
 const TEST_INDEX = ${p.index ?? 0.9};              // modulation index of the 1 V test wave the last lines use
 // The values the parts are rounded to: 'E24' or 'E96' for a full series, or
 // an array of the resistors on hand in ohms; CAPACITORS is null for the usual
@@ -308,7 +310,7 @@ console.log();
 console.log('='.repeat(72));
 console.log('ENVELOPE LOW-PASS FILTER');
 console.log('='.repeat(72));
-const design = designEnvelopeLowPass({ response: RESPONSE, amaxDb: AMAX_DB, aminDb: AMIN_DB, fp: FM_MAX, fs: rippleHz - FM_MAX, order: ORDER, resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS, pairs: RESISTOR_PAIRS, maxOrder: 8 });
+const design = designEnvelopeLowPass({ response: RESPONSE, amaxDb: AMAX_DB, aminDb: AMIN_DB, fp: FM_MAX, fs: rippleHz - FM_MAX, order: ORDER, topology: FILTER_TOPOLOGY, resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS, pairs: RESISTOR_PAIRS, maxOrder: 8 });
 console.log(\`k = fp/fs = \${design.k.toFixed(4)} (fs = \${rippleHz - FM_MAX} Hz, the ripple's lowest sideband), minimum order >= \${design.minOrder.toFixed(2)} -> n = \${design.n}\`);
 if (design.tooHigh) {
 	console.log('That is past order 8, more stages than a demodulator should carry: lower AMIN_DB, raise AMAX_DB or FP_CARRIER.');
@@ -317,10 +319,11 @@ if (design.tooHigh) {
 design.realized.forEach((r, i) => {
 	const f0Target = design.stages[i].wn / (2 * Math.PI);
 	const f0Actual = r.actual.wn / (2 * Math.PI);
-	console.log(\`stage \${i + 1}: target f0 = \${f0Target.toFixed(1)} Hz, Q = \${design.stages[i].q.toFixed(4)}\`);
+	console.log(\`stage \${i + 1} (\${r.topology === 'mfb' ? 'MFB, DC gain -1' : 'Sallen-Key, unity gain'}): target f0 = \${f0Target.toFixed(1)} Hz, Q = \${design.stages[i].q.toFixed(4)}\`);
 	// a stage the list cannot build comes from E24, with single resistors
-	const rText = r.stockShortfall ? r.components.R1 + ' ohm (E24: the list cannot build this stage)' : ohmsLabel(r.components.R1);
-	console.log(\`  R1 = R2 = \${rText}, Ctop = \${r.components.Ctop.toExponential(4)} F, Cbottom = \${r.components.Cbottom.toExponential(4)} F\`);
+	const rText = (v) => (r.stockShortfall ? v + ' ohm (E24: the list cannot build this stage)' : ohmsLabel(v));
+	if (r.topology === 'mfb') console.log(\`  R1 = R3 = \${rText(r.components.R1)}, R2 = \${rText(r.components.R2)}, C1 = \${r.components.C1.toExponential(4)} F, C2 = \${r.components.C2.toExponential(4)} F\`);
+	else console.log(\`  R1 = R2 = \${rText(r.components.R1)}, Ctop = \${r.components.Ctop.toExponential(4)} F, Cbottom = \${r.components.Cbottom.toExponential(4)} F\`);
 	console.log(\`  actual f0 = \${f0Actual.toFixed(1)} Hz (\${(100 * (f0Actual - f0Target) / f0Target).toFixed(2)}%), Q = \${r.actual.q.toFixed(4)}\`);
 });
 
@@ -330,6 +333,7 @@ console.log(\`WHAT COMES OUT (a 1 V carrier at index \${TEST_INDEX}, a \${FM_MAX
 console.log('='.repeat(72));
 const out = recoveredEnvelope({ rectifierType: RECTIFIER_TYPE, rectifier, envelope: design, fm: FM_MAX, index: TEST_INDEX, amplitude: 1 });
 console.log(\`output mean \${out.mean.toFixed(4)} V, recovered tone \${out.tone.toFixed(4)} V (the filter's \${out.gainDb.toFixed(2)} dB at \${FM_MAX} Hz included)\`);
+if (out.sign < 0) console.log('the MFB stages invert, an odd count of them: the message comes out upside down, its DC level negative');
 if (!out.exact) console.log(\`an ideal rectifier would give \${out.ideal.mean.toFixed(4)} V and \${out.ideal.tone.toFixed(4)} V: the bare diode loses its drop on every crest\`);
 `;
 }
@@ -339,6 +343,7 @@ const ENGINE = [
 	formatSrc,
 	orderSrc,
 	sallenKeyLowPassSrc,
+	mfbLowPassSrc,
 	envelopeFilterSrc,
 	jfetModelSrc,
 	jfetModulatorSrc,

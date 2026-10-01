@@ -1,3 +1,4 @@
+import { buildMfbDiagram } from '../filter/circuits';
 import { placeSymbol, label, createNet, portPoints } from '../filter/schematic';
 import { formatFarads, formatHenries, formatOhms } from './format';
 
@@ -857,4 +858,14 @@ export function buildJfetInvertingCellDiagram({ r2, follower: withFollower = tru
 
 	const width = Vout.x + 40 + 60;
 	return { svg: parts.join(''), viewBox: `0 40 ${width} ${loopB + 50 - 40}` };
+}
+
+/**
+ * Envelope-recovery low-pass, MFB: the Active Filter Design tool's own
+ * stage drawing, R1 from the input to the summing node, C1 from it to
+ * ground, R2 into the inverting input, R3 and C2 back from the output
+ * (R3 = R1 here, for a DC gain of -1). `ohms` as above.
+ */
+export function buildEnvelopeMfbDiagram(components, { ohms = formatOhms } = {}) {
+	return buildMfbDiagram(components, { ohms });
 }

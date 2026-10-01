@@ -433,11 +433,12 @@
 		<div class="formula">
 			<h3>Half-wave rectifier and what comes out</h3>
 			<p class="note">
-				One diode, and R_L from its cathode to ground: the envelope filter takes no DC, so without R_L the
-				diode would charge it to the highest crest and hold it there. The precision rectifier hands the
-				filter exactly 2/pi of the envelope; the bare diode loses its drop on every crest, so the tool
+				One diode, and R_L from its cathode to ground: a Sallen-Key envelope filter takes no DC, so without
+				R_L the diode would charge it to the highest crest and hold it there. The precision rectifier hands
+				the filter exactly 2/pi of the envelope; the bare diode loses its drop on every crest, so the tool
 				works it out with the diode law, R_L for the DC and R_L in parallel with the filter's first
-				resistor for the carrier's own swing.
+				resistor for the carrier's own swing. An MFB first stage takes DC through its R1 as well, so there
+				R_L in parallel with R1 carries both.
 			</p>
 			<Equation tex={`\\overline{v}_{full} = \\dfrac{2}{\\pi}\\,A_p\\big[1 + n\\,m(t)\\big] \\ \\Rightarrow\\ \\text{tone} = \\dfrac{2}{\\pi}\\,A_p\\,n\\,|H(f_m)|, \\qquad \\overline{v}_{half} < \\dfrac{1}{\\pi}\\,A_p\\big[1 + n\\,m(t)\\big]`} />
 		</div>
@@ -447,7 +448,7 @@
 			<p class="note">
 				Same design as the Active Filter Design tool, reused directly: fp = f_m,max is the passband
 				edge, fs = the ripple frequency the stopband edge. n is rounded up to the next even integer
-				(every stage is a 2nd-order Sallen-Key, no leftover 1st-order stage). The full derivation
+				(every stage is a 2nd-order Sallen-Key or MFB, no leftover 1st-order stage). The full derivation
 				of the response, the order formula, the poles and the cutoff factor is on the
 				<a href="/tools/filter-design/formulas/">Active Filter Design formula sheet</a>.
 			</p>
@@ -479,6 +480,31 @@
 				hand, round C_top = 4Q&sup2; C_bottom to E12 or to the nearest capacitor on hand, then
 				solve R from omega_n with the two capacitor values actually used, and round R to the
 				resistors in stock (E24 unless another stock is chosen).
+			</p>
+		</div>
+
+		<div class="formula">
+			<h3>MFB low-pass (gain -1)</h3>
+			<p class="note">
+				R1 from the input to the summing node S, C1 from S to ground, R2 from S to the inverting
+				input, R3 from the output back to S, C2 from the inverting input to the output; the + input
+				is grounded, so the inverting input is a virtual ground. Two current balances, at S and at
+				the inverting input, give the transfer function.
+			</p>
+			<Equation
+				tex={`\\text{at S:}\\ \\dfrac{V_{in} - V_S}{R_1} = sC_1V_S + \\dfrac{V_S}{R_2} + \\dfrac{V_S - V_{out}}{R_3}, \\qquad \\text{at (-):}\\ \\dfrac{V_S}{R_2} = -sC_2V_{out}`}
+			/>
+			<Equation
+				tex={`H(s) = \\dfrac{c}{s^2 + as + b}, \\quad a = \\dfrac{1}{C_1}\\left(\\dfrac{1}{R_1} + \\dfrac{1}{R_2} + \\dfrac{1}{R_3}\\right), \\quad b = \\omega_n^2 = \\dfrac{1}{R_2R_3C_1C_2}, \\quad c = -\\dfrac{1}{R_1R_2C_1C_2}`}
+			/>
+			<Equation tex={`R_1 = R_3 \\ \\Rightarrow\\ H(0) = \\dfrac{c}{b} = -\\dfrac{R_3}{R_1} = -1, \\qquad x = \\dfrac{1}{R_1},\\ y = \\dfrac{1}{R_2}:\\ \\ 2x + y = aC_1,\\ \\ xy = bC_1C_2`} />
+			<Equation tex={`2x^2 - (aC_1)\\,x + bC_1C_2 = 0 \\ \\Rightarrow\\ x = \\dfrac{aC_1 \\pm \\sqrt{(aC_1)^2 - 8bC_1C_2}}{4}, \\quad \\text{real only if } \\dfrac{C_1}{C_2} \\geq 8Q^2`} />
+			<p class="note">
+				<strong>How to use:</strong> with a = omega_n/Q, pick C1 and C2 from a preferred series or
+				the capacitors on hand with C1/C2 at least 8Q&sup2;, solve x, then R1 = R3 = 1/x and R2 =
+				1/(aC1 - 2x), and round them to the resistors in stock. Each stage inverts, so an odd count
+				of stages hands the envelope back upside down, its DC level negative; the size of the
+				response is the Sallen-Key's.
 			</p>
 		</div>
 	</section>

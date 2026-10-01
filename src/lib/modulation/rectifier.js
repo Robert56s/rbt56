@@ -1,5 +1,5 @@
 import { DIODE_MODELS, diodeCurrent } from './diodeLaw';
-import { envelopeGainAt } from './envelopeFilter';
+import { envelopeGainAt, envelopeSign } from './envelopeFilter';
 import { nearestResistor } from './eseries';
 
 /**
@@ -42,10 +42,11 @@ export function designPrecisionRectifier({ r = null, diode = '1N4148', resistorS
 
 /**
  * Half-wave rectifier: a single diode, and a load resistor from its
- * cathode to ground. The resistor is not optional: the envelope filter
- * after it takes no DC current (its input ends on capacitors), so without
- * a path to ground the diode would charge the filter up to the highest
- * crest and never let it down. rl is kept small next to the filter's own
+ * cathode to ground. The resistor is not optional: a Sallen-Key envelope
+ * filter after it takes no DC current (its input ends on capacitors), so
+ * without a path to ground the diode would charge the filter up to the
+ * highest crest and never let it down. An MFB first stage does take DC,
+ * over its R1, but R_L stays, so the load is the same with either. rl is kept small next to the filter's own
  * resistors so it hardly moves the first stage.
  *
  * Simpler, but the residual ripple sits at the carrier frequency fp
@@ -67,28 +68,30 @@ export function rectifiedEnvelopeStats(ap, fp, type) {
 
 /**
  * Average of the half-wave rectifier's output over one carrier cycle, for
- * a carrier of height e: the diode law with RL, whose DC the filter leaves
- * alone, and with the filter's first resistor r1 in parallel for the
- * carrier's own swing (at the carrier the filter's input is about r1).
- * The DC current sets the DC voltage RL Idc the diode works against, so
- * it is solved for by bisection.
+ * a carrier of height e: the diode law with RL, and with the filter's
+ * first resistor r1 in parallel for the carrier's own swing (at the
+ * carrier the filter's input is about r1). A Sallen-Key leaves the DC to
+ * RL alone; an MFB first stage (`dcThroughFilter`) takes it over r1 too,
+ * into its summing node held at 0 V. The DC current sets the DC voltage
+ * Rdc Idc the diode works against, so it is solved for by bisection.
  */
-function halfWaveAverage(height, rl, r1, d, S = 96) {
+function halfWaveAverage(height, rl, r1, d, S = 96, dcThroughFilter = false) {
 	const e = Math.abs(height);
 	const rac = Number.isFinite(r1) && r1 > 0 ? (rl * r1) / (rl + r1) : rl;
+	const rdc = dcThroughFilter ? rac : rl;
 	const mean = (idc) => {
 		let s = 0;
-		for (let k = 0; k < S; k++) s += diodeCurrent(e * Math.cos((2 * Math.PI * k) / S) - (rl - rac) * idc, rac, d);
+		for (let k = 0; k < S; k++) s += diodeCurrent(e * Math.cos((2 * Math.PI * k) / S) - (rdc - rac) * idc, rac, d);
 		return s / S;
 	};
 	let lo = 0;
-	let hi = e / rl;
+	let hi = e / rdc;
 	for (let it = 0; it < 40; it++) {
 		const mid = (lo + hi) / 2;
 		if (mean(mid) > mid) lo = mid;
 		else hi = mid;
 	}
-	return (rl * (lo + hi)) / 2;
+	return (rdc * (lo + hi)) / 2;
 }
 
 /**
@@ -98,26 +101,30 @@ function halfWaveAverage(height, rl, r1, d, S = 96) {
  * is exact, 2/pi of the wave. The bare diode is worked out cycle by cycle
  * with the diode law: it loses its drop on every crest and stops
  * conducting where the envelope dips below it, which the ideal 1/pi
- * figure ignores.
+ * figure ignores. The mean carries the filter's sign (`sign`, -1 after an
+ * odd count of MFB stages); the tone is an amplitude, its size only.
  */
 export function recoveredEnvelope({ rectifierType, rectifier, envelope, fm, index, amplitude = 1 }) {
 	const gain = envelopeGainAt(envelope, fm);
+	const sign = envelopeSign(envelope);
 	const full = rectifierType !== 'half';
 	const scale = (full ? 2 : 1) / Math.PI;
-	const ideal = { mean: scale * amplitude, tone: scale * amplitude * index * gain };
-	if (full) return { ...ideal, ideal, gain, gainDb: 20 * Math.log10(gain), exact: true };
+	const ideal = { mean: sign * scale * amplitude, tone: scale * amplitude * index * gain };
+	if (full) return { ...ideal, ideal, gain, gainDb: 20 * Math.log10(gain), sign, exact: true };
 	const d = DIODE_MODELS[rectifier.diode] ?? DIODE_MODELS['1N4148'];
-	const r1 = envelope.realized[0]?.components?.R1;
+	const first = envelope.realized[0];
+	const r1 = first?.components?.R1;
+	const dcThroughFilter = first?.topology === 'mfb';
 	const P = 48;
 	let m0 = 0;
 	let re = 0;
 	let im = 0;
 	for (let k = 0; k < P; k++) {
 		const ph = (2 * Math.PI * k) / P;
-		const y = halfWaveAverage(amplitude * (1 + index * Math.sin(ph)), rectifier.rl, r1, d);
+		const y = halfWaveAverage(amplitude * (1 + index * Math.sin(ph)), rectifier.rl, r1, d, 96, dcThroughFilter);
 		m0 += y;
 		re += y * Math.cos(ph);
 		im += y * Math.sin(ph);
 	}
-	return { mean: m0 / P, tone: ((2 * Math.hypot(re, im)) / P) * gain, ideal, gain, gainDb: 20 * Math.log10(gain), exact: false };
+	return { mean: (sign * m0) / P, tone: ((2 * Math.hypot(re, im)) / P) * gain, ideal, gain, gainDb: 20 * Math.log10(gain), sign, exact: false };
 }

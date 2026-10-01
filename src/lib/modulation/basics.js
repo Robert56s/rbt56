@@ -662,7 +662,11 @@ function realDetector(ctx) {
 	if (ed && fin(ed.n) && Array.isArray(ed.realized)) {
 		const stages = ed.realized.length;
 		const shape = ed.response === 'chebyshev' ? 'Chebyshev' : 'Butterworth';
-		third = `The tool finds the smallest order that meets both, the order being how steeply the filter falls: each step of order adds another tenfold of cut per tenfold in frequency. It rounds the order up to an even number, since each Sallen-Key stage, one op-amp with two resistors and two capacitors, is order 2: order ${ed.n} here, ${stages === 1 ? 'one stage' : `${stages} stages`} of stock parts with a ${shape} response. The preview draws the recovered message at the index set on the page.`;
+		const mfb = ed.topology === 'mfb';
+		const stage = mfb ? 'MFB stage, one op-amp with three resistors and two capacitors,' : 'Sallen-Key stage, one op-amp with two resistors and two capacitors,';
+		// each MFB stage turns the signal over: said once, with what the count of stages makes of it
+		const flip = mfb ? (stages % 2 === 1 ? ' Each MFB stage also turns the signal upside down, so the message comes out inverted.' : ' Each MFB stage also turns the signal upside down, and the flips cancel in pairs, so the message comes out upright.') : '';
+		third = `The tool finds the smallest order that meets both, the order being how steeply the filter falls: each step of order adds another tenfold of cut per tenfold in frequency. It rounds the order up to an even number, since each ${stage} is order 2: order ${ed.n} here, ${stages === 1 ? 'one stage' : `${stages} stages`} of stock parts with a ${shape} response.${flip} The preview draws the recovered message at the index set on the page.`;
 	}
 	const rc = pos(fp) ? 3 / fp : NaN;
 	const fc = pos(rc) ? 1 / (2 * Math.PI * rc) : NaN;
@@ -687,7 +691,7 @@ function demodRest({ rectifierType }) {
 	return [
 		h('Reading the rest of the page'),
 		p(
-			`The first panel holds the rectifier choice, the carrier, the highest message frequency, Amax, Amin, the response and the preview index. The rectifier panel ${full ? 'draws the precision rectifier and its parts' : 'names the single diode'}; the envelope low-pass panel lists each stage with its parts; the preview shows the wave before and after the rectifier. The rectifier and filter panels each have a Show the math section, the download gives a script that holds the whole design, and the formula sheet collects every formula.`
+			`The first panel holds the rectifier choice, the carrier, the highest message frequency, Amax, Amin, the response, the filter topology and the preview index. The rectifier panel ${full ? 'draws the precision rectifier and its parts' : 'names the single diode'}; the envelope low-pass panel lists each stage with its parts; the preview shows the wave before and after the rectifier. The rectifier and filter panels each have a Show the math section, the download gives a script that holds the whole design, and the formula sheet collects every formula.`
 		)
 	];
 }

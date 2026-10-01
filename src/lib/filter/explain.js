@@ -419,8 +419,12 @@ export function explainHpStage(design, stageIndex) {
 /* 4. Component derivations                                                  */
 /* ------------------------------------------------------------------------ */
 
-/** MFB low-pass component derivation for one realized stage. */
-export function explainMfb(stageDesign, targetWn, targetQ) {
+/**
+ * MFB low-pass component derivation for one realized stage. `shownIn` says
+ * where the page shows what the rounded stage does (this tool's "actual"
+ * row and Bode plot by default; the AM tool passes its own).
+ */
+export function explainMfb(stageDesign, targetWn, targetQ, { shownIn = 'which is what the "actual" row above and the Bode plot further down are built from' } = {}) {
 	const st = stageDesign.steps;
 	const blocks = [
 		p(
@@ -456,7 +460,7 @@ export function explainMfb(stageDesign, targetWn, targetQ) {
 		),
 		eq(`R_2 = \\dfrac{1}{y} = \\dfrac{1}{aC_1 - 2x} = ${formatOhms(stageDesign.theoretical.R2)}`),
 		p(
-			`Real resistors only come in standard values, so R1 and R2 get rounded to the nearest ${stockValue(st.resistorSeries)}${pairedTail(st.resistorSeries, [stageDesign.components.R1, stageDesign.components.R2])}: ${ohms(stageDesign.components.R1, st.resistorSeries)} and ${ohms(stageDesign.components.R2, st.resistorSeries)}. Plugging those rounded values back into a and b (not the target ones) gives what this stage will actually do, which is what the "actual" row above and the Bode plot further down are built from:`
+			`Real resistors only come in standard values, so R1 and R2 get rounded to the nearest ${stockValue(st.resistorSeries)}${pairedTail(st.resistorSeries, [stageDesign.components.R1, stageDesign.components.R2])}: ${ohms(stageDesign.components.R1, st.resistorSeries)} and ${ohms(stageDesign.components.R2, st.resistorSeries)}. Plugging those rounded values back into a and b (not the target ones) gives what this stage will actually do, ${shownIn}:`
 		),
 		eq(
 			`f_0' = ${formatHz(stageDesign.actual.wn / (2 * Math.PI))},\\quad Q' = ${stageDesign.actual.q.toFixed(4)}`

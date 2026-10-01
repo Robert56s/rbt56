@@ -20,6 +20,7 @@
 		buildDiodeSummerDiagram,
 		buildDiodeTankDiagram,
 		buildEnvelopeLowPassDiagram,
+		buildEnvelopeMfbDiagram,
 		buildGainStageDiagram,
 		buildHalfWaveDiagram,
 		buildJfetGainCellDiagram,
@@ -389,6 +390,8 @@
 	let amaxDb = $state(1);
 	let aminDb = $state(40);
 	let response = $state('butterworth');
+	// the envelope filter's stages: unity-gain Sallen-Key, or MFB (gain -1 each)
+	let envelopeTopology = $state('sallenKey');
 	let orderOverride = $state(null);
 	let demoModIndex = $state(0.9);
 
@@ -402,7 +405,7 @@
 	const ENVELOPE_MAX_ORDER = 8;
 	const envelopeRaw = $derived.by(() =>
 		demodValid
-			? designEnvelopeLowPass({ response, amaxDb, aminDb, fp: fmMaxDemod, fs: rippleHz - fmMaxDemod, order: orderOverride, maxOrder: ENVELOPE_MAX_ORDER, ...parts })
+			? designEnvelopeLowPass({ response, amaxDb, aminDb, fp: fmMaxDemod, fs: rippleHz - fmMaxDemod, order: orderOverride, topology: envelopeTopology, maxOrder: ENVELOPE_MAX_ORDER, ...parts })
 			: null
 	);
 	const envelopeDesign = $derived(envelopeRaw && !envelopeRaw.tooHigh ? envelopeRaw : null);
@@ -449,6 +452,7 @@
 				aminDb,
 				order: orderOverride,
 				response,
+				topology: envelopeTopology,
 				index: demoModIndex,
 				...parts
 			}),
@@ -1363,6 +1367,13 @@
 					</select>
 				</div>
 				<div class="field">
+					<label for="dtopology">Filter topology</label>
+					<select id="dtopology" bind:value={envelopeTopology}>
+						<option value="sallenKey">Sallen-Key (unity gain)</option>
+						<option value="mfb">MFB (multiple feedback, inverting)</option>
+					</select>
+				</div>
+				<div class="field">
 					<label for="dn">Modulation index (preview only)</label>
 					<input id="dn" type="number" step="0.05" min="0.05" max="1" bind:value={demoModIndex} />
 				</div>
@@ -1415,8 +1426,9 @@
 					</tbody>
 				</table>
 				<p class="note">
-					The envelope filter after it takes no DC, so R_L is what lets the output come down again when the
-					envelope does: without it the diode would charge the filter to the highest crest and hold it there.
+					{envelopeTopology === 'mfb'
+						? "The MFB filter after it takes DC through its R1, into a node held at 0 V, so it could let the output come down on its own. R_L stays all the same, and the figures below count R1 with it."
+						: 'The envelope filter after it takes no DC, so R_L is what lets the output come down again when the envelope does: without it the diode would charge the filter to the highest crest and hold it there.'}
 				</p>
 			{/if}
 			<MathPanel blocks={explainRectifier(rectifierType, fpCarrierDemod, rectifierInfo.r1 ?? 1000)} />
@@ -1431,15 +1443,35 @@
 				</div>
 				{#each envelopeDesign.realized as stage, i (i)}
 					<p class="note">Stage {i + 1}: f0 = {formatHz(stage.actual.wn / (2 * Math.PI))}, Q = {stage.actual.q.toFixed(3)}</p>
-					<DiagramView diagram={buildEnvelopeLowPassDiagram(stage.components, { ohms: diagramOhms(!stage.stockShortfall) })} label="envelope low-pass stage {i + 1}" />
-					<table>
-						<tbody>
-							<tr><td>R1 = R2</td><td>{ohms(stage.components.R1, !stage.stockShortfall)}</td></tr>
-							<tr><td>C_top</td><td>{formatFarads(stage.components.Ctop)}</td></tr>
-							<tr><td>C_bottom</td><td>{formatFarads(stage.components.Cbottom)}</td></tr>
-						</tbody>
-					</table>
+					{#if stage.topology === 'mfb'}
+						<DiagramView diagram={buildEnvelopeMfbDiagram(stage.components, { ohms: diagramOhms(!stage.stockShortfall) })} label="envelope low-pass stage {i + 1}, MFB" />
+						<table>
+							<tbody>
+								<tr><td>R1 = R3</td><td>{ohms(stage.components.R1, !stage.stockShortfall)}</td></tr>
+								<tr><td>R2</td><td>{ohms(stage.components.R2, !stage.stockShortfall)}</td></tr>
+								<tr><td>C1 (to ground)</td><td>{formatFarads(stage.components.C1)}</td></tr>
+								<tr><td>C2 (feedback)</td><td>{formatFarads(stage.components.C2)}</td></tr>
+							</tbody>
+						</table>
+					{:else}
+						<DiagramView diagram={buildEnvelopeLowPassDiagram(stage.components, { ohms: diagramOhms(!stage.stockShortfall) })} label="envelope low-pass stage {i + 1}" />
+						<table>
+							<tbody>
+								<tr><td>R1 = R2</td><td>{ohms(stage.components.R1, !stage.stockShortfall)}</td></tr>
+								<tr><td>C_top</td><td>{formatFarads(stage.components.Ctop)}</td></tr>
+								<tr><td>C_bottom</td><td>{formatFarads(stage.components.Cbottom)}</td></tr>
+							</tbody>
+						</table>
+					{/if}
 				{/each}
+				{#if envelopeDesign.topology === 'mfb'}
+					<p class="note">
+						Each MFB stage has a DC gain of -1 (R1 = R3), the same size as a Sallen-Key's.
+						{envelopeDesign.realized.length % 2 === 1
+							? `With ${envelopeDesign.realized.length === 1 ? 'one stage' : `${envelopeDesign.realized.length} stages`} the message comes out upside down, on a negative DC level: the tone is the same, and an inverting amplifier with two equal resistors puts it back where a positive level is needed.`
+							: `With ${envelopeDesign.realized.length} stages the inversions cancel in pairs and the message comes out upright.`}
+					</p>
+				{/if}
 					{#if envelopeDesign.shortfallStages.length > 0}
 					<p class="flag warn">
 						Stage{envelopeDesign.shortfallStages.length > 1 ? 's' : ''} {envelopeDesign.shortfallStages.join(', ')} cannot be built from the
@@ -1461,7 +1493,7 @@
 				{/if}
 				{#if envelopeCheck && envelopeCheck.maxQ > 4}
 					<p class="flag warn">
-						One stage has a Q of {envelopeCheck.maxQ.toFixed(1)}: a unity-gain Sallen-Key that sharp leans on the op-amp's
+						One stage has a Q of {envelopeCheck.maxQ.toFixed(1)}: a {envelopeDesign.topology === 'mfb' ? 'MFB stage' : 'unity-gain Sallen-Key'} that sharp leans on the op-amp's
 						gain-bandwidth and on exact part values, so a build, and LTspice with a 3 MHz op-amp, give a smaller tone than
 						the figures here. A Butterworth response, a tighter Amax, a lower Amin or a carrier further from the message brings the Q down.
 					</p>
@@ -1488,7 +1520,7 @@
 				{#if demodOut}
 					<table>
 						<tbody>
-							<tr><td>Output mean, for a 1 V carrier</td><td>{formatVolts(demodOut.mean)}{demodOut.exact ? ' (2/pi of the carrier)' : ` (an ideal diode: ${formatVolts(demodOut.ideal.mean)})`}</td></tr>
+							<tr><td>Output mean, for a 1 V carrier</td><td>{formatVolts(demodOut.mean)}{demodOut.exact ? ` (${demodOut.sign < 0 ? '-' : ''}2/pi of the carrier${demodOut.sign < 0 ? ', the MFB inverts' : ''})` : ` (an ideal diode: ${formatVolts(demodOut.ideal.mean)})`}</td></tr>
 							<tr><td>Recovered tone at {formatHz(fmMaxDemod)}, index {demoModIndex}</td><td>{formatVolts(demodOut.tone)}{demodOut.exact ? '' : ` (an ideal diode: ${formatVolts(demodOut.ideal.tone)})`}, the filter's {demodOut.gainDb.toFixed(2)} dB included</td></tr>
 						</tbody>
 					</table>
@@ -1514,7 +1546,7 @@
 					The LTspice files carry the whole demodulator behind a test source: a 1 V AM wave at
 					{formatHz(fpCarrierDemod)} carrying a {formatHz(fmMaxDemod)} tone at index {demoModIndex}, all three on one .param
 					line to change at will, then the {rectifierType === 'full' ? 'precision full-wave rectifier' : 'half-wave rectifier'} and the
-					{envelopeDesign.realized.length === 1 ? 'Sallen-Key stage' : `${envelopeDesign.realized.length} Sallen-Key stages`} of the low-pass. Plot V(vam), V(vrect)
+					{envelopeDesign.realized.length === 1 ? `${envelopeDesign.topology === 'mfb' ? 'MFB' : 'Sallen-Key'} stage` : `${envelopeDesign.realized.length} ${envelopeDesign.topology === 'mfb' ? 'MFB' : 'Sallen-Key'} stages`} of the low-pass. Plot V(vam), V(vrect)
 					and V(vout); the .meas lines print the output's mean and peak-to-peak{demodOut ? `, which should read about ${formatVolts(demodOut.mean)} and ${formatVolts(2 * demodOut.tone)}` : ''}{envelopeCheck && envelopeCheck.maxQ > 4 ? ', the tone a little lower since one stage is sharp enough to lean on the op-amp' : ''}.
 					{spiceReal ? `The op-amps are the ${spiceOpamp} with its supply pins on +15 V and -15 V rails, its model written into the file.` : "The op-amps are the single-pole model with a TL08x's gain-bandwidth."}
 					{rectifierType === 'full' && spiceOpamp === 'LM741' && 2.4e-6 * 2 * fpCarrierDemod > 0.1

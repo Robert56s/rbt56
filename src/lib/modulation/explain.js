@@ -1,7 +1,7 @@
 import { buildJfetTestDiagram } from './circuits';
 import { DIODE_MODELS } from './diodeLaw';
 import { formatFarads, formatHenries, formatHz, formatOhms, formatVolts } from './format';
-import { explainApproximation, explainOrder, explainSallenKey, explainStage } from '../filter/explain';
+import { explainApproximation, explainMfb, explainOrder, explainSallenKey, explainStage } from '../filter/explain';
 
 /**
  * Builds "show the math" content for the AM tool: an ordered list of
@@ -638,9 +638,28 @@ export function explainRectifier(type, fp = null, r = 1000) {
 	];
 }
 
+/**
+ * The sign an MFB cascade puts on the envelope: every stage has a DC gain
+ * of -1, so an odd count of them hands the message back upside down, its
+ * DC level negative. Nothing for a Sallen-Key filter.
+ */
+function mfbSignBlocks(realized) {
+	const count = realized.filter((r) => r?.topology === 'mfb').length;
+	if (count === 0) return [];
+	const odd = count % 2 === 1;
+	return [
+		head('The sign of what comes out'),
+		p(
+			`With R1 = R3 each MFB stage has a gain of exactly -1 at DC: same size as a Sallen-Key's, opposite sign. ${count === 1 ? 'With one stage' : `With ${count} stages`} the filter's gain at DC is ${odd ? '-1' : '+1'}, so ${odd ? 'the message comes out upside down and the DC level the rectifier adds comes out negative. For a message that changes nothing (a speaker or an FFT reads the same tone); where the level has to be positive, an inverting amplifier with two equal resistors after the filter puts it back.' : 'the inversions cancel in pairs and the message comes out upright, its DC level positive.'}`
+		),
+		eq(`H(0) = \\prod_{i=1}^{${count}} \\left(-\\dfrac{R_{3,i}}{R_{1,i}}\\right) = (-1)^{${count}} = ${odd ? '-1' : '+1'}`)
+	];
+}
+
 export function explainEnvelopeFilter(design) {
 	const { fp, fs, n, response, amaxDb, aminDb, minOrder, k, stages, realized } = design;
 	const aminSized = design.aminSized ?? aminDb;
+	const mfb = design.topology === 'mfb';
 	return [
 		p(
 			'After the rectifier the message sits below f_m,max and the unwanted ripple sits at the ripple frequency (2 f_p for full-wave, f_p for half-wave). The ripple is modulated by the message too, so it carries the message as sidebands, and its lowest one sits at the ripple frequency minus f_m,max: that is where the stopband has to start. Separating them is exactly the low-pass problem the Active Filter Design tool solves, so the same design is reused here, step by step. The spec: pass everything up to fp = f_m,max losing at most Amax dB, block everything from fs = the ripple frequency minus f_m,max (its nearest sideband) by at least Amin dB.'
@@ -650,7 +669,7 @@ export function explainEnvelopeFilter(design) {
 		...(aminSized !== aminDb
 			? [
 					p(
-						`Each Sallen-Key stage has unity gain at DC, so an even-order Chebyshev, whose DC sits in a ripple valley, peaks ${n2(amaxDb)} dB above it. For the ripple to end up ${n2(aminDb)} dB under every part of the message, DC included, the stopband has to sit Amin + Amax under that peak, which is where the order formula measures from: A = Amin + Amax = ${n2(aminSized)} dB:`
+						`Each ${mfb ? 'MFB stage has a gain of 1 in size at DC (-1, it inverts)' : 'Sallen-Key stage has unity gain at DC'}, so an even-order Chebyshev, whose DC sits in a ripple valley, peaks ${n2(amaxDb)} dB above it. For the ripple to end up ${n2(aminDb)} dB under every part of the message, DC included, the stopband has to sit Amin + Amax under that peak, which is where the order formula measures from: A = Amin + Amax = ${n2(aminSized)} dB:`
 					)
 				]
 			: []),
@@ -660,8 +679,10 @@ export function explainEnvelopeFilter(design) {
 		...stages.flatMap((s, i) => [
 			head(`Stage ${i + 1}: pole pair and denormalization`),
 			...explainStage(design, i),
-			head(`Stage ${i + 1}: Sallen-Key components`),
-			...explainSallenKey(realized[i], s.q)
-		])
+			...(realized[i]?.topology === 'mfb'
+				? [head(`Stage ${i + 1}: MFB components`), ...explainMfb(realized[i], s.wn, s.q, { shownIn: 'the f0 and Q printed over its drawing' })]
+				: [head(`Stage ${i + 1}: Sallen-Key components`), ...explainSallenKey(realized[i], s.q)])
+		]),
+		...mfbSignBlocks(realized)
 	];
 }

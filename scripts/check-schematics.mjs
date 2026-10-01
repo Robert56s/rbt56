@@ -452,6 +452,7 @@ const CASES = [
 	['modulation/buildPrecisionRectifierDiagram', () => modulation.buildPrecisionRectifierDiagram({ r1: 10000, r2: 10000, r3: 10000 })],
 	['modulation/buildHalfWaveDiagram', () => modulation.buildHalfWaveDiagram({ rl: 1000 })],
 	['modulation/buildEnvelopeLowPassDiagram', () => modulation.buildEnvelopeLowPassDiagram({ R1: 11000, R2: 11000, Ctop: 2.2e-8, Cbottom: 1e-8 })],
+	['modulation/buildEnvelopeMfbDiagram', () => modulation.buildEnvelopeMfbDiagram({ R1: 10000, R2: 10000, R3: 10000, C1: 2.2e-8, C2: 4.7e-9 })],
 	['karnaugh/sop 2 terms (B\'D\' + BD)', () => karnaughCase(4, [0, 2, 5, 7, 8, 10, 13, 15], [], 'sop')],
 	['karnaugh/pos 2 terms', () => karnaughCase(4, [0, 2, 5, 7, 8, 10, 13, 15], [], 'pos')],
 	['karnaugh/sop with don\'t-cares', () => karnaughCase(4, [1, 3, 7, 11, 15], [0, 2, 5], 'sop')],
@@ -558,11 +559,14 @@ console.log();
 		}
 		add(`am/precision rectifier ${sn}`, () => modulation.buildPrecisionRectifierDiagram(designPrecisionRectifier({ resistorSeries: parts.resistorSeries })));
 		add(`am/half-wave ${sn}`, () => modulation.buildHalfWaveDiagram(designHalfWaveRectifier({ resistorSeries: parts.resistorSeries })));
-		for (const response of ['butterworth', 'chebyshev']) {
-			for (const [fm, fs] of [[1000, 79000], [5000, 35000], [300, 9700]]) {
-				const env = designEnvelopeLowPass({ response, amaxDb: 1, aminDb: 40, fp: fm, fs, order: null, maxOrder: 8, ...parts });
-				if (env.tooHigh) continue;
-				env.realized.forEach((s, i) => add(`am/envelope ${sn} ${response} ${fm} stage ${i + 1}`, () => modulation.buildEnvelopeLowPassDiagram(s.components, { ohms: ohmsFor(!s.stockShortfall) })));
+		for (const topology of ['sallenKey', 'mfb']) {
+			for (const response of ['butterworth', 'chebyshev']) {
+				for (const [fm, fs] of [[1000, 79000], [1000, 99000], [5000, 35000], [300, 9700]]) {
+					const env = designEnvelopeLowPass({ response, amaxDb: 1, aminDb: 40, fp: fm, fs, order: null, maxOrder: 8, topology, ...parts });
+					if (env.tooHigh) continue;
+					const build = topology === 'mfb' ? modulation.buildEnvelopeMfbDiagram : modulation.buildEnvelopeLowPassDiagram;
+					env.realized.forEach((s, i) => add(`am/envelope ${topology} ${sn} ${response} ${fm}/${fs} stage ${i + 1}`, () => build(s.components, { ohms: ohmsFor(!s.stockShortfall) })));
+				}
 			}
 		}
 		for (const t of TOPOLOGIES) {

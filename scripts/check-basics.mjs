@@ -390,6 +390,17 @@ function checkText(where, text) {
 				run(`demod/${rectifierType}/${response}/${fp}/${fm}`, { mode: 'demod', rectifierType, fp, fm, envelopeDesign, demoModIndex, rippleHz, amaxDb, aminDb });
 			}
 		}
+		// the same filters built from MFB stages: order 2 (one stage, inverted) and order 4 (two, upright)
+		for (const response of ['butterworth', 'chebyshev']) {
+			for (const [fp, fm, amaxDb, aminDb] of [
+				[40000, 1000, 1, 40],
+				[10000, 1000, 1, 80]
+			]) {
+				const rippleHz = rectifierType === 'full' ? 2 * fp : fp;
+				const envelopeDesign = designEnvelopeLowPass({ response, amaxDb, aminDb, fp: fm, fs: rippleHz - fm, topology: 'mfb', maxOrder: 8 });
+				if (!envelopeDesign.tooHigh) run(`demod/${rectifierType}/${response}/mfb/${fp}/${aminDb}`, { mode: 'demod', rectifierType, fp, fm, envelopeDesign, demoModIndex: 0.9, rippleHz, amaxDb, aminDb });
+			}
+		}
 		run(`demod/${rectifierType}/no design`, { mode: 'demod', rectifierType, fp: 40000, fm: 1000, envelopeDesign: null, demoModIndex: 0.9, rippleHz: rectifierType === 'full' ? 80000 : 40000, amaxDb: 1, aminDb: 40 });
 		run(`demod/${rectifierType}/empty fields`, { mode: 'demod', rectifierType, fp: null, fm: null, envelopeDesign: null, demoModIndex: null, rippleHz: NaN, amaxDb: null, aminDb: null });
 	}
@@ -420,6 +431,17 @@ function checkText(where, text) {
 		check(`modulation basics: the diode defaults give the engine's f_0 = ${f0k} kHz, Q = 6.67 and the ideal-switch index ${ideal}`, eqs('diode/40000/1000').includes(`${f0k}\\ \\text{kHz}`) && eqs('diode/40000/1000').includes('= 6.67') && eqs('diode/40000/1000').includes(`= ${ideal}`) && words('diode/40000/1000').includes(`n = ${dd.modulationIndex.toFixed(2)}`));
 	}
 	check('modulation basics: the demodulator defaults give f_c = 2.12 kHz and order 2', eqs('demod/full/butterworth/40000/1000').includes('2.12\\ \\text{kHz}') && words('demod/full/butterworth/40000/1000').includes('order 2 here'));
+	{
+		// the MFB filter: its stage told by its parts, and what its count of stages does to the sign
+		const one = words('demod/full/butterworth/mfb/40000/40');
+		const two = words('demod/full/butterworth/mfb/10000/80');
+		const sk = words('demod/full/butterworth/40000/1000');
+		check(
+			'modulation basics: an MFB filter is told by its three resistors, inverted with one stage, upright with two',
+			one.includes('each MFB stage, one op-amp with three resistors and two capacitors, is order 2') && one.includes('comes out inverted') && two.includes('order 4 here') && two.includes('comes out upright') && sk.includes('each Sallen-Key stage, one op-amp with two resistors and two capacitors') && !sk.includes('upside down'),
+			`${one.length} and ${two.length} characters`
+		);
+	}
 	{
 		const moved = modulationBasics({ mode: 'jfet', topology: 'noninverting', carrierFrom: 'source', design: designJfetModulator({ ...page, model: idss, fp: 60000, targetModulationIndex: 0.8 }), jfetModel: idss, swingFraction: 0.9, targetN: 0.8, fp: 60000, fm: 1500 });
 		const tex = moved.filter((b) => b.eq !== undefined).map((b) => b.eq).join(' ');

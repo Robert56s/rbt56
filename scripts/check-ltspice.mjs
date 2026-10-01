@@ -344,14 +344,17 @@ for (const [stem, params] of diodeCases) {
 // run. The precision rectifier is held to 2/pi of the wave (a percent or
 // two low with a TL08x's gain-bandwidth), the bare diode to the page's
 // diode-law figure.
-for (const rectifierType of ['full', 'half']) {
-	for (const response of ['butterworth', 'chebyshev']) {
+// The MFB filter runs the same cases: its stages invert, so the mean reads
+// negative through an odd count of them, and its first R1 loads the bare
+// diode for DC as well.
+for (const [topology, rectifierType, response] of ['sallenKey', 'mfb'].flatMap((t) => ['full', 'half'].flatMap((r) => ['butterworth', 'chebyshev'].map((x) => [t, r, x])))) {
+	{
 		const fp = 40000;
 		const fm = 1000;
-		const envelope = designEnvelopeLowPass({ response, amaxDb: 1, aminDb: 40, fp: fm, fs: rectifierType === 'full' ? 2 * fp : fp, order: null });
+		const envelope = designEnvelopeLowPass({ response, amaxDb: 1, aminDb: 40, fp: fm, fs: rectifierType === 'full' ? 2 * fp : fp, order: null, topology });
 		const rectifier = rectifierType === 'full' ? designPrecisionRectifier() : designHalfWaveRectifier();
 		const opts = { rectifierType, rectifier, envelope, fp, fm, index: 0.9 };
-		const stem = `demod-${rectifierType}-${response}`;
+		const stem = `demod-${topology === 'mfb' ? 'mfb-' : ''}${rectifierType}-${response}`;
 		const asc = join(dir, `${stem}.asc`);
 		const cir = join(dir, `${stem}.cir`);
 		writeFileSync(asc, demodSchematic(opts));
@@ -532,11 +535,11 @@ for (const { only, sides, ...spec } of filterSpecs) {
 				else check(`${stem}: simulates`, carrier > 0, `${carrier.toFixed(4)} V, n ${index.toFixed(4)}`);
 			}
 		}
-		// demodulator, precision full-wave
-		{
-			const envelope = designEnvelopeLowPass({ response: 'butterworth', amaxDb: 1, aminDb: 40, fp: 1000, fs: 80000, order: null });
+		// demodulator, precision full-wave, the Sallen-Key filter; the MFB one with the TL082 too
+		for (const topology of opamp === 'TL082' ? ['sallenKey', 'mfb'] : ['sallenKey']) {
+			const envelope = designEnvelopeLowPass({ response: 'butterworth', amaxDb: 1, aminDb: 40, fp: 1000, fs: 80000, order: null, topology });
 			const opts = { rectifierType: 'full', rectifier: designPrecisionRectifier(), envelope, fp: 40000, fm: 1000, index: 0.9, opamp };
-			const stem = `real-${tag}-demod`;
+			const stem = `real-${tag}-demod${topology === 'mfb' ? '-mfb' : ''}`;
 			const cir = demodNetlist(opts);
 			parity(stem, demodSchematic(opts), cir);
 			const { raw, log } = simulate(stem, cir);
