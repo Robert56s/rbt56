@@ -427,7 +427,8 @@
 				amplifier fed through R1 with R2 as feedback.
 			</p>
 			<Equation tex={`V_{out} = V_{in}\\ (V_{in} > 0), \\qquad V_{out} = -\\dfrac{R_2}{R_1}V_{in} = -V_{in}\\ (V_{in} < 0) \\ \\Rightarrow\\ V_{out} = |V_{in}|`} />
-			<p class="note"><strong>How to use:</strong> checked against Texas Instruments TIDU030 and in LTspice; 1 k, TI's value, keeps a switched-off diode's few pF from leaking through at a fast carrier. Use it whenever a single diode's ripple and 0.7 V loss are not acceptable.</p>
+			<Equation tex={`V_{U1A,max} = A_c(1 + n) + V_D \\le V_{swing}`} />
+			<p class="note"><strong>How to use:</strong> checked against Texas Instruments TIDU030 and in LTspice; 1 k, TI's value, keeps a switched-off diode's few pF from leaking through at a fast carrier. Use it whenever a single diode's ripple and 0.7 V loss are not acceptable. U1A runs one diode's drop past its input, so the wave's crest plus that drop has to stay inside the op-amps' swing.</p>
 		</div>
 
 		<div class="formula">
@@ -515,13 +516,14 @@
 				capacitor in series with the load blocks it; with the load R_L it is a first-order high-pass.
 			</p>
 			<Equation tex={`H(s) = \\dfrac{sR_LC}{1 + sR_LC}, \\qquad f_c = \\dfrac{1}{2\\pi R_L C}, \\qquad |H(f)| = \\dfrac{1}{\\sqrt{1 + (f_c/f)^2}}`} />
-			<Equation tex={`f_c \\le f_{m,min}\\sqrt{10^{A_{max}/10} - 1} \\ \\Rightarrow\\ C \\ge \\dfrac{1}{2\\pi R_L f_c}, \\qquad I_{peak} = \\dfrac{V_{tone}}{R_L}`} />
+			<Equation tex={`f_c \\le f_{m,min}\\sqrt{10^{A_{max}/10} - 1} \\ \\Rightarrow\\ C \\ge \\dfrac{1}{2\\pi R_L f_c}, \\qquad I_{peak} = \\dfrac{V_{tone}}{R_L}, \\qquad P = \\dfrac{V_{tone}^2}{2R_L}`} />
 			<p class="note">
 				<strong>How to use:</strong> size C for at most Amax lost at the lowest message frequency, the
 				same spec the low-pass meets at the highest, and round it up. At that size it is an
 				electrolytic: its + plate goes to the side that sits higher in DC, the filter's output when
 				its level is positive, the load (at 0 V) when an odd count of MFB stages made it negative.
 				Earphones (16 to 32 Ω) draw tens of mA: past about 10 mA an audio amplifier goes between.
+				Most of them already play loud from 1 mW, so a volume potentiometer goes before them.
 			</p>
 		</div>
 	</section>

@@ -1467,5 +1467,119 @@ const sameAsNetlist = (wanted, asc) => {
 	}
 }
 
+/* ---------------------------- the carrier the demodulator actually receives */
+{
+	const { demodExpectation, generateDemodNetlist } = await import('../src/lib/modulation/spice.js');
+	const { demodSwing } = await import('../src/lib/modulation/rectifier.js');
+	const { designOutputCoupling } = await import('../src/lib/modulation/outputCoupling.js');
+	const { explainOutputCoupling, explainRectifier } = await import('../src/lib/modulation/explain.js');
+	const { generateDemodScript } = await import('../src/lib/modulation/codegen.js');
+	const { execFileSync } = await import('node:child_process');
+	const { mkdtempSync, writeFileSync } = await import('node:fs');
+	const { tmpdir } = await import('node:os');
+	const { join } = await import('node:path');
+	const spec = { response: 'butterworth', amaxDb: 1, aminDb: 40, fp: 1000, fs: 99000, order: null };
+	const mfb = designEnvelopeLowPass({ ...spec, topology: 'mfb' });
+	const fullOpts = (amplitude) => ({ rectifierType: 'full', rectifier: designPrecisionRectifier(), envelope: mfb, fp: 50000, fm: 1000, index: 0.75, amplitude });
+	const one = demodExpectation(fullOpts(1));
+	const four = demodExpectation(fullOpts(4));
+
+	// (a) the precision rectifier is linear: four times the carrier, four times everything
+	check(
+		'carrier: through the precision rectifier a 4 V carrier gives four times the 1 V mean and tone, -2.546 V through one MFB stage',
+		near(four.mean, 4 * one.mean, 1e-12) && near(four.tone, 4 * one.tone, 1e-12) && near(four.mean, (-8 / Math.PI), 1e-12),
+		`${four.mean.toFixed(4)} V, tone ${four.tone.toFixed(4)} V`
+	);
+
+	// (b) the bare diode is not: its drop weighs less on a larger carrier
+	{
+		const sk = designEnvelopeLowPass({ ...spec, fs: 49000 });
+		const halfAt = (amplitude) => demodExpectation({ rectifierType: 'half', rectifier: designHalfWaveRectifier(), envelope: sk, fp: 50000, fm: 1000, index: 0.75, amplitude });
+		const eff = (a) => halfAt(a).mean / (a / Math.PI);
+		check('carrier: the bare diode keeps a larger share of a larger carrier, never all of it', eff(0.5) < eff(1) && eff(1) < eff(4) && eff(4) < eff(10) && eff(10) < 1, [0.5, 1, 4, 10].map((a) => `${a} V: ${(100 * eff(a)).toFixed(1)} %`).join(', '));
+	}
+
+	// (c) the LTspice files carry the carrier asked for
+	{
+		const cir = generateDemodNetlist(fullOpts(4));
+		const asc = generateDemodSchematic(fullOpts(4));
+		check('carrier: the files test the demodulator with the carrier asked for, on the .param line', cir.includes('.param Ac=4 idx=0.75') && cir.includes('test wave: 4 V carrier') && asc.includes('Ac=4') && cir.includes(`DC level of -2 Ac/pi = ${four.mean.toFixed(3)} V`), cir.split(String.fromCharCode(10)).find((l) => l.startsWith('.param Ac')) ?? 'no .param line');
+	}
+
+	// (d) the op-amps' swing: U1A reaches the crest plus a diode's drop; the bare diode leaves only the filter
+	{
+		const at = (amplitude, rectifierType = 'full', swing = 13.5) => {
+			const opts = rectifierType === 'full' ? fullOpts(amplitude) : { ...fullOpts(amplitude), rectifierType, rectifier: designHalfWaveRectifier() };
+			return demodSwing({ rectifierType, amplitude, index: 0.75, out: demodExpectation(opts), swing });
+		};
+		const fits = at(4);
+		const clips = at(8);
+		const half = at(8, 'half');
+		check(
+			'carrier: 4 V fits in 13.5 V (U1A at 7.7 V), 8 V does not (14.7 V); the bare diode leaves only the filter, at its level plus the tone',
+			fits.ok && near(fits.needed, 7.7, 1e-9) && fits.where === 'rectifier' && !clips.ok && near(clips.needed, 14.7, 1e-9) && half.rectifier === 0 && half.where === 'filter' && half.ok && near(half.needed, Math.abs(half.needed), 0),
+			`${fits.needed.toFixed(2)} V, ${clips.needed.toFixed(2)} V, half-wave ${half.needed.toFixed(3)} V`
+		);
+		// the explanation says it, both ways, and its equations render
+		let broken = 0;
+		const texts = [];
+		for (const [sw, type] of [[fits, 'full'], [clips, 'full'], [half, 'half']]) {
+			const blocks = explainRectifier(type, 50000, 1000, sw);
+			for (const b of blocks.filter((x) => x.type === 'eq')) {
+				try {
+					katex.renderToString(b.tex, { throwOnError: true, strict: 'error', displayMode: true });
+				} catch {
+					broken++;
+				}
+			}
+			texts.push(blocks.filter((x) => x.type === 'p').map((x) => x.text).join(' '));
+		}
+		check('carrier: the rectifier explanation checks the swing, says what clipping costs, and renders', broken === 0 && texts.every((t) => t.includes('Room for the wave')) && texts[1].includes('clips the tops') && !texts[0].includes('clips the tops') && !/undefined|NaN/.test(texts.join(' ')), `${broken} broken`);
+	}
+
+	// (e) the load: four times the current, sixteen times the power; a listened load past 1 mW is flagged, an input never
+	{
+		const cp = (ex, rLoad) => designOutputCoupling({ rLoad, fmMin: 100, fm: 1000, amaxDb: 1, level: ex.mean, tone: ex.tone, amplitude: ex === four ? 4 : 1 });
+		const ear1 = cp(one, 32);
+		const ear4 = cp(four, 32);
+		const input4 = cp(four, 10000);
+		check(
+			'carrier: at 4 V the earphones take four times the current and sixteen times the power, flagged; a 10 k input is not listened to',
+			near(ear4.peakCurrent, 4 * ear1.peakCurrent, 1e-12) && near(ear4.power, 16 * ear1.power, 1e-12) && near(ear1.power, ear1.toneAtLoad ** 2 / 64, 1e-15) && !ear1.powerOk && !ear4.powerOk && ear4.listened && !input4.listened && input4.powerOk,
+			`${(1000 * ear1.power).toFixed(2)} mW and ${(1000 * ear4.power).toFixed(1)} mW, ${(1000 * ear4.peakCurrent).toFixed(1)} mA`
+		);
+		const blocks = explainOutputCoupling(ear4);
+		let broken = 0;
+		for (const b of blocks.filter((x) => x.type === 'eq')) {
+			try {
+				katex.renderToString(b.tex, { throwOnError: true, strict: 'error', displayMode: true });
+			} catch {
+				broken++;
+			}
+		}
+		const words = blocks.filter((x) => x.type === 'p').map((x) => x.text).join(' ');
+		const tex = blocks.filter((x) => x.type === 'eq').map((x) => x.tex).join(' ');
+		check('carrier: the output explanation names the 4 V carrier and gives the power in the earphones', broken === 0 && words.includes('4.00 V carrier') && tex.includes('P = ') && !explainOutputCoupling(input4).some((b) => b.type === 'eq' && b.tex.includes('P = ')), `${broken} broken`);
+	}
+
+	// (f) the downloaded script takes the carrier and the swing
+	{
+		const dir = mkdtempSync(join(tmpdir(), 'rbt56-am-carrier-'));
+		const file = join(dir, 'demod.js');
+		writeFileSync(file, generateDemodScript({ rectifierType: 'full', fpCarrier: 50000, fmMax: 1000, amaxDb: 1, aminDb: 40, order: null, response: 'butterworth', topology: 'mfb', index: 0.75, amplitude: 4, opampSwing: 13.5, outputCoupling: true, loadOhms: 32, fmMin: 100 }));
+		let out;
+		try {
+			out = execFileSync(process.execPath, [file], { encoding: 'utf8', stdio: 'pipe' });
+		} catch (e) {
+			out = `CRASH ${String(e.stderr || e.message).split(String.fromCharCode(10)).slice(0, 3).join(' / ')}`;
+		}
+		check(
+			'carrier: the script runs with CARRIER_AMPLITUDE = 4, prints the mean, the swing it needs and the power in the earphones',
+			out.includes('WHAT COMES OUT (a 4 V carrier') && out.includes('output mean -2.5465 V') && out.includes('op-amp swing needed 7.700 V') && out.includes('fits') && out.includes('power in the earphones') && !out.startsWith('CRASH'),
+			out.startsWith('CRASH') ? out : out.split(String.fromCharCode(10)).find((l) => l.startsWith('op-amp swing')) ?? 'no swing line'
+		);
+	}
+}
+
 console.log(fails === 0 ? 'am checks clean' : `${fails} failure(s)`);
 process.exit(fails === 0 ? 0 : 1);

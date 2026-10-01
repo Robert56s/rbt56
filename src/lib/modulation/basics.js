@@ -112,12 +112,12 @@ function present(props) {
 
 // the carrier height and index the formulas of the common sections use, per mode
 const DIODE_N = 0.8; // stands in for the diode circuit's index until its design is complete
-const DEMOD_AP = 1; // the demodulator preview draws a 1 V carrier
+const DEMOD_AP = 1; // the demodulator's carrier when the page gives none
 
 function waveFor(ctx) {
 	const { mode, design, targetN, carrierAmp, demoModIndex } = ctx;
 	if (mode === 'diode') return { ap: ctx.diodeDesign?.carrierOut ?? carrierAmp, n: ctx.diodeDesign?.modulationIndex ?? DIODE_N };
-	if (mode === 'demod') return { ap: DEMOD_AP, n: demoModIndex };
+	if (mode === 'demod') return { ap: pos(ctx.demodAmp) ? ctx.demodAmp : DEMOD_AP, n: demoModIndex };
 	const ap = design?.postGain?.outputAmplitude ?? design?.carrier?.carrierOut;
 	return { ap, n: design ? design.modulationIndex : targetN };
 }
@@ -179,7 +179,7 @@ function formulaSection(ctx) {
 	const live = pos(ap, fp) && fin(n) && n >= 0;
 	let tail;
 	if (mode === 'diode') tail = live ? (ctx.diodeDesign ? 'On the second line A_p is the carrier this design delivers across the tank and n its index for a slow message, so the line matches the tables further down.' : `On the second line A_p is the carrier amplitude entered on the page, and ${DIODE_N} stands in for n until the design is complete.`) : 'Once the design on the page is complete, its own carrier and index fill in this formula.';
-	else if (mode === 'demod') tail = live ? `On the second line n is the preview index entered on the page, and the carrier is taken as ${volts(DEMOD_AP)}, as in the preview.` : 'In the demodulator n is whatever the incoming wave carries.';
+	else if (mode === 'demod') tail = live ? `On the second line n is the test wave's index entered on the page, and A_p its carrier, ${volts(ap)}.` : 'In the demodulator n is whatever the incoming wave carries.';
 	else tail = live ? 'On the second line A_p is the carrier this design delivers at its output and n its modulation index, so the line matches the tables further down.' : 'Once the design on the page is complete, its own carrier and index fill in this formula.';
 	const sym = 'x(t) = A_p\\,\\big[1 + n\\,m(t)\\big]\\cos(2\\pi f_p t)';
 	return [
@@ -588,7 +588,7 @@ function rectifierSection(ctx) {
 		p(second),
 		p('Averaged over one carrier cycle, the bumps are the envelope scaled by a constant. The rest of the detector is about removing the ripple without touching the message.'),
 		live
-			? eq(`\\begin{aligned} ${sym} \\\\ &= ${texVolts(DEMOD_AP * scale)}\\,\\big[1 + ${fix2(n)}\\,m(t)\\big] + \\text{ripple at } ${texInt(ripple)}\\ \\text{Hz} \\end{aligned}`, `${what} rectified AM wave: the envelope scaled by the average of a rectified cosine, plus the ripple the filter removes, then with the preview's ${volts(DEMOD_AP)} carrier and index:`)
+			? eq(`\\begin{aligned} ${sym} \\\\ &= ${texVolts(waveFor(ctx).ap * scale)}\\,\\big[1 + ${fix2(n)}\\,m(t)\\big] + \\text{ripple at } ${texInt(ripple)}\\ \\text{Hz} \\end{aligned}`, `${what} rectified AM wave: the envelope scaled by the average of a rectified cosine, plus the ripple the filter removes, then with the test wave's ${volts(waveFor(ctx).ap)} carrier and index:`)
 			: eq(`\\begin{aligned} ${sym} \\end{aligned}`, `${what} rectified AM wave: the envelope scaled by the average of a rectified cosine, plus the ripple the filter removes:`)
 	];
 }
@@ -691,7 +691,7 @@ function demodRest({ rectifierType }) {
 	return [
 		h('Reading the rest of the page'),
 		p(
-			`The first panel holds the rectifier choice, the carrier, the highest message frequency, Amax, Amin, the response, the filter topology, the preview index and the output, a capacitor into a load such as earphones, which keeps the DC level off them. The rectifier panel ${full ? 'draws the precision rectifier and its parts' : 'names the single diode'}; the envelope low-pass panel lists each stage with its parts; the preview shows the wave before and after the rectifier. The rectifier and filter panels each have a Show the math section, the download gives a script that holds the whole design, and the formula sheet collects every formula.`
+			`The first panel holds the rectifier choice, the carrier, the highest message frequency, Amax, Amin, the response, the filter topology, the test wave's carrier and index, the op-amps' swing, and the output, a capacitor into a load such as earphones, which keeps the DC level off them. The rectifier panel ${full ? 'draws the precision rectifier and its parts' : 'names the single diode'}; the envelope low-pass panel lists each stage with its parts; the preview shows the wave before and after the rectifier. The rectifier and filter panels each have a Show the math section, the download gives a script that holds the whole design, and the formula sheet collects every formula.`
 		)
 	];
 }
@@ -734,11 +734,12 @@ export function modulationBasics({
 	modAmp,
 	envelopeDesign = null,
 	demoModIndex,
+	demodAmp,
 	rippleHz,
 	amaxDb,
 	aminDb
 } = {}) {
-	const ctx = { mode, topology, carrierFrom, oscillatorOk, rectifierType, rectifierR, design, jfetModel, swingFraction, targetN, fp, fm, diodeDesign, carrierAmp, modAmp, envelopeDesign, demoModIndex, rippleHz, amaxDb, aminDb };
+	const ctx = { mode, topology, carrierFrom, oscillatorOk, rectifierType, rectifierR, design, jfetModel, swingFraction, targetN, fp, fm, diodeDesign, carrierAmp, modAmp, envelopeDesign, demoModIndex, demodAmp, rippleHz, amaxDb, aminDb };
 	const common = [hook(ctx), ...noteOnAScope(ctx), ...carrierCopies(ctx), ...formulaSection(ctx), ...readingN(ctx), ...whereItWent(ctx)];
 	let circuit;
 	if (mode === 'diode') circuit = [...diodeBend(ctx), ...tankSection(ctx), ...diodeNumbers(ctx), ...diodeRest()];

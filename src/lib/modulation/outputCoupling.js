@@ -26,15 +26,24 @@ import { capacitorNotBelow } from './eseries';
  * then draws is the tone over R_L, and past about 10 mA a TL08x no longer
  * drives it cleanly (the same limit the JFET cell is held to).
  *
+ * A load of 600 ohm or less is taken for earphones or headphones, which
+ * someone listens to: the power the tone puts in them, V^2 / (2 R_L), is
+ * worth a warning past 1 mW, where most of them already play loud (around
+ * 100 dB of sound). Above 600 ohm the load is an input, and its power
+ * means nothing.
+ *
  *   rLoad, fmMin   the load in ohms and the lowest message frequency
  *   fm, amaxDb     the highest message frequency and the passband spec
  *   level, tone    the filter output's signed DC level and the tone's
- *                  amplitude at fm, for the page's 1 V test carrier
+ *                  amplitude at fm, for the carrier `amplitude` at the
+ *                  demodulator's input
  *   capacitors     the list on hand, or null for the usual values
  */
 export const LOAD_CURRENT_LIMIT = 0.01; // A
+export const LOAD_POWER_LIMIT = 1e-3; // W, where most earphones already play loud
+export const HEADPHONE_MAX_OHMS = 600; // earphones and headphones run from 16 to 600 ohm
 
-export function designOutputCoupling({ rLoad, fmMin, fm, amaxDb, level, tone, capacitors = null }) {
+export function designOutputCoupling({ rLoad, fmMin, fm, amaxDb, level, tone, amplitude = 1, capacitors = null }) {
 	const fcMax = fmMin * Math.sqrt(10 ** (amaxDb / 10) - 1);
 	const cTarget = 1 / (2 * Math.PI * rLoad * fcMax);
 	const own = capacitorNotBelow(cTarget, capacitors);
@@ -43,6 +52,8 @@ export function designOutputCoupling({ rLoad, fmMin, fm, amaxDb, level, tone, ca
 	const gainAt = (f) => 1 / Math.sqrt(1 + (fc / f) ** 2);
 	const toneAtLoad = tone * gainAt(fm);
 	const peakCurrent = toneAtLoad / rLoad;
+	const power = toneAtLoad ** 2 / (2 * rLoad);
+	const listened = rLoad <= HEADPHONE_MAX_OHMS;
 	return {
 		rLoad,
 		fmMin,
@@ -58,11 +69,15 @@ export function designOutputCoupling({ rLoad, fmMin, fm, amaxDb, level, tone, ca
 		gainAtFm: gainAt(fm),
 		level,
 		tone,
+		amplitude,
 		toneAtLoad,
 		plusToward: level < 0 ? 'load' : 'filter',
 		dcCurrentBlocked: Math.abs(level) / rLoad,
 		peakCurrent,
 		currentOk: peakCurrent <= LOAD_CURRENT_LIMIT,
+		power,
+		listened,
+		powerOk: !listened || power <= LOAD_POWER_LIMIT,
 		timeConstant: rLoad * c
 	};
 }

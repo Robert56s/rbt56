@@ -66,7 +66,7 @@
 	import { DIODES } from '$lib/oscillator/limiter';
 	import { designOscillator } from '$lib/oscillator/topologies';
 	import { fitModel, IDSS_WARNING, JFET_PRESETS, modelFromIdss, modelFromRdsOn, parseMeasurements } from '$lib/modulation/jfetModel';
-	import { designHalfWaveRectifier, designPrecisionRectifier, rectifiedEnvelopeStats } from '$lib/modulation/rectifier';
+	import { demodSwing, designHalfWaveRectifier, designPrecisionRectifier, rectifiedEnvelopeStats } from '$lib/modulation/rectifier';
 	import { amSignal, envelope as envelopeWave, rectify } from '$lib/modulation/waveform';
 	import { componentOptions, defaultStock, isRestricted, loadStock, saveStock } from '$lib/stock';
 
@@ -397,6 +397,9 @@
 	let envelopeTopology = $state('sallenKey');
 	let orderOverride = $state(null);
 	let demoModIndex = $state(0.75);
+	// the carrier the demodulator receives, and what its op-amps can swing
+	let demodAmplitude = $state(1);
+	let demodOpampSwing = $state(13.5);
 	// the output into a load (earphones, an amplifier) through a coupling capacitor
 	let outputCoupling = $state(true);
 	let loadOhms = $state(32);
@@ -407,7 +410,7 @@
 	// frequency minus fmMax: that is where the filter's stopband starts, and
 	// it has to sit above the message
 	const demodValid = $derived(
-		fmMaxDemod > 0 && fmMaxDemod < fpCarrierDemod && rippleHz - fmMaxDemod > fmMaxDemod && amaxDb > 0 && aminDb > amaxDb && demoModIndex > 0 && demoModIndex <= 1
+		fmMaxDemod > 0 && fmMaxDemod < fpCarrierDemod && rippleHz - fmMaxDemod > fmMaxDemod && amaxDb > 0 && aminDb > amaxDb && demoModIndex > 0 && demoModIndex <= 1 && demodAmplitude > 0 && demodOpampSwing > 0
 	);
 	const ENVELOPE_MAX_ORDER = 8;
 	const envelopeRaw = $derived.by(() =>
@@ -435,14 +438,15 @@
 		return { atTone, atSideband, maxQ, top, bottom, span, spanOk: span <= amaxDb + 0.1, stopOk: -atSideband >= aminDb - 0.1 };
 	});
 	const rectifierInfo = $derived(rectifierType === 'full' ? designPrecisionRectifier({ resistorSeries: parts.resistorSeries }) : designHalfWaveRectifier({ resistorSeries: parts.resistorSeries }));
-	const rectStats = $derived(rectifiedEnvelopeStats(1, fpCarrierDemod, rectifierType));
-	// the demodulator with a 1 V test wave at the preview index: what comes out, as the LTspice run gets it
-	const demodOptions = $derived(envelopeDesign ? { rectifierType, rectifier: rectifierInfo, envelope: envelopeDesign, fp: fpCarrierDemod, fm: fmMaxDemod, index: demoModIndex } : null);
+	const rectStats = $derived(rectifiedEnvelopeStats(demodAmplitude, fpCarrierDemod, rectifierType));
+	// the demodulator with the test wave (the carrier and index on the page): what comes out, as the LTspice run gets it
+	const demodOptions = $derived(envelopeDesign ? { rectifierType, rectifier: rectifierInfo, envelope: envelopeDesign, fp: fpCarrierDemod, fm: fmMaxDemod, index: demoModIndex, amplitude: demodAmplitude } : null);
 	const demodOut = $derived(demodOptions && demoModIndex > 0 ? demodExpectation(demodOptions) : null);
+	const swingCheck = $derived(demodOut ? demodSwing({ rectifierType, amplitude: demodAmplitude, index: demoModIndex, out: demodOut, swing: demodOpampSwing }) : null);
 	const couplingValid = $derived(loadOhms > 0 && fmMinDemod > 0 && fmMinDemod < fmMaxDemod);
 	const coupling = $derived(
 		outputCoupling && couplingValid && demodOut
-			? designOutputCoupling({ rLoad: loadOhms, fmMin: fmMinDemod, fm: fmMaxDemod, amaxDb, level: demodOut.mean, tone: demodOut.tone, capacitors: parts.capacitors })
+			? designOutputCoupling({ rLoad: loadOhms, fmMin: fmMinDemod, fm: fmMaxDemod, amaxDb, level: demodOut.mean, tone: demodOut.tone, amplitude: demodAmplitude, capacitors: parts.capacitors })
 			: null
 	);
 	// the message band through both: the low-pass sets its top, the coupling its bottom
@@ -464,7 +468,7 @@
 
 	const demodPreview = $derived.by(() => {
 		const duration = 4 / fmMaxDemod;
-		const source = amSignal(fpCarrierDemod, fmMaxDemod, 1, demoModIndex, duration, 6000);
+		const source = amSignal(fpCarrierDemod, fmMaxDemod, demodAmplitude, demoModIndex, duration, 6000);
 		const rectified = rectify(source, rectifierType);
 		const env = envelopeWave(fmMaxDemod, rectStats.average, demoModIndex, duration, 6000);
 		return { source, rectified, env };
@@ -483,6 +487,8 @@
 				response,
 				topology: envelopeTopology,
 				index: demoModIndex,
+				amplitude: demodAmplitude,
+				opampSwing: demodOpampSwing,
 				outputCoupling,
 				loadOhms,
 				fmMin: fmMinDemod,
@@ -547,6 +553,7 @@
 			modAmp,
 			envelopeDesign,
 			demoModIndex,
+			demodAmp: demodAmplitude,
 			rippleHz,
 			amaxDb,
 			aminDb
@@ -1406,8 +1413,16 @@
 					</select>
 				</div>
 				<div class="field">
-					<label for="dn">Modulation index (preview only)</label>
+					<label for="dac">Carrier amplitude at the input (V)</label>
+					<input id="dac" type="number" step="0.1" min="0.01" bind:value={demodAmplitude} />
+				</div>
+				<div class="field">
+					<label for="dn">Modulation index of the test wave</label>
 					<input id="dn" type="number" step="0.05" min="0.05" max="1" bind:value={demoModIndex} />
+				</div>
+				<div class="field">
+					<label for="dswing">Op-amp output swing (V)</label>
+					<input id="dswing" type="number" step="0.5" min="0.5" bind:value={demodOpampSwing} />
 				</div>
 				<div class="field">
 					<label for="dout">Output</label>
@@ -1435,8 +1450,8 @@
 			{#if !demodValid}
 				<p class="flag bad">
 					The highest message frequency has to sit below the carrier and below the ripple's nearest sideband (the ripple
-					frequency minus that message frequency); Amin has to be larger than Amax, both positive; and the modulation index
-					between 0 and 1.
+					frequency minus that message frequency); Amin has to be larger than Amax, both positive; the modulation index
+					between 0 and 1; the carrier amplitude and the op-amp swing above 0.
 				</p>
 			{:else if envelopeRaw?.tooHigh}
 				<p class="flag bad">
@@ -1462,6 +1477,9 @@
 					<tbody>
 						<tr><td>R1 = R2 = R3</td><td>{formatOhms(rectifierInfo.r1)}</td></tr>
 						<tr><td>Diode</td><td>{rectifierInfo.diode}</td></tr>
+						{#if swingCheck}
+							<tr><td>Op-amp swing needed / available</td><td>{formatVolts(swingCheck.needed)} / {formatVolts(demodOpampSwing)}{swingCheck.where === 'rectifier' ? ", at U1A: the wave's crest plus a diode's drop" : ", at the filter's output"}</td></tr>
+						{/if}
 					</tbody>
 				</table>
 				<p class="note">
@@ -1477,6 +1495,9 @@
 					<tbody>
 						<tr><td>Diode</td><td>{rectifierInfo.diode}</td></tr>
 						<tr><td>R_L (to ground, the diode's return path)</td><td>{formatOhms(rectifierInfo.rl)}</td></tr>
+						{#if swingCheck}
+							<tr><td>Op-amp swing needed / available</td><td>{formatVolts(swingCheck.needed)} / {formatVolts(demodOpampSwing)}{swingCheck.where === 'rectifier' ? ", at U1A: the wave's crest plus a diode's drop" : ", at the filter's output"}</td></tr>
+						{/if}
 					</tbody>
 				</table>
 				<p class="note">
@@ -1485,7 +1506,16 @@
 						: 'The envelope filter after it takes no DC, so R_L is what lets the output come down again when the envelope does: without it the diode would charge the filter to the highest crest and hold it there.'}
 				</p>
 			{/if}
-			<MathPanel blocks={explainRectifier(rectifierType, fpCarrierDemod, rectifierInfo.r1 ?? 1000)} />
+			{#if swingCheck && !swingCheck.ok}
+				<p class="flag bad">
+					{swingCheck.where === 'rectifier'
+						? `U1A's output would reach ${formatVolts(swingCheck.needed)}, the wave's crest A_c(1 + n) = ${formatVolts(swingCheck.crest)} plus a diode's drop,`
+						: `The filter's output would reach ${formatVolts(swingCheck.needed)}, its DC level plus the tone,`}
+					past the {formatVolts(demodOpampSwing)} the op-amps swing: the tops of the envelope get clipped and the message comes out
+					distorted. A divider before the rectifier, or wider rails, brings the wave back inside.
+				</p>
+			{/if}
+			<MathPanel blocks={explainRectifier(rectifierType, fpCarrierDemod, rectifierInfo.r1 ?? 1000, swingCheck)} />
 		</section>
 
 		{#if envelopeDesign}
@@ -1574,7 +1604,7 @@
 				{#if demodOut}
 					<table>
 						<tbody>
-							<tr><td>Output mean, for a 1 V carrier</td><td>{formatVolts(demodOut.mean)}{demodOut.exact ? ` (${demodOut.sign < 0 ? '-' : ''}2/pi of the carrier${demodOut.sign < 0 ? ', the MFB inverts' : ''})` : ` (an ideal diode: ${formatVolts(demodOut.ideal.mean)})`}</td></tr>
+							<tr><td>Output mean, for the {formatVolts(demodAmplitude)} carrier</td><td>{formatVolts(demodOut.mean)}{demodOut.exact ? ` (${demodOut.sign < 0 ? '-' : ''}2/pi of the carrier${demodOut.sign < 0 ? ', the MFB inverts' : ''})` : ` (an ideal diode: ${formatVolts(demodOut.ideal.mean)})`}</td></tr>
 							<tr><td>Recovered tone at {formatHz(fmMaxDemod)}, index {demoModIndex}</td><td>{formatVolts(demodOut.tone)}{demodOut.exact ? '' : ` (an ideal diode: ${formatVolts(demodOut.ideal.tone)})`}, the filter's {demodOut.gainDb.toFixed(2)} dB included</td></tr>
 						</tbody>
 					</table>
@@ -1599,14 +1629,17 @@
 							<tr><td>Voltage rating</td><td>16 V or more</td></tr>
 							<tr><td>Corner f_c = 1/(2 pi R_L C)</td><td>{formatHz(coupling.fc)}</td></tr>
 							<tr><td>Loss at {formatHz(fmMinDemod)} / at {formatHz(fmMaxDemod)}</td><td>{coupling.lossAtFmMin.toFixed(2)} dB / {(-20 * Math.log10(coupling.gainAtFm)).toFixed(2)} dB</td></tr>
-							<tr><td>DC level kept off the load, for a 1 V carrier</td><td>{formatVolts(coupling.level)}, {(1000 * coupling.dcCurrentBlocked).toFixed(1)} mA it would have pushed through R_L</td></tr>
-							<tr><td>Tone across the load, for a 1 V carrier</td><td>{formatVolts(coupling.toneAtLoad)} peak, {(1000 * coupling.peakCurrent).toFixed(1)} mA at its crest</td></tr>
+							<tr><td>DC level kept off the load</td><td>{formatVolts(coupling.level)}, {(1000 * coupling.dcCurrentBlocked).toFixed(1)} mA it would have pushed through R_L</td></tr>
+							<tr><td>Tone across the load</td><td>{formatVolts(coupling.toneAtLoad)} peak, {(1000 * coupling.peakCurrent).toFixed(1)} mA at its crest</td></tr>
+							{#if coupling.listened}
+								<tr><td>Power in the earphones</td><td>{(1000 * coupling.power).toFixed(2)} mW</td></tr>
+							{/if}
 						</tbody>
 					</table>
 					<p class="note">
 						The capacitor blocks the DC level the rectifier leaves under the message and passes the message. It is sized on the
 						same Amax as the low-pass: at most {amaxDb} dB lost at the lowest message frequency, then rounded up, since a larger
-						C only makes the low end flatter. Both figures in volts grow with the carrier the demodulator receives.
+						C only makes the low end flatter.
 					</p>
 					<!-- only when the pair is the cause: a low-pass already off its spec is flagged in its own panel -->
 					{#if bandCheck && !bandCheck.ok && envelopeCheck?.spanOk}
@@ -1618,13 +1651,20 @@
 					{/if}
 					{#if !coupling.currentOk}
 						<p class="flag warn">
-							The load takes {(1000 * coupling.peakCurrent).toFixed(1)} mA at the tone's crest with a 1 V carrier, and more with a larger
-							one: past about 10 mA a TL08x no longer drives it cleanly, and the sound comes out weak or distorted. A small audio
+							The load takes {(1000 * coupling.peakCurrent).toFixed(1)} mA at the tone's crest:
+							past about 10 mA a TL08x no longer drives it cleanly, and the sound comes out weak or distorted. A small audio
 							amplifier between the two (an LM386 with a volume potentiometer, for instance) takes the current; an amplifier's
 							input, about 10 kΩ, needs nothing more than the capacitor.
 						</p>
 					{/if}
-					<MathPanel blocks={explainOutputCoupling(coupling)} />
+					{#if !coupling.powerOk}
+							<p class="flag warn">
+								That is {(1000 * coupling.power).toFixed(1)} mW in the earphones, and most of them already play loud from 1 mW, around
+								100 dB of sound{coupling.power > 0.01 ? ': this much can hurt the ears' : ''}. A volume potentiometer before them, or before
+								the amplifier, brings it down: start low.
+							</p>
+						{/if}
+						<MathPanel blocks={explainOutputCoupling(coupling)} />
 				</section>
 			{/if}
 
@@ -1641,7 +1681,7 @@
 					<button type="button" onclick={() => saveFile(generateDemodNetlist({ ...demodFiles, opamp: spiceOpamp, resistorSeries: parts.resistorSeries, pairs: parts.pairs }), 'am-demodulator.cir')}>Download .cir (netlist)</button>
 				</div>
 				<p class="note">
-					The LTspice files carry the whole demodulator behind a test source: a 1 V AM wave at
+					The LTspice files carry the whole demodulator behind a test source: a {formatVolts(demodAmplitude)} AM wave at
 					{formatHz(fpCarrierDemod)} carrying a {formatHz(fmMaxDemod)} tone at index {demoModIndex}, all three on one .param
 					line to change at will, then the {rectifierType === 'full' ? 'precision full-wave rectifier' : 'half-wave rectifier'} and the
 					{envelopeDesign.realized.length === 1 ? `${envelopeDesign.topology === 'mfb' ? 'MFB' : 'Sallen-Key'} stage` : `${envelopeDesign.realized.length} ${envelopeDesign.topology === 'mfb' ? 'MFB' : 'Sallen-Key'} stages`} of the low-pass{coupling ? `, then C_out into the ${formatOhms(coupling.rLoad)} load` : ''}. Plot V(vam), V(vrect)

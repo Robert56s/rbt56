@@ -401,6 +401,8 @@ function checkText(where, text) {
 				if (!envelopeDesign.tooHigh) run(`demod/${rectifierType}/${response}/mfb/${fp}/${aminDb}`, { mode: 'demod', rectifierType, fp, fm, envelopeDesign, demoModIndex: 0.9, rippleHz, amaxDb, aminDb });
 			}
 		}
+		// the carrier the page says the demodulator receives, 4 V here
+		run(`demod/${rectifierType}/4 V`, { mode: 'demod', rectifierType, fp: 50000, fm: 1000, envelopeDesign: designEnvelopeLowPass({ response: 'butterworth', amaxDb: 1, aminDb: 40, fp: 1000, fs: rectifierType === 'full' ? 99000 : 49000 }), demoModIndex: 0.75, demodAmp: 4, rippleHz: rectifierType === 'full' ? 100000 : 50000, amaxDb: 1, aminDb: 40 });
 		run(`demod/${rectifierType}/no design`, { mode: 'demod', rectifierType, fp: 40000, fm: 1000, envelopeDesign: null, demoModIndex: 0.9, rippleHz: rectifierType === 'full' ? 80000 : 40000, amaxDb: 1, aminDb: 40 });
 		run(`demod/${rectifierType}/empty fields`, { mode: 'demod', rectifierType, fp: null, fm: null, envelopeDesign: null, demoModIndex: null, rippleHz: NaN, amaxDb: null, aminDb: null });
 	}
@@ -430,6 +432,10 @@ function checkText(where, text) {
 		const ideal = dd.idealIndex.toFixed(2);
 		check(`modulation basics: the diode defaults give the engine's f_0 = ${f0k} kHz, Q = 6.67 and the ideal-switch index ${ideal}`, eqs('diode/40000/1000').includes(`${f0k}\\ \\text{kHz}`) && eqs('diode/40000/1000').includes('= 6.67') && eqs('diode/40000/1000').includes(`= ${ideal}`) && words('diode/40000/1000').includes(`n = ${dd.modulationIndex.toFixed(2)}`));
 	}
+	check(
+		"modulation basics: the demodulator's equations use the carrier on the page: 2/pi of 4 V is 2.55 V, 1/pi of it 1.27 V",
+		eqs('demod/full/4 V').includes('2.55\\ \\text{V}') && eqs('demod/half/4 V').includes('1.27\\ \\text{V}') && words('demod/full/4 V').includes('4 V') && !eqs('demod/full/4 V').includes('0.637')
+	);
 	check('modulation basics: the demodulator defaults (50 kHz) give f_c = 2.65 kHz and order 2', eqs('demod/full/butterworth/50000/1000').includes('2.65\\ \\text{kHz}') && words('demod/full/butterworth/50000/1000').includes('order 2 here'));
 	{
 		// the MFB filter: its stage told by its parts, and what its count of stages does to the sign

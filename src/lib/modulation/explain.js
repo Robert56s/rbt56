@@ -588,7 +588,36 @@ export function explainDiodeModulator(design) {
 /* Demodulator: rectifier, then the envelope low-pass filter                 */
 /* ------------------------------------------------------------------------ */
 
-export function explainRectifier(type, fp = null, r = 1000) {
+/**
+ * The rectifier's derivation, then, given `swing` (demodSwing's result in
+ * rectifier.js), whether the op-amps can follow the wave the page asks for.
+ */
+export function explainRectifier(type, fp = null, r = 1000, swing = null) {
+	return [...rectifierBlocks(type, fp, r), ...swingBlocks(type, swing)];
+}
+
+/** U1A runs a diode's drop past the crest; the filter's output reaches its level plus the tone. */
+function swingBlocks(type, sw) {
+	if (!sw) return [];
+	const full = type !== 'half';
+	const cmp = sw.ok ? '\\le' : '>';
+	return [
+		head('Room for the wave'),
+		p(
+			full
+				? `The op-amps have to follow the wave itself, not just its average. U1A runs one diode's drop past its input, D2's on the positive half and D1's on the negative, so at the envelope's crest its output reaches A_c(1 + n) plus that drop. The filter's output only reaches its DC level plus the tone, which is less. Both have to stay inside what the op-amps swing on their rails, ${formatVolts(sw.swing)} here:`
+				: `With the bare diode the only op-amps are the filter's, and its output reaches its DC level plus the tone. That has to stay inside what the op-amps swing on their rails, ${formatVolts(sw.swing)} here:`
+		),
+		eq(
+			full
+				? `V_{U1A} = A_c(1 + n) + V_D = ${n2(sw.crest)} + ${n2(sw.rectifier - sw.crest)} = ${n2(sw.rectifier)}\\ \\text{V} \\ ${cmp}\\ ${n2(sw.swing)}\\ \\text{V}`
+				: `|V_{out}|_{max} = |\\overline{v}| + V_{tone} = ${n2(sw.filter)}\\ \\text{V} \\ ${cmp}\\ ${n2(sw.swing)}\\ \\text{V}`
+		),
+		...(sw.ok ? [] : [p('Past that the op-amp clips the tops of the envelope and the message comes out distorted: a divider before the rectifier, or wider rails, brings the wave back inside.')])
+	];
+}
+
+function rectifierBlocks(type, fp = null, r = 1000) {
 	const rippleNote = (mult) => (Number.isFinite(fp) ? ` = ${formatHz(mult * fp)}` : '');
 	if (type === 'half') {
 		return [
@@ -693,12 +722,12 @@ export function explainEnvelopeFilter(design) {
  * spec, which way round it goes, and what the load draws.
  */
 export function explainOutputCoupling(cp) {
-	const { rLoad, fmMin, fm, amaxDb, fcMax, cTarget, c, fc, lossAtFmMin, gainAtFm, level, toneAtLoad, plusToward, dcCurrentBlocked, peakCurrent } = cp;
+	const { rLoad, fmMin, fm, amaxDb, fcMax, cTarget, c, fc, lossAtFmMin, gainAtFm, level, amplitude, toneAtLoad, plusToward, dcCurrentBlocked, peakCurrent, power, listened } = cp;
 	const ma = (a) => `${n1(1000 * a)}\\ \\text{mA}`;
 	const k = Math.sqrt(10 ** (amaxDb / 10) - 1);
 	return [
 		p(
-			`The filter hands the message back riding on a DC level, the rectifier's average of the carrier: ${formatVolts(level)} for the page's 1 V test carrier. A load wired straight to it would take that level as a steady current, ${n1(1000 * dcCurrentBlocked)} mA through ${formatOhms(rLoad)}: earphones would hold their membrane off centre with it, and the op-amp would have to supply it on top of the message. A capacitor in series blocks the DC and lets the message through.`
+			`The filter hands the message back riding on a DC level, the rectifier's average of the carrier: ${formatVolts(level)} for the ${formatVolts(amplitude ?? 1)} carrier at the input. A load wired straight to it would take that level as a steady current, ${n1(1000 * dcCurrentBlocked)} mA through ${formatOhms(rLoad)}: earphones would hold their membrane off centre with it, and the op-amp would have to supply it on top of the message. A capacitor in series blocks the DC and lets the message through.`
 		),
 		p("With the load it makes a divider between the capacitor's impedance 1/(sC) and R_L, a first-order high-pass:"),
 		eq('H(s) = \\dfrac{R_L}{R_L + \\dfrac{1}{sC}} = \\dfrac{sR_LC}{1 + sR_LC}, \\qquad f_c = \\dfrac{1}{2\\pi R_L C}, \\qquad |H(f)| = \\dfrac{1}{\\sqrt{1 + (f_c/f)^2}}'),
@@ -711,7 +740,13 @@ export function explainOutputCoupling(cp) {
 		p(
 			`At that size the capacitor is an electrolytic, and an electrolytic has to sit with its + plate above its - plate in DC, or it leaks and wears out. The load side sits at 0 V, held there through R_L; the filter's output sits at ${formatVolts(level)}. So the + plate goes ${plusToward === 'load' ? 'to the load: the filter side is the lower one, since the MFB stages turned the level negative.' : "to the filter's output, the higher side."} A voltage rating of 16 V or more covers anything an op-amp on 15 V rails can put across it.`
 		),
-		p(`What the load gets is the message alone: ${formatVolts(toneAtLoad)} peak across ${formatOhms(rLoad)} for the 1 V test carrier, and in proportion to the carrier beyond it. The current at its crest:`),
-		eq(`I_{peak} = \\dfrac{V_{tone}}{R_L} = \\dfrac{${formatVolts(toneAtLoad)}}{${formatOhms(rLoad)}} = ${ma(peakCurrent)}`)
+		p(`What the load gets is the message alone: ${formatVolts(toneAtLoad)} peak across ${formatOhms(rLoad)}. The current at its crest:`),
+		eq(`I_{peak} = \\dfrac{V_{tone}}{R_L} = \\dfrac{${formatVolts(toneAtLoad)}}{${formatOhms(rLoad)}} = ${ma(peakCurrent)}`),
+		...(listened
+			? [
+					p("And the power it puts in the earphones, a sine's peak squared over twice the resistance. Most earphones already play loud from 1 mW, around 100 dB of sound:"),
+					eq(`P = \\dfrac{V_{tone}^2}{2R_L} = \\dfrac{(${formatVolts(toneAtLoad)})^2}{2 \\times ${formatOhms(rLoad)}} = ${n2(1000 * power)}\\ \\text{mW}`)
+				]
+			: [])
 	];
 }

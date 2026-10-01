@@ -271,7 +271,9 @@ const AMIN_DB = ${p.aminDb};                // dB, min attenuation required from
 const ORDER = ${p.order ?? 'null'};                  // null: the minimum even order that meets the spec; an odd order is rounded up (second-order stages only)
 const RESPONSE = ${JSON.stringify(p.response)};      // 'butterworth' or 'chebyshev'
 const FILTER_TOPOLOGY = ${JSON.stringify(p.topology ?? 'sallenKey')}; // 'sallenKey' (unity gain) or 'mfb' (multiple feedback, a DC gain of -1 per stage)
-const TEST_INDEX = ${p.index ?? 0.9};              // modulation index of the 1 V test wave the last lines use
+const CARRIER_AMPLITUDE = ${p.amplitude ?? 1};          // V, the carrier's peak at the demodulator's input
+const TEST_INDEX = ${p.index ?? 0.9};              // modulation index of the test wave the last lines use
+const OPAMP_SWING = ${p.opampSwing ?? 13.5};            // V, what the op-amps reach on their rails (about 13.5 for a TL08x on 15 V)
 const OUTPUT_COUPLING = ${p.outputCoupling === false ? 'false' : 'true'};        // true: a capacitor between the filter and the load blocks the DC level
 const LOAD_OHMS = ${p.loadOhms ?? 32};                // ohm, the load: earphones 16 to 32, an amplifier's input about 10k
 const FM_MIN = ${p.fmMin ?? 100};                 // Hz, the lowest message frequency the capacitor passes, at most AMAX_DB lost there
@@ -298,8 +300,8 @@ const ohmsLabel = (v) => {
 
 const rippleHz = RECTIFIER_TYPE === 'full' ? 2 * FP_CARRIER : FP_CARRIER;
 // the ripple carries the message as sidebands: its lowest one, rippleHz - FM_MAX, is where the stopband starts
-if (!(FM_MAX > 0 && FM_MAX < FP_CARRIER && rippleHz - FM_MAX > FM_MAX && AMAX_DB > 0 && AMIN_DB > AMAX_DB && TEST_INDEX > 0 && TEST_INDEX <= 1)) {
-	console.log('Check the spec: 0 < FM_MAX < FP_CARRIER, the ripple minus FM_MAX above FM_MAX, AMIN_DB > AMAX_DB > 0 and 0 < TEST_INDEX <= 1.');
+if (!(FM_MAX > 0 && FM_MAX < FP_CARRIER && rippleHz - FM_MAX > FM_MAX && AMAX_DB > 0 && AMIN_DB > AMAX_DB && TEST_INDEX > 0 && TEST_INDEX <= 1 && CARRIER_AMPLITUDE > 0 && OPAMP_SWING > 0)) {
+	console.log('Check the spec: 0 < FM_MAX < FP_CARRIER, the ripple minus FM_MAX above FM_MAX, AMIN_DB > AMAX_DB > 0, 0 < TEST_INDEX <= 1, CARRIER_AMPLITUDE and OPAMP_SWING above 0.');
 	process.exit(1);
 }
 const rectifier = RECTIFIER_TYPE === 'full' ? designPrecisionRectifier({ resistorSeries: RESISTOR_SERIES }) : designHalfWaveRectifier({ resistorSeries: RESISTOR_SERIES });
@@ -333,9 +335,11 @@ design.realized.forEach((r, i) => {
 
 console.log();
 console.log('='.repeat(72));
-console.log(\`WHAT COMES OUT (a 1 V carrier at index \${TEST_INDEX}, a \${FM_MAX} Hz tone)\`);
+console.log(\`WHAT COMES OUT (a \${CARRIER_AMPLITUDE} V carrier at index \${TEST_INDEX}, a \${FM_MAX} Hz tone)\`);
 console.log('='.repeat(72));
-const out = recoveredEnvelope({ rectifierType: RECTIFIER_TYPE, rectifier, envelope: design, fm: FM_MAX, index: TEST_INDEX, amplitude: 1 });
+const out = recoveredEnvelope({ rectifierType: RECTIFIER_TYPE, rectifier, envelope: design, fm: FM_MAX, index: TEST_INDEX, amplitude: CARRIER_AMPLITUDE });
+const sw = demodSwing({ rectifierType: RECTIFIER_TYPE, amplitude: CARRIER_AMPLITUDE, index: TEST_INDEX, out, swing: OPAMP_SWING });
+console.log(\`op-amp swing needed \${sw.needed.toFixed(3)} V (\${sw.where === 'rectifier' ? "U1A: the crest plus a diode's drop" : 'the filter: its DC level plus the tone'}) of \${OPAMP_SWING} V: \${sw.ok ? 'fits' : 'CLIPS, a smaller carrier at the input or wider rails'}\`);
 console.log(\`output mean \${out.mean.toFixed(4)} V, recovered tone \${out.tone.toFixed(4)} V (the filter's \${out.gainDb.toFixed(2)} dB at \${FM_MAX} Hz included)\`);
 if (out.sign < 0) console.log('the MFB stages invert, an odd count of them: the message comes out upside down, its DC level negative');
 if (!out.exact) console.log(\`an ideal rectifier would give \${out.ideal.mean.toFixed(4)} V and \${out.ideal.tone.toFixed(4)} V: the bare diode loses its drop on every crest\`);
@@ -345,15 +349,16 @@ if (OUTPUT_COUPLING) {
 		console.log('Check the output: LOAD_OHMS > 0 and 0 < FM_MIN < FM_MAX.');
 		process.exit(1);
 	}
-	const cp = designOutputCoupling({ rLoad: LOAD_OHMS, fmMin: FM_MIN, fm: FM_MAX, amaxDb: AMAX_DB, level: out.mean, tone: out.tone, capacitors: CAPACITORS });
+	const cp = designOutputCoupling({ rLoad: LOAD_OHMS, fmMin: FM_MIN, fm: FM_MAX, amaxDb: AMAX_DB, level: out.mean, tone: out.tone, amplitude: CARRIER_AMPLITUDE, capacitors: CAPACITORS });
 	console.log();
 	console.log('='.repeat(72));
 	console.log('OUTPUT TO THE LOAD (coupling capacitor)');
 	console.log('='.repeat(72));
 	console.log(\`C_out = \${cp.c.toExponential(3)} F, an electrolytic\${cp.stockShortfall ? ' (not on the list: the next E6 value)' : ''}, at least \${cp.cTarget.toExponential(3)} F, rated 16 V or more\`);
-	console.log(\`its + plate toward \${cp.plusToward === 'load' ? 'the load' : 'the filter'}: the filter output sits at \${cp.level.toFixed(4)} V for a 1 V carrier, the load at 0 V\`);
+	console.log(\`its + plate toward \${cp.plusToward === 'load' ? 'the load' : 'the filter'}: the filter output sits at \${cp.level.toFixed(4)} V, the load at 0 V\`);
 	console.log(\`corner \${cp.fc.toFixed(2)} Hz: \${cp.lossAtFmMin.toFixed(2)} dB lost at \${FM_MIN} Hz (AMAX_DB \${AMAX_DB})\`);
 	console.log(\`tone across \${LOAD_OHMS} ohm: \${cp.toneAtLoad.toFixed(4)} V, \${(1000 * cp.peakCurrent).toFixed(2)} mA at its crest\${cp.currentOk ? '' : ': past the 10 mA a TL08x drives cleanly, so an audio amplifier goes between them'}\`);
+	if (cp.listened) console.log(\`power in the earphones: \${(1000 * cp.power).toFixed(2)} mW\${cp.powerOk ? '' : ': most already play loud from 1 mW, so a volume potentiometer goes before them'}\`);
 }
 `;
 }

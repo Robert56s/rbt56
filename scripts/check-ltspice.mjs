@@ -386,21 +386,25 @@ for (const [topology, rectifierType, response] of ['sallenKey', 'mfb'].flatMap((
 // The output into a load: LTspice netlists the polcap pin by pin, so the
 // netlist match also says its + plate is drawn where the page puts it.
 // The load must get the tone with the DC level gone, and the filter's own
-// output keep its level.
-for (const [topology, rectifierType, rLoad] of [
-	['sallenKey', 'full', 32],
-	['mfb', 'full', 32],
-	['mfb', 'half', 1000]
+// output keep its level. Then the same at the 4 V carrier the page can ask
+// for: the precision rectifier scales, and the bare diode keeps a larger
+// share of a larger carrier, as its diode law says.
+for (const [topology, rectifierType, rLoad, amplitude] of [
+	['sallenKey', 'full', 32, 1],
+	['mfb', 'full', 32, 1],
+	['mfb', 'half', 1000, 1],
+	['mfb', 'full', 32, 4],
+	['sallenKey', 'half', 1000, 4]
 ]) {
 	const fp = 40000;
 	const fm = 1000;
 	const envelope = designEnvelopeLowPass({ response: 'butterworth', amaxDb: 1, aminDb: 40, fp: fm, fs: rectifierType === 'full' ? 2 * fp : fp, order: null, topology });
 	const rectifier = rectifierType === 'full' ? designPrecisionRectifier() : designHalfWaveRectifier();
-	const base = { rectifierType, rectifier, envelope, fp, fm, index: 0.9 };
+	const base = { rectifierType, rectifier, envelope, fp, fm, index: 0.9, amplitude };
 	const ex = demodExpectation(base);
-	const coupling = designOutputCoupling({ rLoad, fmMin: 100, fm, amaxDb: 1, level: ex.mean, tone: ex.tone });
+	const coupling = designOutputCoupling({ rLoad, fmMin: 100, fm, amaxDb: 1, level: ex.mean, tone: ex.tone, amplitude });
 	const opts = { ...base, coupling };
-	const stem = `demod-load-${topology}-${rectifierType}`;
+	const stem = `demod-load-${topology}-${rectifierType}${amplitude === 1 ? '' : `-${amplitude}V`}`;
 	const asc = join(dir, `${stem}.asc`);
 	const cir = join(dir, `${stem}.cir`);
 	writeFileSync(asc, demodSchematic(opts));

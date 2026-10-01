@@ -60,6 +60,26 @@ export function designHalfWaveRectifier({ diode = '1N4148', rl = null, resistorS
 	return { diode, rl: rl ?? nearestResistor(1000, resistorSeries) };
 }
 
+/**
+ * How far the demodulator's op-amps have to swing for a wave of carrier
+ * `amplitude` and index `index`. The precision rectifier's U1A runs one
+ * diode drop past its input (it drives D2 into U1B's + input on one half,
+ * and its own - input through D1 on the other), so it reaches the wave's
+ * crest plus that drop; the filter's output reaches its DC level plus the
+ * tone (`out`, recoveredEnvelope's result). The bare diode has no op-amp
+ * of its own, so there only the filter counts. `swing` is what the
+ * op-amps reach on their rails.
+ */
+export const DIODE_DROP = 0.7;
+
+export function demodSwing({ rectifierType, amplitude, index, out, swing }) {
+	const crest = amplitude * (1 + index);
+	const rectifier = rectifierType === 'half' ? 0 : crest + DIODE_DROP;
+	const filter = Math.abs(out.mean) + out.tone;
+	const needed = Math.max(rectifier, filter);
+	return { crest, rectifier, filter, needed, swing, ok: needed <= swing, where: rectifier >= filter ? 'rectifier' : 'filter' };
+}
+
 /** Average value and ripple fundamental of a rectified sinusoid of peak amplitude Ap. */
 export function rectifiedEnvelopeStats(ap, fp, type) {
 	if (type === 'full') return { average: (2 * ap) / Math.PI, rippleFundamentalHz: 2 * fp };
