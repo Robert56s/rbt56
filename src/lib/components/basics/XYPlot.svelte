@@ -10,10 +10,13 @@
 	//   markers   [{ x, label, color }]        vertical guide lines
 	//   hlines    [{ y, label, color }]        horizontal guide lines
 	//   boxes     [{ x0, x1, y0, y1, label, color }]  shaded regions, drawn first
+	//   points    [{ x, y, label, color }]     dots drawn last, e.g. an operating point
 	//   xLog, xLabel, yLabel, yMin, yMax, height
 	//   yStep     optional spacing of the horizontal grid lines
+	// A series may also carry `endLabel`, written where the line ends (the
+	// curves of a family, each named at its right end).
 
-	let { xs = [], series = [], bars = [], markers = [], hlines = [], boxes = [], xLog = false, xLabel = '', yLabel = '', yMin = null, yMax = null, yStep = null, height = 190 } = $props();
+	let { xs = [], series = [], bars = [], markers = [], hlines = [], boxes = [], points = [], xLog = false, xLabel = '', yLabel = '', yMin = null, yMax = null, yStep = null, height = 190 } = $props();
 
 	let canvas = $state(null);
 	let width = $state(600);
@@ -47,7 +50,7 @@
 		const plotW = w - pad.left - pad.right;
 		const plotH = h - pad.top - pad.bottom;
 
-		const allX = [...xs, ...bars.map((b) => b.x), ...markers.map((m) => m.x)].filter((v) => Number.isFinite(v) && (!xLog || v > 0));
+		const allX = [...xs, ...bars.map((b) => b.x), ...markers.map((m) => m.x), ...points.map((p) => p.x)].filter((v) => Number.isFinite(v) && (!xLog || v > 0));
 		let x0 = Math.min(...allX);
 		let x1 = Math.max(...allX);
 		if (!(x1 > x0)) {
@@ -57,7 +60,7 @@
 		let lo = yMin;
 		let hi = yMax;
 		if (lo === null || hi === null) {
-			const allY = [...series.flatMap((s) => Array.from(s.ys)), ...bars.map((b) => b.h), 0].filter(Number.isFinite);
+			const allY = [...series.flatMap((s) => Array.from(s.ys)), ...bars.map((b) => b.h), ...points.map((p) => p.y), 0].filter(Number.isFinite);
 			lo ??= Math.min(...allY);
 			hi ??= Math.max(...allY);
 			if (!(hi > lo)) {
@@ -242,6 +245,35 @@
 			}
 			if (started) g.stroke();
 			g.setLineDash([]);
+			if (s.endLabel) {
+				let k = sx.length - 1;
+				while (k >= 0 && !(Number.isFinite(s.ys[k]) && Y(s.ys[k]) >= pad.top && Y(s.ys[k]) <= h - pad.bottom)) k--;
+				if (k >= 0) {
+					g.fillStyle = main;
+					g.textAlign = 'right';
+					g.textBaseline = 'bottom';
+					g.fillText(s.endLabel, Math.min(X(sx[k]), w - pad.right) - 2, Y(s.ys[k]) - 3);
+				}
+			}
+		}
+		for (const p of points) {
+			if (!Number.isFinite(p.x) || !Number.isFinite(p.y) || (xLog && p.x <= 0)) continue;
+			if (p.y < lo || p.y > hi) continue;
+			const color = resolveColor(node, p.color ?? 'var(--blue)');
+			g.fillStyle = color;
+			g.strokeStyle = '#fff';
+			g.lineWidth = 2;
+			g.beginPath();
+			g.arc(X(p.x), Y(p.y), 4.5, 0, 2 * Math.PI);
+			g.fill();
+			g.stroke();
+			if (p.label) {
+				// the label goes on whichever side of the dot has room
+				const right = X(p.x) < pad.left + plotW * 0.7;
+				g.textAlign = right ? 'left' : 'right';
+				g.textBaseline = 'bottom';
+				g.fillText(p.label, X(p.x) + (right ? 8 : -8), Y(p.y) - 5);
+			}
 		}
 	}
 
