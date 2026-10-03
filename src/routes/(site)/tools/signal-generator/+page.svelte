@@ -2,6 +2,7 @@
 	import { onDestroy } from 'svelte';
 	import GeneratorChannel from '$lib/components/GeneratorChannel.svelte';
 	import ScopeView from '$lib/components/ScopeView.svelte';
+	import SweepPanel from '$lib/components/SweepPanel.svelte';
 	import { formatHz } from '$lib/audio/format';
 	import { LiveGenerator } from '$lib/audio/liveGenerator';
 
@@ -29,10 +30,52 @@
 	// most devices run at, and the real figure replaces it on start.
 	const nyquist = $derived((sampleRate ?? 48000) / 2);
 
+	// The frequency sweep (panel 03). While it runs it takes over the
+	// channels it is set on: a sine at the channel's amplitude, at the
+	// step's frequency, or gliding in the worklet for a continuous sweep.
+	let sweep = $state({
+		mode: 'stepped',
+		channel: 'left',
+		from: 100,
+		to: 20000,
+		spacing: 'log',
+		perDecade: 10,
+		step: 1000,
+		advance: 'auto',
+		dwell: 3,
+		duration: 10,
+		repeat: false,
+		active: false,
+		paused: false,
+		index: 0,
+		id: 0,
+		nowHz: null
+	});
+	let sweepTimes = $state([null, null]);
+	generator.onsweep = (times) => (sweepTimes = times);
+
 	// what the worklet receives: the modulation object only when one is on,
 	// and the frequency clamped to what the output can hold
-	function settingsOf(ch) {
+	function settingsOf(ch, index) {
 		const snap = $state.snapshot(ch);
+		const swept = sweep.active && (sweep.channel === 'both' || (sweep.channel === 'left') === (index === 0));
+		if (swept) {
+			const wave = { ...snap.wave, type: 'sine', offset: 0 };
+			if (sweep.mode === 'stepped') {
+				wave.frequency = Math.min(Number(sweep.nowHz) || Number(sweep.from) || 0, nyquist);
+			} else {
+				wave.frequency = Number(sweep.from) || 0;
+				wave.sweep = {
+					id: sweep.id,
+					from: Math.min(Number(sweep.from), nyquist),
+					to: Math.min(Number(sweep.to), nyquist),
+					duration: Number(sweep.duration),
+					spacing: sweep.spacing,
+					repeat: sweep.repeat
+				};
+			}
+			return { wave, modulation: null, enabled: true };
+		}
 		const wave = { ...snap.wave, frequency: Math.min(Number(snap.wave.frequency) || 0, nyquist) };
 		const modulation = snap.modulation.kind === 'none' ? null : { ...snap.modulation, source: 'wave' };
 		return { wave, modulation, enabled: snap.enabled };
@@ -40,11 +83,17 @@
 
 	// every knob change goes straight to the audio thread
 	$effect(() => {
-		generator.update(0, settingsOf(left));
+		generator.update(0, settingsOf(left, 0));
 	});
 	$effect(() => {
-		generator.update(1, settingsOf(right));
+		generator.update(1, settingsOf(right, 1));
 	});
+
+	// a sweep needs the output open; its Start button is a click, which is
+	// what a browser asks for
+	async function ensureRunning() {
+		if (!generator.running) await start();
+	}
 
 	async function start() {
 		starting = true;
@@ -58,8 +107,8 @@
 			sampleRate = generator.sampleRate;
 			latency = generator.latency;
 			running = generator.running;
-			generator.update(0, settingsOf(left));
-			generator.update(1, settingsOf(right));
+			generator.update(0, settingsOf(left, 0));
+			generator.update(1, settingsOf(right, 1));
 		} catch (e) {
 			error = e?.message || String(e);
 		} finally {
@@ -76,7 +125,9 @@
 		generator.close();
 	});
 
-	const referenceHz = $derived(left.enabled ? Number(left.wave.frequency) || 1000 : Number(right.wave.frequency) || 1000);
+	const referenceHz = $derived(
+		sweep.active && sweep.nowHz ? sweep.nowHz : left.enabled ? Number(left.wave.frequency) || 1000 : Number(right.wave.frequency) || 1000
+	);
 </script>
 
 <svelte:head>
@@ -93,7 +144,8 @@
 	<p class="lead">
 		A function generator on the computer's headphone or line output, live: two independent channels
 		on left and right, each a sine, square, triangle, ramp, DC or noise, with an optional AM or FM
-		by a second waveform. The frequency goes as high as the sound card's sample rate allows, and a
+		by a second waveform. The frequency goes as high as the sound card's sample rate allows, a
+		frequency sweep steps through a range slowly enough to check a filter with a multimeter, and a
 		scope shows what is being sent.
 	</p>
 
@@ -159,6 +211,32 @@
 	<section class="panel">
 		<div class="panel-head">
 			<span class="num">03</span>
+			<h2>Frequency sweep</h2>
+			<span class="hint">check a filter with a multimeter</span>
+		</div>
+		<SweepPanel bind:sweep {running} {nyquist} {sweepTimes} {ensureRunning} />
+		<ul class="notes meter">
+			<li>
+				A multimeter reads AC correctly only over a limited band, written in its manual as the
+				frequency range of AC volts: often 40 Hz to 400 Hz or 1 kHz on a basic meter, 10 kHz to
+				100 kHz on a true-RMS one. Past it the reading falls whatever the filter does. Reading the
+				input and the output at every step cancels most of that, as long as the reading stays
+				well above the meter's last digit.
+			</li>
+			<li>
+				Each step should last long enough for the meter to settle, about 2 to 3 s for most
+				meters. With Next by hand, a step lasts as long as the reading takes.
+			</li>
+			<li>
+				The sound card stops near 20 kHz, so a filter above that (a 30 to 60 kHz band-pass, a
+				50 kHz carrier) needs a real function generator; its sweep is the same idea.
+			</li>
+		</ul>
+	</section>
+
+	<section class="panel">
+		<div class="panel-head">
+			<span class="num">04</span>
 			<h2>Scope</h2>
 			<span class="hint">what the output is sending</span>
 		</div>
@@ -167,7 +245,7 @@
 
 	<section class="panel">
 		<div class="panel-head">
-			<span class="num">04</span>
+			<span class="num">05</span>
 			<h2>What a sound card can and cannot do</h2>
 		</div>
 		<ul class="notes">
@@ -234,5 +312,10 @@
 
 	.notes li + li {
 		margin-top: 0.5rem;
+	}
+
+	.notes.meter {
+		margin-top: 1.2rem;
+		font-size: 0.88rem;
 	}
 </style>

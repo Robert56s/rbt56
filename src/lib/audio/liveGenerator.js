@@ -36,13 +36,23 @@ class SignalGeneratorProcessor extends AudioWorkletProcessor {
 			const { channel, wave, modulation, gate } = e.data;
 			const g = this.gens[channel];
 			if (g) g.set({ wave, modulation, gate });
+			this.sweeping[channel] = !!(wave && wave.sweep);
 		};
+		// a running sweep reports how far it has gone, about 20 times a second,
+		// so the page can show the frequency being played right now
+		this.sweeping = [false, false];
+		this.untilReport = 0;
 	}
 	process(inputs, outputs) {
 		const out = outputs[0];
 		for (let c = 0; c < out.length; c++) {
 			if (this.gens[c]) this.gens[c].fill(out[c]);
 			else out[c].fill(0);
+		}
+		this.untilReport -= out[0] ? out[0].length : 128;
+		if (this.untilReport <= 0 && (this.sweeping[0] || this.sweeping[1])) {
+			this.untilReport = sampleRate / 20;
+			this.port.postMessage({ sweepTimes: this.gens.map((g, c) => (this.sweeping[c] ? g.sweepTime : null)) });
 		}
 		return true;
 	}
@@ -59,6 +69,9 @@ export class LiveGenerator {
 	node = null;
 	analysers = [];
 	error = null;
+	// seconds into each channel's running sweep, as last reported by the worklet
+	sweepTimes = [null, null];
+	onsweep = null;
 
 	get running() {
 		return !!this.ctx && this.ctx.state === 'running';
@@ -117,6 +130,12 @@ export class LiveGenerator {
 			a.smoothingTimeConstant = 0;
 			return a;
 		});
+		node.port.onmessage = (e) => {
+			if (e.data && e.data.sweepTimes) {
+				this.sweepTimes = e.data.sweepTimes;
+				if (this.onsweep) this.onsweep(this.sweepTimes);
+			}
+		};
 		node.connect(splitter);
 		splitter.connect(analysers[0], 0);
 		splitter.connect(analysers[1], 1);

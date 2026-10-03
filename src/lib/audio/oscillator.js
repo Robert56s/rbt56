@@ -69,12 +69,29 @@ export function bandLimitedShape(type, t, s, dt) {
 	}
 }
 
+/**
+ * The frequency of a continuous sweep `t` seconds after it starts.
+ *   sweep  { from, to (Hz), duration (s), spacing: 'log' | 'linear', repeat }
+ * A log sweep spends the same time in every decade, the way a Bode plot
+ * reads; a linear one the same time per hertz. With repeat it starts over
+ * at `from` each period, otherwise it stays at `to` once there.
+ */
+export function sweepFrequency(sweep, t) {
+	const from = Number(sweep.from) || 0;
+	const to = Number(sweep.to) || 0;
+	const d = Number(sweep.duration) || 0;
+	if (!(d > 0) || !(from > 0) || !(to > 0)) return from;
+	const u = sweep.repeat ? (t % d) / d : Math.min(t / d, 1);
+	return sweep.spacing === 'linear' ? from + (to - from) * u : from * Math.pow(to / from, u);
+}
+
 /** Turns the page's wave/modulation objects into the numbers the loop needs. */
 function compile(wave, modulation, sampleRate) {
 	const mw = modulation && modulation.source === 'wave' ? modulation.wave : null;
 	const useFile = !!modulation && modulation.source === 'file';
 	const useMod = !!modulation && (useFile || mw);
 	return {
+		sweep: wave.sweep && Number(wave.sweep.duration) > 0 ? wave.sweep : null,
 		type: wave.type,
 		ideal: !!wave.ideal,
 		amp: Number(wave.amplitude) || 0,
@@ -102,10 +119,13 @@ function compile(wave, modulation, sampleRate) {
  * the level (0 mutes, 1 plays) through the same slew, so switching a
  * channel on or off fades over the smoothing time too.
  *
- *   wave        { type, frequency, amplitude, offset, phase (deg), symmetry (%), ideal }
+ *   wave        { type, frequency, amplitude, offset, phase (deg), symmetry (%), ideal, sweep }
  *   modulation  null, or { kind: 'am'|'fm', depth (%), deviation (Hz), source, wave }
  * AM: y = offset + amplitude * shape * (1 + depth * m). FM: the phase
  * advances at frequency + deviation * m, sample by sample.
+ * sweep: null, or { id, from, to, duration, spacing, repeat } (see
+ * sweepFrequency); the frequency then follows the sweep instead of
+ * `frequency`, with no jump in phase, and a new `id` starts it over.
  */
 export function createGenerator({ wave, modulation = null, sampleRate, smoothing = 0, gate = 1 }) {
 	let cfg = compile(wave, modulation, sampleRate);
@@ -114,6 +134,9 @@ export function createGenerator({ wave, modulation = null, sampleRate, smoothing
 	let curAmp = cfg.amp * gate;
 	let curOff = cfg.off * gate;
 	let targetGate = gate;
+	// time into the running sweep, and which sweep it is
+	let sweepT = 0;
+	let sweepId = cfg.sweep ? cfg.sweep.id : null;
 	const k = smoothing > 0 ? 1 - Math.exp(-1 / (smoothing * sampleRate)) : 1;
 
 	return {
@@ -123,6 +146,11 @@ export function createGenerator({ wave, modulation = null, sampleRate, smoothing
 			if (next.modulation !== undefined) modulation = next.modulation;
 			if (next.gate !== undefined) targetGate = next.gate;
 			cfg = compile(wave, modulation, sampleRate);
+			const id = cfg.sweep ? cfg.sweep.id : null;
+			if (id !== sweepId) {
+				sweepId = id;
+				sweepT = 0;
+			}
 		},
 		/**
 		 * Writes `count` samples into out[start..]. modSamples, when given,
@@ -143,7 +171,12 @@ export function createGenerator({ wave, modulation = null, sampleRate, smoothing
 					modPhase += c.modDt;
 					modPhase -= Math.floor(modPhase);
 				}
-				const dt = (c.baseF + c.fm * m) / sampleRate;
+				let f = c.baseF;
+				if (c.sweep) {
+					f = sweepFrequency(c.sweep, sweepT);
+					sweepT += 1 / sampleRate;
+				}
+				const dt = (f + c.fm * m) / sampleRate;
 				const t = (phase + c.phaseOffset) % 1;
 				let v;
 				if (c.type === 'dc') v = 1;
@@ -159,6 +192,10 @@ export function createGenerator({ wave, modulation = null, sampleRate, smoothing
 		},
 		get phase() {
 			return phase;
+		},
+		/** Seconds into the running sweep (0 without one). */
+		get sweepTime() {
+			return sweepT;
 		}
 	};
 }

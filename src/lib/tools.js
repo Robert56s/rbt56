@@ -65,7 +65,7 @@ export const tools = [
 		href: '/tools/signal-generator/',
 		category: 'audio',
 		summary:
-			'A live two-channel function generator on the audio output: sine, square, triangle, ramps, noise, AM and FM on left and right, up to what the sound card can hold, with a scope.',
+			'A live two-channel function generator on the audio output: sine, square, triangle, ramps, noise, AM and FM on left and right, up to what the sound card can hold, a frequency sweep for checking filters with a multimeter, and a scope.',
 		tags: ['audio', 'electronics', 'generator'],
 		state: 'live'
 	},

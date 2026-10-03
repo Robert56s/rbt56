@@ -113,5 +113,51 @@ const warn = sideWarnings(side, 48000, 'Left');
 check('warnings: above Nyquist and clipping both flagged', warn.length === 2 && /half the sample rate/.test(warn[0]) && /clip/.test(warn[1]), `${warn.length} warnings`);
 check('describeSource', describeSource(side) === 'sine 30000 Hz', describeSource(side));
 
+// ---------------------------------------------------------------- sweeps
+// a continuous log sweep: the frequency heard at each moment, read from the
+// zero crossings of a short window, follows from * (to / from)^(t / T)
+const { createGenerator, sweepFrequency } = await import('../src/lib/audio/oscillator.js');
+const swept = { id: 1, from: 100, to: 10000, duration: 2, spacing: 'log', repeat: false };
+d = new Float32Array(fs * 2);
+createGenerator({ wave: { ...defaultWave({ amplitude: 1 }), sweep: swept }, sampleRate: fs }).fill(d);
+let worst = 0;
+for (const t of [0.25, 0.75, 1.25, 1.75]) {
+	const w = d.subarray(Math.round((t - 0.05) * fs), Math.round((t + 0.05) * fs));
+	const heard = zeroCrossings(w) / 2 / 0.1;
+	const want = sweepFrequency(swept, t);
+	worst = Math.max(worst, Math.abs(heard / want - 1));
+}
+check('sweep: log glide 100 Hz to 10 kHz in 2 s heard at the right frequency', worst < 0.03, `worst ${(100 * worst).toFixed(2)} %`);
+// no step in the waveform anywhere: a sine at f changes by at most 2 pi f / fs per sample
+let jump = 0;
+for (let i = 1; i < d.length; i++) jump = Math.max(jump, Math.abs(d[i] - d[i - 1]));
+check('sweep: continuous, no jump in phase', jump <= (2 * Math.PI * 10000) / fs + 1e-6, `largest step ${jump.toFixed(4)}`);
+check('sweep: linear spacing halfway is the middle', sweepFrequency({ ...swept, spacing: 'linear' }, 1) === 5050);
+check('sweep: once, it stays at the top', sweepFrequency(swept, 5) === 10000);
+check('sweep: repeating, it starts over', Math.abs(sweepFrequency({ ...swept, repeat: true }, 2.5) - sweepFrequency(swept, 0.5)) < 1e-9);
+// a new sweep id starts the glide over, an unchanged one carries on
+const gen = createGenerator({ wave: { ...defaultWave(), sweep: swept }, sampleRate: fs });
+gen.fill(new Float32Array(fs));
+gen.set({ wave: { ...defaultWave({ amplitude: 0.3 }), sweep: swept } });
+const kept = gen.sweepTime;
+gen.set({ wave: { ...defaultWave(), sweep: { ...swept, id: 2 } } });
+check('sweep: same id carries on, a new id restarts', Math.abs(kept - 1) < 1e-6 && gen.sweepTime === 0, `${kept.toFixed(3)} s, then ${gen.sweepTime}`);
+
+// the stepped sweep's list and the reading of a measured response
+const { readResponse, sweepSteps } = await import('../src/lib/audio/sweep.js');
+const r10 = sweepSteps({ from: 100, to: 10000, perDecade: 10 });
+check('steps: R10 from 100 Hz to 10 kHz is 21 preferred values', r10.length === 21 && r10[1] === 125 && r10[5] === 315 && r10[20] === 10000, r10.join(' '));
+check('steps: ends kept even off the series', sweepSteps({ from: 150, to: 3000, perDecade: 3 }).join(' ') === '150 200 500 1000 2000 3000');
+check('steps: linear', sweepSteps({ from: 1000, to: 4000, spacing: 'linear', step: 1000 }).join(' ') === '1000 2000 3000 4000');
+check('steps: a nonsense range gives none', sweepSteps({ from: 0, to: 1000 }).length === 0 && sweepSteps({ from: 10, to: 1e9, spacing: 'linear', step: 1 }).length === 400);
+// a 4th-order Butterworth low-pass at 1 kHz read at R20 steps: the -3 dB point
+// interpolated between steps lands on 1 kHz
+const rows = sweepSteps({ from: 100, to: 10000, perDecade: 20 }).map((f) => ({ f, vin: 0.7, vout: 0.7 / Math.sqrt(1 + (f / 1000) ** 8) }));
+const resp = readResponse(rows);
+check('response: Butterworth -3 dB found at 1 kHz', resp.crossings.length === 1 && Math.abs(resp.crossings[0].f / 1000 - 1) < 0.01 && !resp.crossings[0].rising, resp.crossings.map((c) => c.f.toFixed(1)).join(' '));
+const bp = sweepSteps({ from: 100, to: 10000, perDecade: 20 }).map((f) => ({ f, vout: 0.5 / Math.sqrt(1 + ((f / 1000 - 1000 / f) / 0.5) ** 2) }));
+const bpr = readResponse(bp, 0.5);
+check('response: a band-pass read with one reference input crosses -3 dB twice', bpr.crossings.length === 2 && bpr.crossings[0].rising && !bpr.crossings[1].rising, bpr.crossings.map((c) => c.f.toFixed(0)).join(' '));
+
 console.log(fails === 0 ? 'wavegen clean' : `${fails} failure(s)`);
 process.exit(fails === 0 ? 0 : 1);
