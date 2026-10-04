@@ -8,6 +8,7 @@
 	// saturation, where the curve can no longer reach the line and I_C / I_B
 	// falls below beta.
 	//   vcc, rc, ib   starting values (V, ohms, A)
+	import RichText from '../guides/RichText.svelte';
 	import Slider from '../basics/Slider.svelte';
 	import XYPlot from '../basics/XYPlot.svelte';
 	import { bjtOperatingPoint, icForIb, SMALL_NPN } from '$lib/transistors/models';
@@ -38,13 +39,20 @@
 	const mA = (a) => (a >= 1e-3 ? `${(a * 1000).toFixed(2)} mA` : `${(a * 1e6).toFixed(1)} µA`);
 	const ohms = (r) => (r >= 1000 ? `${(r / 1000).toFixed(2)} kΩ` : `${r.toFixed(0)} Ω`);
 	const REGION = { cutoff: 'cutoff', active: 'active', saturation: 'saturation' };
+	const reading = $derived(
+		op.region === 'cutoff'
+			? 'No base current, no collector current: the transistor is an open switch and the whole supply sits across it, $V_{CE} = V_{CC}$.'
+			: op.region === 'active'
+				? `The base current picks a curve and the curve is nearly flat: $I_C$ is about $\\beta I_B$ ($\\beta$ about ${beta} here) whatever $V_{CE}$ does. The resistor turns that current into a voltage, which is how the transistor amplifies.`
+				: `The load line ends at $I_C = V_{CC} / R_C$ = ${mA(vcc / rc)}. More base current cannot push the collector current past it, so the point slides into the knee near $V_{CE}$ = 0.1 V, and $I_C / I_B$ drops to ${ratio.toFixed(0)}, well under $\\beta$. That is the closed switch. A switch design asks for this on purpose, with $I_B$ about $I_C / 10$.`
+	);
 </script>
 
 <div class="demo">
 	<div class="controls">
-		<Slider bind:value={ibUa} label="Base current I_B" min={0} max={150} step={1} fmt={(v) => `${v.toFixed(0)} µA`} />
-		<Slider bind:value={vcc} label="Supply V_CC" min={1} max={15} step={0.5} fmt={(v) => `${v.toFixed(1)} V`} />
-		<Slider bind:value={rc} label="Collector resistor R_C" min={100} max={10000} log fmt={ohms} />
+		<Slider bind:value={ibUa} label={'Base current $I_B$'} min={0} max={150} step={1} fmt={(v) => `${v.toFixed(0)} µA`} />
+		<Slider bind:value={vcc} label={'Supply $V_{CC}$'} min={1} max={15} step={0.5} fmt={(v) => `${v.toFixed(1)} V`} />
+		<Slider bind:value={rc} label={'Collector resistor $R_C$'} min={100} max={10000} log fmt={ohms} />
 	</div>
 	<XYPlot
 		xs={vces}
@@ -63,15 +71,7 @@
 	<p class="mono">
 		{REGION[op.region]}: V_CE = {op.vce.toFixed(2)} V, I_C = {mA(op.ic)}, V_BE = {op.vbe.toFixed(3)} V{#if ibUa > 0}, I_C / I_B = {ratio.toFixed(0)}{/if}, P = {(1000 * op.vce * op.ic).toFixed(1)} mW
 	</p>
-	<p class="read">
-		{#if op.region === 'cutoff'}
-			No base current, no collector current: the transistor is an open switch and the whole supply sits across it, V_CE = V_CC.
-		{:else if op.region === 'active'}
-			The base current picks a curve and the curve is nearly flat: I_C is about beta times I_B (beta about {beta} here) whatever V_CE does. The resistor turns that current into a voltage, which is how the transistor amplifies.
-		{:else}
-			The load line ends at I_C = V_CC / R_C = {mA(vcc / rc)}. More base current cannot push the collector current past it, so the point slides into the knee near V_CE = 0.1 V, and I_C / I_B drops to {ratio.toFixed(0)}, well under beta. That is the closed switch. A switch design asks for this on purpose, with I_B about I_C / 10.
-		{/if}
-	</p>
+	<p class="read"><RichText text={reading} /></p>
 </div>
 
 <style>

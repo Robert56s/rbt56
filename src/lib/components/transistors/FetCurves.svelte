@@ -6,6 +6,7 @@
 	// left from the saturation region on its right. The same plot serves the
 	// three kinds: only the gate voltages that matter move.
 	//   kind   'njfet', 'depletion' or 'enhancement'
+	import RichText from '../guides/RichText.svelte';
 	import Slider from '../basics/Slider.svelte';
 	import XYPlot from '../basics/XYPlot.svelte';
 	import { FET_KINDS, fetOperatingPoint } from '$lib/transistors/models';
@@ -59,6 +60,13 @@
 	}));
 	const ohms = (r) => (r >= 1000 ? `${(r / 1000).toFixed(2)} kΩ` : `${r.toFixed(0)} Ω`);
 	const regionName = { off: 'off', triode: 'triode (ohmic)', saturation: 'saturation' };
+	const reading = $derived(
+		op.region === 'off'
+			? `The gate is past ${kind.id === 'njfet' ? 'pinch-off' : 'threshold'}: the channel is closed and the whole supply sits across it.`
+			: op.region === 'saturation'
+				? 'Right of the dashed edge the curves are flat: the current depends on $V_{GS}$ and hardly on $V_{DS}$. This is where a FET amplifies, and its name clashes with the BJT: FET saturation behaves like the BJT active region.'
+				: 'Left of the dashed edge the channel acts as a resistor whose value the gate sets. A FET used as a switch sits here, fully on, and its datasheet gives that resistance as $R_{DS(on)}$.'
+	);
 </script>
 
 <div class="demo">
@@ -68,9 +76,9 @@
 				<button type="button" class:on={kindId === k.id} onclick={() => (kindId = k.id)}>{k.label}</button>
 			{/each}
 		</div>
-		<Slider bind:value={vgs} label="Gate-source voltage V_GS" min={range[0] - 1} max={range[1] + (kind.id === 'njfet' ? 0.5 : 1)} step={0.05} fmt={(v) => `${v.toFixed(2)} V`} />
-		<Slider bind:value={vdd} label="Supply V_DD" min={1} max={15} step={0.5} fmt={(v) => `${v.toFixed(1)} V`} />
-		<Slider bind:value={rd} label="Drain resistor R_D" min={100} max={10000} log fmt={ohms} />
+		<Slider bind:value={vgs} label={'Gate-source voltage $V_{GS}$'} min={range[0] - 1} max={range[1] + (kind.id === 'njfet' ? 0.5 : 1)} step={0.05} fmt={(v) => `${v.toFixed(2)} V`} />
+		<Slider bind:value={vdd} label={'Supply $V_{DD}$'} min={1} max={15} step={0.5} fmt={(v) => `${v.toFixed(1)} V`} />
+		<Slider bind:value={rd} label={'Drain resistor $R_D$'} min={100} max={10000} log fmt={ohms} />
 	</div>
 	<XYPlot
 		xs={vdss}
@@ -90,15 +98,7 @@
 	<p class="mono">
 		{regionName[op.region]}: V_DS = {op.vds.toFixed(2)} V, I_D = {(1000 * op.id).toFixed(2)} mA{#if op.region === 'triode' && op.vds > 0.001}, channel about {ohms(op.vds / op.id)}{/if}
 	</p>
-	<p class="read">
-		{#if op.region === 'off'}
-			The gate is past {kind.id === 'njfet' ? 'pinch-off' : 'threshold'}: the channel is closed and the whole supply sits across it.
-		{:else if op.region === 'saturation'}
-			Right of the dashed edge the curves are flat: the current depends on V_GS and hardly on V_DS. This is where a FET amplifies, and its name clashes with the BJT: FET saturation behaves like the BJT active region.
-		{:else}
-			Left of the dashed edge the channel acts as a resistor whose value the gate sets. A FET used as a switch sits here, fully on, and its datasheet gives that resistance as R_DS(on).
-		{/if}
-	</p>
+	<p class="read"><RichText text={reading} /></p>
 </div>
 
 <style>

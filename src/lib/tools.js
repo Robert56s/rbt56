@@ -17,6 +17,11 @@ export const CATEGORIES = [
 		blurb: 'Make, measure and manipulate signals in the browser, using the sound card as the instrument.'
 	},
 	{
+		id: 'guides',
+		name: 'Component guides',
+		blurb: 'How each kind of part works, its basic circuits running live in a simulator, and the datasheet lines that matter when building with it.'
+	},
+	{
 		id: 'digital',
 		name: 'Digital logic',
 		blurb: 'Boolean minimization and the gate circuits that come out of it.'
@@ -76,6 +81,15 @@ export const tools = [
 		summary:
 			'Five ways to make a sine wave from op-amps: Wien bridge, phase shift, buffered, Bubba and quadrature, with amplitude stabilization, distortion, the gain-bandwidth ceiling and which one to build.',
 		tags: ['electronics', 'oscillators', 'ltspice'],
+		state: 'live'
+	},
+	{
+		name: 'Transistor Guide',
+		href: '/tools/transistors/',
+		category: 'guides',
+		summary:
+			'Every kind of transistor, bipolar, JFET, MOSFET, IGBT, GaN, SiC and UJT: how each works, curves to play with, basic circuits running in the Falstad simulator, design rules, and real datasheets with their pinouts.',
+		tags: ['electronics', 'transistors', 'simulation'],
 		state: 'live'
 	}
 ];

@@ -5,7 +5,9 @@
 	// any other on the page (src/lib/guides/activeSim.svelte.js), so a page
 	// with twenty circuits still runs one simulator at a time.
 	//   sim   { id, title, what, steps: [...], watch, text, height, preview }
-	//         preview: optional SVG markup of the circuit, shown before it runs
+	//         preview: optional address of a drawing of the circuit (exported
+	//         from the simulator itself), shown until it runs
+	import RichText from './RichText.svelte';
 	import { sims } from '$lib/guides/activeSim.svelte.js';
 	import { falstadUrl } from '$lib/guides/falstad';
 
@@ -29,7 +31,7 @@
 		<span class="tag">Simulation</span>
 		<h4>{sim.title}</h4>
 	</figcaption>
-	<p class="what">{sim.what}</p>
+	<p class="what"><RichText text={sim.what} /></p>
 	{#if running}
 		<div class="frame" style="height: {height}px">
 			<iframe {src} title={`${sim.title}, Falstad circuit simulator`} allow="fullscreen" referrerpolicy="no-referrer"></iframe>
@@ -37,7 +39,7 @@
 	{:else}
 		<button type="button" class="stage" style="min-height: {sim.preview ? 0 : 7}rem" onclick={start} aria-label={`Run the simulation: ${sim.title}`}>
 			{#if sim.preview}
-				<span class="preview">{@html sim.preview}</span>
+				<img class="preview" src={sim.preview} alt={`Schematic: ${sim.title}`} loading="lazy" />
 			{/if}
 			<span class="play">
 				<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor" /></svg>
@@ -48,12 +50,12 @@
 	{#if sim.steps?.length}
 		<ol class="steps">
 			{#each sim.steps as step, i (i)}
-				<li>{step}</li>
+				<li><RichText text={step} /></li>
 			{/each}
 		</ol>
 	{/if}
 	{#if sim.watch}
-		<p class="watch"><b>What to see.</b> {sim.watch}</p>
+		<p class="watch"><b>What to see.</b> <RichText text={sim.watch} /></p>
 	{/if}
 	<div class="foot">
 		{#if running}
@@ -137,15 +139,15 @@
 
 	.preview {
 		display: block;
-		width: 100%;
-		max-height: 18rem;
-		opacity: 0.55;
+		max-width: 100%;
+		max-height: 17rem;
+		margin: 0 auto;
+		opacity: 0.8;
+		transition: opacity 0.3s;
 	}
 
-	.preview :global(svg) {
-		width: 100%;
-		max-height: 18rem;
-		height: auto;
+	.stage:hover .preview {
+		opacity: 0.45;
 	}
 
 	.play {
@@ -162,6 +164,7 @@
 
 	.preview + .play {
 		position: absolute;
+		box-shadow: 0 2px 12px rgba(16, 24, 40, 0.18);
 	}
 
 	.stage:hover .play {

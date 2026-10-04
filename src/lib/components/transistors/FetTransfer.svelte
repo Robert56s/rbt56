@@ -7,6 +7,7 @@
 	// a solid channel line and the one with a broken line. The P switch
 	// mirrors everything: negative V_GS turns a P-channel part on.
 	//   channel   'n' or 'p'
+	import RichText from '../guides/RichText.svelte';
 	import Slider from '../basics/Slider.svelte';
 	import XYPlot from '../basics/XYPlot.svelte';
 	import { FET_KINDS } from '$lib/transistors/models';
@@ -49,7 +50,7 @@
 			<button type="button" class:on={channel === 'n'} onclick={() => (channel = 'n')}>N-channel</button>
 			<button type="button" class:on={channel === 'p'} onclick={() => (channel = 'p')}>P-channel</button>
 		</div>
-		<Slider bind:value={vgs} label="Gate-source voltage V_GS" min={-6} max={6} step={0.05} fmt={(v) => `${v.toFixed(2)} V`} />
+		<Slider bind:value={vgs} label={'Gate-source voltage $V_{GS}$'} min={-6} max={6} step={0.05} fmt={(v) => `${v.toFixed(2)} V`} />
 	</div>
 	<XYPlot
 		{xs}
@@ -82,7 +83,7 @@
 	</ul>
 	<p class="read">
 		{#if channel === 'n'}
-			At V_GS = 0 the JFET and the depletion MOSFET already carry current: a negative gate voltage is needed to turn them off. The enhancement MOSFET is off at 0 V and starts only above its threshold, here +2 V. The JFET curve stops near +0.5 V because its gate is a diode junction that conducts past that point; a MOSFET gate is insulated and can go either way.
+			<RichText text={'At $V_{GS} = 0$ the JFET'} /> and the depletion MOSFET already carry current: a negative gate voltage is needed to turn them off. The enhancement MOSFET is off at 0 V and starts only above its threshold, here +2 V. The JFET curve stops near +0.5 V because its gate is a diode junction that conducts past that point; a MOSFET gate is insulated and can go either way.
 		{:else}
 			Every voltage flips sign: the P-channel enhancement MOSFET turns on when the gate goes below the source, and the P-channel JFET and depletion MOSFET turn off when the gate goes above it. The shapes are the same as the N-channel ones.
 		{/if}

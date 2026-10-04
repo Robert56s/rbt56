@@ -6,6 +6,12 @@
 //   node --import ./scripts/resolve-ext.mjs scripts/falstad-suite.mjs [ids...] > suite.json
 import { CIRCUITS } from '../src/lib/transistors/circuits.js';
 
+// --previews: one entry per circuit, its starting state, for scripts/falstad-previews.js
+if (process.argv.includes('--previews')) {
+	process.stdout.write(JSON.stringify(Object.entries(CIRCUITS).map(([id, s]) => ({ id, text: s.build().toText() }))));
+	process.exit(0);
+}
+
 const only = process.argv.slice(2);
 const out = [];
 for (const [id, s] of Object.entries(CIRCUITS)) {

@@ -16,7 +16,8 @@
     "check:oscillator": "node --import ./scripts/resolve-ext.mjs scripts/check-oscillator.mjs",
     "check:ltspice": "node --import ./scripts/resolve-ext.mjs scripts/check-ltspice.mjs",
     "check:basics": "node --import ./scripts/resolve-ext.mjs scripts/check-basics.mjs",
-    "prepare": "svelte-kit sync || echo ''"
+    "prepare": "svelte-kit sync || echo ''",
+    "check:guides": "node --import ./scripts/resolve-ext.mjs scripts/check-guides.mjs"
   },
   "devDependencies": {
     "@sveltejs/adapter-node": "^5.5.7",

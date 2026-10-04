@@ -26,9 +26,9 @@ export const CIRCUITS = {
 		steps: [
 			'Drag Input voltage in the right-hand panel slowly from 0 to 5 V.',
 			'Stop near 0.9 V and hover the transistor: it reads fwd active, and the LED is dim.',
-			'Go on to 5 V and hover again: it reads saturation, with V_CE under 0.1 V.'
+			'Go on to 5 V and hover again: it reads saturation, with $V_{CE}$ under 0.1 V.'
 		],
-		watch: 'Below about 0.6 V no current flows. Between 0.6 and about 1.1 V the LED current grows with the base current: the active region. Past that the LED current stops at about (5 - 1.8) / 330 = 10 mA however hard the base is driven, because the resistor sets it, not the transistor: that is saturation, the closed switch.',
+		watch: 'Below about 0.6 V no current flows. Between 0.6 and about 1.1 V the LED current grows with the base current: the active region. Past that the LED current stops at about $(5 - 1.8) / 330\\ \\Omega = 10$ mA however hard the base is driven, because the resistor sets it, not the transistor: that is saturation, the closed switch.',
 		build({ input = 0 } = {}) {
 			const c = circuit({ voltRange: 5 });
 			c.rail(p(320, 64), 5);
@@ -54,13 +54,13 @@ export const CIRCUITS = {
 
 	'npn-ce-amp': {
 		title: 'Common-emitter amplifier',
-		what: 'A divider biases the base, R_E sets the collector current, and a 20 mV sine at 1 kHz comes in through a capacitor. The output is taken from the collector through another capacitor.',
+		what: 'A divider biases the base, $R_E$ sets the collector current, and a 20 mV sine at 1 kHz comes in through a capacitor. The output is taken from the collector through another capacitor.',
 		steps: [
 			'Compare the two scopes under the drawing: the output is larger and upside down.',
 			'Drag Transistor beta from 50 to 400 and hover the transistor: the collector current hardly moves.',
-			'Click the switch next to R_E to connect the 100 µF bypass capacitor, and watch the output grow and flatten on one side.'
+			'Click the switch next to $R_E$ to connect the 100 µF bypass capacitor, and watch the output grow and flatten on one side.'
 		],
-		watch: 'Without the bypass capacitor the gain is about R_C / R_E = 4.7: the emitter resistor feeds back and fixes it, and it fixes the bias too, which is why beta can change eightfold with no effect. Bypassing R_E removes that feedback for the signal: the gain jumps to about R_C / r_e, near 250, and the output clips against the supply and against the emitter voltage. High gain, but no longer set by resistors.',
+		watch: 'Without the bypass capacitor the gain is about $R_C / R_E = 4.7$: the emitter resistor feeds back and fixes it, and it fixes the bias too, which is why $\\beta$ can change eightfold and move the collector current only from about 1.3 to 1.47 mA. Bypassing $R_E$ removes that feedback for the signal: the gain jumps to about $R_C / r_e$, near 250, and the output flattens at the bottom, where the transistor saturates against the emitter voltage. High gain, but no longer set by resistors.',
 		build({ bypass = false } = {}) {
 			const c = circuit({ voltRange: 12, timeStep: 2e-6, speed: 20 });
 			c.rail(p(208, 48), 12);
@@ -102,7 +102,7 @@ export const CIRCUITS = {
 			'Compare the two scopes: the output has the same shape as the input, about 0.6 V lower.',
 			'Click the switch to add the 100 Ω load, and look at the output again.'
 		],
-		watch: 'The emitter stays one V_BE below the base whatever the load does, so the voltage gain is about 1. What the follower gives is current: the base supplies only I_E / beta, so a weak source can drive a 100 Ω load through it. That is the buffer used after a high-impedance stage.',
+		watch: 'The emitter stays one $V_{BE}$ below the base whatever the load does, so the voltage gain is about 1. What the follower gives is current: the base supplies only $I_E / \\beta$, so a weak source can drive a 100 Ω load through it. That is the buffer used after a high-impedance stage.',
 		build({ load = false } = {}) {
 			const c = circuit({ voltRange: 12, timeStep: 5e-6, speed: 25 });
 			c.rail(p(320, 64), 12);
@@ -198,7 +198,7 @@ export const CIRCUITS = {
 		title: 'One transistor against a Darlington pair',
 		what: 'The same input drives two 100 mA loads (120 Ω on 12 V) through the same 47 kΩ base resistor: on the left one NPN, on the right two NPNs in a Darlington pair.',
 		steps: ['Drag Input voltage up to 5 V.', 'Hover each load resistor and compare the currents, then hover the right-hand transistors.'],
-		watch: 'Through 47 kΩ the base gets about 90 µA. One transistor with beta 100 turns that into 9 mA, far short of the 100 mA load. The Darlington multiplies by beta twice and saturates easily, but its saturation voltage is a V_BE plus a V_CE(sat), about 0.8 V instead of 0.1 V, so it dissipates more when on.',
+		watch: 'Through 47 kΩ the base gets about 90 µA. One transistor with $\\beta = 100$ turns that into 9 mA, far short of the 100 mA load. The Darlington multiplies by $\\beta$ twice and saturates easily, but its saturation voltage is a $V_{BE}$ plus a $V_{CE(sat)}$, about 0.8 V instead of 0.1 V, so it dissipates more when on.',
 		build({ input = 0 } = {}) {
 			const c = circuit({ voltRange: 12 });
 			c.rail(p(320, 64), 12);
@@ -237,9 +237,9 @@ export const CIRCUITS = {
 
 	phototransistor: {
 		title: 'Phototransistor with a pull-up resistor',
-		what: 'The simulator has no phototransistor, so the light is what it amounts to: a small current into the base, set by the Light slider (0 to 5 µA). A 10 kΩ pull-up on 5 V turns the collector current into an output voltage.',
+		what: 'The simulator has no phototransistor, so the light is what it amounts to: a small current into the base, fed from the Light level slider through 1 MΩ: about 1 µA for each volt above the 0.55 V the base needs, so up to about 4.5 µA. A 10 kΩ pull-up on 5 V turns the collector current into an output voltage.',
 		steps: ['Start in the dark (Light at 0) and read the output: 5 V.', 'Raise Light slowly and watch the output fall, then hit the bottom.'],
-		watch: 'In the dark only leakage flows and the output sits at the supply. Light makes base current that the transistor multiplies by beta, about 300 here, and the drop across 10 kΩ pulls the output down until the transistor saturates near 0.1 V. The bigger the pull-up, the less light it takes, and the slower the output, because the junction capacitance charges through it.',
+		watch: 'In the dark only leakage flows and the output sits at the supply. Light makes base current that the transistor multiplies by $\\beta$, about 300 here, and the drop across 10 kΩ pulls the output down until the transistor saturates near 0.1 V. The bigger the pull-up, the less light it takes, and the slower the output, because the junction capacitance charges through it.',
 		build({ light = 0 } = {}) {
 			const c = circuit({ voltRange: 5 });
 			c.rail(p(320, 64), 5);
@@ -253,7 +253,7 @@ export const CIRCUITS = {
 			c.wire(q.e, p(320, 320));
 			c.ground(p(320, 320));
 			// the photocurrent: a slider through 1 MΩ, so 1 V means 1 µA
-			c.slider(p(128, 240), { min: 0, max: 5, value: light, label: 'Light (µA of photocurrent)' });
+			c.slider(p(128, 240), { min: 0, max: 5, value: light, label: 'Light level' });
 			c.resistor(p(128, 240), q.b, 1e6);
 			return c;
 		},
@@ -268,12 +268,12 @@ export const CIRCUITS = {
 
 	'jfet-current-source': {
 		title: 'JFET current source',
-		what: 'An N-channel JFET (I_DSS 3 mA, V_P = -1.5 V) under a 1 kΩ load, with its gate tied to the bottom of a 330 Ω source resistor. A switch shorts the resistor.',
+		what: 'An N-channel JFET ($I_{DSS} = 3$ mA, $V_P = -1.5$ V) under a 1 kΩ load, with its gate tied to the bottom of a 330 Ω source resistor. A switch shorts the resistor.',
 		steps: [
-			'With the switch closed (V_GS = 0) drag Supply voltage from 15 V down to 3 V and read the ammeter.',
+			'With the switch closed ($V_{GS}$ = 0) drag Supply voltage from 15 V down to 3 V and read the ammeter.',
 			'Open the switch to put the 330 Ω resistor in the source, and do it again.'
 		],
-		watch: 'With the gate at the source, the JFET passes its I_DSS, 3 mA here, whatever the supply, as long as V_DS stays above the pinch-off voltage. The source resistor makes V_GS negative by I_D R_S, which settles at a smaller current, about 1.4 mA. Two parts, no supply for the gate: the simplest current source there is, and the origin of the current-regulator diode.',
+		watch: 'With the gate at the source, the JFET passes its $I_{DSS}$, 3 mA here, whatever the supply, as long as $V_{DS}$ stays above the pinch-off voltage. The source resistor makes $V_{GS}$ negative by $I_D$ $R_S$, which settles at a smaller current, about 1.4 mA. Two parts, no supply for the gate: the simplest current source there is, and the origin of the current-regulator diode.',
 		build({ supply = 12, shorted = true } = {}) {
 			const c = circuit({ voltRange: 12 });
 			c.slider(p(320, 48), { min: 0, max: 15, value: supply, label: 'Supply voltage', dir: 'up' });
@@ -299,9 +299,9 @@ export const CIRCUITS = {
 
 	'jfet-vcr': {
 		title: 'JFET as a voltage-controlled resistor',
-		what: 'A 0.2 V sine goes through 2.2 kΩ into the drain of an N-JFET (V_P = -4 V) whose source is grounded. The gate voltage is a slider; the output is the drain.',
+		what: 'A 0.2 V sine goes through 2.2 kΩ into the drain of an N-JFET ($V_P = -4$ V) whose source is grounded. The gate voltage is a slider; the output is the drain.',
 		steps: ['Start with Gate voltage at -5 V: the output is the whole input.', 'Move the gate toward 0 V and watch the output shrink.'],
-		watch: 'Past pinch-off the channel is open and nothing is lost. Above it the channel is a resistor, r_DS = 1 / (beta (V_GS - V_P)) while V_DS stays small, so the divider attenuates more and more as the gate rises: the JFET is a volume knob turned by a voltage. This is the part an AM modulator, an AGC or a Wien oscillator uses it for.',
+		watch: 'Past pinch-off the channel is open and nothing is lost. Above it the channel is a resistor, $r_{DS} = 1 / (\\beta (V_{GS} - V_P))$ while $V_{DS}$ stays small, so the divider attenuates more and more as the gate rises: the JFET is a volume knob turned by a voltage. This is the part an AM modulator, an AGC or a Wien oscillator uses it for.',
 		build({ gate = -5 } = {}) {
 			const c = circuit({ voltRange: 0.2, timeStep: 2e-6, speed: 20 });
 			const input = c.rail(p(128, 160), 0, { dir: 'left', wave: 'ac', amp: 0.2, freq: 1000 });
@@ -330,9 +330,9 @@ export const CIRCUITS = {
 
 	'jfet-amp': {
 		title: 'Common-source JFET amplifier',
-		what: 'Self-bias: the gate sits at 0 V through 1 MΩ and a 470 Ω source resistor lifts the source, so V_GS comes out negative on its own. A 50 mV sine comes in on the gate.',
-		steps: ['Compare the scopes: the output is about five times larger and upside down.', 'Hover the JFET to read I_D and V_GS.'],
-		watch: 'No negative supply is needed: the drain current through R_S sets V_GS = -I_D R_S, which settles where the JFET law agrees, about 1.2 mA here. The gain is -g_m R_D: the transconductance of a JFET is small next to a BJT at the same current (2.5 mA/V against 46 mA/V), so the gain is modest, but the input draws no current at all.',
+		what: 'Self-bias: the gate sits at 0 V through 1 MΩ and a 470 Ω source resistor lifts the source, so $V_{GS}$ comes out negative on its own. A 50 mV sine comes in on the gate.',
+		steps: ['Compare the scopes: the output is about five times larger and upside down.', 'Hover the JFET to read $I_D$ and $V_{GS}$.'],
+		watch: 'No negative supply is needed: the drain current through $R_S$ sets $V_{GS} = -I_D R_S$, which settles where the JFET law agrees, about 1.2 mA here. The gain is $-g_m R_D$: the transconductance of a JFET is small next to a BJT at the same current (2.5 mA/V against 46 mA/V), so the gain is modest, but the input draws no current at all.',
 		build() {
 			const c = circuit({ voltRange: 12, timeStep: 2e-6, speed: 20 });
 			c.rail(p(336, 48), 12);
@@ -366,9 +366,9 @@ export const CIRCUITS = {
 
 	'pjfet-current-source': {
 		title: 'P-channel JFET current source',
-		what: 'The same current source upside down: a P-JFET (I_DSS 3 mA) hangs from the supply with its gate tied to its source, and the 1 kΩ load goes to ground.',
+		what: 'The same current source upside down: a P-JFET ($I_{DSS}$ 3 mA) hangs from the supply with its gate tied to its source, and the 1 kΩ load goes to ground.',
 		steps: ['Drag Supply voltage from 15 V down to 3 V and read the ammeter.'],
-		watch: 'A P-channel part is the N one with every voltage and current reversed: the source is the terminal at the higher voltage, current leaves through the drain, and a POSITIVE gate-source voltage pinches it off. Tied gate to source, it passes I_DSS into a grounded load, which is how a current is sourced rather than sunk.',
+		watch: 'A P-channel part is the N one with every voltage and current reversed: the source is the terminal at the higher voltage, current leaves through the drain, and a POSITIVE gate-source voltage pinches it off. Tied gate to source, it passes $I_{DSS}$ into a grounded load, which is how a current is sourced rather than sunk.',
 		build({ supply = 12 } = {}) {
 			const c = circuit({ voltRange: 12 });
 			c.slider(p(320, 48), { min: 0, max: 15, value: supply, label: 'Supply voltage', dir: 'up' });
@@ -392,9 +392,9 @@ export const CIRCUITS = {
 
 	'depletion-mosfet': {
 		title: 'Depletion MOSFET: on with no gate voltage',
-		what: 'An N-channel depletion MOSFET (V_th = -2 V) with its source grounded and a 470 Ω load on 12 V. The gate voltage is a slider from -3 to +2 V.',
+		what: 'An N-channel depletion MOSFET ($V_{th} = -2$ V) with its source grounded and a 470 Ω load on 12 V. The gate voltage is a slider from -3 to +2 V.',
 		steps: ['Start at 0 V on the gate: current already flows.', 'Go negative until it stops, then positive past 0 V.'],
-		watch: 'A depletion part conducts at V_GS = 0, like a JFET, and needs a negative gate voltage to turn off, here about -2 V. Unlike a JFET its gate is insulated, so it can also go positive and conduct more. Used with a resistor from source to gate, it makes a current source that runs straight off a high-voltage line, as in the start-up circuit of a switching supply.',
+		watch: 'A depletion part conducts at $V_{GS} = 0$, like a JFET, and needs a negative gate voltage to turn off, here about -2 V. Unlike a JFET its gate is insulated, so it can also go positive and conduct more. Used with a resistor from source to gate, it makes a current source that runs straight off a high-voltage line, as in the start-up circuit of a switching supply.',
 		build({ gate = 0 } = {}) {
 			const c = circuit({ voltRange: 12 });
 			c.rail(p(320, 48), 12);
@@ -422,7 +422,7 @@ export const CIRCUITS = {
 			'Watch the drain voltage on the scope: about 0 V while on, 12 V while off.',
 			'Click the switch to disconnect the flyback diode and look at the scope again.'
 		],
-		watch: 'A coil keeps its current flowing. At turn-off the diode gives it a path back to the supply, so the drain stops one diode drop above 12 V. Without the diode the current has nowhere to go: the drain climbs until the MOSFET breaks down, at 62 V here, and the energy of the coil, L I² / 2 = 7 mJ, is dumped into the transistor at every turn-off. A datasheet rates that as the avalanche energy E_AS; a design never counts on it. The 100 kΩ keeps the gate off when the driver is unplugged, and the 100 Ω tames the ringing of the gate capacitance.',
+		watch: 'A coil keeps its current flowing. At turn-off the diode gives it a path back to the supply, so the drain stops one diode drop above 12 V. Without the diode the current has nowhere to go: the drain climbs until the MOSFET breaks down, at 62 V here, and the energy of the coil, $L I^2 / 2 = 7$ mJ, is dumped into the transistor at every turn-off. A datasheet rates that as the avalanche energy $E_{AS}$; a design never counts on it. The 100 kΩ keeps the gate off when the driver is unplugged, and the 100 Ω tames the ringing of the gate capacitance.',
 		build({ diode = true } = {}) {
 			const c = circuit({ voltRange: 12, timeStep: 2e-6, speed: 25 });
 			c.rail(p(448, 48), 12);
@@ -458,9 +458,9 @@ export const CIRCUITS = {
 
 	'logic-level': {
 		title: 'Logic-level against standard MOSFET',
-		what: 'The same gate voltage drives two N-MOSFETs, each switching a 6 Ω load (2 A) on 12 V: on the left a logic-level part (V_th = 1.5 V), on the right a standard one (V_th = 3.5 V), the kind whose datasheet gives R_DS(on) at V_GS = 10 V.',
-		steps: ['Set Gate voltage to 3.3 V, then 5 V, then 10 V, and hover each MOSFET: compare V_DS and the power P.'],
-		watch: 'At 10 V both are fully on, with a fraction of a volt across them. At 5 V the standard part is not: it sits in its saturation region, limits the current, and burns watts. At 3.3 V it hardly conducts. The datasheet line to check is R_DS(on) at the gate voltage the driver really has, not V_GS(th), which is the voltage where it only starts to conduct.',
+		what: 'The same gate voltage drives two N-MOSFETs, each switching a 6 Ω load (2 A) on 12 V: on the left a logic-level part ($V_{th} = 1.5$ V), on the right a standard one ($V_{th} = 3.5$ V), the kind whose datasheet gives $R_{DS(on)}$ at $V_{GS} = 10$ V.',
+		steps: ['Set Gate voltage to 3.3 V, then 5 V, then 10 V, and hover each MOSFET: compare $V_{DS}$ and the power P.'],
+		watch: 'At 10 V both are fully on, with a fraction of a volt across them. At 5 V the standard part is not: it sits in its saturation region, limits the current, and burns watts. At 3.3 V it hardly conducts. The datasheet line to check is $R_{DS(on)}$ at the gate voltage the driver really has, not $V_{GS(th)}$, which is the voltage where it only starts to conduct.',
 		build({ gate = 5 } = {}) {
 			const c = circuit({ voltRange: 12 });
 			c.rail(p(320, 48), 12);
@@ -490,7 +490,7 @@ export const CIRCUITS = {
 		title: 'Two-way level shifter, 3.3 V to 5 V',
 		what: 'The classic one-MOSFET shifter (a BSS138): gate on 3.3 V, source on the 3.3 V side, drain on the 5 V side, a 10 kΩ pull-up on each. A switch on each side pulls that side low, like an I2C device.',
 		steps: ['With both switches open, read both outputs: 3.3 V and 5 V.', 'Close the 3.3 V side switch, then open it and close the 5 V side switch.'],
-		watch: 'Pulling the 3.3 V side low raises V_GS to 3.3 V: the channel turns on and pulls the 5 V side down with it. Pulling the 5 V side low first drags the 3.3 V side down through the body diode, which raises V_GS and turns the channel on again. Either side can drive, and each side only ever sees its own voltage.',
+		watch: 'Pulling the 3.3 V side low raises $V_{GS}$ to 3.3 V: the channel turns on and pulls the 5 V side down with it. Pulling the 5 V side low first drags the 3.3 V side down through the body diode, which raises $V_{GS}$ and turns the channel on again. Either side can drive, and each side only ever sees its own voltage.',
 		build({ lowA = false, lowB = false } = {}) {
 			const c = circuit({ voltRange: 5 });
 			c.rail(p(352, 160), 3.3);
@@ -525,8 +525,8 @@ export const CIRCUITS = {
 	'pmos-high-side': {
 		title: 'P-MOSFET high-side switch',
 		what: 'A P-MOSFET between 12 V and the load, its gate held at 12 V by 10 kΩ. A small N-MOSFET, driven by a 5 V logic signal, pulls the gate down to switch it on.',
-		steps: ['Drag Logic input from 0 to 5 V.', 'Hover the P-MOSFET at each end and read V_GS.'],
-		watch: 'A P-channel part turns on when its gate goes BELOW its source: here V_GS swings from 0 to -12 V. The logic signal never reaches 12 V, so the small N-MOSFET does the pulling, and it also keeps the logic pin away from the 12 V rail. A gate pulled 12 V under the source is fine for most parts, which take +/-20 V; at 24 V a zener from source to gate would be needed.',
+		steps: ['Drag Logic input from 0 to 5 V.', 'Hover the P-MOSFET at each end and read $V_{GS}$.'],
+		watch: 'A P-channel part turns on when its gate goes BELOW its source: here $V_{GS}$ swings from 0 to -12 V. The logic signal never reaches 12 V, so the small N-MOSFET does the pulling, and it also keeps the logic pin away from the 12 V rail. A gate pulled 12 V under the source is fine for most parts, which take +/-20 V; at 24 V a zener from source to gate would be needed.',
 		build({ logic = 0 } = {}) {
 			const c = circuit({ voltRange: 12 });
 			c.rail(p(448, 48), 12);
@@ -559,7 +559,7 @@ export const CIRCUITS = {
 		title: 'Reverse-battery protection: diode against P-MOSFET',
 		what: 'A battery whose voltage is a slider from -12 V (connected backwards) to +12 V feeds two 100 Ω loads: one through a P-MOSFET, the other through a series diode.',
 		steps: ['At +12 V read both load voltages.', 'Drag the battery to -12 V and read them again.'],
-		watch: 'Both block a reversed battery. Forward, the diode costs its 0.7 V and its loss, watts at high current. The P-MOSFET is placed backwards on purpose: its body diode conducts first, that pulls the source up, V_GS goes to about -12 V and the channel turns on and shorts the diode, so the loss is only I squared times R_DS(on). Reversed, the body diode blocks and V_GS stays near 0: off.',
+		watch: 'Both block a reversed battery. Forward, the diode costs its 0.7 V and its loss, watts at high current. The P-MOSFET is placed backwards on purpose: its body diode conducts first, that pulls the source up, $V_{GS}$ goes to about -12 V and the channel turns on and shorts the diode, so the loss is only I squared times $R_{DS(on)}$. Reversed, the body diode blocks and $V_{GS}$ stays near 0: off.',
 		build({ battery = 12 } = {}) {
 			const c = circuit({ voltRange: 12 });
 			c.slider(p(352, 288), { min: -12, max: 12, value: battery, label: 'Battery voltage', dir: 'down' });
@@ -626,7 +626,7 @@ export const CIRCUITS = {
 		title: 'Inside an IGBT: a MOSFET driving a PNP',
 		what: 'The simulator has no IGBT, so this is the equivalent circuit datasheets draw: an N-MOSFET whose drain current is the base current of a wide-base PNP. Gate, collector and emitter are the IGBT terminals, switching a 10 Ω load on 24 V.',
 		steps: ['Drag Gate voltage from 0 to 15 V.', 'Hover the PNP and the MOSFET at 15 V and add up the voltage between collector and emitter.'],
-		watch: 'The gate is a MOSFET gate, insulated and charge-driven, but the current flows through a bipolar junction, so the on-state voltage never falls under about one diode drop, whatever the current: an IGBT is rated by V_CE(sat), 1.5 to 2 V, not by an on-resistance. That is a loss at low current and a gain at high current and high voltage, where a MOSFET of the same size would have a large R_DS(on).',
+		watch: 'The gate is a MOSFET gate, insulated and charge-driven, but the current flows through a bipolar junction, so the on-state voltage never falls under about one diode drop, whatever the current: an IGBT is rated by $V_{CE(sat)}$, 1.5 to 2.5 V, not by an on-resistance. That is a loss at low current and a gain at high current and high voltage, where a MOSFET of the same size would have a large $R_{DS(on)}$.',
 		build({ gate = 0 } = {}) {
 			const c = circuit({ voltRange: 24 });
 			c.rail(p(400, 48), 24);
@@ -656,9 +656,9 @@ export const CIRCUITS = {
 
 	'ujt-oscillator': {
 		title: 'UJT relaxation oscillator',
-		what: 'A capacitor charges through R toward 10 V. When it reaches the UJT\'s peak point the emitter junction breaks down, the capacitor dumps into base 1, and the cycle starts over. A slider sets R.',
+		what: 'A capacitor charges through R toward 10 V. When it reaches the UJT\'s peak point the emitter junction turns on and the resistance from emitter to base 1 collapses, so the capacitor dumps into base 1. Then the cycle starts over. A slider sets R.',
 		steps: ['Watch the two scopes: a sawtooth on the capacitor, a short pulse across the 47 Ω resistor.', 'Drag Charging resistor and watch the period change.'],
-		watch: 'The UJT fires at a fixed fraction of the supply, V_P = eta V_BB + V_D, with eta the intrinsic stand-off ratio of the part (0.56 to 0.75 for a 2N2646). The period is about R C ln(1 / (1 - eta)), so it depends on R, C and eta but hardly on the supply. The pulse across the base-1 resistor is what used to fire a thyristor.',
+		watch: 'The UJT fires at a fixed fraction of the supply, $V_P = \\eta V_{BB} + V_D$, with $\\eta$ the intrinsic stand-off ratio of the part (0.56 to 0.75 for a 2N2646). The period is about $R C \\ln(1 / (1 - \\eta))$, so it depends on $R$, $C$ and $\\eta$ but hardly on the supply. The pulse across the base-1 resistor is what used to fire a thyristor.',
 		build() {
 			const c = circuit({ voltRange: 10, timeStep: 5e-6, speed: 30 });
 			c.rail(p(352, 48), 10);
@@ -689,7 +689,7 @@ export const CIRCUITS = {
 		title: 'Current mirror',
 		what: 'Q1 is wired as a diode: its collector feeds its own base, so 10 kΩ from 12 V sets about 1.1 mA through it. Q2 shares its base voltage and copies that current into whatever its collector is tied to, here a voltage set by a slider.',
 		steps: ['Drag Collector voltage from 12 V down to 1 V and read the ammeter.', 'Go under about 0.3 V and watch the copy fail.'],
-		watch: 'Two matched transistors with the same V_BE carry the same collector current, so the output current is set by the 10 kΩ and not by what Q2 drives, down to the point where Q2 saturates. Real mirrors drift a little with V_CE (the Early effect) and need their two transistors at the same temperature, which is why they come on one chip.',
+		watch: 'Two matched transistors with the same $V_{BE}$ carry the same collector current, so the output current is set by the 10 kΩ and not by what Q2 drives, down to the point where Q2 saturates. Real mirrors drift a little with $V_{CE}$ (the Early effect) and need their two transistors at the same temperature, which is why they come on one chip.',
 		build({ vc = 12 } = {}) {
 			const c = circuit({ voltRange: 12 });
 			c.rail(p(208, 48), 12);
@@ -720,7 +720,7 @@ export const CIRCUITS = {
 		title: 'Differential pair',
 		what: 'Two NPNs share a 1 mA tail current from -12 V. One base gets a 10 mV sine, the other is grounded; each collector has 10 kΩ to 12 V.',
 		steps: ['Compare the two collector scopes: same size, opposite phase.'],
-		watch: 'The tail current is fixed, so whatever one transistor gains the other loses: the pair amplifies the DIFFERENCE between its two bases, gain about g_m R_C / 2 on each side, near 100 here. The same voltage on both bases would only move the emitters. That is the input stage of every op-amp.',
+		watch: 'The tail current is fixed, so whatever one transistor gains the other loses: the pair amplifies the DIFFERENCE between its two bases, gain about $g_m R_C / 2$ on each side, near 100 here. The same voltage on both bases would only move the emitters. That is the input stage of every op-amp.',
 		build() {
 			const c = circuit({ voltRange: 12, timeStep: 2e-6, speed: 20 });
 			c.rail(p(304, 48), 12);
@@ -759,7 +759,7 @@ export const CIRCUITS = {
 		title: 'Push-pull output: class B against class AB',
 		what: 'Two complementary emitter followers (an NPN pushing, a PNP pulling) drive 100 Ω loads from +/-12 V with the same 5 V sine. On the left the bases are tied to the input (class B); on the right two diodes hold them 1.2 V apart (class AB).',
 		steps: ['Compare the two output scopes, especially where the wave crosses zero.'],
-		watch: 'A follower only conducts once its base is a V_BE past the emitter, so with tied bases neither transistor conducts while the input is within about 0.6 V of zero: a flat step at every zero crossing, crossover distortion, which the ear hears clearly. The two diodes pre-bias both transistors to the edge of conduction, and the step disappears. Real amplifiers add small emitter resistors so the idle current cannot run away with temperature.',
+		watch: 'A follower only conducts once its base is a $V_{BE}$ past the emitter, so with tied bases neither transistor conducts while the input is within about 0.6 V of zero: a flat step at every zero crossing, crossover distortion, which the ear hears clearly. The two diodes pre-bias both transistors to the edge of conduction, and the step disappears. Real amplifiers add small emitter resistors so the idle current cannot run away with temperature.',
 		build() {
 			const c = circuit({ voltRange: 12, timeStep: 5e-6, speed: 25 });
 			// left: class B
@@ -852,5 +852,7 @@ export const CIRCUITS = {
 export function sim(id) {
 	const s = CIRCUITS[id];
 	if (!s) throw new Error(`Unknown simulation: ${id}`);
-	return { id, title: s.title, what: s.what, steps: s.steps, watch: s.watch, text: s.build().toText() };
+	// the drawing shown before the simulator loads: exported from CircuitJS
+	// itself, one file per circuit in static/guides/transistors/
+	return { id, title: s.title, what: s.what, steps: s.steps, watch: s.watch, text: s.build().toText(), preview: `/guides/transistors/${id}.svg` };
 }

@@ -1,6 +1,9 @@
 <script>
 	// One labelled range control with a live readout, for the small
-	// interactive figures in the beginner sections.
+	// interactive figures in the beginner sections. The label may hold a
+	// formula between $...$ (set with KaTeX).
+	import RichText from '../guides/RichText.svelte';
+
 	let { value = $bindable(), label, min, max, step = 0.01, fmt = (v) => String(v), log = false } = $props();
 
 	// a log slider maps its own linear position onto the value
@@ -12,7 +15,7 @@
 </script>
 
 <label class="ctl">
-	<span class="name">{label}</span>
+	<span class="name"><RichText text={label} /></span>
 	<input type="range" min={log ? 0 : min} max={log ? 1 : max} step={log ? 0.001 : step} value={pos} oninput={onInput} />
 	<output>{fmt(value)}</output>
 </label>
