@@ -41,7 +41,7 @@ const terms = (list) => ({ terms: list });
 const TWO_PI = 2 * Math.PI;
 const TYPES = ['lowpass', 'highpass', 'bandpass', 'bandstop'];
 const C_RC = 10e-9; // the capacitor of the one-section example, 10 nF
-const MAX_ORDER = 8; // the page's limit
+const MAX_ORDER = 16; // the page's limit
 // the stand-in used by the figures when the page has no valid design
 const DEFAULT_SPEC = { response: 'butterworth', amaxDb: 3, aminDb: 40, fp: 10000, fs: 35000, order: null };
 

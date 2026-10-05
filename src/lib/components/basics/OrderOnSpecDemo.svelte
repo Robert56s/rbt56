@@ -24,7 +24,7 @@
 
 	let { kind = 'lowpass', response = 'butterworth', fp = 10000, fs = 35000, amaxDb = 3, aminDb = 40, n0 = 4, live = false, side = '' } = $props();
 
-	const MAX_N = 8;
+	const MAX_N = 16;
 	const Y_MAX = 10;
 	const high = $derived(kind === 'highpass');
 	const cheby = $derived(response === 'chebyshev');

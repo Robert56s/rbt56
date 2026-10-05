@@ -70,7 +70,7 @@
 
 	const SUMMING_R = 10_000; // ohms, the summing amplifier's three equal resistors
 
-	const MAX_ORDER = 8;
+	const MAX_ORDER = 16;
 
 	let amaxDb = $state(3);
 	let aminDb = $state(40);
@@ -642,6 +642,49 @@
 		if (stageDesign.topology === 'towThomasHp') return { ...TOW_THOMAS_HP_SENSITIVITY };
 		if (stageDesign.topology === 'towThomasNotch') return { ...TOW_THOMAS_NOTCH_SENSITIVITY };
 		return null;
+	}
+
+	// A stage the numbers allow but a breadboard does not: past these, the
+	// stage gets a flag under its values. Q_SHARP: the resonance is so narrow
+	// that ordinary tolerances move it across a large part of its own width.
+	// C_TINY: down where a few picofarads of stray capacitance (a breadboard
+	// row, the op-amp's input pins) change the value. C_SPREAD: a ratio no
+	// stock of capacitors covers well, and a sign the topology is strained.
+	const Q_SHARP = 20;
+	const C_TINY = 47e-12;
+	const C_SPREAD = 1000;
+
+	function stageAlerts(stageDesign, target) {
+		if (stageDesign.topology === 'firstOrder' || stageDesign.topology === 'firstOrderHp') return [];
+		const out = [];
+		const q = target.q;
+		if (q > Q_SHARP) {
+			// f0 goes as 1/sqrt(R1 R2 C1 C2): each part moves it by half its own error
+			const width = 100 / q;
+			out.push({
+				level: q > 2.5 * Q_SHARP ? 'bad' : 'warn',
+				text: `Q = ${q.toFixed(1)}: the peak of this stage is only f0/Q wide, ${width.toFixed(1)} % of f0. A 1 % resistor or capacitor moves f0 by about 0.5 %, ${(50 / width).toFixed(0)} % of that width, so the built filter can miss its passband by several dB, and the op-amp's finite speed adds an error that grows with Q. Meeting the spec at a lower order keeps Q lower (an elliptic response needs the fewest stages), and a Tow-Thomas stage is the easiest to trim.`
+			});
+		}
+		const caps = Object.entries(stageDesign.components).filter(([name, v]) => /^C/.test(name) && Number.isFinite(v) && v > 0);
+		const tiny = caps.filter(([, v]) => v < C_TINY);
+		if (tiny.length) {
+			out.push({
+				level: 'warn',
+				text: `${tiny.map(([name, v]) => `${name} = ${formatFarads(v)}`).join(', ')}: a few picofarads of stray capacitance from a breadboard row or the op-amp's input pins add to ${tiny.length > 1 ? 'these values' : 'this value'}, so the built stage will not match. Above about 47 pF it holds: pick larger values in the fields below and the resistors are recalculated.`
+			});
+		}
+		if (caps.length > 1 && (stageDesign.topology === 'mfb' || stageDesign.topology === 'sallenKey')) {
+			const values = caps.map(([, v]) => v);
+			const spread = Math.max(...values) / Math.min(...values);
+			if (spread > C_SPREAD) {
+				out.push({
+					level: 'warn',
+					text: `The capacitors of this stage span ${spread >= 1e4 ? Math.round(spread).toLocaleString('en-US') : spread.toFixed(0)}:1. The ratio this circuit needs grows with Q², and past about ${C_SPREAD}:1 it no longer suits this topology: a Tow-Thomas stage reaches the same Q with equal capacitors.`
+				});
+			}
+		}
+		return out;
 	}
 
 	function explainComponents(stageDesign, i) {
@@ -1532,6 +1575,9 @@
 											{worstCaseQError(sens, 1).toFixed(2)}% (root-sum-square across all of them).
 										</p>
 									{/if}
+									{#each stageAlerts(stageDesign, design.stages[i]) as alert, k (k)}
+										<p class="flag {alert.level}">{alert.text}</p>
+									{/each}
 								{/if}
 							</div>
 							<!-- a pair is drawn as its two parts, R1 56k + 8.2k; a stage that fell back to E24 has none -->
