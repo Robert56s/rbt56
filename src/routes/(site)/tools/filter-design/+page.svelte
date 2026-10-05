@@ -65,7 +65,7 @@
 	import { designLowPass, designHighPass, designBandPass, designBandStop, minimumOrder } from '$lib/filter/stages';
 	import { branchDcGain, branchOrder, branchSign, combinerChoice, combinerDesign, magnitudePhaseAt, sweep, magnitudePhaseAtParallelSum, sweepParallelSum } from '$lib/filter/bode';
 	import { buildDifferenceAmpDiagram, buildSummingAmpDiagram } from '$lib/filter/circuits';
-	import { nearestResistor, pairDiagramLabel, pairLabel } from '$lib/filter/eseries';
+	import { C_FLOOR, nearestResistor, pairDiagramLabel, pairLabel } from '$lib/filter/eseries';
 	import { componentOptions, defaultStock, isRestricted, loadStock, saveStock } from '$lib/stock';
 
 	const SUMMING_R = 10_000; // ohms, the summing amplifier's three equal resistors
@@ -648,10 +648,11 @@
 	// stage gets a flag under its values. Q_SHARP: the resonance is so narrow
 	// that ordinary tolerances move it across a large part of its own width.
 	// C_TINY: down where a few picofarads of stray capacitance (a breadboard
-	// row, the op-amp's input pins) change the value. C_SPREAD: a ratio no
+	// row, the op-amp's input pins) change the value; the searches avoid
+	// it whenever another capacitor works (smallCapPenalty in eseries.js). C_SPREAD: a ratio no
 	// stock of capacitors covers well, and a sign the topology is strained.
 	const Q_SHARP = 20;
-	const C_TINY = 47e-12;
+	const C_TINY = C_FLOOR;
 	const C_SPREAD = 1000;
 
 	function stageAlerts(stageDesign, target) {

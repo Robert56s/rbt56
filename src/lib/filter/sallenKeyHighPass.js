@@ -1,4 +1,4 @@
-import { capacitorCandidates, nearestCapacitor, pairedResistor } from './eseries';
+import { capacitorCandidates, nearestCapacitor, pairedResistor, smallCapPenalty } from './eseries';
 
 /**
  * Sallen-Key high-pass, unity-gain simplified form: two equal capacitors C
@@ -66,7 +66,7 @@ export function designSallenKeyHighPass(wn, q, { resistorSeries = 'E24', capacit
 	let best = null;
 	for (const C of caps) {
 		const { Rtop, Rbottom } = solveSkHpResistors(wn, q, C);
-		const s = scoreSkHpResistors(Rtop, Rbottom);
+		const s = scoreSkHpResistors(Rtop, Rbottom) + smallCapPenalty(C);
 		if (best === null || s < best.score) best = { C, Rtop, Rbottom, score: s };
 	}
 	if (!best) return null;

@@ -1,4 +1,4 @@
-import { capacitorCandidates, nearestCapacitor, pairedResistor } from './eseries';
+import { capacitorCandidates, nearestCapacitor, pairedResistor, smallCapPenalty } from './eseries';
 
 /**
  * Sallen-Key low-pass, unity-gain simplified form: two equal resistors R, a
@@ -48,7 +48,7 @@ export function designSallenKeyLowPass(wn, q, { resistorSeries = 'E24', capacito
 	for (const Cbottom of caps) {
 		const Ctarget = ratio * Cbottom;
 		const Rtarget = 1 / (wn * Cbottom * 2 * q);
-		const score = Math.log(Rtarget / SK_R_SWEET) ** 2;
+		const score = Math.log(Rtarget / SK_R_SWEET) ** 2 + smallCapPenalty(Cbottom, Ctarget);
 		if (!(Rtarget > SK_R_MIN && Rtarget < SK_R_MAX)) continue;
 		if (best === null || score < best.score) best = { Cbottom, Ctarget, Rtarget, score };
 	}

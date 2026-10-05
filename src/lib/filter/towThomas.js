@@ -1,4 +1,4 @@
-import { capacitorCandidates, nearestCapacitor, nearestResistor, pairedResistor } from './eseries';
+import { capacitorCandidates, nearestCapacitor, nearestResistor, pairedResistor, smallCapPenalty } from './eseries';
 
 /**
  * Tow-Thomas biquad: two integrators in a loop, three op-amps.
@@ -109,7 +109,7 @@ function pickCapacitor(wn, q, capacitors) {
 		if (!(R > TT_R_MIN && R < TT_R_MAX && Rd > TT_R_MIN && Rd < TT_R_MAX)) continue;
 		// R is what sets the impedance level; Rd = Q R is allowed to wander
 		// further from the sweet spot, it only has to stay in range
-		const score = Math.log(R / TT_R_SWEET) ** 2 + 0.25 * Math.log(Rd / TT_R_SWEET) ** 2;
+		const score = Math.log(R / TT_R_SWEET) ** 2 + 0.25 * Math.log(Rd / TT_R_SWEET) ** 2 + smallCapPenalty(C);
 		if (best === null || score < best.score) best = { C, R, Rd, score };
 	}
 	return best;
@@ -208,7 +208,7 @@ function searchNotch(wn, q, wz, { lowSide, resistorSeries, capacitors, pairs }) 
 		// a Cin of a few tens of picofarads would compete with the op-amp's own input capacitance
 		const tinyCin = CinIdeal < TT_CIN_MIN ? Math.log(TT_CIN_MIN / CinIdeal) ** 2 : 0;
 		const level = Math.log(R / TT_R_SWEET) ** 2 + 0.125 * (Math.log(RdIdeal / TT_R_SWEET) ** 2 + Math.log(RzIdeal / TT_R_SWEET) ** 2);
-		const score = level + rounding + tinyCin;
+		const score = level + rounding + tinyCin + smallCapPenalty(C, Cin);
 		if (best === null || score < best.score) best = { C, score };
 	}
 	if (!best) return null;

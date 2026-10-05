@@ -1,4 +1,4 @@
-import { capacitorCandidates, nearestCapacitor, pairedResistor } from './eseries';
+import { capacitorCandidates, nearestCapacitor, pairedResistor, smallCapPenalty } from './eseries';
 
 /**
  * Multiple-feedback (MFB) high-pass, the standard equal-capacitor layout:
@@ -74,7 +74,7 @@ export function designMfbHighPass(wn, q, { resistorSeries = 'E24', capacitors = 
 	let best = null;
 	for (const C of caps) {
 		const { R1, R2 } = solveMfbHpResistors(a, b, C);
-		const score = scoreMfbHpResistors(R1, R2);
+		const score = scoreMfbHpResistors(R1, R2) + smallCapPenalty(C);
 		if (best === null || score < best.score) best = { C, R1, R2, score };
 	}
 	if (!best) return null;

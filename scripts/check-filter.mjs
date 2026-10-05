@@ -548,7 +548,8 @@ const PAIR_STOCKS = {
 // existed: these fingerprints were taken from that code over this sweep.
 // A deliberate change to a designer moves them too: rerun and update them.
 {
-	const BEFORE = { E24: '55b291a947b0dbd5', E96: '30dfbf3d28313c82', lab: '281fd971f50c20b1', labR: '22b02fda69c38974' };
+	// retaken when the searches began to avoid capacitors under 47 pF (C_FLOOR in eseries.js)
+	const BEFORE = { E24: 'c145fc6ff57332c7', E96: '9fb167b8061e19b8', lab: '90bf9582cfc60661', labR: 'a63bd8c92ed9f783' };
 	for (const [name, opts] of Object.entries(PAIR_STOCKS)) {
 		const rows = sweepDesigns({ ...opts, pairs: false });
 		const off = fingerprint(rows);

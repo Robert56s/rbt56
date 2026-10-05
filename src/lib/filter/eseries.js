@@ -105,6 +105,23 @@ export function nearestCapacitor(target, option) {
  * Capacitor values a search may try: the caller's own list when given one,
  * otherwise E6 steps spanning pF to uF (1e-12 .. 1e-6 F).
  */
+/**
+ * Under this a capacitor competes with the stray capacitance of a
+ * breadboard row and of the op-amp's input pins (a few picofarads), so the
+ * built stage drifts off its design. The page flags such a part, and the
+ * searches below take one only when no capacitor at or above it works.
+ */
+export const C_FLOOR = 47e-12;
+
+/**
+ * Added to a search score when a candidate uses a capacitor under C_FLOOR:
+ * larger than any difference between two valid candidates, so a small
+ * capacitor wins only when it is the one way to build the stage.
+ */
+export function smallCapPenalty(...caps) {
+	return caps.some((c) => c < C_FLOOR * (1 - 1e-9)) ? 1000 : 0;
+}
+
 export function capacitorCandidates(option) {
 	if (Array.isArray(option)) return normalizeList(option);
 	return seriesValues(E6, -12, -6);

@@ -1,4 +1,4 @@
-import { capacitorCandidates, nearestCapacitor, pairedResistor } from './eseries';
+import { capacitorCandidates, nearestCapacitor, pairedResistor, smallCapPenalty } from './eseries';
 
 /**
  * First-order low-pass stage: H(s) = 1 / (RCs + 1), used for the leftover
@@ -29,7 +29,7 @@ export function designFirstOrderLowPass(tau, { resistorSeries = 'E24', capacitor
 	for (const C of caps) {
 		const Rtarget = tau / C;
 		if (!(Rtarget > FO_R_MIN && Rtarget < FO_R_MAX)) continue;
-		const score = Math.log(Rtarget / FO_R_SWEET) ** 2;
+		const score = Math.log(Rtarget / FO_R_SWEET) ** 2 + smallCapPenalty(C);
 		if (best === null || score < best.score) best = { C, Rtarget, score };
 	}
 	// Every candidate landed outside the sweet range (very short or very long

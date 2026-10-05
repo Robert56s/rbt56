@@ -1,4 +1,4 @@
-import { capacitorCandidates, nearestCapacitor, pairedResistor } from './eseries';
+import { capacitorCandidates, nearestCapacitor, pairedResistor, smallCapPenalty } from './eseries';
 
 /**
  * Multiple-feedback (MFB) low-pass, the standard (Rauch) layout: R1 from
@@ -87,7 +87,7 @@ export function designMfbLowPass(wn, q, { resistorSeries = 'E24', capacitors = n
 			const roots = solveRoots(a, b, C1, C2);
 			if (!roots) continue;
 			for (const { R1, R2 } of roots) {
-				const score = scoreResistors(R1, R2);
+				const score = scoreResistors(R1, R2) + smallCapPenalty(C1, C2);
 				if (best === null || score < best.score) best = { C1, C2, R1, R2, score };
 			}
 		}
