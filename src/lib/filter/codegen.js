@@ -12,6 +12,7 @@ import sallenKeyHighPassSrc from './sallenKeyHighPass.js?raw';
 import sensitivitySrc from './sensitivity.js?raw';
 import stagesSrc from './stages.js?raw';
 import towThomasSrc from './towThomas.js?raw';
+import boctorSrc from './boctor.js?raw';
 
 /**
  * Turns one of this file's own modules into a plain script chunk: strips
@@ -124,8 +125,8 @@ function reportBlock() {
 const BAND = FILTER_TYPE === 'bandpass' || FILTER_TYPE === 'bandstop';
 const topologyOf = (side) => (BAND ? (side === 'highpass' ? TOPOLOGY_HP : TOPOLOGY_LP) : TOPOLOGY);
 for (const [response, side, name] of BAND ? [[RESPONSE_HP, 'highpass', 'TOPOLOGY_HP'], [RESPONSE_LP, 'lowpass', 'TOPOLOGY_LP']] : [[RESPONSE, FILTER_TYPE, 'TOPOLOGY']]) {
-	if (RESPONSES[response].zeros && topologyOf(side) !== 'towThomas') {
-		throw new Error(\`\${RESPONSES[response].label} can only be built with Tow-Thomas stages: set \${name} = 'towThomas'\`);
+	if (RESPONSES[response].zeros && !['towThomas', 'boctor'].includes(topologyOf(side))) {
+		throw new Error(\`\${RESPONSES[response].label} needs Tow-Thomas or Boctor notch stages: set \${name} = 'towThomas'\`);
 	}
 }
 
@@ -211,19 +212,31 @@ const realized = design.stages.map((stage, i) => {
 	const f0 = stage.wn / (2 * Math.PI);
 
 	if (Number.isFinite(stage.wz)) {
-		// a stage with zeros: always the Tow-Thomas notch (feed-forward) form
+		// A finite zero uses the selected notch network.
 		const fz = stage.wz / (2 * Math.PI);
 		const lowSide = stage.filterType === 'lowpass';
 		console.log(\`stage \${i + 1} (\${stage.filterType} notch): f0 = \${f0.toFixed(1)} Hz, Q = \${stage.q.toFixed(4)}, zero at fz = \${fz.toFixed(1)} Hz\`);
-		const r = ov && ov.C ? designTowThomasNotchFromCap(stage.wn, stage.q, stage.wz, ov.C, { ...OPTS, lowSide }) : designTowThomasNotch(stage.wn, stage.q, stage.wz, { ...OPTS, lowSide });
+		const notch = topologyOf(stage.filterType) === 'boctor' ? designBoctorNotch : designTowThomasNotch;
+		const fromCap = topologyOf(stage.filterType) === 'boctor' ? designBoctorNotchFromCap : designTowThomasNotchFromCap;
+		let notchOpts = { ...OPTS, lowSide };
+		let auto = notch(stage.wn, stage.q, stage.wz, notchOpts);
+		if (!auto && topologyOf(stage.filterType) === 'boctor') {
+			notchOpts = { resistorSeries: 'E24', capacitors: null, lowSide };
+			auto = notch(stage.wn, stage.q, stage.wz, notchOpts);
+			if (auto) console.log('  Stock cannot realize this section; using the full E24/E6 grid, as on the page.');
+		}
+		const edited = ov && ov.C ? fromCap(stage.wn, stage.q, stage.wz, ov.C, notchOpts) : null;
+		const r = edited && edited.ok !== false ? edited : auto;
+		if (!r) throw new Error('This Boctor section is not realizable. Select Tow-Thomas or change the specification.');
 		printParts(r);
 		const f0Actual = r.actual.wn / (2 * Math.PI);
 		const fzActual = r.actual.wz / (2 * Math.PI);
 		console.log(
 			\`  actual f0 = \${f0Actual.toFixed(1)} Hz (\${(100 * (f0Actual - f0) / f0).toFixed(2)}%), Q = \${r.actual.q.toFixed(4)} (\${(100 * (r.actual.q - stage.q) / stage.q).toFixed(2)}%), fz = \${fzActual.toFixed(1)} Hz (\${(100 * (fzActual - fz) / fz).toFixed(2)}%)\`
 		);
-		console.log(lowSide ? \`  DC gain = \${r.actual.dcGain.toFixed(4)} (Cin rounded to a stocked value; Rz solved so the zero stays put)\` : \`  gain above the zero = \${r.actual.gain.toFixed(4)}\`);
-		console.log(\`  Q sensitivity to 1% component error: \${worstCaseQError(TOW_THOMAS_NOTCH_SENSITIVITY, 1).toFixed(2)}% (root-sum-square, fixed for this topology)\`);
+		console.log('  numerator s coefficient = ' + (r.actual.numeratorS ?? 0));
+		console.log(lowSide ? \`  DC gain = \${r.actual.dcGain.toFixed(4)} (including component rounding)\` : \`  gain above the zero = \${r.actual.gain.toFixed(4)}\`);
+		if (topologyOf(stage.filterType) !== 'boctor') console.log(\`  Q sensitivity to 1% component error: \${worstCaseQError(TOW_THOMAS_NOTCH_SENSITIVITY, 1).toFixed(2)}% (root-sum-square, fixed for this topology)\`);
 		return r;
 	}
 
@@ -231,14 +244,14 @@ const realized = design.stages.map((stage, i) => {
 	const TOPO = topologyOf(stage.filterType);
 	let r;
 	if (stage.filterType === 'highpass') {
-		if (TOPO === 'towThomas') {
+		if (TOPO === 'towThomas' || TOPO === 'boctor') {
 			r = ov && ov.C ? designTowThomasHighPassFromCap(stage.wn, stage.q, ov.C, OPTS) : designTowThomasHighPass(stage.wn, stage.q, OPTS);
 		} else if (TOPO === 'sallenKey') {
 			r = ov && ov.C ? designSallenKeyHighPassFromCap(stage.wn, stage.q, ov.C, OPTS) : designSallenKeyHighPass(stage.wn, stage.q, OPTS);
 		} else {
 			r = ov && ov.C ? designMfbHighPassFromCap(stage.wn, stage.q, ov.C, OPTS) : designMfbHighPass(stage.wn, stage.q, OPTS);
 		}
-	} else if (TOPO === 'towThomas') {
+	} else if (TOPO === 'towThomas' || TOPO === 'boctor') {
 		r = ov && ov.C ? designTowThomasLowPassFromCap(stage.wn, stage.q, ov.C, OPTS) : designTowThomasLowPass(stage.wn, stage.q, OPTS);
 	} else if (TOPO === 'sallenKey') {
 		const auto = designSallenKeyLowPass(stage.wn, stage.q, OPTS);
@@ -268,9 +281,9 @@ const realized = design.stages.map((stage, i) => {
 		\`  actual f0 = \${f0Actual.toFixed(1)} Hz (\${(100 * (f0Actual - f0) / f0).toFixed(2)}%), Q = \${r.actual.q.toFixed(4)} (\${(100 * (r.actual.q - stage.q) / stage.q).toFixed(2)}%)\`
 	);
 	if (stage.filterType === 'highpass') {
-		const sens = TOPO === 'towThomas' ? TOW_THOMAS_HP_SENSITIVITY : TOPO === 'sallenKey' ? SALLEN_KEY_HP_SENSITIVITY : MFB_HP_SENSITIVITY;
+		const sens = TOPO === 'towThomas' || TOPO === 'boctor' ? TOW_THOMAS_HP_SENSITIVITY : TOPO === 'sallenKey' ? SALLEN_KEY_HP_SENSITIVITY : MFB_HP_SENSITIVITY;
 		console.log(\`  Q sensitivity to 1% component error: \${worstCaseQError(sens, 1).toFixed(2)}% (root-sum-square, fixed for this topology)\`);
-	} else if (TOPO === 'towThomas') {
+	} else if (TOPO === 'towThomas' || TOPO === 'boctor') {
 		console.log(\`  Q sensitivity to 1% component error: \${worstCaseQError(TOW_THOMAS_SENSITIVITY, 1).toFixed(2)}% (root-sum-square, fixed for this topology)\`);
 	} else if (TOPO === 'mfb') {
 		console.log(\`  Q sensitivity to 1% component error: \${worstCaseQError(mfbSensitivity(r.components), 1).toFixed(2)}% (root-sum-square)\`);
@@ -472,6 +485,7 @@ export function generateScript({
 		inline(sallenKeySrc),
 		inline(sallenKeyHighPassSrc),
 		inline(towThomasSrc),
+		inline(boctorSrc),
 		inline(firstOrderSrc),
 		inline(firstOrderHighPassSrc),
 		inline(bodeSrc),

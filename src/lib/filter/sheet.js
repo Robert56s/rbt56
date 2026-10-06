@@ -186,7 +186,59 @@ function drawTowThomasNotch(sheet, parts, p) {
 	return corner;
 }
 
+function drawBoctor(sheet, parts, p, hp = false) {
+	const [C2, Rlink, C1, Rground1, Rfeedback, Rextra, Rinput, Rground2, U] = hp ? parts : [parts[0], parts[1], parts[2], parts[3], parts[5], parts[4], parts[6], parts[7], parts[8]];
+	p = run(sheet, p, 'right', 64);
+	const x = p.x, y = p.y;
+	if (!hp) {
+		const X = run(sheet, series(sheet, C2, run(sheet, p, 'right', 64), 'right'), 'right', 64);
+		const P = run(sheet, run(sheet, series(sheet, Rlink, run(sheet, run(sheet, X, 'right', 32), 'right', 32), 'right'), 'right', 32), 'right', 32);
+		const capEnd = series(sheet, C1, run(sheet, P, 'right', 64), 'right');
+		const O = { x: capEnd.x + 128, y };
+		sheet.wire(capEnd, O);
+		const u = sheet.placeOpamp(U, { x: P.x + 64, y: y + 176 });
+		sheet.route(P, {x:P.x-32,y:P.y}, {x:P.x-32,y:u.pins[1].y}, u.pins[1]);
+		sheet.route(u.pins[2], { x: O.x, y: u.pins[2].y }, O);
+		for (const [e,n] of [[Rground1,X],[Rextra,P]]) {
+			const end = sheet.placeFrom(e,run(sheet,n,'up',48),'up',{labels:'left'}).pins[1];
+			sheet.flag(run(sheet,end,'up',64),'0');
+		}
+		const tap = run(sheet, X, 'right', 32), top = { x: tap.x, y: y - 288 };
+		sheet.wire(tap, top);
+		const fb = series(sheet,Rfeedback,run(sheet,top,'right',48),'right');
+		sheet.route(fb,{x:O.x,y:top.y},O);
+		const M = { x: P.x - 64, y: y + 288 };
+		const inputEnd = series(sheet,Rinput,run(sheet,{x,y:M.y},'right',128),'right');
+		sheet.wire(p,{x,y:M.y}); sheet.wire(inputEnd,M);
+		sheet.route(M,{x:M.x,y:u.pins[0].y},u.pins[0]);
+		shunt(sheet,Rground2,M);
+		return run(sheet,O,'right',64);
+	}
+	const X = run(sheet,series(sheet,C2,run(sheet,p,'right',64),'right'),'right',48);
+	const M = run(sheet,series(sheet,Rlink,X,'right'),'right',64);
+	const u = sheet.placeOpamp(U,{x:M.x+128,y:y+16});
+	const O = run(sheet,u.pins[2],'right',96);
+	// Main row into the upper, inverting input.
+	sheet.wire(M,{x:M.x+32,y:M.y}); sheet.wire({x:M.x+32,y:M.y},u.pins[1]);
+	const top = run(sheet,run(sheet,M,'right',32),'up',192);
+	const fb = series(sheet,Rfeedback,run(sheet,top,'right',64),'right');
+	sheet.route(fb,{x:O.x,y:top.y},O);
+	const rg = sheet.placeFrom(Rground1,run(sheet,M,'up',48),'up',{labels:'left'}).pins[1]; sheet.flag(run(sheet,rg,'up',64),'0');
+	const P = {x:M.x,y:y+192};
+	const capEnd = series(sheet,C1,{x:x+128,y:P.y},'right');
+	sheet.route(p,{x,y:P.y},{x:x+128,y:P.y}); sheet.wire(capEnd,P);
+	sheet.route(P,{x:u.pins[0].x-32,y:P.y},{x:u.pins[0].x-32,y:u.pins[0].y},u.pins[0]);
+	const r3End = series(sheet,Rinput,run(sheet,run(sheet,P,'right',32),'right',32),'right');
+	sheet.route(r3End,{x:O.x,y:P.y},O);
+	const bottom={x,y:y+320}; sheet.wire({x,y:P.y},bottom);
+	const r1End=series(sheet,Rextra,run(sheet,bottom,'right',128),'right');
+	const foot={x:P.x,y:bottom.y}; sheet.wire(r1End,foot); sheet.wire(foot,P); shunt(sheet,Rground2,foot);
+	return run(sheet,O,'right',64);
+}
+
 const DRAW = {
+	boctor: (sheet, parts, p) => drawBoctor(sheet, parts, p),
+	boctorHp: (sheet, parts, p) => drawBoctor(sheet, parts, p, true),
 	mfb: drawMfb,
 	mfbHp: drawMfb,
 	sallenKey: drawSallenKey,

@@ -24,6 +24,7 @@ import { audit } from '../src/lib/spice/geometry.js';
 import { designBandPass, designBandStop, designHighPass, designLowPass } from '../src/lib/filter/stages.js';
 import { designTowThomasHighPass, designTowThomasLowPass, designTowThomasNotch } from '../src/lib/filter/towThomas.js';
 import { realOpampProblems } from './lib-real-opamp.mjs';
+import { designBoctorNotch, boctorActual } from '../src/lib/filter/boctor.js';
 
 let fails = 0;
 const check = (label, ok, detail) => {
@@ -374,6 +375,42 @@ for (const { spec, topology, responseHp, responseLp } of CASES) {
 		}
 	}
 	check('real op-amps: every drawing wired as the ideal one, on v++ and v--, drawn clean', messy.length === 0, messy.length ? messy.slice(0, 3).join('; ') : `${drawn} drawings`);
+}
+
+for (const lowSide of [true, false]) for (const q of [0.6, 0.9, 1.2]) for (const pairs of [false, true]) {
+	const wn = 2 * Math.PI * 1000, wz = wn * (lowSide ? 2 : 0.5);
+	const d = designBoctorNotch(wn, q, wz, { lowSide, pairs });
+	const label = `Boctor ${lowSide ? 'LP' : 'HP'} Q=${q} pairs=${pairs}`;
+	check(`${label} realized`, !!d);
+	if (!d) continue;
+	const ideal = boctorActual(d.theoretical, lowSide);
+	check(`${label} ideal synthesis`, Math.abs(ideal.wn / wn - 1) < 1e-10 && Math.abs(ideal.q / q - 1) < 1e-10 && Math.abs(ideal.wz / wz - 1) < 1e-10 && Math.abs(ideal.numeratorS / wn) < 1e-10);
+	const opts = { filterType: lowSide ? 'lowpass' : 'highpass', response: 'elliptic', fp: 1000, fs: lowSide ? 3000 : 300, topology: 'boctor', realizedStages: [d], ideal: true };
+	const elements = parseNetlist(generateNetlist(opts));
+	let worst = 0;
+	for (const f of [10, 100, 500, 1000, wz / (2 * Math.PI), 3000, 10000, 100000]) worst = Math.max(worst, Math.abs(20 * Math.log10(Math.max(abs(solveAt(elements, f)),1e-15)) - magnitudePhaseAt([d],f).db));
+	check(`${label} nodal response`, worst < 1e-6, `${worst} dB`);
+	const asc = generateSchematic(opts), parsed = parseSchematic(asc);
+	const wanted = buildElements(opts).filter(e=>e.kind !== 'LABEL');
+	const amp = wanted.find(e => e.kind === 'OP');
+	const feedbackGround = wanted.find(e => e.name === (lowSide ? 'R11' : 'R41'));
+	check(`${label} feedback returns to the inverting input`, amp.nodes[1] === feedbackGround.nodes[0]);
+	const netOf = new Map(), nodeOf = new Map(), problems = [...parsed.clashes,...parsed.dangling];
+	for (const w of wanted) {
+		const got = parsed.elements.find(e=>e.name===w.name);
+		if (!got) { problems.push(w.name+' missing'); continue; }
+		got.nodes.forEach((net,i)=>{
+			const node=w.nodes[i];
+			if (netOf.has(net) && netOf.get(net)!==node) problems.push(w.name+' joins '+netOf.get(net)+' and '+node);
+			if (nodeOf.has(node) && nodeOf.get(node)!==net) problems.push(node+' split');
+			netOf.set(net,node);nodeOf.set(node,net);
+		});
+	}
+	check(`${label} schematic connectivity`, problems.length===0,problems.slice(0,3).join('; '));
+	const issues=audit(asc);
+	check(`${label} schematic geometry`,issues.length===0,issues.slice(0,3).map(e=>e.detail).join('; '));
+	const realIssues = audit(generateSchematic({ ...opts, ideal: false, opamp: 'TL082' }));
+	check(`${label} powered TL082 schematic geometry`, realIssues.length === 0, realIssues.slice(0, 2).map(e => e.detail).join('; '));
 }
 
 console.log(fails === 0 ? 'netlists LTspice conformes au modele de l outil' : `${fails} failure(s)`);

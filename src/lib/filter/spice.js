@@ -41,6 +41,14 @@ export function stageElements(stage, i, nIn, nOut) {
 	const op = (tag, p, m, out) => ({ kind: 'OP', name: `U${tag}${i}`, nodes: [p, m, out] });
 
 	switch (stage.topology) {
+		case 'boctor': {
+			const X = n('x'), M = n('m'), P = n('p');
+			return [C('2', nIn, X, c.C2), R('6', X, M, c.R6), C('1', M, nOut, c.C1), R('2', X, '0', c.R2), R('1', M, '0', c.R1), R('4', X, nOut, c.R4), R('3', nIn, P, c.R3), R('5', P, '0', c.R5), op('', P, M, nOut)];
+		}
+		case 'boctorHp': {
+			const X = n('x'), M = n('m'), P = n('p');
+			return [C('2', nIn, X, c.C2), R('2', X, M, c.R2), C('1', nIn, P, c.C1), R('4', M, '0', c.R4), R('5', M, nOut, c.R5), R('1', nIn, P, c.R1), R('3', P, nOut, c.R3), R('6', P, '0', c.R6), op('', P, M, nOut)];
+		}
 		case 'mfb': {
 			// R1 in to summing node A, C1 A to ground, R2 A to the virtual
 			// ground, R3 feedback to A, C2 feedback from the virtual ground.
@@ -309,7 +317,7 @@ export function generateNetlist(opts) {
 	});
 }
 
-const TOPOLOGY_LABEL = { mfb: 'multiple feedback', sallenKey: 'Sallen-Key', towThomas: 'Tow-Thomas' };
+const TOPOLOGY_LABEL = { mfb: 'multiple feedback', sallenKey: 'Sallen-Key', towThomas: 'Tow-Thomas', boctor: 'Boctor notch' };
 
 /** The stage circuits actually on the sheet: the chosen topology, the notch stages, or both. */
 function stagesText({ topology, realizedStages = [] }) {

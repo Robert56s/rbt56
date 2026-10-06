@@ -1,4 +1,5 @@
 <script>
+	import { buildBoctorDiagram } from '$lib/filter/boctorDiagram';
 	// Renders the schematic for one realized stage using real component
 	// shapes from the `schematic-symbols` library (resistor zigzags,
 	// capacitor plates, an op-amp triangle), wired up by src/lib/filter/circuits.js.
@@ -23,6 +24,7 @@
 	const diagram = $derived.by(() => {
 		// an undefined ohms leaves each builder on its formatOhms default
 		const opts = { ohms };
+		if (design.topology === 'boctor' || design.topology === 'boctorHp') return buildBoctorDiagram(design.components, { ...opts, highPass: design.topology === 'boctorHp' });
 		if (design.topology === 'towThomas') return buildTowThomasDiagram(design.components, opts);
 		if (design.topology === 'towThomasHp') return buildTowThomasHpDiagram(design.components, opts);
 		if (design.topology === 'towThomasNotch') return buildTowThomasNotchDiagram(design.components, opts);

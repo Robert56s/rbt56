@@ -70,7 +70,7 @@ function stageGainComplex(stage, s) {
 	if (Number.isFinite(stage.actual.wz)) {
 		// a notch stage: gain * (s^2 + wz^2), gain being the value far above the zero
 		const wz = stage.actual.wz;
-		return complexDivide({ re: gain * (wz * wz - s.im * s.im), im: 0 }, den);
+		return complexDivide({ re: gain * (wz * wz - s.im * s.im), im: (stage.actual.numeratorS ?? 0) * s.im }, den);
 	}
 	const num = isHp
 		? { re: -gain * s.im * s.im, im: 0 } // gain * s^2, s^2 = -omega^2

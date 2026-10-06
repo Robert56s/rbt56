@@ -1,4 +1,6 @@
 <script>
+	import { designBoctorNotch, designBoctorNotchFromCap, boctorFeasible } from '$lib/filter/boctor';
+	import { explainBoctor } from '$lib/filter/explainBoctor';
 	import { onMount, untrack } from 'svelte';
 	import BasicsPanel from '$lib/components/BasicsPanel.svelte';
 	import OrderOnSpecDemo from '$lib/components/basics/OrderOnSpecDemo.svelte';
@@ -226,16 +228,18 @@
 	// the sides still waiting for Tow-Thomas, by name
 	const blockedSides = $derived(
 		isBandType
-			? [zerosHp && topologyHp !== 'towThomas' ? 'high-pass' : null, zerosLp && topologyLp !== 'towThomas' ? 'low-pass' : null].filter(Boolean)
-			: needsTowThomas && topology !== 'towThomas'
+			? [zerosHp && !['towThomas', 'boctor'].includes(topologyHp) ? 'high-pass' : null, zerosLp && !['towThomas', 'boctor'].includes(topologyLp) ? 'low-pass' : null].filter(Boolean)
+			: needsTowThomas && !['towThomas', 'boctor'].includes(topology)
 				? ['filter']
 				: []
 	);
 	const topologyBlocked = $derived(blockedSides.length > 0);
 	const usesTopology = (t) => (isBandType ? topologyHp === t || topologyLp === t : topology === t);
-	const TOPOLOGY_WORD = { mfb: 'multiple feedback', sallenKey: 'Sallen-Key', towThomas: 'Tow-Thomas biquad' };
+	const TOPOLOGY_WORD = { mfb: 'multiple feedback', sallenKey: 'Sallen-Key', towThomas: 'Tow-Thomas biquad', boctor: 'Boctor biquad' };
 	// the circuit each stage heading names, so a band filter shows which menu drives it
 	const CIRCUIT_WORD = {
+		boctor: 'Boctor low-pass notch',
+		boctorHp: 'Boctor high-pass notch',
 		firstOrder: 'first-order RC, same for every topology',
 		firstOrderHp: 'first-order RC, same for every topology',
 		mfb: 'multiple feedback',
@@ -358,9 +362,14 @@
 	function buildStage(stage, i, opts) {
 		const ov = capOverrides[i];
 
-		// a stage with zeros (elliptic, inverse Chebyshev) is always a Tow-Thomas notch
+		// A finite zero uses the selected notch network.
 		if (Number.isFinite(stage.wz)) {
 			const notchOpts = { ...opts, lowSide: stage.filterType === 'lowpass' };
+			if (topologyFor(stage.filterType) === 'boctor') {
+				const auto = designBoctorNotch(stage.wn, stage.q, stage.wz, notchOpts);
+				if (!ov?.C) return auto;
+				return designBoctorNotchFromCap(stage.wn, stage.q, stage.wz, ov.C * 1e-9, notchOpts) ?? (auto && { ...auto, manualError: 'This capacitor cannot realize the Boctor section with positive resistors in range. Showing the automatic values.' });
+			}
 			if (ov?.C > 0) {
 				const r = designTowThomasNotchFromCap(stage.wn, stage.q, stage.wz, ov.C * 1e-9, notchOpts);
 				if (r.ok) return r;
@@ -377,7 +386,7 @@
 				}
 				return designFirstOrderHighPass(stage.tau, opts);
 			}
-			if (wiring === 'towThomas') {
+			if (wiring === 'towThomas' || wiring === 'boctor') {
 				if (ov?.C > 0) {
 					const r = designTowThomasHighPassFromCap(stage.wn, stage.q, ov.C * 1e-9, opts);
 					if (r.ok) return r;
@@ -406,7 +415,7 @@
 			return designFirstOrderLowPass(stage.tau, opts);
 		}
 
-		if (wiring === 'towThomas') {
+		if (wiring === 'towThomas' || wiring === 'boctor') {
 			if (ov?.C > 0) {
 				const r = designTowThomasLowPassFromCap(stage.wn, stage.q, ov.C * 1e-9, opts);
 				if (r.ok) return r;
@@ -438,7 +447,8 @@
 		return auto;
 	}
 
-	const realizedStages = $derived.by(() => {
+	const boctorUnavailable = $derived(design?.stages.flatMap((s, i) => topologyFor(s.filterType) === 'boctor' && Number.isFinite(s.wz) && !boctorFeasible(s.wn, s.q, s.wz, s.filterType === 'lowpass') ? [i + 1] : []) ?? []);
+	const stageResults = $derived.by(() => {
 		if (!design) return [];
 		return design.stages
 			.map((stage, i) => {
@@ -448,9 +458,10 @@
 				// the full E24/E6 grid and flag it, rather than dropping the stage
 				const fallback = buildStage(stage, i, { resistorSeries: 'E24', capacitors: null });
 				return fallback && { ...fallback, stockShortfall: true };
-			})
-			.filter(Boolean);
+			});
 	});
+	const realizationFailures = $derived(stageResults.flatMap((s, i) => s ? [] : [i + 1]));
+	const realizedStages = $derived(realizationFailures.length ? [] : stageResults);
 
 	const shortfallStages = $derived(realizedStages.flatMap((r, i) => (r.stockShortfall ? [i + 1] : [])));
 	// what to look at when the passband misses by more than rounding
@@ -689,6 +700,7 @@
 	}
 
 	function explainComponents(stageDesign, i) {
+		if (stageDesign.topology === 'boctor' || stageDesign.topology === 'boctorHp') return explainBoctor(stageDesign);
 		if (stageDesign.topology === 'mfb') return explainMfb(stageDesign, design.stages[i].wn, design.stages[i].q);
 		if (stageDesign.topology === 'sallenKey') return explainSallenKey(stageDesign, design.stages[i].q);
 		if (stageDesign.topology === 'mfbHp') return explainMfbHp(stageDesign, design.stages[i].wn, design.stages[i].q);
@@ -828,7 +840,7 @@
 				{#if !valid}
 					fix the values below
 				{:else if topologyBlocked}
-					select Tow-Thomas in Topology
+					select Tow-Thomas or Boctor in Topology
 				{:else if filterType === 'bandpass'}
 					high-pass side + low-pass side, see below
 				{:else if filterType === 'bandstop'}
@@ -884,6 +896,7 @@
 						<option value="mfb" disabled={needsTowThomas}>Multiple feedback (MFB)</option>
 						<option value="sallenKey" disabled={needsTowThomas}>Sallen-Key (unity gain)</option>
 						<option value="towThomas">Tow-Thomas (3 op-amps)</option>
+						<option value="boctor" disabled={!needsTowThomas}>Boctor notch (1 op-amp)</option>
 					</select>
 				</div>
 			{/if}
@@ -947,6 +960,7 @@
 						<option value="mfb" disabled={zerosHp}>Multiple feedback (MFB)</option>
 						<option value="sallenKey" disabled={zerosHp}>Sallen-Key (unity gain)</option>
 						<option value="towThomas">Tow-Thomas (3 op-amps)</option>
+						<option value="boctor" disabled={!zerosHp}>Boctor notch (1 op-amp)</option>
 					</select>
 				</div>
 				<div class="field">
@@ -976,6 +990,7 @@
 						<option value="mfb" disabled={zerosLp}>Multiple feedback (MFB)</option>
 						<option value="sallenKey" disabled={zerosLp}>Sallen-Key (unity gain)</option>
 						<option value="towThomas">Tow-Thomas (3 op-amps)</option>
+						<option value="boctor" disabled={!zerosLp}>Boctor notch (1 op-amp)</option>
 					</select>
 				</div>
 				<div class="field">
@@ -1025,12 +1040,12 @@
 				{RESPONSES[response].label}: {RESPONSES[response].best}.
 			{/if}
 			{#if needsTowThomas && !topologyBlocked}
-				{zeroResponsesText} zeros in the stopband, and the Tow-Thomas biquad is the only wiring here that can
+				{zeroResponsesText} zeros in the stopband. Tow-Thomas and Boctor can
 				build a stage with zeros (its notch form), so every second-order stage {isBandType
 					? zerosHp && zerosLp
-						? 'is a Tow-Thomas, on both sides'
-						: `of the ${zerosHp ? 'high' : 'low'}-pass ${filterType === 'bandstop' ? 'branch' : 'side'} is a Tow-Thomas, while the other ${filterType === 'bandstop' ? 'branch' : 'side'} keeps its own topology`
-					: 'is a Tow-Thomas'}; an odd order adds one first-order RC stage.
+						? 'uses the selected notch topology on each side'
+						: `of the ${zerosHp ? 'high' : 'low'}-pass ${filterType === 'bandstop' ? 'branch' : 'side'} uses its selected notch topology, while the other ${filterType === 'bandstop' ? 'branch' : 'side'} keeps its own topology`
+					: 'uses the selected notch topology'}; an odd order adds one first-order RC stage.
 			{/if}
 		</p>
 
@@ -1039,12 +1054,10 @@
 				{#if isBandType}
 					{#each blockedSides as side (side)}
 						The {side} {filterType === 'bandstop' ? 'branch' : 'side'} is {RESPONSES[side === 'high-pass' ? responseHp : responseLp].short ??
-							RESPONSES[side === 'high-pass' ? responseHp : responseLp].label}, which can only be built with Tow-Thomas stages: select Tow-Thomas
-						(3 op-amps) in its Topology menu to continue.
+							RESPONSES[side === 'high-pass' ? responseHp : responseLp].label}, which needs a notch section: select Tow-Thomas or Boctor in its Topology menu to continue.
 					{/each}
 				{:else}
-					{zeroResponses.map((r) => RESPONSES[r].short ?? RESPONSES[r].label).join(' and ')} can only be built with
-					Tow-Thomas stages: select Tow-Thomas (3 op-amps) in Topology to continue.
+					{zeroResponses.map((r) => RESPONSES[r].short ?? RESPONSES[r].label).join(' and ')} needs notch sections: select Tow-Thomas or Boctor in Topology to continue.
 				{/if}
 			</p>
 		{/if}
@@ -1105,7 +1118,13 @@
 		widgets={{ 'two-tones': TwoTonesDemo, 'rc-on-spec': RcOnSpecDemo, 'order-on-spec': OrderOnSpecDemo, 'stages-multiply': StagesMultiplyDemo }}
 	/>
 
-	{#if valid && !topologyBlocked}
+	{#if realizationFailures.length}
+		<p class="flag bad">Boctor cannot realize stage {realizationFailures.join(', ')} with the available capacitor range and positive resistors. {boctorUnavailable.length ? 'The high-pass form needs Q < 1 / (1 - (fz/f0)²).' : 'The capacitor ratio or resistor range is insufficient.'} Select Tow-Thomas for this side, or change the specification. No incomplete cascade is exported.</p>
+	{/if}
+	{#if usesTopology('boctor') && !realizationFailures.length}
+		<p class="note">Boctor uses one op-amp, six resistors and two capacitors per notch section. The high-pass form has gain above one. Resistor rounding can leave a finite notch minimum; the response plot includes it. Sections without finite zeros keep the Tow-Thomas circuit, and an odd order keeps its first-order RC section. <a href="https://www.analog.com/media/en/training-seminars/design-handbooks/Basic-Linear-Design/Chapter8.pdf" target="_blank" rel="noreferrer">Derivation reference: Analog Devices, figures 8.78 and 8.79.</a></p>
+	{/if}
+	{#if valid && !topologyBlocked && !realizationFailures.length}
 		{#if isBandType}
 			<section class="panel">
 				<div class="panel-head">
@@ -1235,12 +1254,12 @@
 						{#if filterType === 'bandstop'}
 							{orderLp} low-pass stage{orderLp === 1 ? '' : 's'} summed with {orderHp} high-pass
 							stage{orderHp === 1 ? '' : 's'} - {orderLp + orderHp} filtering stages total, plus
-							the summing amplifier. Each stage is its own unity-gain block, so the sum meets both
+							the summing amplifier. The ideal branches are normalized to unity passband gain, so the sum meets both
 							halves of the spec with a predictable notch depth.
 						{:else}
 							{orderHp} high-pass stage{orderHp === 1 ? '' : 's'} cascaded with {orderLp} low-pass
 							stage{orderLp === 1 ? '' : 's'} - {orderHp + orderLp} stages total. Each stage is its
-							own unity-gain block, so the product meets both halves of the spec with no extra gain
+							own normalized block, so the ideal product meets both halves of the spec with no extra gain
 							stage needed.
 						{/if}
 					</p>
@@ -1290,7 +1309,7 @@
 						2 ===
 						1
 							? ' plus one first-order stage'
-							: ''}, cascaded. Each stage is built as its own unity-DC-gain block, so the
+							: ''}, cascaded. The ideal response is normalized to unity passband gain, so the
 						product of the stages meets the spec with no extra gain stage needed.
 					</p>
 				{/if}
@@ -1350,7 +1369,7 @@
 				{/if}
 				{#if hasZeros}
 					<p class="note">
-						A row with a zero fz is a notch stage: a pair of zeros on top blocks fz completely, with
+						A row with a zero fz is a notch stage: the ideal numerator blocks fz completely, with
 						gain 1 at DC on a low-pass side and far above the zero on a high-pass side.
 					</p>
 					<Equation tex={`H(s) = K\\,\\dfrac{s^2 + \\omega_z^2}{s^2 + \\frac{\\omega_n}{Q}s + \\omega_n^2}, \\qquad \\omega_z = 2\\pi f_z`} />
@@ -1477,7 +1496,7 @@
 						the comparison with MFB and Sallen-Key.
 					</p>
 				{/if}
-				{#if hasZeros}
+				{#if hasZeros && usesTopology('towThomas')}
 					<p class="note">
 						The stages with a zero are Tow-Thomas notch stages: the Tow-Thomas high-pass (input
 						capacitor Cin into A1) plus a resistor Rz from the input into A2, which together put a pair
@@ -1551,7 +1570,7 @@
 													<th>Resistor ratio needed</th>
 													<td>{capRatioHp(design.stages[i].q).toFixed(1)}:1</td>
 												</tr>
-											{:else if stageDesign.topology === 'towThomasNotch'}
+											{:else if ['towThomasNotch', 'boctor', 'boctorHp'].includes(stageDesign.topology)}
 												<tr>
 													<th>fz actual</th>
 													<td>
@@ -1588,7 +1607,11 @@
 							/>
 							<div class="math-full cap-picker">
 								<p class="note">
-									{#if stageDesign.topology === 'firstOrder' || stageDesign.topology === 'firstOrderHp' || stageDesign.topology === 'mfbHp' || stageDesign.topology === 'sallenKeyHp' || stageDesign.topology === 'towThomas' || stageDesign.topology === 'towThomasHp' || stageDesign.topology === 'towThomasNotch'}
+									{#if stageDesign.topology === 'boctor'}
+										C1 can be chosen below. C2 is selected from stock and the resistors are recalculated to balance the notch.
+									{:else if stageDesign.topology === 'boctorHp'}
+										C sets both equal capacitors. The resistors and gain are recalculated to fit.
+									{:else if stageDesign.topology === 'firstOrder' || stageDesign.topology === 'firstOrderHp' || stageDesign.topology === 'mfbHp' || stageDesign.topology === 'sallenKeyHp' || stageDesign.topology === 'towThomas' || stageDesign.topology === 'towThomasHp' || stageDesign.topology === 'towThomasNotch'}
 										Pick a different C value if the one above does not match what is in stock; the
 										resistors above are recalculated to fit.
 									{:else}
@@ -1598,9 +1621,9 @@
 									{/if}
 								</p>
 								<div class="row">
-									{#if stageDesign.topology === 'firstOrder' || stageDesign.topology === 'firstOrderHp' || stageDesign.topology === 'mfbHp' || stageDesign.topology === 'sallenKeyHp' || stageDesign.topology === 'towThomas' || stageDesign.topology === 'towThomasHp' || stageDesign.topology === 'towThomasNotch'}
+									{#if stageDesign.topology === 'firstOrder' || stageDesign.topology === 'firstOrderHp' || stageDesign.topology === 'mfbHp' || stageDesign.topology === 'sallenKeyHp' || stageDesign.topology === 'towThomas' || stageDesign.topology === 'towThomasHp' || ['towThomasNotch', 'boctor', 'boctorHp'].includes(stageDesign.topology)}
 										<div class="field">
-											<label for={`cap-C-${i}`}>C (nF)</label>
+											<label for={`cap-C-${i}`}>{stageDesign.topology === 'boctor' ? 'C1' : 'C'} (nF)</label>
 											<input
 												id={`cap-C-${i}`}
 												type="number"
@@ -1778,11 +1801,13 @@
 				{#if Math.abs(passbandPeakDb) > 0.05}
 					<p class="note">
 						The top of the passband is at {passbandPeakDb > 0 ? '+' : ''}{passbandPeakDb.toFixed(2)} dB:
-						{#if passbandPeakDb > 0}
+						{#if realizedStages.some(s => s.topology === 'boctorHp')}
+							Boctor high-pass sections have gain above one, and component rounding also shifts the passband level.
+						{:else if passbandPeakDb > 0}
 							a response with passband ripple (Chebyshev, elliptic) built from stages of unity gain ripples above 0 dB
-							{isBandType ? 'where the ripples of its two sides meet' : 'when its order is even'}{hasZeros ? ', and a notch stage\'s rounded Cin moves the level a little' : ''}.
+							{isBandType ? 'where the ripples of its two sides meet' : 'when its order is even'}{hasZeros ? ', and rounding the notch components also shifts the gain' : ''}.
 						{:else}
-							a notch stage's rounded Cin moves the passband level a little.
+							rounding the notch components moves the passband level a little.
 						{/if}
 						The spec's limits are measured from that top, so the amber Amax and Amin lines and the figures below
 						sit {Math.abs(passbandPeakDb).toFixed(2)} dB {passbandPeakDb > 0 ? 'higher' : 'lower'} than they would from 0 dB.

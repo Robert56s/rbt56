@@ -141,7 +141,7 @@ function checkText(where, text) {
 		for (const response of ['butterworth', 'chebyshev', 'legendre', 'bessel', 'inverseChebyshev', 'elliptic']) {
 			// the exact values of the page's Topology menu: a key the module
 			// does not know would throw at render time
-			for (const topology of ['mfb', 'sallenKey', 'towThomas']) {
+			for (const topology of ['mfb', 'sallenKey', 'towThomas', 'boctor']) {
 				for (const order of [2, 4, 5, NaN]) {
 					const stages = Number.isFinite(order) ? Math.ceil(order / 2) : 0;
 					const fp = Number.isFinite(order) ? 1000 : NaN;
@@ -166,13 +166,15 @@ function checkText(where, text) {
 	const { designSallenKeyLowPass } = await import('../src/lib/filter/sallenKey.js');
 	const { designSallenKeyHighPass } = await import('../src/lib/filter/sallenKeyHighPass.js');
 	const { designTowThomasHighPass, designTowThomasLowPass, designTowThomasNotch } = await import('../src/lib/filter/towThomas.js');
+	const { designBoctorNotch } = await import('../src/lib/filter/boctor.js');
 	const { designFirstOrderLowPass } = await import('../src/lib/filter/firstOrder.js');
 	const { designFirstOrderHighPass } = await import('../src/lib/filter/firstOrderHighPass.js');
 
 	const SECOND = {
 		mfb: [designMfbLowPass, designMfbHighPass],
 		sallenKey: [designSallenKeyLowPass, designSallenKeyHighPass],
-		towThomas: [designTowThomasLowPass, designTowThomasHighPass]
+		towThomas: [designTowThomasLowPass, designTowThomasHighPass],
+		boctor: [designTowThomasLowPass, designTowThomasHighPass]
 	};
 	const STOCK = {
 		E24: { resistorSeries: 'E24', capacitors: null },
@@ -181,7 +183,7 @@ function checkText(where, text) {
 	};
 	const buildStage = (stage, topology, opts) =>
 		Number.isFinite(stage.wz)
-			? designTowThomasNotch(stage.wn, stage.q, stage.wz, { ...opts, lowSide: stage.filterType === 'lowpass' })
+			? (topology === 'boctor' ? designBoctorNotch : designTowThomasNotch)(stage.wn, stage.q, stage.wz, { ...opts, lowSide: stage.filterType === 'lowpass' })
 			: stage.order === 1
 			? (stage.filterType === 'highpass' ? designFirstOrderHighPass : designFirstOrderLowPass)(stage.tau, opts)
 			: SECOND[topology][stage.filterType === 'highpass' ? 1 : 0](stage.wn, stage.q, opts);
@@ -268,7 +270,7 @@ function checkText(where, text) {
 	let designs = 0;
 	for (const spec of SPECS) {
 		for (const response of ['butterworth', 'chebyshev', 'legendre', 'bessel', 'inverseChebyshev', 'elliptic']) {
-			for (const topology of ['mfb', 'sallenKey', 'towThomas']) {
+			for (const topology of ['mfb', 'sallenKey', 'towThomas', 'boctor']) {
 				for (const stock of Object.keys(STOCK)) {
 					const values = pageValues(spec, response, topology, stock);
 					configs++;

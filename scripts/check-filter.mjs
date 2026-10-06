@@ -22,6 +22,8 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import katex from 'katex';
+import { boctorActual, boctorFeasible, designBoctorNotch, designBoctorNotchFromCap } from '../src/lib/filter/boctor.js';
+import { explainBoctor } from '../src/lib/filter/explainBoctor.js';
 import { besselPrototype, ellipticOrder, inverseChebyshevOrder, legendrePolynomial, prototypeFor, prototypeLossDb } from '../src/lib/filter/approximations.js';
 import { combinerChoice, magnitudePhaseAt, magnitudePhaseAtParallelSum } from '../src/lib/filter/bode.js';
 import { generateScript } from '../src/lib/filter/codegen.js';
@@ -421,7 +423,7 @@ check('combiner never leaves depth on the table', worstLoss <= 1e-9, `${worstLos
 			try {
 				execFileSync(process.execPath, [file], { encoding: 'utf8', stdio: 'pipe' });
 			} catch (e) {
-				if (new RegExp(`can only be built with Tow-Thomas stages: set ${name} = 'towThomas'`).test(String(e.stderr))) refused++;
+				if (new RegExp(`needs Tow-Thomas or Boctor notch stages: set ${name} = 'towThomas'`).test(String(e.stderr))) refused++;
 			}
 		}
 	}
@@ -831,6 +833,40 @@ const PAIR_STOCKS = {
 		notes.length === 6 && missing.length === 0 && circuit(cir) === circuit(generateNetlist({ ...opts, pairs: false })) && !/in series/.test(generateNetlist({ ...opts, pairs: false })) && issues.length === 0,
 		missing.length ? `missing: ${missing[0]}` : issues.length ? `${issues[0].kind}: ${issues[0].detail}` : notes[0]
 	);
+}
+
+// Boctor: exact ideal coefficients, stock rounding, manual edits and script parity.
+{
+	const wn = 2 * Math.PI * 10000;
+	for (const lowSide of [true, false]) {
+		const wz = wn * (lowSide ? 2 : 0.5), q = 0.9;
+		for (const resistorSeries of ['E24', 'E96', LAB_KIT.resistors]) {
+			const opts = { lowSide, resistorSeries };
+			const d = designBoctorNotch(wn, q, wz, opts);
+			const paired = designBoctorNotch(wn, q, wz, { ...opts, pairs: true });
+			check(`Boctor ${lowSide ? 'LP' : 'HP'} stock design`, !!d && !!paired);
+			if (!d) continue;
+			const a = boctorActual(d.theoretical, lowSide);
+			check('  ideal poles, Q and zero reproduce the target', Math.abs(a.wn / wn - 1) < 1e-10 && Math.abs(a.q / q - 1) < 1e-10 && Math.abs(a.wz / wz - 1) < 1e-10 && Math.abs(a.numeratorS / (a.gain * wz)) < 1e-10);
+			const edited = designBoctorNotchFromCap(wn, q, wz, d.components.C1, opts);
+			check('  manual C is respected', edited?.manual && edited.components.C1 === d.components.C1);
+			for (const block of explainBoctor(d)) if (block.type === 'eq') {
+				try { katex.renderToString(block.tex, { throwOnError: true, strict: 'error' }); }
+				catch (e) { check('Boctor equation renders', false, e.message); }
+			}
+		}
+	}
+	check('Boctor rejects impossible high-pass Q and reversed zero ordering', !boctorFeasible(wn, 2, wn / 2, false) && designBoctorNotch(wn, 2, wn / 2, { lowSide: false }) === null && !boctorFeasible(wn, 1, wn / 2, true));
+	const dir = mkdtempSync(join(tmpdir(), 'rbt56-boctor-'));
+	for (const response of ['inverseChebyshev', 'elliptic']) {
+		const opts = { filterType: 'lowpass', response, topology: 'boctor', stock: 'E24', amaxDb: 3, aminDb: 40, fp: 10000, fs: 35000, order: null, capOverrides: {}, pairs: true };
+		const text = generateScript(opts), path = join(dir, `${response}.js`);
+		writeFileSync(path, text);
+		try {
+			const output = execFileSync(process.execPath, [path], { encoding: 'utf8' });
+			check(`Boctor ${response} downloadable script executes`, output.includes('numerator s coefficient') && !output.includes('NaN'));
+		} catch (e) { check(`Boctor ${response} script executes`, false, e.message); }
+	}
 }
 
 console.log(fails === 0 ? 'filter checks clean' : `${fails} failure(s)`);

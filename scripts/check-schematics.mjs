@@ -18,6 +18,8 @@
 
 import { symbols } from 'schematic-symbols';
 import * as filter from '../src/lib/filter/circuits.js';
+import { buildBoctorDiagram } from '../src/lib/filter/boctorDiagram.js';
+import { designBoctorNotch } from '../src/lib/filter/boctor.js';
 import * as modulation from '../src/lib/modulation/circuits.js';
 import { designTowThomasHighPass, designTowThomasLowPass, designTowThomasNotch } from '../src/lib/filter/towThomas.js';
 import { buildAgcDiagram, buildClampDiagram, buildLimiterDiagram, buildOscillatorDiagram } from '../src/lib/oscillator/circuits.js';
@@ -413,6 +415,10 @@ const CASES = [
 	['filter/buildFirstOrderDiagram', () => filter.buildFirstOrderDiagram({ R: 16000, C: 1e-8 }, 1.6e-4)],
 	['filter/buildSummingAmpDiagram', () => filter.buildSummingAmpDiagram(10000)],
 	['filter/buildDifferenceAmpDiagram', () => filter.buildDifferenceAmpDiagram(10000)],
+	['filter/Boctor LP', () => buildBoctorDiagram(designBoctorNotch(2 * Math.PI * 10000, 0.8, 2 * Math.PI * 20000).components)],
+	['filter/Boctor HP', () => buildBoctorDiagram(designBoctorNotch(2 * Math.PI * 10000, 0.8, 2 * Math.PI * 5000, { lowSide: false }).components, { highPass: true })],
+	['filter/Boctor LP pair labels', () => buildBoctorDiagram(designBoctorNotch(2 * Math.PI * 10000, 0.8, 2 * Math.PI * 20000).components, { ohms: () => '1.00M + 1.00M' })],
+	['filter/Boctor HP pair labels', () => buildBoctorDiagram(designBoctorNotch(2 * Math.PI * 10000, 0.8, 2 * Math.PI * 5000, { lowSide: false }).components, { highPass: true, ohms: () => '1.00M + 1.00M' })],
 	['filter/buildTowThomasDiagram', () => filter.buildTowThomasDiagram(designTowThomasLowPass(2 * Math.PI * 10000, 0.7071).components)],
 	['filter/buildTowThomasHpDiagram', () => filter.buildTowThomasHpDiagram(designTowThomasHighPass(2 * Math.PI * 10000, 1.3066).components)],
 	['filter/buildTowThomasNotchDiagram (low side)', () => filter.buildTowThomasNotchDiagram(designTowThomasNotch(2 * Math.PI * 10000, 1.5, 2 * Math.PI * 21000, { lowSide: true }).components)],

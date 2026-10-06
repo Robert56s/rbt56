@@ -27,6 +27,20 @@
 			transition ratio. They all come from the Specification step of the tool.
 		</p>
 	</section>
+	<section class="panel">
+		<h2>Boctor notch sections</h2>
+		<p class="note">One op-amp, six resistors and two capacitors realize a second-order section with stopband zeros. Inverse Chebyshev and elliptic responses can use it in place of a Tow-Thomas notch. Sections without finite zeros retain the ordinary Tow-Thomas or first-order circuit.</p>
+		<Equation tex={String.raw`H(s)=\dfrac{b_2s^2+b_1s+b_0}{s^2+(\omega_0/Q)s+\omega_0^2},\qquad \omega_z=\sqrt{b_0/b_2}`} />
+		<p class="note">An exact notch needs b1 = 0. Rounded resistor ratios generally leave a nonzero b1; the tool keeps this term in its Bode plot and spec checks.</p>
+		<h3>Low-pass notch</h3>
+		<Equation tex={String.raw`\omega_0^2=\frac1{R_4R_6C_1C_2},\qquad \frac{\omega_0}{Q}=\frac{1/R_2+1/R_4+1/R_6}{C_2}`} />
+		<p class="note">The target zero is above the pole frequency. The search chooses unequal capacitors and balances the ideal resistor ratios for unity DC gain.</p>
+		<h3>High-pass notch</h3>
+		<Equation tex={String.raw`\omega_0^2=\frac{1/R_1+1/R_6-R_5/(R_3R_4)}{R_2C_1C_2},\qquad b_2=1+\frac{R_5}{R_4}`} />
+		<Equation tex={String.raw`\omega_z<\omega_0,\qquad Q<\frac1{1-(\omega_z/\omega_0)^2}`} />
+		<p class="note">The equal-capacitor high-pass form needs gain above one and positive resistors. A section outside this limit needs Tow-Thomas. Gain is included in the complete circuit response.</p>
+		<p class="note">Circuit reference: <a href="https://www.analog.com/media/en/training-seminars/design-handbooks/Basic-Linear-Design/Chapter8.pdf" target="_blank" rel="noreferrer">Analog Devices, Basic Linear Design, figures 8.78 and 8.79</a>.</p>
+	</section>
 
 	<section class="panel">
 		<div class="panel-head">

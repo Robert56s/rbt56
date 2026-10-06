@@ -499,8 +499,9 @@ function opampAndQ({ type, response, side, amaxDb, aminDb, ok }) {
 
 /* ------------------------------------------------- 6. stages to parts */
 
-const TOPOLOGY_NAME = { mfb: 'multiple feedback', sallenKey: 'Sallen-Key', towThomas: 'Tow-Thomas' };
+const TOPOLOGY_NAME = { mfb: 'multiple feedback', sallenKey: 'Sallen-Key', towThomas: 'Tow-Thomas', boctor: 'Boctor' };
 const TOPOLOGY_LINE = {
+	boctor: 'Boctor uses one op-amp for a section with stopband zeros. The high-pass form needs gain above one; accurate resistor ratios set the depth of the notch.',
 	mfb: 'Multiple feedback, the default, returns the output through two paths and inverts the signal, harmless in a filter; its f0 and Q depend least on the op-amp being ideal.',
 	sallenKey: 'Sallen-Key uses the op-amp as a follower, keeps the signal the right way up and is the easiest to read and tune, but is more sensitive to part tolerances at high Q.',
 	towThomas: 'Tow-Thomas spends three op-amps per stage so that f0 and Q are set by separate resistors.'
@@ -529,6 +530,13 @@ const CORNER = {
 const partTex = (name, v) => (/^R/.test(name) ? ohmTex(v) : faradTex(v));
 
 function stageCorner(stage) {
+	if (stage?.topology === 'boctor' || stage?.topology === 'boctorHp') {
+		const f = stage.actual.wn / TWO_PI;
+		const formula = stage.topology === 'boctor'
+			? String.raw`f_0=\frac1{2\pi\sqrt{R_4R_6C_1C_2}}`
+			: String.raw`f_0=\frac1{2\pi}\sqrt{\frac{1/R_1+1/R_6-R_5/(R_3R_4)}{R_2C_1C_2}}`;
+		return { f, tex: `${formula} = ${hzTex(f)}` };
+	}
 	const shape = CORNER[stage?.topology];
 	const c = stage?.components;
 	if (!shape || !c || !shape.parts.every((name) => allPos(c[name]))) return null;
@@ -557,10 +565,10 @@ function stagesToParts({ topology, stock, design, realizedStages, needsTowThomas
 		(ROUNDING[stock] ?? 'fixes the capacitors from the values in stock, solves for the resistors, rounds each to the nearest value in stock') +
 		(pairs ? ' (or to two resistors in series where no single one comes close)' : '');
 	// zeros take the Tow-Thomas notch form, so the menu has to be on it
-	if (needsTowThomas && topology !== 'towThomas') {
-		menu += ' Elliptic and inverse Chebyshev put zeros in the stopband, which only the Tow-Thomas notch form can build, so the page designs nothing until the menu is on Tow-Thomas.';
+	if (needsTowThomas && !['towThomas', 'boctor'].includes(topology)) {
+		menu += ' Elliptic and inverse Chebyshev put zeros in the stopband, which need Tow-Thomas or Boctor notch sections, so the page designs nothing until the menu is on Tow-Thomas or Boctor.';
 	} else if (needsTowThomas || (Array.isArray(realizedStages) && realizedStages.some((s) => s?.topology === 'towThomasNotch'))) {
-		menu += ' With zeros in the response the menu has to be on Tow-Thomas: its notch form is the one wiring here that can place a zero, and those stages use it.';
+		menu += ' With zeros in the response the menu selects Tow-Thomas or Boctor notch sections. Boctor saves op-amps but has realization limits and needs accurate resistor ratios for deep rejection.';
 	}
 
 	const stage = Array.isArray(realizedStages) ? realizedStages[0] : null;
@@ -581,7 +589,7 @@ function stagesToParts({ topology, stock, design, realizedStages, needsTowThomas
 			? `Stage 1's corner from its own rounded parts, with the values in panel 04, next to the ${hzText(asked)} it was asked for; the difference is the cost of rounding:`
 			: "Stage 1's corner from its own rounded parts, with the values in panel 04:";
 	} else {
-		const fallback = CORNER[stage?.topology] ?? CORNER[known];
+		const fallback = CORNER[stage?.topology] ?? CORNER[known] ?? CORNER.mfb;
 		tex = fallback.sym;
 		intro = "A stage's corner from its parts, for the wiring chosen:";
 	}
