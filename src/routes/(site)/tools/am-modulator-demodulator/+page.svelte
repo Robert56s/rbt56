@@ -13,6 +13,7 @@
 	import OpampPicker from '$lib/components/OpampPicker.svelte';
 	import StockPicker from '$lib/components/StockPicker.svelte';
 	import TimePlot from '$lib/components/TimePlot.svelte';
+	import XYPlot from '$lib/components/basics/XYPlot.svelte';
 	import { modulationIndexFromEnvelope, modulationQuality, powerEfficiency } from '$lib/modulation/amMath';
 	import {
 		buildBiasSummerDiagram,
@@ -65,7 +66,7 @@
 	import { DEFAULT_OPAMP, OPAMP_MODELS } from '$lib/spice/opamps';
 	import { DIODES } from '$lib/oscillator/limiter';
 	import { designOscillator } from '$lib/oscillator/topologies';
-	import { fitModel, IDSS_WARNING, JFET_PRESETS, modelFromIdss, modelFromRdsOn, parseMeasurements } from '$lib/modulation/jfetModel';
+	import { estimateSeriesR, fitModel, IDSS_WARNING, JFET_PRESETS, modelFromIdss, modelFromRdsOn, parseFixedVds, parseMeasurements, readOutputCurves } from '$lib/modulation/jfetModel';
 	import { demodSwing, designHalfWaveRectifier, designPrecisionRectifier, rectifiedEnvelopeStats } from '$lib/modulation/rectifier';
 	import { amSignal, envelope as envelopeWave, rectify } from '$lib/modulation/waveform';
 	import { componentOptions, defaultStock, isRestricted, loadStock, saveStock } from '$lib/stock';
@@ -119,13 +120,31 @@
 	// the page opens on a bench case: a low-resistance JFET read point by
 	// point (about 13 to 21 ohm from -0.5 V to -3 V), a 50 kHz carrier from a
 	// Wien bridge on the board, a 4 MHz, 16 V/us op-amp on +/-15 V rails
-	let jfetMode = $state('measured'); // 'idss' | 'rdson' | 'measured'
+	let jfetMode = $state('measured'); // 'idss' | 'rdson' | 'measured' | 'fixedvds'
 	let vp = $state(-4);
 	let idssMa = $state(5);
 	let rdsOn = $state(400);
 	let measurementText = $state(
 		['-0.5  0.2  0.0026  1000', '-1.0  0.2  0.0029  1000', '-1.5  0.2  0.0031  1000', '-2.0  0.2  0.0034  1000', '-2.5  0.2  0.0037  1000', '-3.0  0.2  0.0041  1000'].join(String.fromCharCode(10))
 	);
+	// the course method (experiment 1): the drain held at a fixed V_DS, the
+	// current read on an ammeter; the example rows are a J111 read at 0.2 V
+	// in 0.5 V gate steps
+	let fixedVds = $state(0.2);
+	let seriesR = $state(0);
+	let fixedText = $state(
+		['0  2.6', '-0.5  2.53', '-1  2.46', '-1.5  2.39', '-2  2.32', '-2.5  2.25', '-3  2.16', '-3.5  2.07', '-4  1.95', '-4.5  1.83', '-5  1.68', '-5.5  1.5', '-6  1.24', '-6.5  0.85', '-7  0.19', '-7.5  0'].join(String.fromCharCode(10))
+	);
+	// R_s found from the rows themselves (estimateSeriesR), shown with its fit
+	let rsEstimate = $state(null);
+	// experiment 2 of the course: I_DS against V_DS at three gate voltages
+	// (the same J111, the same bench), rows VGS VDS IDS
+	const EXP2 = [
+		[0, [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6], [0, 5.61, 11.92, 17.8, 23.87, 29.71, 35.4, 41, 46.4, 51.7, 56.6, 60, 59]],
+		[-0.5, [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5], [0, 5.08, 10.05, 12.06, 17.17, 22.03, 26.64, 33, 39, 43.9, 48.9, 53.7, 58, 61.4]],
+		[-1, [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6], [0, 5.09, 7.19, 11.8, 16.88, 20.7, 24.8, 30.06, 36.5, 41.3, 46.4, 51.4, 52.1]]
+	];
+	let exp2Text = $state(EXP2.flatMap(([g, vs, is]) => vs.map((v, k) => `${g}  ${v}  ${is[k]}`)).join(String.fromCharCode(10)));
 	let windowLow = $state(-7.2);
 	let windowHigh = $state(0);
 	let presetNote = $state('');
@@ -161,12 +180,35 @@
 	let fmPreview = $state(1000);
 
 	const idss = $derived(idssMa / 1000);
-	const measuredPoints = $derived(jfetMode === 'measured' ? parseMeasurements(measurementText) : []);
+	// both bench methods end as (VGS, rDS) points and the same fitted line
+	const fitted = $derived(jfetMode === 'measured' || jfetMode === 'fixedvds');
+	const fixedRead = $derived(jfetMode === 'fixedvds' ? parseFixedVds(fixedText, { vds: fixedVds, rs: seriesR }) : { rows: [], dropped: 0 });
+	const measuredPoints = $derived(jfetMode === 'measured' ? parseMeasurements(measurementText) : fixedRead.rows);
 	// one straight line G(VGS), whatever it was built from
+	const outputCurves = $derived(jfetMode === 'fixedvds' ? readOutputCurves(exp2Text, { rs: seriesR }) : []);
+	const CURVE_COLORS = ['var(--blue)', 'var(--green, #2f9e44)', 'var(--amber, #b7791f)', 'var(--red, #c92a2a)', 'var(--textDim)'];
+
+	function estimateRs() {
+		const est = estimateSeriesR(fixedText, { vds: fixedVds, low: windowLow, high: windowHigh });
+		rsEstimate = est ?? { failed: true };
+		if (est) seriesR = Math.round(est.rs * 10) / 10;
+	}
+
+	// the conductance line of experiment 1 drawn as I_DS(V_DS) curves: the
+	// square law below the knee V_GS - V_P, flat above it
+	function modelCurve(vgs, vMax) {
+		const m = jfetModel;
+		if (!m || !(vgs > m.vp)) return null;
+		const knee = vgs - m.vp;
+		const xs = Array.from({ length: 41 }, (_, k) => (vMax * k) / 40);
+		return { xs, ys: xs.map((v) => 1000 * m.beta * (v < knee ? knee * v - (v * v) / 2 : (knee * knee) / 2)) };
+	}
+
 	const jfetModel = $derived.by(() => {
 		if (jfetMode === 'idss') return modelFromIdss(vp, idss);
 		if (jfetMode === 'rdson') return modelFromRdsOn(vp, rdsOn);
-		return fitModel(measuredPoints, { low: windowLow, high: windowHigh });
+		const m = fitModel(measuredPoints, { low: windowLow, high: windowHigh });
+		return m && jfetMode === 'fixedvds' ? { ...m, source: 'fixedvds', vds: fixedVds, rs: seriesR > 0 ? seriesR : 0 } : m;
 	});
 	// the ceiling of n for this line and swing; null when the swing pinches the channel off
 	const depthCeiling = $derived(jfetModel ? conductanceDepth(jfetModel, swingFraction) : null);
@@ -297,11 +339,12 @@
 		if (!jfetDesign) return;
 		download(
 			generateJfetScript({
-				mode: jfetMode,
+				// the course method exports as measured points: its rows are already rDS
+				mode: fitted ? 'measured' : jfetMode,
 				vp: jfetModel.vp,
 				idss: jfetModel.idss,
 				rdsOn: jfetModel.rdsOn,
-				measurements: jfetMode === 'measured' ? measuredPoints.map((pt) => [pt.vgs, pt.rds]) : null,
+				measurements: fitted ? measuredPoints.map((pt) => [pt.vgs, pt.rds]) : null,
 				windowLow,
 				windowHigh,
 				topology,
@@ -567,7 +610,7 @@
 			<div class="panel-head">
 				<span class="num">01</span>
 				<h2>JFET characteristics</h2>
-				<span class="hint">{jfetMode === 'measured' ? 'fitted to measurements' : 'datasheet or measured pair'}</span>
+				<span class="hint">{fitted ? 'fitted to measurements' : 'datasheet or measured pair'}</span>
 			</div>
 			<div class="grid">
 				<div class="field">
@@ -576,6 +619,7 @@
 						<option value="idss">V_P and I_DSS</option>
 						<option value="rdson">V_P and r_DS(on)</option>
 						<option value="measured">Measured points (fit a line)</option>
+						<option value="fixedvds">Measured I_DS at a fixed V_DS (course method, fit a line)</option>
 					</select>
 				</div>
 				<div class="field" role="group" aria-labelledby="presetLabel">
@@ -586,7 +630,7 @@
 						{/each}
 					</div>
 				</div>
-				{#if jfetMode !== 'measured'}
+				{#if !fitted}
 					<div class="field">
 						<label for="vp">VP - pinch-off voltage (V)</label>
 						<input id="vp" type="number" step="0.1" max="-0.01" bind:value={vp} />
@@ -604,7 +648,7 @@
 					</div>
 				{/if}
 				<div class="field">
-					<label for="swing">Swing fraction {jfetMode === 'measured' ? '(of the window half-width)' : '(of the |VP|/2 range)'}</label>
+					<label for="swing">Swing fraction {fitted ? '(of the window half-width)' : '(of the |VP|/2 range)'}</label>
 					<input id="swing" type="number" step="0.05" min="0.05" max="1" bind:value={swingFraction} />
 				</div>
 				<div class="field">
@@ -619,13 +663,29 @@
 				<p class="note">{presetNote}</p>
 			{/if}
 
-			{#if jfetMode === 'measured'}
+			{#if fitted}
 				<div class="measure">
 					<div class="field grow">
-						<label for="meas">Measured rows: <code>VGS rDS</code> (V, Ω) or <code>VGS Vin VD Rseries</code> (V, V, V, Ω)</label>
-						<textarea id="meas" rows="6" bind:value={measurementText}></textarea>
+						{#if jfetMode === 'measured'}
+							<label for="meas">Measured rows: <code>VGS rDS</code> (V, Ω) or <code>VGS Vin VD Rseries</code> (V, V, V, Ω)</label>
+							<textarea id="meas" rows="6" bind:value={measurementText}></textarea>
+						{:else}
+							<label for="meas">Measured rows: <code>VGS IDS</code> (V, mA), the drain held at V_DS</label>
+							<textarea id="meas" rows="6" bind:value={fixedText}></textarea>
+						{/if}
 					</div>
 					<div class="grid narrow">
+						{#if jfetMode === 'fixedvds'}
+							<div class="field">
+								<label for="fvds">V_DS held on the drain (V)</label>
+								<input id="fvds" type="number" step="0.05" min="0.01" bind:value={fixedVds} />
+							</div>
+							<div class="field">
+								<label for="frs">R_s in series with the channel (Ω)</label>
+								<input id="frs" type="number" step="1" min="0" bind:value={seriesR} oninput={() => (rsEstimate = null)} />
+								<button type="button" class="small" onclick={estimateRs}>Estimate from the rows</button>
+							</div>
+						{/if}
 						<div class="field">
 							<label for="wlo">Fit window, low VGS (V)</label>
 							<input id="wlo" type="number" step="0.1" bind:value={windowLow} />
@@ -636,13 +696,38 @@
 						</div>
 					</div>
 				</div>
-				<p class="note">
-					Four columns describe the divider measurement: V_in through R_series into the drain,
-					V_D read at the drain, source grounded, gate at V_GS; the tool computes r_DS = R_series
-					V_D / (V_in - V_D). Keep V_D small (a few tenths of a volt at most) so the part stays in
-					the ohmic region. The window picks the straight stretch the design is allowed to use:
-					its middle becomes the bias point, its half-width the maximum swing.
-				</p>
+				{#if jfetMode === 'measured'}
+					<p class="note">
+						Four columns describe the divider measurement: V_in through R_series into the drain,
+						V_D read at the drain, source grounded, gate at V_GS; the tool computes r_DS = R_series
+						V_D / (V_in - V_D). Keep V_D small (a few tenths of a volt at most) so the part stays in
+						the ohmic region. The window picks the straight stretch the design is allowed to use:
+						its middle becomes the bias point, its half-width the maximum swing.
+					</p>
+				{:else}
+					<p class="note">
+						Experiment 1 of the course: the drain held at a fixed V_DS (0.2 V), the source grounded,
+						I_DS read on an ammeter at each gate voltage; the tool computes r_DS = V_DS / I_DS - R_s.
+						R_s is what sits in series with the channel and is counted in V_DS when V_DS is set on
+						the supply: the ammeter's shunt, the output resistance of the source (50 Ω for a function
+						generator), the wires. Leave it at 0 when V_DS is read with a voltmeter at the drain
+						itself. A curve that flattens near V_GS = 0 is the sign of an R_s left in. The window
+						picks the straight stretch the design is allowed to use.
+					</p>
+					{#if rsEstimate?.failed}
+						<p class="flag bad">No estimate: the window holds fewer than three rows with a current, or no series resistance makes the conductance rise with V_GS.</p>
+					{:else if rsEstimate}
+						<p class="note">
+							R_s estimated at {formatOhms(rsEstimate.rs)}: with it, a straight channel and the series
+							resistance give back the currents read within {(100 * rsEstimate.err).toFixed(1)} % rms over
+							the window. The estimate assumes the channel is straight there, so it moves with the window;
+							a voltmeter on the drain settles it.
+						</p>
+					{/if}
+					{#if fixedRead.dropped > 0}
+						<p class="flag bad">{fixedRead.dropped} row{fixedRead.dropped > 1 ? 's give' : ' gives'} r_DS at or below zero once R_s is taken off: R_s is larger than V_DS / I_DS there. Lower R_s.</p>
+					{/if}
+				{/if}
 				{#if measuredPoints.length > 0}
 					<ConductancePlot points={measuredPoints} fit={jfetModel?.fit ?? null} vp={jfetModel?.vp ?? null} />
 				{/if}
@@ -668,6 +753,64 @@
 				{:else}
 					<p class="flag bad">No readable rows yet. One measurement per line, numbers separated by spaces or commas.</p>
 				{/if}
+				{#if jfetMode === 'fixedvds'}
+					<details class="exp2">
+						<summary>Experiment 2 (optional): I_DS against V_DS at a fixed V_GS</summary>
+						<div class="field grow">
+							<label for="exp2">Rows: <code>VGS VDS IDS</code> (V, V, mA), V_DS as set on the bench; R_s above comes off it</label>
+							<textarea id="exp2" rows="6" bind:value={exp2Text}></textarea>
+						</div>
+						{#if outputCurves.length}
+							{@const vTop = Math.max(...outputCurves.map((c) => c.vMax))}
+							{@const zero = outputCurves.find((c) => c.vgs === 0)}
+							<XYPlot
+								xs={[0, Math.ceil(vTop * 2) / 2]}
+								xLabel="V_DS at the drain, V"
+								yLabel="I_DS, mA"
+								yMin={0}
+								height={230}
+								series={outputCurves.flatMap((c, k) => {
+									const color = CURVE_COLORS[k % CURVE_COLORS.length];
+									const model = modelCurve(c.vgs, vTop);
+									return [
+										{ xs: c.points.map((pt) => pt.v), ys: c.points.map((pt) => 1000 * pt.ids), color, endLabel: `V_GS ${c.vgs} V` },
+										...(model ? [{ xs: model.xs, ys: model.ys, color, dash: [5, 4], width: 1.2 }] : [])
+									];
+								})}
+								markers={[{ x: 0.8, label: 'course: ohmic to 0.8 V' }]}
+							/>
+							<p class="note">Solid: the rows, plotted against the drain voltage the channel really saw (V_DS minus R_s I_DS). Dashed: the line of experiment 1 turned into the square-law curves, flat past the knee V_GS - V_P.</p>
+							<div class="tableScroll">
+							<table>
+								<thead>
+									<tr><th>V_GS</th><th>r_DS at the first step</th><th>Ohmic up to (within 10 %)</th><th>Highest V_DS at the drain</th><th>Highest I_DS</th></tr>
+								</thead>
+								<tbody>
+									{#each outputCurves as c (c.vgs)}
+										<tr><td>{formatVolts(c.vgs)}</td><td>{formatOhms(c.r0)}</td><td>{formatVolts(c.ohmicTo)}</td><td>{formatVolts(c.vMax)}</td><td>{(1000 * c.iMax).toFixed(1)} mA</td></tr>
+									{/each}
+								</tbody>
+							</table>
+							</div>
+							{#if zero && jfetModel && zero.vMax < Math.abs(jfetModel.vp)}
+								<p class="flag warn">
+									At V_GS = 0 the drain reached only {formatVolts(zero.vMax)}, below |V_P| = {formatVolts(Math.abs(jfetModel.vp))}:
+									the channel never pinched off, so the flat top at {(1000 * zero.iMax).toFixed(1)} mA is not I_DSS. The
+									series resistance and the heating of the part bend the curve instead.
+								</p>
+							{:else if zero}
+								<p class="note">At V_GS = 0 the drain passed |V_P|, so the flat top, {(1000 * zero.iMax).toFixed(1)} mA, reads I_DSS.</p>
+							{/if}
+							<p class="note">
+								The ohmic range is where the gain cell may swing the drain: past it the channel stops acting as
+								a resistor and the envelope distorts. Sweeping to the plateau puts V_DS x I_DS into the part,
+								about 0.36 W at 6 V and 60 mA, more than a TO-92 J111 dissipates: keep that part of the sweep short.
+							</p>
+						{:else}
+							<p class="flag bad">No readable rows: three numbers per line, V_GS V_DS I_DS.</p>
+						{/if}
+					</details>
+				{/if}
 			{/if}
 
 			<p class="note">
@@ -684,7 +827,7 @@
 						Check the carrier frequency and the op-amp figures below: all must be positive.
 					{/if}
 				</p>
-			{:else if !jfetModel && jfetMode !== 'measured'}
+			{:else if !jfetModel && !fitted}
 				<p class="flag bad">VP must be negative and {jfetMode === 'idss' ? 'IDSS' : 'r_DS(on)'} positive.</p>
 			{/if}
 			<MathPanel blocks={explainJfetModel(jfetModel)} summary="Show the math for the characterization" />
@@ -1854,5 +1997,19 @@
 
 	.formula-link {
 		margin-top: 0.6rem;
+	}
+	/* block, not grid: a details element lays its content out in an inner
+	   slot, which a grid would size to the widest child */
+	.exp2 {
+		margin-top: 1rem;
+	}
+
+	.exp2 > :global(* + *) {
+		margin-top: 0.6rem;
+	}
+
+	.exp2 summary {
+		cursor: pointer;
+		font-weight: 500;
 	}
 </style>

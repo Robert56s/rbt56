@@ -784,6 +784,75 @@ export function buildJfetTestDiagram() {
 	return { svg: parts.join(''), viewBox: `0 50 ${width} ${bottom - 50}` };
 }
 
+/** An ammeter lying on a horizontal wire: port 1 on the left, port 2 on the right. */
+function ammeter(cx, cy) {
+	const r = 14;
+	const ports = { 1: { x: cx - r, y: cy }, 2: { x: cx + r, y: cy } };
+	const inner = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="currentColor" stroke-width="1.6" /><text x="${cx}" y="${cy + 4.5}" text-anchor="middle" class="glyph">A</text>`;
+	return { svg: `<g data-symbol="ammeter" data-ports="${cx - r},${cy};${cx + r},${cy}" data-bbox="${cx - r},${cy - r},${cx + r},${cy + r}">${inner}</g>`, ports };
+}
+
+/**
+ * The course's bench setup for the same characterization (experiment 1):
+ * a fixed V_DS on the drain through an ammeter, the source grounded, the
+ * gate at an adjustable negative V_GS. The voltmeter on the drain reads
+ * the V_DS the channel really sees, past the ammeter and the source's own
+ * resistance.
+ */
+export function buildJfetFixedVdsDiagram() {
+	const railY = 90;
+	const D = { x: 300, y: railY };
+	const jfet = placeAt('njfet_transistor_horz', 'drain', { x: D.x, y: railY + 60 });
+	const am = ammeter(D.x - 70, railY);
+	const vin = { x: MARGIN, y: railY };
+	const vd = voltmeter(D.x + 90, railY + 60);
+	const vdCorner = { x: vd.ports[1].x, y: railY };
+	const vdGnd = placeAt('ground_down', '1', { x: vd.ports[2].x, y: vd.ports[2].y + 16 });
+	const sGnd = placeAt('ground_down', '1', { x: jfet.ports.source.x, y: jfet.ports.source.y + 20 });
+	const G = { x: jfet.ports.gate.x - 110, y: jfet.ports.gate.y };
+	const vg = voltmeter(G.x, G.y + 50);
+	const vgGnd = placeAt('ground_down', '1', { x: vg.ports[2].x, y: vg.ports[2].y + 16 });
+	const supply = { x: MARGIN + 30, y: G.y };
+
+	const net = createNet();
+	net.wire(vin, am.ports[1]);
+	net.wire(am.ports[2], D);
+	net.wire(D, jfet.ports.drain);
+	net.wire(D, vdCorner);
+	net.wire(vdCorner, vd.ports[1]);
+	net.wire(vd.ports[2], vdGnd.ports['1']);
+	net.wire(jfet.ports.source, sGnd.ports['1']);
+	net.wire(supply, G);
+	net.wire(G, jfet.ports.gate);
+	net.wire(G, vg.ports[1]);
+	net.wire(vg.ports[2], vgGnd.ports['1']);
+
+	const meterMid = (m) => (m.ports[1].y + m.ports[2].y) / 2;
+	const parts = [
+		am.svg,
+		jfet.svg,
+		vd.svg,
+		vdGnd.svg,
+		sGnd.svg,
+		vg.svg,
+		vgGnd.svg,
+		net.svg(),
+		net.dots(portPoints(am, jfet, vd, vdGnd, sGnd, vg, vgGnd)),
+		label('V_DS fixed, 0.2 V', vin.x, railY - 12, { anchor: 'start' }),
+		label('I_DS', am.ports[1].x + 14, railY - 20, { anchor: 'middle' }),
+		label('V_DS at the drain', vd.ports[1].x + 22, meterMid(vd) + 4, { anchor: 'start' }),
+		label('V_GS', vg.ports[1].x + 22, meterMid(vg) + 4, { anchor: 'start' }),
+		label('adjustable, 0 V to V_P', supply.x, supply.y - 12, { anchor: 'start' }),
+		label('D', jfet.ports.drain.x + 8, jfet.ports.drain.y - 4, { anchor: 'start' }),
+		label('S', jfet.ports.source.x + 8, jfet.ports.source.y + 4, { anchor: 'start' }),
+		label('G', jfet.ports.gate.x - 8, jfet.ports.gate.y - 6, { anchor: 'end' })
+	];
+
+	const width = vd.ports[1].x + 150;
+	const bottom = vgGnd.ports['1'].y + 30;
+	return { svg: parts.join(''), viewBox: `0 50 ${width} ${bottom - 50}` };
+}
+
 /**
  * JFET modulator, inverting cell: the channel is the input resistor. A
  * follower copies the (attenuated) carrier onto the drain, the source sits

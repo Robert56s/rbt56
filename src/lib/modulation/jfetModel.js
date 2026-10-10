@@ -72,6 +72,154 @@ export function parseMeasurements(text) {
 }
 
 /**
+ * Reads the rows of the other bench method, the one the course slides
+ * describe (experiment 1): the drain held at a fixed V_DS, the drain
+ * current read on an ammeter at each gate voltage. Two numbers per row:
+ * VGS (V) and IDS (mA). Each row becomes the same point as a divider row:
+ *   rDS = V_DS / IDS - rs
+ * where rs is whatever sits in series with the channel and is counted in
+ * V_DS (the output resistance of the source, the ammeter's shunt, the
+ * wires); it is 0 when V_DS is read at the drain itself. A row whose rDS
+ * comes out at or below zero is dropped and counted in `dropped`.
+ */
+export function parseFixedVds(text, { vds = 0.2, rs = 0 } = {}) {
+	const rows = [];
+	let dropped = 0;
+	if (!(vds > 0)) return { rows, dropped };
+	for (const raw of String(text).split(/\r?\n/)) {
+		const nums = raw
+			.split(/[\s,;]+/)
+			.filter(Boolean)
+			.map(Number);
+		if (nums.length < 2 || nums.some((v) => !Number.isFinite(v))) continue;
+		const [vgs, idsMa] = nums;
+		if (!(idsMa > 0)) continue; // channel closed: no conductance to fit
+		const rds = vds / (idsMa / 1000) - (rs > 0 ? rs : 0);
+		if (!(rds > 0)) {
+			dropped++;
+			continue;
+		}
+		rows.push({ vgs, rds, g: 1 / rds, ids: idsMa / 1000 });
+	}
+	return { rows: rows.sort((a, b) => a.vgs - b.vgs), dropped };
+}
+
+/** Least-squares line y = a x + b; null with fewer than two distinct x. */
+function line(xs, ys) {
+	const n = xs.length;
+	if (n < 2) return null;
+	let sx = 0;
+	let sy = 0;
+	let sxx = 0;
+	let sxy = 0;
+	for (let i = 0; i < n; i++) {
+		sx += xs[i];
+		sy += ys[i];
+		sxx += xs[i] * xs[i];
+		sxy += xs[i] * ys[i];
+	}
+	const denom = n * sxx - sx * sx;
+	if (Math.abs(denom) < 1e-18) return null;
+	const a = (n * sxy - sx * sy) / denom;
+	return { a, b: (sy - a * sx) / n };
+}
+
+/**
+ * The series resistance of the course method, estimated from its own rows:
+ * for each trial R_s the rows are corrected, a line G = a VGS + b is fitted
+ * inside the window, and the currents that line and R_s predict,
+ * V_DS / (R_s + 1/G), are compared with the currents read. The R_s with the
+ * smallest rms relative gap wins. It assumes what the design assumes, a
+ * channel that is a straight line over the window, so it is a starting
+ * value to check with a voltmeter on the drain, not a measurement.
+ * Returns { rs, err } (err as a fraction), or null with fewer than three
+ * usable rows in the window.
+ */
+export function estimateSeriesR(text, { vds = 0.2, low, high } = {}) {
+	const lo = Number.isFinite(low) ? low : -Infinity;
+	const hi = Number.isFinite(high) ? high : Infinity;
+	const used = parseFixedVds(text, { vds, rs: 0 }).rows.filter((r) => r.vgs >= lo && r.vgs <= hi);
+	if (used.length < 3) return null;
+	const rMax = Math.min(...used.map((r) => r.rds)) * 0.98;
+	const gap = (rs) => {
+		const fit = line(
+			used.map((r) => r.vgs),
+			used.map((r) => 1 / (r.rds - rs))
+		);
+		if (!fit || !(fit.a > 0)) return Infinity;
+		let s = 0;
+		for (const r of used) {
+			const g = fit.a * r.vgs + fit.b;
+			const ipred = g > 0 ? vds / (rs + 1 / g) : 0;
+			s += ((ipred - r.ids) / r.ids) ** 2;
+		}
+		return Math.sqrt(s / used.length);
+	};
+	let best = { rs: 0, err: gap(0) };
+	const scan = (from, to, steps) => {
+		for (let k = 0; k <= steps; k++) {
+			const rs = from + ((to - from) * k) / steps;
+			const err = gap(rs);
+			if (err < best.err) best = { rs, err };
+		}
+	};
+	scan(0, rMax, 400);
+	const step = rMax / 400;
+	scan(Math.max(0, best.rs - step), Math.min(rMax, best.rs + step), 100);
+	return Number.isFinite(best.err) ? best : null;
+}
+
+/**
+ * Experiment 2 of the course: I_DS against V_DS with the gate held. Rows:
+ * VGS VDS IDS (V, V, mA), any number of gate voltages. The same series
+ * resistance as experiment 1 comes off the drain voltage, V = V_DS - R_s
+ * I_DS, since the bench is the same. For each gate voltage:
+ *   r0        the channel at the first step, V / I there
+ *   ohmicTo   the largest drain voltage where the current is still within
+ *             `tolerance` of the straight line through the origin and the
+ *             first step (the end of the ohmic range)
+ *   vMax      the largest drain voltage the channel really saw
+ *   iMax      the largest current read (at V_GS = 0, the I_DSS reading if
+ *             vMax reached |V_P|)
+ */
+export function readOutputCurves(text, { rs = 0, tolerance = 0.1 } = {}) {
+	const byGate = new Map();
+	for (const raw of String(text).split(/\r?\n/)) {
+		const nums = raw
+			.split(/[\s,;]+/)
+			.filter(Boolean)
+			.map(Number);
+		if (nums.length < 3 || nums.some((v) => !Number.isFinite(v))) continue;
+		const [vgs, vds, idsMa] = nums;
+		const ids = idsMa / 1000;
+		if (!(vds >= 0) || !(ids >= 0)) continue;
+		const v = vds - (rs > 0 ? rs : 0) * ids;
+		if (!byGate.has(vgs)) byGate.set(vgs, []);
+		byGate.get(vgs).push({ vds, v, ids });
+	}
+	const curves = [];
+	for (const [vgs, pts] of byGate) {
+		pts.sort((a, b) => a.vds - b.vds);
+		const first = pts.find((p) => p.v > 0 && p.ids > 0);
+		if (!first) continue;
+		const r0 = first.v / first.ids;
+		// the range ends where two points in a row fall below the line, so
+		// one misread point does not cut it short
+		let ohmicTo = first.v;
+		let misses = 0;
+		for (const p of pts) {
+			if (p.v <= 0) continue;
+			if (p.ids >= (1 - tolerance) * (p.v / r0)) {
+				ohmicTo = Math.max(ohmicTo, p.v);
+				misses = 0;
+			} else if (++misses >= 2) break;
+		}
+		curves.push({ vgs, points: pts, r0, ohmicTo, vMax: Math.max(...pts.map((p) => p.v)), iMax: Math.max(...pts.map((p) => p.ids)) });
+	}
+	return curves.sort((a, b) => b.vgs - a.vgs);
+}
+
+/**
  * Least-squares line G = a VGS + b over the points whose VGS lies inside
  * [low, high]. Returns null with fewer than two points there. Along with
  * the model comes what a scope of the fit shows: R^2, and the largest
