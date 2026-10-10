@@ -72,9 +72,8 @@ export function parseMeasurements(text) {
 }
 
 /**
- * Reads the rows of the other bench method, the one the course slides
- * describe (experiment 1): the drain held at a fixed V_DS, the drain
- * current read on an ammeter at each gate voltage. Two numbers per row:
+ * Reads the rows of the other bench method: the drain held at a fixed
+ * V_DS, the drain current read on an ammeter at each gate voltage. Two numbers per row:
  * VGS (V) and IDS (mA). Each row becomes the same point as a divider row:
  *   rDS = V_DS / IDS - rs
  * where rs is whatever sits in series with the channel and is counted in
@@ -125,7 +124,7 @@ function line(xs, ys) {
 }
 
 /**
- * The series resistance of the course method, estimated from its own rows:
+ * The series resistance of the fixed-V_DS method, estimated from its rows:
  * for each trial R_s the rows are corrected, a line G = a VGS + b is fitted
  * inside the window, and the currents that line and R_s predict,
  * V_DS / (R_s + 1/G), are compared with the currents read. The R_s with the
@@ -170,9 +169,9 @@ export function estimateSeriesR(text, { vds = 0.2, low, high } = {}) {
 }
 
 /**
- * Experiment 2 of the course: I_DS against V_DS with the gate held. Rows:
+ * The output curves: I_DS against V_DS with the gate held. Rows:
  * VGS VDS IDS (V, V, mA), any number of gate voltages. The same series
- * resistance as experiment 1 comes off the drain voltage, V = V_DS - R_s
+ * resistance as in the fixed-V_DS rows comes off the drain voltage, V = V_DS - R_s
  * I_DS, since the bench is the same. For each gate voltage:
  *   r0        the channel at the first step, V / I there
  *   ohmicTo   the largest drain voltage where the current is still within

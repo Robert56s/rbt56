@@ -132,20 +132,20 @@ export function explainJfetSourcing() {
 		]),
 		eq('r_{DS} = R_{series}\\,\\dfrac{V_D}{V_{in} - V_D}, \\qquad G = \\dfrac{1}{r_{DS}} = a\\,V_{GS} + b \\ \\Rightarrow\\ V_P = -\\dfrac{b}{a}, \\quad \\beta = a'),
 		p('The fitted V_P lands a little closer to 0 V than a V_GS(off) reading, which is taken at a tiny current, out in that gradual tail. The design runs on the line, so the fitted value is the one to keep.'),
-		head('4. The course method: a fixed V_DS and an ammeter'),
-		p('The course slides (course 3, AM modulation, the two JFET experiments) characterize the part the other way round. Experiment 1 holds the drain at a fixed small voltage and reads the drain current while the gate voltage steps. Experiment 2 holds the gate and sweeps the drain. The mode Measured I_DS at a fixed V_DS reads experiment 1.'),
-		figure(buildJfetFixedVdsDiagram(), 'Course method: a fixed V_DS through an ammeter into the drain, source grounded, gate at an adjustable V_GS, a voltmeter on the drain and one on the gate'),
+		head('4. Another way: a fixed V_DS and an ammeter'),
+		p('The same line can be measured the other way round: hold the drain at a fixed small voltage and read the drain current while the gate voltage steps. The mode Measured I_DS at a fixed V_DS reads these rows. Holding the gate and sweeping the drain instead gives the output curves, read in the optional section of the same mode.'),
+		figure(buildJfetFixedVdsDiagram(), 'Fixed V_DS method: a fixed V_DS through an ammeter into the drain, source grounded, gate at an adjustable V_GS, a voltmeter on the drain and one on the gate'),
 		steps([
-			'Ground the source. Hold the drain at a small fixed voltage, 0.2 V in the course data, with an ammeter in series to read I_DS.',
+			'Ground the source. Hold the drain at a small fixed voltage, 0.2 V for instance, with an ammeter in series to read I_DS.',
 			'Step the gate from 0 V towards V_P, for instance by 0.5 V, and note I_DS at each step, until the current is almost zero.',
 			'Choose Measured I_DS at a fixed V_DS above, enter V_DS and one row per step: V_GS I_DS, with I_DS in milliamps.'
 		]),
-		p('Both methods measure the same thing, the channel conductance at a small drain voltage. Dividing the current by V_DS gives it, so the straight line the course draws, I_DS against V_GS, is the conductance line scaled by V_DS: its slope is beta V_DS and it reaches zero at V_P.'),
+		p('Both methods measure the same thing, the channel conductance at a small drain voltage. Dividing the current by V_DS gives it, so the straight line of I_DS against V_GS is the conductance line scaled by V_DS: its slope is beta V_DS and it reaches zero at V_P.'),
 		eq('G = \\dfrac{I_{DS}}{V_{DS}}, \\qquad I_{DS} = V_{DS}\\,\\beta\\,(V_{GS} - V_P) \\ \\Rightarrow\\ \\text{slope} = \\beta\\,V_{DS}, \\quad I_{DS} = 0 \\text{ at } V_{GS} = V_P'),
 		p('The difference is in what the voltage reading includes. A V_DS set on a supply also drops across everything in series with the channel: the ammeter\'s shunt, the output resistance of the source (50 Ω on a function generator), the wires. Near V_GS = 0 the channel itself is only a few tens of ohms, so that resistance R_s takes a large share and flattens the top of the curve. Reading V_DS with a voltmeter at the drain removes it; otherwise the field R_s subtracts it:'),
 		eq('r_{DS} = \\dfrac{V_{DS}}{I_{DS}} - R_s'),
 		table(
-			['Aspect', 'Divider (Measured points)', 'Fixed V_DS (course)'],
+			['Aspect', 'Divider (Measured points)', 'Fixed V_DS'],
 			[
 				['What is set', 'V_in at the top of R_series', 'V_DS on the drain'],
 				['What is read', 'V_D, a voltmeter only', 'I_DS, an ammeter in series'],
@@ -154,7 +154,7 @@ export function explainJfetSourcing() {
 				['Near V_P', 'V_D climbs to V_in, the channel stays ohmic', 'I_DS falls to the ammeter\'s last digits']
 			]
 		),
-		p('Experiment 2 answers the other question of the design: how large V_DS may get before the channel stops acting as a resistor. On the I_DS against V_DS curves the straight start is the ohmic region, the course reads it as V_D up to about 0.8 V, and the flat top at V_GS = 0 is I_DSS. Sweeping V_DS to the plateau puts V_DS x I_DS into the part, about 0.36 W for 60 mA at 6 V, already past what a TO-92 J111 dissipates at room temperature: keep that sweep short.'),
+		p('The output curves answer the other question of the design: how large V_DS may get before the channel stops acting as a resistor. On the I_DS against V_DS curves the straight start is the ohmic region and, once the drain passes |V_P|, the flat top at V_GS = 0 is I_DSS. Sweeping V_DS to the plateau puts V_DS x I_DS into the part, about 0.36 W for 60 mA at 6 V, already past what a TO-92 J111 dissipates at room temperature: keep that sweep short.'),
 		head('Quick readings without the fit'),
 		steps([
 			'V_P, any JFET: gate to ground, 1 MΩ from source to ground, drain at +15 V. The source rises until the channel is almost closed, so a 10 MΩ voltmeter on the source reads about |V_P| (V_GS(off) at a few microamps, like a datasheet).',
@@ -200,7 +200,7 @@ export function explainJfetModel(model) {
 		...common,
 		fixed
 			? p(
-					`From the course method: each row is the drain current at one gate voltage with the drain held at V_DS = ${n3(model.vds)} V, so the channel resistance is V_DS / I_DS${model.rs > 0 ? `, less the ${formatOhms(model.rs)} entered as R_s for what sits in series with the channel` : ''}. Turned into conductances, the ${f.count} points inside the chosen window (${n2(f.low)} V to ${n2(f.high)} V) are fitted with a least-squares line:`
+					`From the fixed V_DS method: each row is the drain current at one gate voltage with the drain held at V_DS = ${n3(model.vds)} V, so the channel resistance is V_DS / I_DS${model.rs > 0 ? `, less the ${formatOhms(model.rs)} entered as R_s for what sits in series with the channel` : ''}. Turned into conductances, the ${f.count} points inside the chosen window (${n2(f.low)} V to ${n2(f.high)} V) are fitted with a least-squares line:`
 				)
 			: p(
 					`From measurements: each row gives the channel resistance at one gate voltage, either read directly or from a divider (V_in through R_series into the drain, V_D at the drain, source grounded, so r_DS = R_series V_D / (V_in - V_D)). Turned into conductances, the ${f.count} points inside the chosen window (${n2(f.low)} V to ${n2(f.high)} V) are fitted with a least-squares line:`

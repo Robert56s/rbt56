@@ -793,7 +793,7 @@ function ammeter(cx, cy) {
 }
 
 /**
- * The course's bench setup for the same characterization (experiment 1):
+ * The other bench setup for the same characterization:
  * a fixed V_DS on the drain through an ammeter, the source grounded, the
  * gate at an adjustable negative V_GS. The voltmeter on the drain reads
  * the V_DS the channel really sees, past the ammeter and the source's own

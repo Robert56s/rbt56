@@ -127,24 +127,24 @@
 	let measurementText = $state(
 		['-0.5  0.2  0.0026  1000', '-1.0  0.2  0.0029  1000', '-1.5  0.2  0.0031  1000', '-2.0  0.2  0.0034  1000', '-2.5  0.2  0.0037  1000', '-3.0  0.2  0.0041  1000'].join(String.fromCharCode(10))
 	);
-	// the course method (experiment 1): the drain held at a fixed V_DS, the
-	// current read on an ammeter; the example rows are a J111 read at 0.2 V
-	// in 0.5 V gate steps
+	// the fixed-V_DS method: the drain held at a fixed V_DS, the current
+	// read on an ammeter; the example rows are a J111 read at 0.2 V in 0.5 V
+	// gate steps, padded so the columns line up
 	let fixedVds = $state(0.2);
 	let seriesR = $state(0);
 	let fixedText = $state(
-		['0  2.6', '-0.5  2.53', '-1  2.46', '-1.5  2.39', '-2  2.32', '-2.5  2.25', '-3  2.16', '-3.5  2.07', '-4  1.95', '-4.5  1.83', '-5  1.68', '-5.5  1.5', '-6  1.24', '-6.5  0.85', '-7  0.19', '-7.5  0'].join(String.fromCharCode(10))
+		[' 0.0   2.60', '-0.5   2.53', '-1.0   2.46', '-1.5   2.39', '-2.0   2.32', '-2.5   2.25', '-3.0   2.16', '-3.5   2.07', '-4.0   1.95', '-4.5   1.83', '-5.0   1.68', '-5.5   1.50', '-6.0   1.24', '-6.5   0.85', '-7.0   0.19', '-7.5   0.00'].join(String.fromCharCode(10))
 	);
 	// R_s found from the rows themselves (estimateSeriesR), shown with its fit
 	let rsEstimate = $state(null);
-	// experiment 2 of the course: I_DS against V_DS at three gate voltages
-	// (the same J111, the same bench), rows VGS VDS IDS
+	// the output curves: I_DS against V_DS at three gate voltages (the same
+	// J111, the same bench), rows VGS VDS IDS
 	const EXP2 = [
 		[0, [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6], [0, 5.61, 11.92, 17.8, 23.87, 29.71, 35.4, 41, 46.4, 51.7, 56.6, 60, 59]],
 		[-0.5, [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5], [0, 5.08, 10.05, 12.06, 17.17, 22.03, 26.64, 33, 39, 43.9, 48.9, 53.7, 58, 61.4]],
 		[-1, [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6], [0, 5.09, 7.19, 11.8, 16.88, 20.7, 24.8, 30.06, 36.5, 41.3, 46.4, 51.4, 52.1]]
 	];
-	let exp2Text = $state(EXP2.flatMap(([g, vs, is]) => vs.map((v, k) => `${g}  ${v}  ${is[k]}`)).join(String.fromCharCode(10)));
+	let exp2Text = $state(EXP2.flatMap(([g, vs, is]) => vs.map((v, k) => `${g.toFixed(1).padStart(4)}  ${v.toFixed(1).padStart(4)}  ${is[k].toFixed(2).padStart(5)}`)).join(String.fromCharCode(10)));
 	let windowLow = $state(-7.2);
 	let windowHigh = $state(0);
 	let presetNote = $state('');
@@ -194,7 +194,7 @@
 		if (est) seriesR = Math.round(est.rs * 10) / 10;
 	}
 
-	// the conductance line of experiment 1 drawn as I_DS(V_DS) curves: the
+	// the fitted conductance line drawn as I_DS(V_DS) curves: the
 	// square law below the knee V_GS - V_P, flat above it
 	function modelCurve(vgs, vMax) {
 		const m = jfetModel;
@@ -339,7 +339,7 @@
 		if (!jfetDesign) return;
 		download(
 			generateJfetScript({
-				// the course method exports as measured points: its rows are already rDS
+				// the fixed-V_DS rows export as measured points: they are already rDS
 				mode: fitted ? 'measured' : jfetMode,
 				vp: jfetModel.vp,
 				idss: jfetModel.idss,
@@ -619,7 +619,7 @@
 						<option value="idss">V_P and I_DSS</option>
 						<option value="rdson">V_P and r_DS(on)</option>
 						<option value="measured">Measured points (fit a line)</option>
-						<option value="fixedvds">Measured I_DS at a fixed V_DS (course method, fit a line)</option>
+						<option value="fixedvds">Measured I_DS at a fixed V_DS (fit a line)</option>
 					</select>
 				</div>
 				<div class="field" role="group" aria-labelledby="presetLabel">
@@ -683,7 +683,7 @@
 							<div class="field">
 								<label for="frs">R_s in series with the channel (Ω)</label>
 								<input id="frs" type="number" step="1" min="0" bind:value={seriesR} oninput={() => (rsEstimate = null)} />
-								<button type="button" class="small" onclick={estimateRs}>Estimate from the rows</button>
+								<button type="button" class="small estimate" onclick={estimateRs}>Estimate from the rows</button>
 							</div>
 						{/if}
 						<div class="field">
@@ -706,7 +706,7 @@
 					</p>
 				{:else}
 					<p class="note">
-						Experiment 1 of the course: the drain held at a fixed V_DS (0.2 V), the source grounded,
+						The drain held at a fixed V_DS (0.2 V for instance), the source grounded,
 						I_DS read on an ammeter at each gate voltage; the tool computes r_DS = V_DS / I_DS - R_s.
 						R_s is what sits in series with the channel and is counted in V_DS when V_DS is set on
 						the supply: the ammeter's shunt, the output resistance of the source (50 Ω for a function
@@ -755,7 +755,7 @@
 				{/if}
 				{#if jfetMode === 'fixedvds'}
 					<details class="exp2">
-						<summary>Experiment 2 (optional): I_DS against V_DS at a fixed V_GS</summary>
+						<summary>Output curves (optional): I_DS against V_DS at a fixed V_GS</summary>
 						<div class="field grow">
 							<label for="exp2">Rows: <code>VGS VDS IDS</code> (V, V, mA), V_DS as set on the bench; R_s above comes off it</label>
 							<textarea id="exp2" rows="6" bind:value={exp2Text}></textarea>
@@ -777,9 +777,8 @@
 										...(model ? [{ xs: model.xs, ys: model.ys, color, dash: [5, 4], width: 1.2 }] : [])
 									];
 								})}
-								markers={[{ x: 0.8, label: 'course: ohmic to 0.8 V' }]}
 							/>
-							<p class="note">Solid: the rows, plotted against the drain voltage the channel really saw (V_DS minus R_s I_DS). Dashed: the line of experiment 1 turned into the square-law curves, flat past the knee V_GS - V_P.</p>
+							<p class="note">Solid: the rows, plotted against the drain voltage the channel really saw (V_DS minus R_s I_DS). Dashed: the fitted line above turned into the square-law curves, flat past the knee V_GS - V_P.</p>
 							<div class="tableScroll">
 							<table>
 								<thead>
@@ -1920,8 +1919,24 @@
 		display: grid;
 		grid-template-columns: 2fr 1fr;
 		gap: 1rem;
-		align-items: start;
+		align-items: stretch;
 		margin-bottom: 0.9rem;
+	}
+
+	/* the rows box runs down to the last field beside it */
+	.measure > .field.grow {
+		display: flex;
+		flex-direction: column;
+		margin-bottom: 0;
+	}
+
+	.measure > .field.grow textarea {
+		flex: 1;
+		min-height: 8rem;
+	}
+
+	.estimate {
+		margin-top: 0.45rem;
 	}
 
 	.measure textarea {
