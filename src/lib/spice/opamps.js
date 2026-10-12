@@ -117,6 +117,35 @@ export const OPAMP_MODELS = {
 /** What the pages offer first: the usual lab part, on the usual rails. */
 export const DEFAULT_OPAMP = 'TL082';
 
+/**
+ * The single-pole gain-bandwidth (Hz) that stands for each real part when
+ * a design is corrected for its op-amp (the multiple feedback band-pass
+ * stages of the filter page, mfbBandPass.js): A(s) = 2 pi GBW / s.
+ * Measured on the models above in LTspice, open loop (the output fed back
+ * to the inverting input through 1 GH, that input held to ground by 10 F),
+ * +/-15 V, 5 kHz to 500 kHz:
+ *   TL082  |A| f = 3.446 MHz from 1 kHz to 200 kHz (3.436 MHz at 500 kHz,
+ *          3.396 MHz into 10 k), phase 0.4 degree past -90 at 50 kHz and
+ *          1.3 at 150 kHz. Unity gain is at 3.07 MHz, where the second
+ *          pole has already bent the curve.
+ *   LM741  |A| f = 0.998 MHz up to 50 kHz (0.958 MHz at 500 kHz), phase
+ *          1.7 degrees past -90 at 50 kHz and 4.9 at 150 kHz.
+ * Then band-pass filters built from three MFB band-pass stages (Butterworth,
+ * centred on 5 kHz, 20 kHz, 49 kHz and 150 kHz) were corrected for a GBW,
+ * run with each model, and the GBW that best gives the run's passband
+ * shape was found: 3.44 to 3.51 MHz for the TL082, 0.99 to 1.04 MHz for
+ * the LM741 (at 150 kHz an LM741 leaves the upper stage a loop gain under
+ * 2, so no such band was built). The values below give the shape of those
+ * bands within 0.08 dB.
+ * A single pole is not the whole part: the TL082 model also has a second
+ * pole near 7 MHz and some output resistance. On the 40 to 60 kHz band they
+ * lift a TL082 run by about 0.15 dB over the page, nearly all level (under
+ * 0.05 dB of shape), and at 5 kHz by under 0.03 dB. On a band from 100 kHz
+ * to 220 kHz the run sits up to 0.4 dB above the page, 0.15 to 0.18 dB of
+ * it in shape.
+ */
+export const OPAMP_GBW = { TL082: 3.45e6, LM741: 1e6 };
+
 export function opampModel(id) {
 	return OPAMP_MODELS[id] ?? OPAMP_MODELS.ideal;
 }

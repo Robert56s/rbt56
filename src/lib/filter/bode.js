@@ -1,7 +1,14 @@
+import { mfbBandPassResponse } from './mfbBandPass';
+
 /**
  * Frequency response of a cascade of realized stages, evaluated from the
  * actual (rounded) component values rather than the ideal design targets:
- * this is what actually shows up on the bench.
+ * this is what actually shows up on the bench. A stage is read from its
+ * topology and its actual figures: first order (tau), a notch (finite wz),
+ * a band-pass (topology ending in "Bp", gain = the signed gain at its own
+ * centre), a high-pass (ending in "Hp") or else a low-pass. A multiple
+ * feedback band-pass built for a single-pole op-amp (a finite actual.gbw)
+ * is evaluated exactly from its parts with that op-amp.
  */
 
 /** Complex response H(j*2*pi*f) of the full cascade at one frequency. */
@@ -62,6 +69,10 @@ function stageGainComplex(stage, s) {
 		// s purely imaginary, so tau*s + 1 = 1 + j*tau*omega.
 		return complexDivide({ re: 1, im: 0 }, { re: 1, im: tau * s.im });
 	}
+	if (stage.topology === 'mfbBp' && Number.isFinite(stage.actual.gbw)) {
+		// its parts with the op-amp it was built for, sign included
+		return mfbBandPassResponse(stage.components, s.im / (2 * Math.PI), stage.actual.gbw);
+	}
 	const wn = stage.actual.wn;
 	const q = stage.actual.q;
 	const gain = stage.actual.gain ?? 1;
@@ -71,6 +82,10 @@ function stageGainComplex(stage, s) {
 		// a notch stage: gain * (s^2 + wz^2), gain being the value far above the zero
 		const wz = stage.actual.wz;
 		return complexDivide({ re: gain * (wz * wz - s.im * s.im), im: (stage.actual.numeratorS ?? 0) * s.im }, den);
+	}
+	if (stage.topology?.endsWith('Bp')) {
+		// a band-pass: gain * (wn/q) * s, so that the gain is the value at s = j*wn
+		return complexDivide({ re: 0, im: gain * (wn / q) * s.im }, den);
 	}
 	const num = isHp
 		? { re: -gain * s.im * s.im, im: 0 } // gain * s^2, s^2 = -omega^2

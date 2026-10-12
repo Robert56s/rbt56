@@ -6,10 +6,13 @@ import { stageElements } from './spice';
  * line, each stage the way a textbook draws it: an MFB or a Tow-Thomas
  * with its inverting input on top and its feedback over the top, a
  * Sallen-Key or a first-order section as a follower with its + input on
- * top. A band-stop runs its two branches on two rows from the same input
- * and joins them in the combiner on the right. Parts are joined by wires,
- * never pin to pin, and every label is horizontal; the check scripts
- * audit the sheet for overlaps and read it back against the netlist.
+ * top. A band-stop built as two branches runs them on two rows from the
+ * same input and joins them in the combiner on the right; a transformed
+ * band-stop (structure 'cascade') is one line of notch stages like any
+ * other filter, and a transformed band-pass one line of band-pass and
+ * notch stages. Parts are joined by wires, never pin to pin, and every
+ * label is horizontal; the check scripts audit the sheet for overlaps and
+ * read it back against the netlist.
  *
  * Each stage drawer takes the point its input arrives at and returns the
  * point its output leaves from (16 lower, since an op-amp's output sits
@@ -28,7 +31,7 @@ function overTop(sheet, e, from, to, rise, dir) {
 	sheet.route(end, { x: to.x, y: top.y }, to);
 }
 
-/** MFB low-pass or high-pass: [series1, shunt, series2, outer, inner, U]. */
+/** MFB low-pass, high-pass or band-pass: [series1, shunt, series2, outer, inner, U]. */
 function drawMfb(sheet, [s1, sh, s2, outer, inner, U], p) {
 	const A = run(sheet, series(sheet, s1, p, 'right'), 'right', 48);
 	shunt(sheet, sh, A);
@@ -115,7 +118,8 @@ function integrator(sheet, input, feedback, U, p, { room = 48, dir = 'right' } =
 
 /**
  * Tow-Thomas low-pass (output after the second integrator) or high-pass
- * (output after the first).
+ * (output after the first). The band-pass form is drawn as the high-pass,
+ * its output after the first integrator, with R1 in place of Cin.
  *
  * Low-pass: both integrators on the main line and the inverter under
  * them pointing back, so the loop is one ring: along the top, down the
@@ -241,12 +245,14 @@ const DRAW = {
 	boctorHp: (sheet, parts, p) => drawBoctor(sheet, parts, p, true),
 	mfb: drawMfb,
 	mfbHp: drawMfb,
+	mfbBp: drawMfb,
 	sallenKey: drawSallenKey,
 	sallenKeyHp: drawSallenKey,
 	firstOrder: drawFirstOrder,
 	firstOrderHp: drawFirstOrder,
 	towThomas: (sheet, parts, p) => drawTowThomas(sheet, parts, p, false),
 	towThomasHp: (sheet, parts, p) => drawTowThomas(sheet, parts, p, true),
+	towThomasBp: (sheet, parts, p) => drawTowThomas(sheet, parts, p, true),
 	towThomasNotch: drawTowThomasNotch
 };
 
@@ -315,15 +321,16 @@ function drawCombiner(sheet, E, lp, hp, mode) {
 /**
  * The drawn schematic of a realized design. `elements` is buildElements'
  * list (for the source and the combiner parts), the stages come from
- * realizedStages exactly as the netlist numbers them.
+ * realizedStages exactly as the netlist numbers them. `structure` is
+ * buildElements' own: 'cascade' draws a band-stop as one chain.
  */
-export function drawFilter({ elements, realizedStages, filterType, lpCount = 0, combinerMode = 'sum' }, { comments = [], directives = [], gbw = '3Meg', opamp = 'ideal' }) {
+export function drawFilter({ elements, realizedStages, filterType, method, structure = method === 'transformed' ? 'cascade' : 'parallel', lpCount = 0, combinerMode = 'sum' }, { comments = [], directives = [], gbw = '3Meg', opamp = 'ideal' }) {
 	const E = Object.fromEntries(elements.filter((e) => e.kind !== 'LABEL').map((e) => [e.name, e]));
 	const sheet = createSheet({ gbw, opamp });
 	const RAIL = 384;
 	const vin = source(sheet, E.V1, RAIL);
 	let vout;
-	if (filterType === 'bandstop') {
+	if (filterType === 'bandstop' && structure !== 'cascade') {
 		const lpStages = realizedStages.slice(0, lpCount);
 		const hpStages = realizedStages.slice(lpCount);
 		const split = run(sheet, vin, 'right', 48);

@@ -10,10 +10,12 @@
 	import {
 		buildFirstOrderDiagram,
 		buildFirstOrderHpDiagram,
+		buildMfbBpDiagram,
 		buildMfbDiagram,
 		buildMfbHpDiagram,
 		buildSallenKeyDiagram,
 		buildSallenKeyHpDiagram,
+		buildTowThomasBpDiagram,
 		buildTowThomasDiagram,
 		buildTowThomasHpDiagram,
 		buildTowThomasNotchDiagram
@@ -28,10 +30,12 @@
 		if (design.topology === 'towThomas') return buildTowThomasDiagram(design.components, opts);
 		if (design.topology === 'towThomasHp') return buildTowThomasHpDiagram(design.components, opts);
 		if (design.topology === 'towThomasNotch') return buildTowThomasNotchDiagram(design.components, opts);
+		if (design.topology === 'towThomasBp') return buildTowThomasBpDiagram(design.components, opts);
 		if (design.topology === 'mfb') return buildMfbDiagram(design.components, opts);
 		if (design.topology === 'sallenKey') return buildSallenKeyDiagram(design.components, opts);
 		if (design.topology === 'firstOrder') return buildFirstOrderDiagram(design.components, design.actual.tau, opts);
 		if (design.topology === 'mfbHp') return buildMfbHpDiagram(design.components, opts);
+		if (design.topology === 'mfbBp') return buildMfbBpDiagram(design.components, opts);
 		if (design.topology === 'sallenKeyHp') return buildSallenKeyHpDiagram(design.components, opts);
 		if (design.topology === 'firstOrderHp') return buildFirstOrderHpDiagram(design.components, design.actual.tau, opts);
 		return null;

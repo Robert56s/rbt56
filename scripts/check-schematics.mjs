@@ -21,7 +21,8 @@ import * as filter from '../src/lib/filter/circuits.js';
 import { buildBoctorDiagram } from '../src/lib/filter/boctorDiagram.js';
 import { designBoctorNotch } from '../src/lib/filter/boctor.js';
 import * as modulation from '../src/lib/modulation/circuits.js';
-import { designTowThomasHighPass, designTowThomasLowPass, designTowThomasNotch } from '../src/lib/filter/towThomas.js';
+import { designTowThomasBandPass, designTowThomasHighPass, designTowThomasLowPass, designTowThomasNotch } from '../src/lib/filter/towThomas.js';
+import { designMfbBandPass } from '../src/lib/filter/mfbBandPass.js';
 import { buildAgcDiagram, buildClampDiagram, buildLimiterDiagram, buildOscillatorDiagram } from '../src/lib/oscillator/circuits.js';
 import { designOscillator, TOPOLOGIES } from '../src/lib/oscillator/topologies.js';
 import { buildTwoLevelDiagram } from '../src/lib/karnaugh/circuit.js';
@@ -423,6 +424,13 @@ const CASES = [
 	['filter/buildTowThomasHpDiagram', () => filter.buildTowThomasHpDiagram(designTowThomasHighPass(2 * Math.PI * 10000, 1.3066).components)],
 	['filter/buildTowThomasNotchDiagram (low side)', () => filter.buildTowThomasNotchDiagram(designTowThomasNotch(2 * Math.PI * 10000, 1.5, 2 * Math.PI * 21000, { lowSide: true }).components)],
 	['filter/buildTowThomasNotchDiagram (high side)', () => filter.buildTowThomasNotchDiagram(designTowThomasNotch(2 * Math.PI * 10000, 1.5, 2 * Math.PI * 4700, { lowSide: false }).components)],
+	// the band-pass stages of a transformed design: the narrow band-pass's
+	// lower stage on MFB, its centre stage on Tow-Thomas, and each with the
+	// longest pair label a resistor can carry
+	['filter/buildMfbBpDiagram', () => filter.buildMfbBpDiagram(designMfbBandPass(2 * Math.PI * 41047, 4.9719, { gain: 2.0314 }).components)],
+	['filter/buildMfbBpDiagram pair labels', () => filter.buildMfbBpDiagram(designMfbBandPass(2 * Math.PI * 48990, 3).components, { ohms: () => '12.1k + 3.32k' })],
+	['filter/buildTowThomasBpDiagram', () => filter.buildTowThomasBpDiagram(designTowThomasBandPass(2 * Math.PI * 48990, 2.4476).components)],
+	['filter/buildTowThomasBpDiagram pair labels', () => filter.buildTowThomasBpDiagram(designTowThomasBandPass(2 * Math.PI * 41047, 4.9719, { gain: 2.0314 }).components, { ohms: () => '12.1k + 3.32k' })],
 	['modulation/buildJfetGainCellDiagram', () => modulation.buildJfetGainCellDiagram({ rb: 13600 })],
 	['modulation/buildGainStageDiagram', () => modulation.buildGainStageDiagram({ rtop: 8200, rbottom: 10000 })],
 	['modulation/buildHighPassDiagram', () => modulation.buildHighPassDiagram({ r: 100000, c: 2.2e-7 })],
@@ -653,12 +661,16 @@ console.log();
 		if (d.topology === 'towThomas') return filter.buildTowThomasDiagram(c, opts);
 		if (d.topology === 'towThomasHp') return filter.buildTowThomasHpDiagram(c, opts);
 		if (d.topology === 'towThomasNotch') return filter.buildTowThomasNotchDiagram(c, opts);
+		if (d.topology === 'mfbBp') return filter.buildMfbBpDiagram(c, opts);
+		if (d.topology === 'towThomasBp') return filter.buildTowThomasBpDiagram(c, opts);
 		if (d.topology === 'firstOrder') return filter.buildFirstOrderDiagram(c, d.actual.tau, opts);
 		if (d.topology === 'firstOrderHp') return filter.buildFirstOrderHpDiagram(c, d.actual.tau, opts);
 		throw new Error(`no diagram for ${d.topology}`);
 	};
 	const F0 = [50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000];
 	const QS = [0.5, 0.5412, 0.7071, 1, 1.3066, 2, 3, 5];
+	// a transformed design's stages reach the Q of a narrow band
+	const QS_BAND = [0.5, 0.7071, 1, 2, 3, 5, 8, 12, 20];
 	const seen = new Set();
 	const SWEEP = [];
 	let withPairs = 0;
@@ -692,6 +704,19 @@ console.log();
 				stage(`towThomasHp ${tag}`, designTowThomasHighPass(wn, q, parts));
 				for (const k of [1.1, 1.5, 2.5, 5]) stage(`notch (low side) ${tag} fz ${k} f0`, designTowThomasNotch(wn, q, k * wn, { lowSide: true, ...parts }));
 				for (const k of [0.2, 0.4, 0.67, 0.9]) stage(`notch (high side) ${tag} fz ${k} f0`, designTowThomasNotch(wn, q, k * wn, { lowSide: false, ...parts }));
+			}
+			// the transformation's stages: band-pass stages at their centre gain,
+			// and notches held at a gain (their input capacitor scaled by it)
+			for (const q of QS_BAND) {
+				for (const gain of [1, 2]) {
+					const tag = `${f0} Hz Q ${q} gain ${gain}`;
+					stage(`mfbBp ${tag}`, designMfbBandPass(wn, q, { ...parts, gain }));
+					stage(`towThomasBp ${tag}`, designTowThomasBandPass(wn, q, { ...parts, gain }));
+				}
+			}
+			for (const q of [2, 8, 20]) {
+				stage(`notch at a gain (zero above) ${f0} Hz Q ${q}`, designTowThomasNotch(wn, q, 1.5 * wn, { ...parts, gain: 0.4 }));
+				stage(`notch at a gain (zero below) ${f0} Hz Q ${q}`, designTowThomasNotch(wn, q, 0.67 * wn, { ...parts, gain: 2 }));
 			}
 		}
 	}

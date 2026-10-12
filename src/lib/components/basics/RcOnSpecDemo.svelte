@@ -9,7 +9,8 @@
 	//   fp, fs            the two edges, Hz
 	//   amaxDb, aminDb    the two limits
 	//   live              true when the numbers come from the page, false for the default spec
-	//   side              'bandpass' | 'bandstop' when the figure stands for a band type's low-pass side
+	//   side              'bandpass' | 'bandstop' when the figure stands for a band type's low-pass side,
+	//                     'prototype' when it stands for the low-pass prototype of a transformed band type
 	import { formatFarads, formatOhms } from '$lib/filter/format';
 	import { butterworthOrder } from '$lib/filter/order';
 	import Slider from './Slider.svelte';
@@ -70,7 +71,9 @@
 				? 'For a band-pass the figure shows the low-pass side: fp here is fh and fs is fsh.'
 				: side === 'bandstop'
 					? 'For a band-stop the figure shows the low-pass branch: fp here is fl and fs is fsl.'
-					: ''
+					: side === 'prototype'
+						? 'For a band filter built by transformation the figure shows its low-pass prototype: fp here is the bandwidth B and fs is Omega times B.'
+						: ''
 	);
 	const markers = $derived([...(fc >= frame.x0 && fc <= frame.x1 ? [{ x: fc, label: `fc = ${hzText(fc)}`, color: 'var(--blue)' }] : []), ...zones.markers]);
 </script>

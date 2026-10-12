@@ -26,6 +26,13 @@
 			the passband edge (Hz), f<sub>s</sub> the stopband edge (Hz), n the filter order, and k the
 			transition ratio. They all come from the Specification step of the tool.
 		</p>
+		<p class="note">
+			For the band types: f<sub>l</sub> and f<sub>h</sub> are the passband edges, f<sub>sl</sub> and
+			f<sub>sh</sub> the stopband edges, f<sub>0</sub> = &radic;(f<sub>l</sub> f<sub>h</sub>) the centre
+			of the band, B = f<sub>h</sub> &minus; f<sub>l</sub> its width, and &Omega; the frequency of the low-pass
+			prototype that a band frequency lands on when the band filter is built by transformation
+			(sections 25 and 26).
+		</p>
 	</section>
 	<section class="panel">
 		<h2>Boctor notch sections</h2>
@@ -573,6 +580,23 @@
 		</div>
 
 		<div class="formula">
+			<h3>Per-stage gain, band-pass</h3>
+			<p class="note">
+				A band-pass stage of a band filter built by transformation (sections 25 and 27) has s on top
+				instead of a constant. Its gain peaks at its own centre omega_n, where it equals K, the
+				centre gain of its actual (rounded) parts; the circuits here invert, so K is negative.
+			</p>
+			<Equation
+				tex={`H(j\\omega) = \\dfrac{K\\,j\\omega\\,\\dfrac{\\omega_n}{Q}}{(\\omega_n^2-\\omega^2) + j\\dfrac{\\omega_n}{Q}\\omega}, \\qquad |H(j\\omega_n)| = |K|, \\qquad |H(j\\omega_0)| = \\dfrac{|K|}{\\sqrt{1 + Q^2\\left(\\dfrac{\\omega_n}{\\omega_0} - \\dfrac{\\omega_0}{\\omega_n}\\right)^2}}`}
+			/>
+			<p class="note">
+				<strong>How to use:</strong> it multiplies into the same cascade product as every other
+				stage. Each band-pass stage is designed so that its gain at the band centre omega_0 is 1,
+				which makes the whole product 1 there.
+			</p>
+		</div>
+
+		<div class="formula">
 			<h3>Per-stage gain, first order</h3>
 			<p class="note">The complex gain of the leftover first-order stage, from its actual (rounded) tau.</p>
 			<Equation tex={`H(j\\omega) = \\dfrac{1}{1+j\\omega\\tau}`} />
@@ -852,17 +876,19 @@
 	<section class="panel">
 		<div class="panel-head">
 			<span class="num">17</span>
-			<h2>Band-pass (cascaded low-pass + high-pass)</h2>
+			<h2>Band-pass, first method: high-pass and low-pass in a row</h2>
 		</div>
 
 		<div class="formula">
 			<h3>Two independent order calculations</h3>
 			<p class="note">
-				This tool builds a band-pass by cascading a high-pass section (passband edge fl, stopband
-				edge fsl) with a low-pass section (passband edge fh, stopband edge fsh) - the standard
-				approach when the two edges are well separated (more than about 2 octaves apart). Each
-				section gets its own transition ratio and minimum order, from the exact same formulas as
-				sections 1 and 11, just with fl/fsl or fh/fsh in place of fp/fs.
+				This tool builds a band-pass in one of two ways, and by default takes the one that needs
+				fewer op-amps. This first one cascades a high-pass section (passband edge fl, stopband edge
+				fsl) with a low-pass section (passband edge fh, stopband edge fsh). It suits edges well
+				apart, more than about two octaves; for a narrow band the second way, one low-pass
+				prototype moved onto the band (section 25), usually needs far fewer stages. Here each
+				section gets its own transition ratio and minimum order, from the same formulas as sections
+				1 and 11, with fl/fsl or fh/fsh in place of fp/fs.
 			</p>
 			<Equation tex={`k_{hp} = \\dfrac{f_{sl}}{f_l}, \\qquad k_{lp} = \\dfrac{f_h}{f_{sh}}`} />
 			<p class="note">
@@ -878,9 +904,9 @@
 				Every stage in either section is an ordinary low-pass or high-pass second-order (or
 				leftover first-order) block, denormalized, synthesized into components and evaluated in
 				the Bode response exactly as sections 2 through 16 already describe. Cascading the two
-				sections - each one's output feeding the next one's input, exactly like stacking more
-				low-pass or high-pass stages - is what turns two separate responses into one band-pass
-				response; there is no new per-stage math to learn.
+				sections, each output feeding the next input exactly like stacking more low-pass or
+				high-pass stages, turns two separate responses into one band-pass response; there is no
+				new per-stage math to learn.
 			</p>
 			<p class="note">
 				<strong>How to use:</strong> design and build the high-pass section and the low-pass
@@ -893,16 +919,18 @@
 	<section class="panel">
 		<div class="panel-head">
 			<span class="num">18</span>
-			<h2>Band-stop (summed low-pass + high-pass)</h2>
+			<h2>Band-stop, first method: low-pass and high-pass summed</h2>
 		</div>
 
 		<div class="formula">
 			<h3>Two independent order calculations</h3>
 			<p class="note">
-				This tool builds a band-stop (notch) by summing a low-pass branch (passband edge fl,
-				stopband edge fsl) with a high-pass branch (passband edge fh, stopband edge fsh) - the
-				mirror image of band-pass's edge order: fl &lt; fsl &lt; fsh &lt; fh, stopband sitting
-				inside the two passband edges instead of outside them.
+				A band-stop (notch) is also built in one of two ways, and by default the tool takes the one
+				that needs fewer op-amps. This first one sums a low-pass branch (passband edge fl, stopband
+				edge fsl) with a high-pass branch (passband edge fh, stopband edge fsh) in an extra op-amp.
+				The edges come in the mirror order of a band-pass, fl &lt; fsl &lt; fsh &lt; fh: the stopband
+				sits inside the two passband edges instead of outside them. The second way, a chain of notch
+				stages from one low-pass prototype with no summing amplifier, is section 26.
 			</p>
 			<Equation tex={`k_{lp} = \\dfrac{f_l}{f_{sl}}, \\qquad k_{hp} = \\dfrac{f_{sh}}{f_h}`} />
 			<p class="note">
@@ -914,8 +942,8 @@
 		<div class="formula">
 			<h3>Why summing works</h3>
 			<p class="note">
-				Every stage this tool builds has an exactly known, rounding-independent gain in its own
-				passband - MFB is always exactly -1 (forced by R1 = R3), Sallen-Key is always exactly +1,
+				Every stage of the two branches has an exactly known, rounding-independent gain in its own
+				passband: MFB is always exactly -1 (forced by R1 = R3), Sallen-Key is always exactly +1,
 				a unity-gain follower. Summing a fully-passing branch with a fully-attenuated one
 				reliably reconstructs the original signal outside the stopband; the notch depth in between
 				is set by the same Amin-driven order search as everywhere else in this tool, not by
@@ -924,7 +952,7 @@
 			<p class="note">
 				<strong>How to use:</strong> design the low-pass branch and the high-pass branch as two
 				completely independent filters running in parallel from the same input, each feeding its
-				own output into the summing amplifier below - never cascaded in series.
+				own output into the summing amplifier below, never cascaded in series.
 			</p>
 		</div>
 
@@ -1191,6 +1219,202 @@
 				band-stop, a low-pass branch whose DC gain is G gets its combiner input resistor scaled by G.
 			</p>
 			<Equation tex={`A(f) = \\max_{\\text{passband}} \\left|H\\right|_{dB} - \\left|H(f)\\right|_{dB}, \\qquad \\min_{f\\,\\in\\,\\text{stopband}} A(f) \\ge A_{min}, \\qquad R_a = G\\,R_f`} />
+		</div>
+	</section>
+
+	<section class="panel">
+		<div class="panel-head">
+			<span class="num">25</span>
+			<h2>Band-pass, second method: transformation of a low-pass</h2>
+		</div>
+
+		<div class="formula">
+			<h3>Centre, bandwidth and the substitution</h3>
+			<p class="note">
+				One low-pass prototype, with its passband edge at the bandwidth B, is moved onto the band by
+				replacing every s in its transfer function. The new variable is zero at the centre f0 and
+				grows on both sides of it, so the prototype's DC lands on f0. On the frequency axis a band
+				frequency f behaves like the prototype frequency Omega (in units of its passband edge), and
+				since f0 squared is fl fh, both passband edges land on |Omega| = 1, where the prototype loses
+				exactly Amax.
+			</p>
+			<Equation tex={`f_0 = \\sqrt{f_l f_h}, \\qquad B = f_h - f_l, \\qquad s \\ \\longrightarrow\\ \\dfrac{s^2 + \\omega_0^2}{\\omega_B\\, s}, \\qquad \\omega_0 = 2\\pi f_0,\\ \\ \\omega_B = 2\\pi B`} />
+			<Equation tex={`\\Omega(f) = \\dfrac{f^2 - f_0^2}{f\\,B}, \\qquad \\Omega(f_h) = 1,\\ \\ \\Omega(f_l) = -1, \\qquad |\\Omega(f)| = |\\Omega(f_0^2/f)|`} />
+			<p class="note">
+				<strong>How to use:</strong> the last equation is the geometric symmetry: f and f0&sup2;/f
+				lose the same, so the band filter is symmetric on a log axis about f0, not about the
+				arithmetic middle of fl and fh.
+			</p>
+		</div>
+
+		<div class="formula">
+			<h3>Stopband edges and the order</h3>
+			<p class="note">
+				Each stopband edge lands on its own Omega, above 1, and the prototype is counted like any
+				low-pass with k = 1/Omega (sections 1, 20 to 23), each edge with its own Amin. For a
+				response whose loss keeps growing past the passband (Butterworth, Chebyshev, Legendre,
+				Bessel) the order is the larger of the two counts. For inverse Chebyshev and elliptic the
+				stopband stays at one floor from the prototype's stopband edge on, so the count takes the
+				closer edge with the larger Amin; when the closer edge needs less, lower orders are tried
+				with the prototype's stopband edge moved between the two, keeping the first that holds both.
+			</p>
+			<Equation tex={`\\Omega_{sl} = \\dfrac{|f_{sl}^2 - f_0^2|}{f_{sl} B}, \\qquad \\Omega_{sh} = \\dfrac{|f_{sh}^2 - f_0^2|}{f_{sh} B}, \\qquad n = \\max\\left(n\\!\\left(\\tfrac{1}{\\Omega_{sl}}, A_{min,l}\\right),\\ n\\!\\left(\\tfrac{1}{\\Omega_{sh}}, A_{min,h}\\right)\\right)`} />
+			<p class="note">
+				<strong>How to use:</strong> the band filter has order 2n: n prototype poles give n
+				second-order stages. Panel 02 shows both edge counts and the op-amp count of both methods.
+			</p>
+		</div>
+
+		<div class="formula">
+			<h3>Poles and zeros to stages</h3>
+			<p class="note">
+				At the prototype's real scale the substitution is (s&sup2; + omega_0&sup2;)/s. Each prototype
+				pole p (rad/s) turns into the two roots of one quadratic. They multiply to omega_0&sup2;, so
+				a pole pair gives two stages on either side of f0, symmetric on a log axis, with one shared
+				Q. The real pole of an odd order gives one stage on f0. A prototype zero at &plusmn;j
+				omega_z gives two zeros with the same product: the upper one goes with the upper stage
+				(a low-pass notch), the lower one with the lower stage (a high-pass notch).
+			</p>
+			<Equation tex={`s^2 - p\\,s + \\omega_0^2 = 0, \\qquad \\omega_{n1}\\,\\omega_{n2} = \\omega_0^2, \\qquad Q = \\dfrac{|s|}{-2\\,\\mathrm{Re}\\,s}`} />
+			<Equation tex={`p = -\\dfrac{1}{\\tau}: \\ \\ \\omega_n = \\omega_0,\\ \\ Q = \\omega_0\\tau, \\qquad \\omega_{z\\pm} = \\sqrt{\\dfrac{\\omega_z^2}{4} + \\omega_0^2} \\pm \\dfrac{\\omega_z}{2}`} />
+		</div>
+
+		<div class="formula">
+			<h3>Gain of each stage</h3>
+			<p class="note">
+				Every stage is set for gain 1 at f0, so the whole filter is exactly 1 there. A band-pass
+				stage centred off f0 has lost gain by f0, so its centre gain K is raised to make up for it;
+				a notch stage gets the gain far above its zero, K&infin;, that does the same. With an even
+				order of Chebyshev or elliptic, f0 sits in a ripple trough and the passband peaks Amax above
+				it, measured from the peak as always. Bessel's flat delay does not survive: Omega is not
+				proportional to f.
+			</p>
+			<Equation tex={`K = \\sqrt{1 + Q^2\\left(\\dfrac{\\omega_n}{\\omega_0} - \\dfrac{\\omega_0}{\\omega_n}\\right)^2}, \\qquad K_\\infty = \\dfrac{|\\omega_n^2 - \\omega_0^2 + j\\,\\omega_n\\omega_0/Q|}{|\\omega_z^2 - \\omega_0^2|}`} />
+			<p class="note">
+				<strong>How to use:</strong> build each band-pass stage as a multiple-feedback band-pass
+				(section 27, one op-amp) or at A1 of a Tow-Thomas (section 19, three op-amps, centre gain
+				-Rd/R1, so R1 = Rd/K), and each notch stage as a Tow-Thomas notch with Cin = K&infin; C
+				(section 24) or a Boctor section. Boctor keeps its own gain, which moves the level at f0, so
+				the tool keeps it only where its gain at f0 lands within 1 dB of 1 and its zero on target;
+				elsewhere the stage is a Tow-Thomas notch.
+			</p>
+		</div>
+	</section>
+
+	<section class="panel">
+		<div class="panel-head">
+			<span class="num">26</span>
+			<h2>Band-stop, second method: transformation of a low-pass</h2>
+		</div>
+
+		<div class="formula">
+			<h3>The substitution and the order</h3>
+			<p class="note">
+				The same prototype idea, with the inverse substitution: zero at DC and far above the band,
+				infinite at f0. The prototype's passband lands on both outer passbands, fl and fh land on
+				|Omega| = 1, and its stopband folds into the middle of the band. The order is counted per
+				stopband edge as for the band-pass (section 25), with the one Amin of the band-stop.
+			</p>
+			<Equation tex={`s \\ \\longrightarrow\\ \\dfrac{\\omega_B\\, s}{s^2 + \\omega_0^2}, \\qquad \\Omega(f) = \\dfrac{f\\,B}{f_0^2 - f^2}, \\qquad \\Omega_{s} = \\dfrac{f_s B}{|f_0^2 - f_s^2|}`} />
+		</div>
+
+		<div class="formula">
+			<h3>Poles and zeros to notch stages</h3>
+			<p class="note">
+				Each prototype pole p gives two roots with product omega_0&sup2; and one shared Q, now from
+				the quadratic with omega_B&sup2;/p in place of p. The prototype's zeros at infinity land
+				where the substitution is infinite, at &plusmn;j omega_0: every stage is a notch at f0, the
+				lower stage of a pair a low-pass notch and the upper one a high-pass notch. The real pole of
+				an odd order gives a symmetric notch, poles and zero both on f0. A finite prototype zero
+				splits like a pole, with r = omega_B&sup2;/omega_z.
+			</p>
+			<Equation tex={`s^2 - \\dfrac{\\omega_B^2}{p}\\,s + \\omega_0^2 = 0, \\qquad p = -\\dfrac{1}{\\tau}: \\ \\ \\omega_n = \\omega_z = \\omega_0,\\ \\ Q = \\dfrac{\\omega_0}{\\omega_B^2\\,\\tau}, \\qquad \\omega_{z\\pm} = \\sqrt{\\dfrac{r^2}{4} + \\omega_0^2} \\pm \\dfrac{r}{2}`} />
+		</div>
+
+		<div class="formula">
+			<h3>Gain of each stage, and no summing amplifier</h3>
+			<p class="note">
+				Every notch stage is set for gain 1 at DC, whichever side of its poles the zero is on, so
+				far above the band it passes (omega_n/omega_z)&sup2;. In each pair the poles and the zeros
+				both multiply to omega_0&sup2;, so those factors cancel pair by pair: the whole chain
+				passes exactly 1 at DC and far above the band, and needs no summing amplifier.
+			</p>
+			<Equation tex={`H(s) = \\dfrac{\\omega_n^2}{\\omega_z^2}\\,\\dfrac{s^2 + \\omega_z^2}{s^2 + \\frac{\\omega_n}{Q}\\,s + \\omega_n^2}, \\qquad H(0) = 1, \\qquad \\prod_i \\dfrac{\\omega_{n,i}^2}{\\omega_{z,i}^2} = 1`} />
+			<p class="note">
+				<strong>How to use:</strong> build each stage as a Tow-Thomas notch with Rz = R (DC gain
+				1 on either side of the zero, section 24) or as a Boctor section. Boctor keeps its own gain,
+				which moves the level of both passbands together, so the tool keeps it only where its DC
+				gain lands within 1 dB of 1 and its zero on target. Elsewhere, and for the symmetric notch
+				Boctor cannot build, the stage is a Tow-Thomas notch. Evaluate the Bode response as one cascade (section 10),
+				not as the parallel sum of section 18.
+			</p>
+		</div>
+	</section>
+
+	<section class="panel">
+		<div class="panel-head">
+			<span class="num">27</span>
+			<h2>Multiple-feedback band-pass (Delyiannis-Friend)</h2>
+		</div>
+
+		<div class="formula">
+			<h3>Circuit and transfer function</h3>
+			<p class="note">
+				One op-amp: R1 from the input to a node A, R2 from A to ground (an input attenuator with
+				R1), C2 from A to the inverting input M, C1 from the output back to A, R3 from M to the
+				output, the non-inverting input grounded. KCL at the virtual ground M gives V_A = -V_out/(s
+				C2 R3); KCL at A then gives a band-pass.
+			</p>
+			<Equation tex={`H(s) = -\\dfrac{s/(R_1 C_1)}{s^2 + s\\,\\dfrac{C_1 + C_2}{R_3 C_1 C_2} + \\dfrac{1/R_1 + 1/R_2}{R_3 C_1 C_2}}`} />
+			<Equation tex={`\\omega_0^2 = \\dfrac{1/R_1 + 1/R_2}{R_3 C_1 C_2}, \\qquad \\dfrac{\\omega_0}{Q} = \\dfrac{C_1 + C_2}{R_3 C_1 C_2}, \\qquad H_0 = -\\dfrac{R_3 C_2}{R_1 (C_1 + C_2)} \\ \\ \\left(-\\dfrac{R_3}{2R_1} \\text{ for } C_1 = C_2\\right)`} />
+		</div>
+
+		<div class="formula">
+			<h3>Design for omega_0, Q and the centre gain</h3>
+			<p class="note">
+				With the capacitors chosen, R3 alone sets the bandwidth, R1 then the gain, and R2 only
+				moves omega_0. R2 must stay positive, which caps the gain at Q&sup2;(1 + C2/C1), 2Q&sup2;
+				with equal capacitors: a stage with Q under about 0.7 needs C2 larger than C1 to reach gain
+				1. At the centre the op-amp runs at a noise gain just above that ceiling, and a single-pole
+				op-amp of gain-bandwidth f_T keeps the peak gain but pulls f0 down and Q up by the factor below.
+			</p>
+			<Equation tex={`R_3 = \\dfrac{Q\\,(C_1 + C_2)}{\\omega_0 C_1 C_2}, \\qquad R_1 = \\dfrac{Q}{|H_0|\\,\\omega_0 C_1}, \\qquad \\dfrac{1}{R_2} = \\dfrac{\\omega_0}{Q}\\left(Q^2 (C_1 + C_2) - |H_0|\\,C_1\\right)`} />
+			<Equation tex={`|H_0| < Q^2\\left(1 + \\dfrac{C_2}{C_1}\\right), \\qquad NG(f_0) = 1 + Q^2\\left(1 + \\dfrac{C_2}{C_1}\\right), \\qquad f_T \\gg NG \\cdot f_0`} />
+			<Equation tex={`k = \\dfrac{Q\\,(1 + C_2/C_1)\\,f_0}{f_T}, \\qquad f_0' = \\dfrac{f_0}{\\sqrt{1 + k}}, \\qquad Q' \\approx Q\\sqrt{1 + k}`} />
+			<p class="note">
+				<strong>How to use:</strong> a narrow band moves with every percent of f0, so round in steps:
+				R3 first, then R1 solved against the rounded R3, then R2 against both, which keeps the
+				realized f0 close. The resistor spread R3/R2 grows like 4Q&sup2;. Designed for an ideal
+				op-amp, the stage needs a gain-bandwidth of ten times NG f0 or more; designed ahead of
+				the op-amp (below), a loop gain T of 2 will do. Past that, the Tow-Thomas band-pass
+				(section 19) keeps every ratio small for three op-amps.
+			</p>
+		</div>
+
+		<div class="formula">
+			<h3>Designing ahead of the op-amp</h3>
+			<p class="note">
+				With a single-pole op-amp, A(s) = omega_t/s and omega_t = 2 pi GBW, the denominator is a
+				cubic: one fast real pole near omega_t and the pole pair the band sees. To put that pair on
+				a target (omega_n, q), the circuit alone is designed at a higher omega_0 and a lower Q.
+				Splitting the cubic around the target leaves the op-amp's pole p as the one unknown.
+			</p>
+			<Equation tex={`D(s) = s^3 + \\left(\\omega_t + \\dfrac{\\omega_0}{Q} + \\omega_0 Q\\left(1 + \\dfrac{C_2}{C_1}\\right)\\right)s^2 + \\left(\\omega_t\\dfrac{\\omega_0}{Q} + \\omega_0^2\\right)s + \\omega_t\\,\\omega_0^2 = (s + p)\\left(s^2 + \\dfrac{\\omega_n}{q}\\,s + \\omega_n^2\\right)`} />
+			<Equation tex={`\\omega_0^2 = \\dfrac{p\\,\\omega_n^2}{\\omega_t}, \\qquad \\dfrac{\\omega_0}{Q} = \\dfrac{p\\,\\omega_n/q + \\omega_n^2 - \\omega_0^2}{\\omega_t}, \\qquad \\omega_t + \\dfrac{\\omega_0}{Q} + \\left(1 + \\dfrac{C_2}{C_1}\\right)\\dfrac{\\omega_0^2}{\\omega_0/Q} = p + \\dfrac{\\omega_n}{q}`} />
+			<Equation tex={`|H(j\\omega_n)| = \\dfrac{\\omega_t/(R_1 C_1)}{(\\omega_n/q)\\sqrt{p^2 + \\omega_n^2}}, \\qquad |H_0| = \\dfrac{1/(R_1 C_1)}{\\omega_0/Q}`} />
+			<Equation tex={`\\text{to first order:}\\quad \\omega_0 \\approx \\omega_n\\sqrt{1 + k}, \\qquad Q \\approx \\dfrac{q}{\\sqrt{1 + k}}, \\qquad k = \\dfrac{q\\,(1 + C_2/C_1)\\,f_n}{\\text{GBW}}, \\qquad T(f_0) = \\dfrac{\\text{GBW}}{NG \\cdot f_0} \\geq 2`} />
+			<p class="note">
+				<strong>How to use:</strong> the last of the three equations in p has one root past
+				omega_t when omega_t&sup2; - (omega_n/q) omega_t + omega_n&sup2; &gt; 0, always so when GBW is
+				above f_n/q; found by bisection. With no root the op-amp is too slow for any circuit. The
+				root gives omega_0 and Q, the gain at omega_n gives R1 C1 and so the centre gain |H0|, and
+				the parts follow from the formulas above. Score what the rounded parts do with the op-amp,
+				not alone, and count an f0 miss 2q times: near its band edges a stage moves about 2q times
+				as much for 1 % of f0 as for 1 % of Q. Keep only capacitor pairs whose loop gain T at f0 is
+				2 or more; under 3 the correction leans on the exact GBW. Use the part's single-pole
+				figure: 3.45 MHz for the TL082 model, 1 MHz for the LM741. Another op-amp needs another
+				correction.
+			</p>
 		</div>
 	</section>
 </article>

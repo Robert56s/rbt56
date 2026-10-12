@@ -13,7 +13,8 @@
 	//   fc          the first-order stage's corner, Hz, present for an odd order
 	//   order       the order n
 	//   live        true for the page's design, false for the default one
-	//   side        'bandpass' | 'bandstop' when the stages are a band type's low-pass side
+	//   side        'bandpass' | 'bandstop' when the stages are a band type's low-pass side,
+	//               'prototype' when they are the low-pass prototype of a transformed band type
 	import Slider from './Slider.svelte';
 	import XYPlot from './XYPlot.svelte';
 	import { AMBER, dbText, hzText, logSpace, plain } from './bodeFigure.js';
@@ -104,6 +105,7 @@
 		if (!live) out.push('The page has no valid design yet, so the figure uses the default one: a fourth-order Butterworth low-pass at 10 kHz.');
 		if (side === 'bandpass') out.push('For a band-pass these are the stages of the low-pass side, and fp here is fh.');
 		if (side === 'bandstop') out.push('For a band-stop these are the stages of the low-pass branch, and fp here is fl.');
+		if (side === 'prototype') out.push('For a band filter built by transformation these are the stages of its low-pass prototype, and fp here is the bandwidth B.');
 		if (table.length > 3) out.push("Stages 3 and 4 are drawn at the table's values and counted in the product.");
 		else if (table.length === 3) out.push("Stage 3 is drawn at the table's values and counted in the product.");
 		if (table.some((s) => s.fz > 0)) out.push('A stage with a zero drops to nothing at its own frequency, past the edge: that notch is what lets the product fall so fast.');

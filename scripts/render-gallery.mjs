@@ -5,7 +5,8 @@
 import { writeFileSync } from 'node:fs';
 import * as filter from '../src/lib/filter/circuits.js';
 import * as modulation from '../src/lib/modulation/circuits.js';
-import { designTowThomasHighPass, designTowThomasLowPass } from '../src/lib/filter/towThomas.js';
+import { designTowThomasBandPass, designTowThomasHighPass, designTowThomasLowPass } from '../src/lib/filter/towThomas.js';
+import { designMfbBandPass } from '../src/lib/filter/mfbBandPass.js';
 import { buildTwoLevelDiagram } from '../src/lib/karnaugh/circuit.js';
 import { literals } from '../src/lib/karnaugh/expression.js';
 import { minimizeBoth } from '../src/lib/karnaugh/minimize.js';
@@ -34,13 +35,15 @@ const CASES = [
 	['Difference amplifier (band-stop, opposite tails)', filter.buildDifferenceAmpDiagram(10000)],
 	['Tow-Thomas biquad, low-pass', filter.buildTowThomasDiagram(designTowThomasLowPass(2 * Math.PI * 10000, 0.7071).components)],
 	['Tow-Thomas biquad, high-pass (input capacitor)', filter.buildTowThomasHpDiagram(designTowThomasHighPass(2 * Math.PI * 10000, 1.3066).components)],
+	['MFB band-pass (Delyiannis-Friend)', filter.buildMfbBpDiagram(designMfbBandPass(2 * Math.PI * 41047, 4.972, { gain: 2.03 }).components)],
+	['Tow-Thomas biquad, band-pass (output at A1)', filter.buildTowThomasBpDiagram(designTowThomasBandPass(2 * Math.PI * 41047, 4.972, { gain: 2.03 }).components)],
 	['JFET gain cell', modulation.buildJfetGainCellDiagram({ rb: 13600 })],
 	['Gain stage', modulation.buildGainStageDiagram({ rtop: 8200, rbottom: 10000 })],
 	['High-pass (DC blocker)', modulation.buildHighPassDiagram({ r: 100000, c: 2.2e-7 })],
 	['Summer (2 inputs)', modulation.buildSummerDiagram({ inputs: ['x_m(t) (AC)', 'V_bias (DC)'], r: 10000 })],
 	['Summer (3 inputs)', modulation.buildSummerDiagram({ inputs: ['x_p(t)', 'x_m(t)', 'V_DC (bias)'], r: 10000 })],
 	['Bias divider', modulation.buildDividerDiagram({ top: 51000, bottom: 10000, vcc: 12 })],
-	['Diode + resonant tank', modulation.buildDiodeTankDiagram({ l: 1e-3, c: 1.5e-8, r: 4300 })],
+	['Diode + resonant tank', modulation.buildDiodeTankDiagram({ rs: 8200, l: 1e-3, capacitors: [15e-9], r: 5100 })],
 	['Precision full-wave rectifier', modulation.buildPrecisionRectifierDiagram({ r1: 10000, r2: 10000, r3: 10000 })],
 	['Envelope low-pass (Sallen-Key)', modulation.buildEnvelopeLowPassDiagram({ R1: 11000, R2: 11000, Ctop: 2.2e-8, Cbottom: 1e-8 })]
 ];
@@ -60,7 +63,7 @@ const html = `<!doctype html><meta charset="utf-8"><title>rbt56 schematics</titl
   svg text.lbl { font-family: ui-monospace, monospace; font-size: 11px; fill: #2f6fed; }
   svg text.lbl.note { fill: #6b7280; }
 </style>
-<h1>rbt56 circuit schematics (all 16, harness-verified)</h1>
+<h1>rbt56 circuit schematics (harness-verified)</h1>
 <div class="grid">${cards}</div>`;
 
 const out = process.argv[2] || 'schematics-gallery.html';

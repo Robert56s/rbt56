@@ -122,7 +122,9 @@
 				? 'For a band-pass the figure shows the low-pass side: fp here is fh and fs is fsh.'
 				: side === 'bandstop'
 					? 'For a band-stop the figure shows the low-pass branch: fp here is fl and fs is fsl.'
-					: ''
+					: side === 'prototype'
+						? 'For a band filter built by transformation the figure shows its low-pass prototype: fp here is the bandwidth B and fs is Omega times B.'
+						: ''
 	);
 </script>
 

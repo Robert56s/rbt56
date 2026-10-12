@@ -153,6 +153,18 @@ function checkText(where, text) {
 	}
 	configs++;
 	for (const w of inspectFilter('filter no arguments', filterBasics())) widgets.add(w);
+	// a band type set to the transformation, with its two stage menus and no design yet
+	for (const filterType of ['bandpass', 'bandstop']) {
+		for (const response of ['butterworth', 'chebyshev', 'legendre', 'bessel', 'inverseChebyshev', 'elliptic']) {
+			for (const [topology, topologyNotch] of [['mfb', 'boctor'], ['towThomas', 'towThomas']]) {
+				for (const order of [2, 6, NaN]) {
+					configs++;
+					const fp = Number.isFinite(order) ? 1000 : NaN;
+					for (const w of inspectFilter(`filter ${filterType}/${response}/${topology}/${order}/transformed`, filterBasics({ filterType, method: 'transformed', response, topology, topologyNotch, order, stages: 0, fp, fs: 4000, amaxDb: 1, aminDb: 40 }))) widgets.add(w);
+				}
+			}
+		}
+	}
 
 	// real designs, built with the tool's own library the way the page
 	// builds them, so that the figures' props (the realized stages, the
@@ -169,6 +181,9 @@ function checkText(where, text) {
 	const { designBoctorNotch } = await import('../src/lib/filter/boctor.js');
 	const { designFirstOrderLowPass } = await import('../src/lib/filter/firstOrder.js');
 	const { designFirstOrderHighPass } = await import('../src/lib/filter/firstOrderHighPass.js');
+	const { chooseBandMethod, opampCount } = await import('../src/lib/filter/bandMethod.js');
+	const { OPAMP_GBW } = await import('../src/lib/spice/opamps.js');
+	const { designTransformed, hasZeros, realizeBandStage, transformedMenus } = await import('./lib-band.mjs');
 
 	const SECOND = {
 		mfb: [designMfbLowPass, designMfbHighPass],
@@ -188,26 +203,61 @@ function checkText(where, text) {
 			? (stage.filterType === 'highpass' ? designFirstOrderHighPass : designFirstOrderLowPass)(stage.tau, opts)
 			: SECOND[topology][stage.filterType === 'highpass' ? 1 : 0](stage.wn, stage.q, opts);
 
-	// what the page computes before it calls filterBasics
-	function pageValues(spec, response, topology, stock, orderOverride = null) {
+	// the page's order limit for the transformation's prototype
+	const MAX_ORDER_BAND = 16;
+	// what the page computes before it calls filterBasics. A band type is
+	// built the way its Method menu says: 'cascade' (two sections, or a
+	// band-stop's two branches), 'transformed' (one low-pass prototype), or
+	// 'auto', the one with fewer op-amps at the minimum orders (a tie keeps
+	// the cascade). The transformation's two menus follow the topology as
+	// the page sets them: Tow-Thomas stays Tow-Thomas, anything else takes
+	// MFB band-pass stages and Boctor notches, the MFB band-pass stages of a
+	// band-pass built for the page's default op-amp, the TL082.
+	function pageValues(spec, response, topology, stock, orderOverride = null, bandMethod = 'cascade') {
 		const { filterType, amaxDb, aminDb } = spec;
 		const band = filterType === 'bandpass' || filterType === 'bandstop';
 		// the page's count: null when a searched response never gets there, which counts as past the limit
-		const count = (k) => minimumOrder(response, amaxDb, aminDb, k).n ?? 99;
+		const count = (k, amax = amaxDb, amin = aminDb) => minimumOrder(response, amax, amin, k).n ?? 99;
 		// the page keeps every edge in its state, whatever the filter type
 		const e = { fp: 10000, fs: 35000, fl: 1000, fh: 10000, fsl: 300, fsh: 30000, ...spec };
 		const lpFp = filterType === 'bandstop' ? e.fl : e.fh;
 		const lpFs = filterType === 'bandstop' ? e.fsl : e.fsh;
+		// a band type's limits per side: a band-pass may ask another Amin at fsl
+		// (its high-pass side) than at fsh, a band-stop has one for its stopband
+		const amaxDbHp = spec.amaxDbHp ?? amaxDb;
+		const amaxDbLp = spec.amaxDbLp ?? amaxDb;
+		const aminSideHp = filterType === 'bandstop' ? aminDb : (spec.aminDbHp ?? aminDb);
+		const aminSideLp = filterType === 'bandstop' ? aminDb : (spec.aminDbLp ?? aminDb);
+		const amaxBand = Math.min(amaxDbHp, amaxDbLp);
 		let design = null;
 		let k = null;
 		let order;
+		let method;
+		let menus = null;
 		if (band) {
-			const nLp = count(transitionRatio(lpFp, lpFs));
-			const nHp = count(transitionRatio(filterType === 'bandstop' ? e.fsh : e.fsl, filterType === 'bandstop' ? e.fh : e.fl));
-			order = nLp + nHp;
-			if (nLp <= 8 && nHp <= 8) {
-				const args = { response, amaxDb, aminDb, fl: e.fl, fh: e.fh, fsl: e.fsl, fsh: e.fsh, orderLow: nLp, orderHigh: nHp };
-				design = filterType === 'bandstop' ? designBandStop(args) : designBandPass(args);
+			const nLp = count(transitionRatio(lpFp, lpFs), amaxDbLp, aminSideLp);
+			const nHp = count(transitionRatio(filterType === 'bandstop' ? e.fsh : e.fsl, filterType === 'bandstop' ? e.fh : e.fl), amaxDbHp, aminSideHp);
+			const args = { response, amaxDbHp, aminDbHp: aminSideHp, amaxDbLp, aminDbLp: aminSideLp, fl: e.fl, fh: e.fh, fsl: e.fsl, fsh: e.fsh, orderLow: nLp, orderHigh: nHp };
+			const cascade = nLp <= 8 && nHp <= 8 ? (filterType === 'bandstop' ? designBandStop(args) : designBandPass(args)) : null;
+			// the transformation: one Amax (the smaller), the Amin of each stopband edge
+			const transformed = designTransformed({ filterType, amaxDb: amaxBand, aminDb, aminDbLow: aminSideHp, aminDbHigh: aminSideLp, fl: e.fl, fh: e.fh, fsl: e.fsl, fsh: e.fsh }, response);
+			const nBand = transformed.orderInfo.n;
+			const transformedOk = nBand !== null && nBand <= MAX_ORDER_BAND;
+			menus = transformedMenus(topology === 'towThomas' ? 'towThomas' : 'mfb', topology === 'towThomas' ? 'towThomas' : 'boctor');
+			if (filterType === 'bandpass' && menus.bandpass === 'mfb') menus = { ...menus, gbw: OPAMP_GBW.TL082 };
+			method = bandMethod;
+			if (bandMethod === 'auto') {
+				// a cascade whose zeros wait for a notch topology is not counted
+				const blocked = hasZeros(response) && !['towThomas', 'boctor'].includes(topology);
+				const cascadeCount = cascade && !blocked ? opampCount(cascade, { method: 'cascade', highpass: topology, lowpass: topology }) : null;
+				method = chooseBandMethod({ cascade: cascadeCount, transformed: transformedOk ? opampCount(transformed, menus) : null });
+			}
+			if (method === 'transformed') {
+				order = 2 * (nBand ?? 0);
+				design = transformedOk ? transformed : null;
+			} else {
+				order = nLp + nHp;
+				design = cascade;
 			}
 		} else {
 			k = filterType === 'highpass' ? transitionRatio(e.fs, e.fp) : transitionRatio(e.fp, e.fs);
@@ -215,7 +265,13 @@ function checkText(where, text) {
 			order = orderOverride ?? min;
 			if (min <= 8) design = (filterType === 'highpass' ? designHighPass : designLowPass)({ response, amaxDb, aminDb, fp: e.fp, fs: e.fs, order });
 		}
-		const realizedStages = design
+		const transformed = method === 'transformed';
+		// a transformed design as the page builds it, its own E24 fallback
+		// included; a stage that cannot be built leaves no stages at all there
+		const bandStages = design && transformed ? design.stages.map((s) => realizeBandStage(s, menus, STOCK[stock])) : null;
+		const realizedStages = bandStages
+			? bandStages.every(Boolean) ? bandStages : []
+			: design
 			? design.stages
 					.map((s) => {
 						const built = buildStage(s, topology, STOCK[stock]);
@@ -225,7 +281,8 @@ function checkText(where, text) {
 					})
 					.filter(Boolean)
 			: [];
-		const lpCount = design && filterType === 'bandstop' ? design.lp.stages.length : 0;
+		// a transformed band-stop is one chain: no branches, no combiner
+		const lpCount = design && filterType === 'bandstop' && !transformed ? design.lp.stages.length : 0;
 		const bandStopBranches = lpCount && realizedStages.length ? [realizedStages.slice(0, lpCount), realizedStages.slice(lpCount)] : null;
 		const combineSigns = bandStopBranches ? combinerChoice(bandStopBranches, e.fsl, e.fsh).signs : null;
 		const loss = (f) => {
@@ -235,12 +292,27 @@ function checkText(where, text) {
 		return {
 			filterType,
 			response,
-			topology,
+			topology: transformed ? menus.bandpass : topology,
 			order,
 			stages: realizedStages.length,
 			...e,
-			amaxDb,
-			aminDb,
+			amaxDb: transformed ? amaxBand : band ? amaxDbLp : amaxDb,
+			aminDb: band ? aminSideLp : aminDb,
+			// as the page passes them for a band type: each side's limits, and the ones each edge answers to
+			...(band
+				? {
+						method,
+						topologyNotch: menus.notch,
+						bandLimits: {
+							hp: { amaxDb: amaxDbHp, aminDb: aminSideHp },
+							lp: { amaxDb: amaxDbLp, aminDb: aminSideLp },
+							amaxAtFl: transformed ? amaxBand : filterType === 'bandstop' ? amaxDbLp : amaxDbHp,
+							amaxAtFh: transformed ? amaxBand : filterType === 'bandstop' ? amaxDbHp : amaxDbLp,
+							aminAtFsl: aminSideHp,
+							aminAtFsh: aminSideLp
+						}
+					}
+				: {}),
 			lpFp,
 			lpFs,
 			k,
@@ -265,17 +337,26 @@ function checkText(where, text) {
 		{ label: 'low-pass past order 8', filterType: 'lowpass', fp: 10000, fs: 11000, amaxDb: 0.5, aminDb: 60 },
 		{ label: 'default high-pass', filterType: 'highpass', fp: 10000, fs: 3000, amaxDb: 3, aminDb: 40 },
 		{ label: 'default band-pass', filterType: 'bandpass', fl: 1000, fh: 10000, fsl: 300, fsh: 30000, amaxDb: 3, aminDb: 40 },
-		{ label: 'default band-stop', filterType: 'bandstop', fl: 1000, fh: 30000, fsl: 3000, fsh: 10000, amaxDb: 3, aminDb: 40 }
+		{ label: 'default band-stop', filterType: 'bandstop', fl: 1000, fh: 30000, fsl: 3000, fsh: 10000, amaxDb: 3, aminDb: 40 },
+		// narrow bands, where the transformation takes fewer op-amps; the
+		// band-pass asks another Amin at fsl than at fsh
+		{ label: 'narrow band-pass', filterType: 'bandpass', fl: 40000, fh: 60000, fsl: 10000, fsh: 100000, amaxDb: 3, aminDbHp: 50, aminDbLp: 30 },
+		{ label: 'narrow band-stop', filterType: 'bandstop', fl: 9000, fh: 11500, fsl: 9800, fsh: 10300, amaxDb: 1, aminDb: 30 }
 	];
 	let designs = 0;
+	const transformedSeen = new Set();
 	for (const spec of SPECS) {
+		const band = spec.filterType === 'bandpass' || spec.filterType === 'bandstop';
 		for (const response of ['butterworth', 'chebyshev', 'legendre', 'bessel', 'inverseChebyshev', 'elliptic']) {
 			for (const topology of ['mfb', 'sallenKey', 'towThomas', 'boctor']) {
 				for (const stock of Object.keys(STOCK)) {
-					const values = pageValues(spec, response, topology, stock);
-					configs++;
-					if (values.design) designs++;
-					for (const w of inspectFilter(`filter ${spec.label}/${response}/${topology}/${stock}`, filterBasics(values))) widgets.add(w);
+					for (const bandMethod of band ? ['cascade', 'transformed', 'auto'] : ['cascade']) {
+						const values = pageValues(spec, response, topology, stock, null, bandMethod);
+						configs++;
+						if (values.design) designs++;
+						if (values.method === 'transformed' && values.design) transformedSeen.add(`${spec.label} ${bandMethod}`);
+						for (const w of inspectFilter(`filter ${spec.label}/${response}/${topology}/${stock}${band ? `/${bandMethod}` : ''}`, filterBasics(values))) widgets.add(w);
+					}
 				}
 			}
 		}
@@ -288,6 +369,13 @@ function checkText(where, text) {
 	}
 
 	check(`filter basics: ${configs} configurations clean, ${designs} of them with a real design`, problems.length === before, `${problems.length - before} problems`);
+	// every band spec built by transformation, chosen outright and by auto
+	const wantedTransformed = SPECS.filter((s) => s.filterType === 'bandpass' || s.filterType === 'bandstop').flatMap((s) => [`${s.label} transformed`, `${s.label} auto`]);
+	check(
+		'filter basics: every band spec has transformed designs, chosen outright and by auto',
+		wantedTransformed.every((w) => transformedSeen.has(w)),
+		`missing: ${wantedTransformed.filter((w) => !transformedSeen.has(w)).join(', ') || 'none'}`
+	);
 	check('filter basics: no paragraph much over 130 words', longest.words <= 135, `${longest.words} words at ${longest.where}`);
 	check('filter basics: the four figures are used', FILTER_FIGURES.every((w) => widgets.has(w)), [...widgets].join(', '));
 	{
@@ -304,6 +392,29 @@ function checkText(where, text) {
 				byName['order-on-spec']?.n0 === 4 &&
 				byName['stages-multiply']?.stages?.length === 2,
 			`two-tones ${byName['two-tones']?.stages?.length} stages, order-on-spec n0 ${byName['order-on-spec']?.n0}, stages-multiply ${byName['stages-multiply']?.stages?.length} stages`
+		);
+	}
+	{
+		// a transformed design feeds the four figures too: the narrow band-pass
+		// in auto (three MFB band-pass stages), its prototype in the order and
+		// stage figures; the default band-stop as one chain of notches
+		const figures = (values) => Object.fromEntries(filterBasics(values).filter((b) => b.widget !== undefined).map((b) => [b.widget, b.props]));
+		const narrow = SPECS.find((s) => s.label === 'narrow band-pass');
+		const values = pageValues(narrow, 'butterworth', 'mfb', 'E24', null, 'auto');
+		const bp = figures(values);
+		const stop = figures(pageValues(SPECS.find((s) => s.label === 'default band-stop'), 'butterworth', 'towThomas', 'E24', null, 'transformed'));
+		check(
+			'filter basics: a transformed design feeds the four figures (the narrow band-pass in auto, the default band-stop as one chain)',
+			values.method === 'transformed' &&
+				FILTER_FIGURES.every((w) => w in bp && w in stop) &&
+				bp['two-tones'].stages?.length === 3 &&
+				bp['order-on-spec'].n0 === 3 &&
+				bp['stages-multiply'].side === 'prototype' &&
+				bp['stages-multiply'].live === true &&
+				stop['two-tones'].cascade === true &&
+				stop['two-tones'].branches === undefined &&
+				stop['two-tones'].stages?.length === 4,
+			`method ${values.method}, two-tones ${bp['two-tones']?.stages?.length} stages, order-on-spec n0 ${bp['order-on-spec']?.n0}, band-stop two-tones cascade ${stop['two-tones']?.cascade} with ${stop['two-tones']?.stages?.length} stages`
 		);
 	}
 }

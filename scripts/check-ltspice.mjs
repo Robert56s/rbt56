@@ -11,7 +11,12 @@
 // at the measured frequency, and for the modulator the index read from
 // the carrier peaks. Each is held against what the page predicts. The
 // filter exports are netlisted the same way, and their .cir run through an
-// AC sweep whose .meas points must match the page's response. Skips
+// AC sweep whose .meas points must match the page's response; a band filter
+// both ways the page builds it, the cascade and the transformation of one
+// low-pass prototype (a plain chain, no combiner). The narrow band-pass
+// with its MFB band-pass stages built for the TL082 runs with the
+// single-pole op-amp at that GBW (it must give the page's response) and
+// with TI's TL082 model (it must keep Amax and Amin). Skips
 // (exit 0) when no LTspice executable is found; set LTSPICE to its path
 // to point at another install.
 
@@ -24,12 +29,14 @@ import { nearestResistor } from '../src/lib/filter/eseries.js';
 import { designFirstOrderLowPass } from '../src/lib/filter/firstOrder.js';
 import { designFirstOrderHighPass } from '../src/lib/filter/firstOrderHighPass.js';
 import { designMfbLowPass } from '../src/lib/filter/mfb.js';
+import { designMfbBandPass } from '../src/lib/filter/mfbBandPass.js';
 import { designMfbHighPass } from '../src/lib/filter/mfbHighPass.js';
 import { designSallenKeyLowPass } from '../src/lib/filter/sallenKey.js';
 import { designSallenKeyHighPass } from '../src/lib/filter/sallenKeyHighPass.js';
 import { generateNetlist as filterNetlist, generateSchematic as filterSchematic } from '../src/lib/filter/spice.js';
 import { designBandPass, designBandStop, designHighPass, designLowPass } from '../src/lib/filter/stages.js';
 import { designTowThomasHighPass, designTowThomasLowPass, designTowThomasNotch } from '../src/lib/filter/towThomas.js';
+import { designTransformed, realizeTransformed, transformedMenus, transformedNetlistOpts } from './lib-band.mjs';
 import { designDiodeMixerModulator } from '../src/lib/modulation/diodeMixerModulator.js';
 import { designEnvelopeLowPass } from '../src/lib/modulation/envelopeFilter.js';
 import { designJfetModulator } from '../src/lib/modulation/jfetModulator.js';
@@ -44,6 +51,7 @@ import {
 	generateNetlist as modNetlist,
 	generateSchematic as modSchematic
 } from '../src/lib/modulation/spice.js';
+import { OPAMP_GBW } from '../src/lib/spice/opamps.js';
 import { generateNetlist as oscNetlist, generateSchematic as oscSchematic, probeNode } from '../src/lib/oscillator/spice.js';
 import { designOscillator, TOPOLOGIES } from '../src/lib/oscillator/topologies.js';
 
@@ -464,21 +472,35 @@ const filterSpecs = [
 	// a band filter has a topology per side: the side with zeros is Tow-Thomas, the other keeps its own
 	{ filterType: 'bandstop', response: 'elliptic', responseHp: 'butterworth', responseLp: 'elliptic', amaxDb: 3, aminDb: 40, fl: 1000, fh: 30000, fsl: 3000, fsh: 10000, sides: { hp: 'mfb', lp: 'towThomas' } },
 	{ filterType: 'bandpass', response: 'inverseChebyshev', responseHp: 'legendre', responseLp: 'inverseChebyshev', amaxDb: 3, aminDb: 40, fl: 1000, fh: 10000, fsl: 300, fsh: 30000, sides: { hp: 'mfb', lp: 'towThomas' } },
-	{ filterType: 'bandpass', response: 'elliptic', responseHp: 'elliptic', responseLp: 'butterworth', amaxDb: 3, aminDb: 40, fl: 1000, fh: 10000, fsl: 300, fsh: 30000, sides: { hp: 'towThomas', lp: 'sallenKey' } }
+	{ filterType: 'bandpass', response: 'elliptic', responseHp: 'elliptic', responseLp: 'butterworth', amaxDb: 3, aminDb: 40, fl: 1000, fh: 10000, fsl: 300, fsh: 30000, sides: { hp: 'towThomas', lp: 'sallenKey' } },
+	// by the transformation of one low-pass prototype: the narrow band-pass
+	// on MFB band-pass stages (3 op-amps, 7 as a cascade); the same band,
+	// elliptic, on Tow-Thomas (two notches held at their gain at f0 and a
+	// band-pass stage, its high-Q stages close to fl and fh, measured at f0
+	// too); the default band-stop as one chain of Tow-Thomas notches with no
+	// summing amplifier
+	{ filterType: 'bandpass', method: 'transformed', response: 'butterworth', amaxDb: 3, aminDbLow: 50, aminDbHigh: 30, fl: 40000, fh: 60000, fsl: 10000, fsh: 100000, only: ['mfb'] },
+	{ filterType: 'bandpass', method: 'transformed', response: 'elliptic', amaxDb: 3, aminDbLow: 50, aminDbHigh: 30, fl: 40000, fh: 60000, fsl: 10000, fsh: 100000, only: ['towThomas'] },
+	{ filterType: 'bandstop', method: 'transformed', response: 'butterworth', amaxDb: 3, aminDb: 40, fl: 1000, fh: 30000, fsl: 3000, fsh: 10000, only: ['towThomas'] }
 ];
 for (const { only, sides, ...spec } of filterSpecs) {
 	for (const topology of sides ? [`${sides.hp}+${sides.lp}`] : (only ?? Object.keys(secondOrder))) {
+		const transformed = spec.method === 'transformed';
 		let design;
-		if (spec.filterType === 'bandpass') design = designBandPass({ ...spec, orderLow: null, orderHigh: null });
+		if (transformed) design = designTransformed(spec, spec.response);
+		else if (spec.filterType === 'bandpass') design = designBandPass({ ...spec, orderLow: null, orderHigh: null });
 		else if (spec.filterType === 'bandstop') design = designBandStop({ ...spec, orderLow: null, orderHigh: null });
 		else if (spec.filterType === 'highpass') design = designHighPass({ ...spec, order: null });
 		else design = designLowPass({ ...spec, order: null });
-		const realized = design.stages.map((s) => realize(sides ? (s.filterType === 'highpass' ? sides.hp : sides.lp) : topology)(s));
-		const lpCount = spec.filterType === 'bandstop' ? design.lp.stages.length : 0;
+		// a transformed design's band-pass stages on the topology, its notches on Tow-Thomas
+		const realized = transformed ? realizeTransformed(design, transformedMenus(topology, 'towThomas')) : design.stages.map((s) => realize(sides ? (s.filterType === 'highpass' ? sides.hp : sides.lp) : topology)(s));
+		// a transformed band-stop is one chain: the page's response is the plain cascade's
+		const parallel = spec.filterType === 'bandstop' && !transformed;
+		const lpCount = parallel ? design.lp.stages.length : 0;
 		let combinerMode = 'sum';
 		let combinerResistors = null;
 		let predicted = (f) => magnitudePhaseAt(realized, f).db;
-		if (spec.filterType === 'bandstop') {
+		if (parallel) {
 			const branches = [realized.slice(0, lpCount), realized.slice(lpCount)];
 			const choice = combinerChoice(branches, spec.fsl, spec.fsh);
 			combinerMode = choice.mode;
@@ -487,9 +509,9 @@ for (const { only, sides, ...spec } of filterSpecs) {
 			combinerResistors = parts.resistors;
 			predicted = (f) => magnitudePhaseAtParallelSum(branches, f, parts.weights).db;
 		}
-		const opts = { realizedStages: realized, topology: sides ? null : topology, topologyHp: sides?.hp ?? null, topologyLp: sides?.lp ?? null, lpCount, combinerMode, combinerR: 10000, combinerResistors, ...spec };
+		const opts = { realizedStages: realized, topology: sides ? null : topology, topologyHp: sides?.hp ?? null, topologyLp: sides?.lp ?? null, lpCount, combinerMode, combinerR: 10000, combinerResistors, ...spec, ...(transformed ? transformedNetlistOpts(design) : {}) };
 		const responseTag = spec.responseHp && spec.responseHp !== spec.responseLp ? `${spec.responseHp}+${spec.responseLp}` : spec.response;
-		const stem = `flt-${spec.filterType}-${responseTag}-${topology}`;
+		const stem = `flt-${spec.filterType}${spec.method ? `-${spec.method}` : ''}-${responseTag}-${topology}`;
 		const asc = join(dir, `${stem}.asc`);
 		const cir = join(dir, `${stem}.cir`);
 		writeFileSync(asc, filterSchematic(opts));
@@ -507,6 +529,78 @@ for (const { only, sides, ...spec } of filterSpecs) {
 		const worst = meas.reduce((w, m) => Math.max(w, Math.abs(m.db - predicted(m.f))), 0);
 		check(`${stem}: LTspice gives the page's response at the band edges`, meas.length >= 2 && worst < 0.05, meas.length ? `${meas.map((m) => `${m.name} ${m.db.toFixed(2)} dB`).join(', ')}; worst ${worst.toFixed(3)} dB off` : 'no .meas in the log');
 	}
+}
+
+/* -------------------------- MFB band-pass stages built for their op-amp */
+// The narrow band-pass (40 to 60 kHz, Butterworth, 3 MFB band-pass
+// stages) with its stages built for the TL082 (mfbBandPass.js, the
+// single-pole figure measured on TI's model). Exported with the
+// single-pole op-amp at that GBW, LTspice must give the page's response,
+// which includes that op-amp. Exported with TI's TL082 model itself, the
+// band edges must lose Amax within 0.6 dB either way and both stopband
+// edges hold; the same band with plain stages misses fh by several dB.
+{
+	const spec = { filterType: 'bandpass', amaxDb: 3, aminDbLow: 50, aminDbHigh: 30, fl: 40000, fh: 60000, fsl: 10000, fsh: 100000 };
+	const design = designTransformed(spec, 'butterworth');
+	const gbw = OPAMP_GBW.TL082;
+	const built = design.stages.map((s) => designMfbBandPass(s.wn, s.q, { gain: s.gain, gbw }));
+	const plain = design.stages.map((s) => designMfbBandPass(s.wn, s.q, { gain: s.gain }));
+	const base = { ...spec, topology: 'mfb', lpCount: 0, ...transformedNetlistOpts(design) };
+	const optsBuilt = { ...base, realizedStages: built, correctedGbw: gbw };
+	const stem = 'flt-bandpass-transformed-butterworth-mfb-tl082gbw';
+	// the drawing netlists into the .cir, the single-pole op-amps at the stages' GBW
+	writeFileSync(join(dir, `${stem}.asc`), filterSchematic(optsBuilt));
+	const cirText = filterNetlist(optsBuilt);
+	writeFileSync(join(dir, `${stem}.cir`), cirText);
+	run(['-netlist', join(dir, `${stem}.asc`)], 60000);
+	const netFile = join(dir, `${stem}.net`);
+	const netText = existsSync(netFile) ? readFileSync(netFile, 'latin1') : '';
+	const problems = netText ? sameCircuit(cirText, netText) : ['LTspice wrote no netlist'];
+	const gbwOk = /^\.param AOL=1meg GBW=3\.45meg$/m.test(cirText) && (netText.match(/gbw=3\.45meg/gi) ?? []).length === built.length;
+	check(`${stem}: LTspice netlists the drawn .asc into our .cir, every op-amp at GBW = 3.45 MHz`, problems.length === 0 && gbwOk, problems.slice(0, 3).join('; ') || (gbwOk ? '' : 'GBW not 3.45meg everywhere'));
+	run(['-b', join(dir, `${stem}.cir`)]);
+	const log = existsSync(join(dir, `${stem}.log`)) ? readFileSync(join(dir, `${stem}.log`), 'latin1') : '';
+	const meas = [...log.matchAll(/^v_(\w+): V\(vout\)\s*=\(([-+0-9.e]+)dB,[^)]*\) at ([-+0-9.e]+)/gim)].map((m) => ({ name: m[1], db: Number(m[2]), f: Number(m[3]) }));
+	const worst = meas.reduce((w, m) => Math.max(w, Math.abs(m.db - magnitudePhaseAt(built, m.f).db)), 0);
+	check(`${stem}: LTspice with the single-pole op-amp at 3.45 MHz gives the page's response (which includes it)`, meas.length === 5 && worst < 0.05, meas.length ? `${meas.map((m) => `${m.name} ${m.db.toFixed(3)} dB`).join(', ')}; worst ${worst.toFixed(4)} dB off` : 'no .meas in the log');
+
+	// with TI's TL082 model: the losses from the top of the passband
+	const acRun = (name, text) => {
+		const file = join(dir, `${name}.cir`);
+		writeFileSync(file, text);
+		run(['-b', '-ascii', file], 900000);
+		const rawFile = join(dir, `${name}.raw`);
+		if (!existsSync(rawFile)) return null;
+		const raw = readFileSync(rawFile, 'latin1');
+		const head = raw.slice(0, raw.indexOf('Values:'));
+		const nVars = Number(/No\. Variables:\s*(\d+)/.exec(head)[1]);
+		const names = head.slice(head.indexOf('\nVariables:') + 12).trim().split(/\r?\n/).map((l) => l.trim().split(/\s+/)[1].toLowerCase());
+		const k = names.indexOf('v(vout)');
+		const body = raw.slice(raw.indexOf('Values:') + 7).trim().split(/\r?\n/);
+		const f = [];
+		const db = [];
+		for (let i = 0; i + nVars - 1 < body.length; i += nVars) {
+			f.push(Number(body[i].trim().split(/\s+/)[1].split(',')[0]));
+			const [re, im] = body[i + k].trim().split(',').map(Number);
+			db.push(20 * Math.log10(Math.hypot(re, im)));
+		}
+		const at = (x) => {
+			let i = f.findIndex((v) => v >= x);
+			if (i <= 0) i = 1;
+			const t = Math.log(x / f[i - 1]) / Math.log(f[i] / f[i - 1]);
+			return db[i - 1] + t * (db[i] - db[i - 1]);
+		};
+		const top = Math.max(...f.map((v, i) => (v >= spec.fl && v <= spec.fh ? db[i] : -Infinity)));
+		return { fl: top - at(spec.fl), fh: top - at(spec.fh), fsl: top - at(spec.fsl), fsh: top - at(spec.fsh) };
+	};
+	const real = acRun(`${stem}-ti`, filterNetlist({ ...optsBuilt, opamp: 'TL082' }));
+	const before = acRun('flt-bandpass-transformed-butterworth-mfb-plain-ti', filterNetlist({ ...base, realizedStages: plain, opamp: 'TL082' }));
+	const text = (l) => (l ? `fl ${l.fl.toFixed(2)}, fh ${l.fh.toFixed(2)}, fsl ${l.fsl.toFixed(1)}, fsh ${l.fsh.toFixed(1)} dB` : 'no run');
+	check(
+		`${stem}: with TI's TL082 model the band edges lose Amax within 0.6 dB and both stopband edges hold; the plain stages miss fh by several dB`,
+		!!real && !!before && Math.abs(real.fl - spec.amaxDb) <= 0.6 && Math.abs(real.fh - spec.amaxDb) <= 0.6 && real.fsl >= spec.aminDbLow && real.fsh >= spec.aminDbHigh && before.fh > spec.amaxDb + 2,
+		`built for it: ${text(real)}; plain stages: ${text(before)}`
+	);
 }
 
 /* ------------------------------------------- real op-amps: TL082, LM741 */

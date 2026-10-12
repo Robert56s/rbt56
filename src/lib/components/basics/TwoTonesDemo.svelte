@@ -12,6 +12,8 @@
 	//   fl, fh, fsl, fsh    edges of a band type, Hz
 	//   stages              the realized stages, as panel 04 lists them
 	//   branches, signs     band-stop only: the two branches and the combiner's signs
+	//   cascade             band-stop only: true when the stages form one chain, as
+	//                       a band-stop built by transformation does (no branches)
 	// With no stages (the page has no valid design) the figure uses an ideal
 	// fourth-order Butterworth low-pass at 10 kHz and says so.
 	import { magnitudePhaseAt, magnitudePhaseAtParallelSum } from '$lib/filter/bode';
@@ -20,7 +22,7 @@
 	import Slider from './Slider.svelte';
 	import { dbText, hzText, pctText } from './bodeFigure.js';
 
-	let { filterType = 'lowpass', fp = 10000, fs = 35000, fl = 1000, fh = 10000, fsl = 300, fsh = 30000, stages = null, branches = null, signs = null } = $props();
+	let { filterType = 'lowpass', fp = 10000, fs = 35000, fl = 1000, fh = 10000, fsl = 300, fsh = 30000, stages = null, branches = null, signs = null, cascade = false } = $props();
 
 	// the stand-in design, shaped like realized stages so bode.js takes it as is
 	const DEFAULT_STAGES = butterworthStages(4).stages.map((s) => ({
@@ -30,8 +32,10 @@
 	}));
 	const AMPLITUDE = [1, 0.6];
 
+	// a band-stop sums two branches, unless its stages form one chain
+	const parallel = $derived(filterType === 'bandstop' && !cascade);
 	const fallback = $derived(
-		filterType === 'bandstop'
+		parallel
 			? !(Array.isArray(branches) && branches.length === 2 && branches.every((b) => Array.isArray(b) && b.length > 0))
 			: !(Array.isArray(stages) && stages.length > 0)
 	);
@@ -40,7 +44,7 @@
 
 	function respond(f) {
 		if (fallback) return magnitudePhaseAt(DEFAULT_STAGES, f);
-		if (filterType === 'bandstop') return magnitudePhaseAtParallelSum(branches, f, signs);
+		if (parallel) return magnitudePhaseAtParallelSum(branches, f, signs);
 		return magnitudePhaseAt(stages, f);
 	}
 

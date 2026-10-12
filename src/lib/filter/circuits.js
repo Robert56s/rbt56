@@ -273,6 +273,78 @@ export function buildMfbHpDiagram(components, { ohms = formatOhms } = {}) {
 }
 
 /**
+ * MFB band-pass (Delyiannis-Friend, mfbBandPass.js), laid out like the MFB
+ * high-pass: R1 from the input to A, R2 hung from A to ground (with R1 the
+ * input attenuator), C2 from A to the inverting input X, and two feedback
+ * paths back to Vout: C1 from A over the top rail, R3 from X on the rail
+ * under it.
+ */
+export function buildMfbBpDiagram(components, { ohms = formatOhms } = {}) {
+	const y0 = 220;
+	const Vin = { x: MARGIN, y: y0 };
+	// R1's label ends 10px short of A; a long one moves R1 right
+	const r1Text = `R1 ${ohms(components.R1)}`;
+	const R1 = placeClear((dx) => placeSymbol('resistor_right', Vin.x + 90 + dx, y0, SCALE), r1Text, 10, VIN_END);
+	const A = R1.ports['2'];
+
+	const R2 = placeSymbol('resistor_down', A.x, A.y + HANG.resistor_down * SCALE, SCALE);
+	const gndR2 = placeSymbol('ground_down', R2.ports['2'].x - 0.01 * SCALE, R2.ports['2'].y + 0.29 * SCALE, SCALE);
+
+	const C2 = placeSymbol('capacitor_right', A.x + 100, y0, SCALE);
+	const X = C2.ports['2'];
+
+	const opamp = placeSymbol('opamp_no_power_right', X.x + 140, X.y - 0.09 * SCALE, SCALE);
+	const gndPlusX = opamp.ports.inp1.x - 35;
+	const gndPlus = placeSymbol('ground_down', gndPlusX - 0.01 * SCALE, opamp.ports.inp1.y + 40 + 0.29 * SCALE, SCALE);
+
+	const Vout = { x: opamp.ports.out.x + 90, y: opamp.ports.out.y };
+	const railY1 = 90;
+	const railY2 = 130;
+	const C1 = placeSymbol('capacitor_right', (A.x + Vout.x) / 2, railY1, SCALE);
+	const R3 = placeSymbol('resistor_right', (X.x + Vout.x) / 2, railY2, SCALE);
+
+	const net = createNet();
+	net.wire(Vin, R1.ports['1']);
+	net.wire(C2.ports['1'], A);
+	net.elbow(X, opamp.ports.inp2, 'h');
+	net.elbow(opamp.ports.inp1, gndPlus.ports['1'], 'h');
+	net.wire(R2.ports['2'], gndR2.ports['1']);
+	net.wire(A, { x: A.x, y: railY1 });
+	net.wire({ x: A.x, y: railY1 }, C1.ports['1']);
+	net.wire(C1.ports['2'], { x: Vout.x, y: railY1 });
+	net.wire({ x: Vout.x, y: railY1 }, { x: Vout.x, y: railY2 });
+	net.wire(X, { x: X.x, y: railY2 });
+	net.wire({ x: X.x, y: railY2 }, R3.ports['1']);
+	net.wire(R3.ports['2'], { x: Vout.x, y: railY2 });
+	net.wire({ x: Vout.x, y: railY2 }, Vout);
+	net.wire(opamp.ports.out, Vout);
+	net.wire(Vout, { x: Vout.x + 40, y: Vout.y });
+
+	const parts = [
+		R1.svg,
+		R2.svg,
+		gndR2.svg,
+		C2.svg,
+		opamp.svg,
+		gndPlus.svg,
+		C1.svg,
+		R3.svg,
+		net.svg(),
+		net.dots(portPoints(R1, R2, gndR2, C2, opamp, gndPlus, C1, R3)),
+		label('Vin', Vin.x, Vin.y - 12, { anchor: 'start' }),
+		label('Vout', Vout.x + 48, Vout.y + 5, { anchor: 'start' }),
+		label(r1Text, A.x - 10, y0 - 22, { anchor: 'end' }),
+		label(`R2 ${ohms(components.R2)}`, R2.ports['1'].x + 12, (R2.ports['1'].y + R2.ports['2'].y) / 2, { anchor: 'start' }),
+		label(`C2 ${formatFarads(components.C2)}`, X.x - 8, C2.ports['1'].y - 24, { anchor: 'end' }),
+		label(`C1 ${formatFarads(components.C1)}`, C1.ports['1'].x, railY1 - 12, { anchor: 'start' }),
+		label(`R3 ${ohms(components.R3)}`, R3.ports['1'].x, railY2 + 24, { anchor: 'start' })
+	];
+
+	const width = Vout.x + 40 + 60;
+	return { svg: parts.join(''), viewBox: `0 40 ${width} 320` };
+}
+
+/**
  * Sallen-Key high-pass, unity-gain follower: the R-C dual of the low-pass -
  * two equal capacitors in series to the + input, a feedback resistor from
  * Vout to the first junction, a grounded resistor at the second (hung so its
@@ -442,10 +514,12 @@ export function buildFirstOrderDiagram(components, actualTau, { ohms = formatOhm
  * left) takes A2's output through r, feeds back through r, and returns
  * through Ra up into N1 to close the loop. Low-pass at A2's output, band-
  * pass at A1's; the high-pass form takes its output at A1 and A2's output
- * is then the band-pass.
+ * is then the band-pass. The band-pass form (`bandPass`) is the low-pass
+ * circuit with its output taken at A1.
  */
-function towThomasCore(components, highPass, ohms) {
+function towThomasCore(components, highPass, ohms, bandPass = false) {
 	const c = components;
+	const atA1 = highPass || bandPass;
 	const y0 = 300;
 	const Vin = { x: MARGIN, y: y0 };
 	// the input element's label ends 10px short of N1; a long one moves the
@@ -518,14 +592,15 @@ function towThomasCore(components, highPass, ohms) {
 	net.wire({ x: A3.ports.out.x, y: loopY }, A3.ports.out);
 	net.wire(A3.ports.out, { x: N1.x, y: A3.ports.out.y });
 	net.wire({ x: N1.x, y: A3.ports.out.y }, Ra.ports['2']);
-	// a tap on A1's output: the band-pass (low-pass form) or the output (high-pass form)
+	// a tap on A1's output: the band-pass (low-pass form) or the output (high-pass and band-pass forms)
 	const tap = { x: B.x + 30, y: B.y };
 	const tapEnd = { x: tap.x, y: y0 + 44 };
 	net.wire(tap, tapEnd);
-	// right end: the stage output (low-pass form) or the band-pass (high-pass form)
-	const end = { x: L.x + (highPass ? 40 : 90), y: L.y };
+	// right end: the stage output (low-pass form), the band-pass (high-pass
+	// form) or the low-pass (band-pass form)
+	const end = { x: L.x + (atA1 ? 40 : 90), y: L.y };
 	net.wire(L, end);
-	if (!highPass) net.wire(end, { x: end.x + 40, y: end.y });
+	if (!atA1) net.wire(end, { x: end.x + 40, y: end.y });
 
 	// Rd's label starts at Rd and has to end short of B's riser; a long one
 	// ends a character short of it instead
@@ -560,8 +635,8 @@ function towThomasCore(components, highPass, ohms) {
 		label('A1', A1.ports.out.x - 24, y0 + 24, { anchor: 'middle' }),
 		label('A2', A2.ports.out.x - 24, B.y + 24, { anchor: 'middle' }),
 		label('A3', A3.ports.out.x + 24, yA3 - 22, { anchor: 'middle' }),
-		label(highPass ? 'Vout (HP)' : 'V_bp', tapEnd.x + 6, tapEnd.y + 2, { anchor: 'start' }),
-		label(highPass ? 'V_bp' : 'Vout (LP)', end.x + (highPass ? 6 : 48), end.y + 5, { anchor: 'start' })
+		label(highPass ? 'Vout (HP)' : bandPass ? 'Vout (BP)' : 'V_bp', tapEnd.x + 6, tapEnd.y + 2, { anchor: 'start' }),
+		label(highPass ? 'V_bp' : bandPass ? 'V_lp' : 'Vout (LP)', end.x + (atA1 ? 6 : 48), end.y + 5, { anchor: 'start' })
 	];
 
 	const width = Math.max(end.x + 40, r1.ports['2'].x + 30) + 70;
@@ -576,6 +651,10 @@ export function buildTowThomasDiagram(components, { ohms = formatOhms } = {}) {
 
 export function buildTowThomasHpDiagram(components, { ohms = formatOhms } = {}) {
 	return towThomasCore(components, true, ohms);
+}
+
+export function buildTowThomasBpDiagram(components, { ohms = formatOhms } = {}) {
+	return towThomasCore(components, false, ohms, true);
 }
 
 /** Places a symbol so that its port `key` lands exactly on `p`. */

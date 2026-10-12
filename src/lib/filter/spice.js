@@ -138,6 +138,37 @@ export function stageElements(stage, i, nIn, nOut) {
 				op('c', '0', N4, N3)
 			];
 		}
+		case 'mfbBp': {
+			// Delyiannis-Friend: R1 in to A and R2 A to ground (the input
+			// attenuator), C2 A to the virtual ground, C1 output back to A, R3
+			// output back to the virtual ground. The order of mfbHp, so drawMfb
+			// draws it.
+			const A = n('a');
+			const M = n('n');
+			return [R('1', nIn, A, c.R1), R('2', A, '0', c.R2), C('2', A, M, c.C2), C('1', nOut, A, c.C1), R('3', M, nOut, c.R3), op('', '0', M, nOut)];
+		}
+		case 'towThomasBp': {
+			// the low-pass loop with its output taken at A1 (the band-pass):
+			// towThomasHp with R1 in place of Cin
+			const N1 = n('n1');
+			const N2 = n('n2');
+			const L = n('lp');
+			const N4 = n('n4');
+			const N3 = n('inv');
+			return [
+				R('1', nIn, N1, c.R1),
+				R('a', N3, N1, c.Ra),
+				C('1', N1, nOut, c.C1),
+				R('d', N1, nOut, c.Rd),
+				op('a', '0', N1, nOut),
+				R('b', nOut, N2, c.Rb),
+				C('2', N2, L, c.C2),
+				op('b', '0', N2, L),
+				R('r1', L, N4, c.r),
+				R('r2', N4, N3, c.r),
+				op('c', '0', N4, N3)
+			];
+		}
 		case 'firstOrder': {
 			// passive RC then the unity-gain buffer the schematic shows
 			const A = n('a');
@@ -168,14 +199,41 @@ export function chainElements(stages, from, to, startIndex = 1) {
 
 const TYPE_LABEL = { lowpass: 'low-pass', highpass: 'high-pass', bandpass: 'band-pass', bandstop: 'band-stop' };
 const isBand = (t) => t === 'bandpass' || t === 'bandstop';
+/**
+ * A band filter built from one low-pass prototype (stages.js,
+ * designBandPassTransformed / designBandStopTransformed); a band-stop
+ * drawn as one chain is one too.
+ */
+const isTransformed = ({ filterType, method, structure }) => isBand(filterType) && (method === 'transformed' || (filterType === 'bandstop' && structure === 'cascade'));
+const hz = (f) => Number(f.toPrecision(6));
+/**
+ * MFB band-pass stages built for a single-pole op-amp (mfbBandPass.js):
+ * opts.correctedGbw, in Hz. The single-pole model in the file then takes
+ * that gain-bandwidth unless gbw says otherwise, and the notes say so. Left
+ * at it, the note says that it is the GBW set in the file: the generic
+ * note above it quotes datasheet figures (3meg for a TL07x), and the
+ * stages may be built for another (3.45 MHz, measured on the TL082 model).
+ */
+const correctedGbw = (opts) => (Number.isFinite(opts.correctedGbw) && opts.correctedGbw > 0 ? opts.correctedGbw : null);
+const correctedLine = (opts) => {
+	const mhz = Number((correctedGbw(opts) / 1e6).toPrecision(4));
+	// the single-pole model left at that GBW
+	const setHere = !opampModel(opts.opamp ?? 'ideal').real && opts.gbw === undefined;
+	return setHere
+		? `The MFB band-pass stages are built for a single-pole op-amp of ${mhz} MHz, the GBW set here: another GBW moves them.`
+		: `The MFB band-pass stages are built for a single-pole op-amp of ${mhz} MHz: another op-amp moves them.`;
+};
 
 /**
  * Every element of the circuit, format-independent. The source V1 is
- * included so both renderers drive the input the same way.
+ * included so both renderers drive the input the same way. A band-stop
+ * is two branches and a combiner (structure 'parallel'), or with
+ * structure 'cascade' (a transformed band-stop, every stage a notch) one
+ * chain like any other filter.
  */
-export function buildElements({ realizedStages, filterType, lpCount = 0, combinerMode = 'sum', combinerR = 10000, combinerResistors = null }) {
+export function buildElements({ realizedStages, filterType, method, structure = method === 'transformed' ? 'cascade' : 'parallel', lpCount = 0, combinerMode = 'sum', combinerR = 10000, combinerResistors = null }) {
 	const out = [{ kind: 'V', name: 'V1', nodes: ['vin', '0'], spice: 'AC 1 SIN(0 1 1k)' }];
-	if (filterType === 'bandstop') {
+	if (filterType === 'bandstop' && structure !== 'cascade') {
 		const lp = realizedStages.slice(0, lpCount);
 		const hp = realizedStages.slice(lpCount);
 		// the combiner's resistors: all equal, unless the low-pass branch's
@@ -209,14 +267,16 @@ export function buildElements({ realizedStages, filterType, lpCount = 0, combine
 	return out;
 }
 
-/** The frequencies worth measuring: the spec edges. */
-function measurePoints({ filterType, fp, fs, fl, fh, fsl, fsh }) {
+/** The frequencies worth measuring: the spec edges, and the centre f0 of a transformed band-pass (its gain is 1 there). */
+function measurePoints(opts) {
+	const { filterType, fp, fs, fl, fh, fsl, fsh } = opts;
 	return isBand(filterType)
 		? [
 				['fl', fl],
 				['fh', fh],
 				['fsl', fsl],
-				['fsh', fsh]
+				['fsh', fsh],
+				...(isTransformed(opts) && filterType === 'bandpass' ? [['f0', hz(bandCentreOf(opts).f0)]] : [])
 			]
 		: [
 				['fp', fp],
@@ -230,16 +290,37 @@ function sweepRange({ filterType, fp, fs, fsl, fsh }) {
 	return { low, high };
 }
 
-/** The response in words: one name, or one per side when a band type mixes two. */
-function responseText({ filterType, response, responseHp, responseLp }) {
+/** f0 and B of a band, as given or from fl and fh. */
+function bandCentreOf({ f0, B, fl, fh }) {
+	return { f0: f0 ?? Math.sqrt(fl * fh), B: B ?? fh - fl };
+}
+
+/** The response in words: one name, or one per side when a band type mixes two (a transformed band has one). */
+function responseText(opts) {
+	const { filterType, response, responseHp, responseLp } = opts;
 	const name = (r) => RESPONSES[r]?.label ?? r;
-	if (isBand(filterType) && responseHp && responseLp && responseHp !== responseLp) return `${name(responseHp)} high-pass side, ${name(responseLp)} low-pass side`;
+	if (isBand(filterType) && !isTransformed(opts) && responseHp && responseLp && responseHp !== responseLp) return `${name(responseHp)} high-pass side, ${name(responseLp)} low-pass side`;
 	return name(response ?? responseLp ?? 'butterworth');
 }
 
+/**
+ * The limits of a transformed band: one Amax (fl and fh land on the same
+ * prototype edge), and for a band-pass an Amin per stopband edge when the
+ * two differ. aminDbLow / aminDbHigh when given, else the sides' figures.
+ */
+function transformedLimitsText({ filterType, amaxDb, aminDb, amaxDbHp, amaxDbLp, aminDbHp, aminDbLp, aminDbLow, aminDbHigh }) {
+	const amax = Number.isFinite(amaxDbHp) && Number.isFinite(amaxDbLp) ? Math.min(amaxDbHp, amaxDbLp) : amaxDb;
+	const low = aminDbLow ?? aminDbHp ?? aminDb;
+	const high = aminDbHigh ?? aminDbLp ?? aminDb;
+	const amin = filterType === 'bandstop' || low === high ? `${low} dB` : `${low} dB at fsl, ${high} dB at fsh`;
+	return `Amax = ${amax} dB, Amin = ${amin}`;
+}
+
 /** The limits in one line, each one per side when a band filter's two sides differ. */
-function limitsText({ filterType, amaxDb, aminDb, amaxDbHp, aminDbHp, amaxDbLp, aminDbLp }) {
+function limitsText(opts) {
+	const { filterType, amaxDb, aminDb, amaxDbHp, aminDbHp, amaxDbLp, aminDbLp } = opts;
 	if (!isBand(filterType)) return `Amax = ${amaxDb} dB, Amin = ${aminDb} dB`;
+	if (isTransformed(opts)) return transformedLimitsText(opts);
 	const word = filterType === 'bandstop' ? 'branch' : 'side';
 	const pair = (hp, lp) => (hp === lp ? `${lp} dB` : `${hp} dB (high-pass ${word}), ${lp} dB (low-pass ${word})`);
 	return `Amax = ${pair(amaxDbHp ?? amaxDb, amaxDbLp ?? amaxDb)}, Amin = ${pair(aminDbHp ?? aminDb, aminDbLp ?? aminDb)}`;
@@ -248,6 +329,11 @@ function limitsText({ filterType, amaxDb, aminDb, amaxDbHp, aminDbHp, amaxDbLp, 
 function specSummary(opts) {
 	const { filterType, fp, fs, fl, fh, fsl, fsh, topology, topologyHp, topologyLp } = opts;
 	const edges = isBand(filterType) ? `fl = ${fl} Hz, fh = ${fh} Hz, fsl = ${fsl} Hz, fsh = ${fsh} Hz` : `fp = ${fp} Hz, fs = ${fs} Hz`;
+	if (isTransformed(opts)) {
+		const { f0, B } = bandCentreOf(opts);
+		const type = TYPE_LABEL[filterType];
+		return [`${type}, ${responseText(opts)}, low-pass to ${type} transformation`, `${limitsText(opts)}, ${edges}`, `f0 = ${hz(f0)} Hz, B = ${hz(B)} Hz, stages: ${stagesText(opts)}`];
+	}
 	return [`${TYPE_LABEL[filterType] ?? filterType}, ${responseText(opts)}`, `${limitsText(opts)}, ${edges}`, topologyHp && topologyLp && topologyHp !== topologyLp ? `topology: ${topologyHp} (high-pass side), ${topologyLp} (low-pass side)` : `topology: ${topology ?? topologyLp}`];
 }
 
@@ -289,14 +375,26 @@ function headerLines(opts) {
 						'pole set so the gain-bandwidth product equals GBW. Change GBW to the',
 						'part that will be built (3meg = TL07x/TL08x, 8meg = OPA2134,',
 						'10meg = NE5532) and rerun to see whether the op-amp limits the design.'
-					])
+					]),
+			...(correctedGbw(opts) ? [correctedLine(opts)] : [])
 		]
 	};
 }
 
+/**
+ * Points per decade of the sweep. The .meas lines read between its points,
+ * and a transformed band's stages sharpen as the band narrows, so its
+ * sweep puts about 50 points across f0/Q of its sharpest stage.
+ */
+function pointsPerDecade(opts) {
+	if (!isTransformed(opts)) return 200;
+	const q = Math.max(0, ...(opts.realizedStages ?? []).map((s) => s.actual?.q).filter(Number.isFinite));
+	return Math.max(200, Math.ceil((50 * Math.LN10 * q) / 100) * 100);
+}
+
 function analysis(opts) {
 	const { low, high } = sweepRange(opts);
-	return [`.ac dec 200 ${low} ${high}`, ...measurePoints(opts).map(([name, f]) => `.meas AC v_${name} FIND V(vout) AT ${f}`)];
+	return [`.ac dec ${pointsPerDecade(opts)} ${low} ${high}`, ...measurePoints(opts).map(([name, f]) => `.meas AC v_${name} FIND V(vout) AT ${f}`)];
 }
 
 /**
@@ -304,7 +402,7 @@ function analysis(opts) {
  * no external library and the gain-bandwidth can be swept.
  */
 export function generateNetlist(opts) {
-	const { gbw = '3meg', ideal = false, opamp = 'ideal' } = opts;
+	const { gbw = correctedGbw(opts) ? spiceValue(correctedGbw(opts)) : '3meg', ideal = false, opamp = 'ideal' } = opts;
 	const { title, comments } = headerLines(opts);
 	return renderNetlist({
 		elements: buildElements(opts),
@@ -317,11 +415,11 @@ export function generateNetlist(opts) {
 	});
 }
 
-const TOPOLOGY_LABEL = { mfb: 'multiple feedback', sallenKey: 'Sallen-Key', towThomas: 'Tow-Thomas', boctor: 'Boctor notch' };
+const TOPOLOGY_LABEL = { mfb: 'multiple feedback', sallenKey: 'Sallen-Key', towThomas: 'Tow-Thomas', boctor: 'Boctor notch', mfbBp: 'multiple feedback band-pass', towThomasBp: 'Tow-Thomas band-pass' };
 
-/** The stage circuits actually on the sheet: the chosen topology, the notch stages, or both. */
+/** The stage circuits actually on the sheet: the chosen topology, the notch stages, the band-pass stages, or several. */
 function stagesText({ topology, realizedStages = [] }) {
-	const kinds = new Set(realizedStages.map((s) => (s.topology === 'towThomasNotch' ? 'Tow-Thomas notch' : /^firstOrder/.test(s.topology) ? null : TOPOLOGY_LABEL[s.topology.replace(/Hp$/, '')])).filter(Boolean));
+	const kinds = new Set(realizedStages.map((s) => (s.topology === 'towThomasNotch' ? 'Tow-Thomas notch' : /^firstOrder/.test(s.topology) ? null : TOPOLOGY_LABEL[s.topology] ?? TOPOLOGY_LABEL[s.topology.replace(/Hp$/, '')])).filter(Boolean));
 	return kinds.size ? [...kinds].join(' and ') : TOPOLOGY_LABEL[topology] ?? topology;
 }
 
@@ -330,6 +428,11 @@ function schematicNotes(opts) {
 	const { filterType, realizedStages = [] } = opts;
 	const order = realizedStages.reduce((n, s) => n + (s.order ?? (/^firstOrder/.test(s.topology) ? 1 : 2)), 0);
 	const kind = `${TYPE_LABEL[filterType] ?? filterType}, ${responseText(opts)}, order ${order}, ${stagesText(opts)}`;
+	if (isTransformed(opts)) {
+		const { f0, B } = bandCentreOf(opts);
+		const at = filterType === 'bandpass' ? 'at the band edges and at f0' : 'at the band edges';
+		return [`Active ${kind} filter (rbt56.com/tools/filter-design)`, `Low-pass to ${TYPE_LABEL[filterType]} transformation, f0 = ${hz(f0)} Hz, B = ${hz(B)} Hz.`, `Run, then plot V(vout); the .meas lines give its gain ${at}.`, ...(correctedGbw(opts) ? [correctedLine(opts)] : []), ...pairLines(opts, 'the drawing shows their sum')];
+	}
 	return [`Active ${kind} filter (rbt56.com/tools/filter-design)`, 'Run, then plot V(vout); the .meas lines give its gain at the band edges.', ...pairLines(opts, 'the drawing shows their sum')];
 }
 
@@ -338,7 +441,7 @@ function schematicNotes(opts) {
  * stage by stage (sheet.js), the AC analysis already set up.
  */
 export function generateSchematic(opts) {
-	const { gbw = '3Meg', opamp = 'ideal' } = opts;
+	const { gbw = correctedGbw(opts) ? `${Number((correctedGbw(opts) / 1e6).toPrecision(4))}Meg` : '3Meg', opamp = 'ideal' } = opts;
 	return drawFilter(
 		{ ...opts, elements: buildElements(opts) },
 		{ comments: schematicNotes(opts), directives: ['.lib opamp.sub', ...analysis(opts)], gbw, opamp }

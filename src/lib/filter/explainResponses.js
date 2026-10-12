@@ -318,14 +318,66 @@ export function modernRealPoleBlocks(design, stage) {
 /* The notch stage's components (Components panel)                           */
 /* ------------------------------------------------------------------------ */
 
-/** Tow-Thomas notch (feed-forward) derivation for one realized stage. */
-export function explainTowThomasNotch(stageDesign, targetWn, targetQ, targetWz) {
+/**
+ * Tow-Thomas notch (feed-forward) derivation for one realized stage.
+ * `context` (optional) is { method: 'transformed', filterType: 'bandpass' |
+ * 'bandstop', w0 } for a stage of a band filter built by transformation:
+ * a band-pass stage is set for gain 1 at f0 through Cin = K∞ C, a band-stop
+ * stage for gain 1 at DC, and neither has a combiner to even out Cin's
+ * rounding. w0 (rad/s, optional) adds the realized gain at f0. Without a
+ * context the text is that of a low-pass or high-pass stage.
+ */
+export function explainTowThomasNotch(stageDesign, targetWn, targetQ, targetWz, context = null) {
 	const st = stageDesign.steps;
 	const c = stageDesign.components;
 	const a = stageDesign.actual;
-	const low = stageDesign.lowSide;
+	const band = context?.method === 'transformed' ? context : null;
+	// a band-pass stage set by its gain at f0: Cin = K∞ C, rounded like the low side's
+	const atF0 = !!band && band.filterType !== 'bandstop' && Number.isFinite(st.gainTarget);
+	const low = atF0 || stageDesign.lowSide;
 	const f0 = targetWn / (2 * Math.PI);
 	const dcDb = 20 * Math.log10(Math.abs(a.dcGain));
+	let rule = low
+		? 'Far above the zero the gain is -Cin/C, at DC it is -R/Rz. A stage of a low-pass must pass DC at gain 1, which sets Rz = R, and then the zero fixes the capacitor ratio:'
+		: 'Far above the zero the gain is -Cin/C, at DC it is -R/Rz. A stage of a high-pass must pass high frequencies at gain 1, which sets Cin = C, and then the zero fixes Rz:';
+	let ruleTex = low
+		? '\\text{DC gain } 1:\\ R_z = R \\ \\Rightarrow\\ C_{in} = C\\left(\\dfrac{\\omega_n}{\\omega_z}\\right)^2'
+		: '\\text{gain } 1 \\text{ above the zero}:\\ C_{in} = C \\ \\Rightarrow\\ R_z = R\\left(\\dfrac{\\omega_n}{\\omega_z}\\right)^2';
+	// what Cin's rounding does to the level
+	let tail = low ? ' The small DC gain error from Cin is a flat step across the passband: the spec, measured from the top of the passband, does not see it, and a band-stop evens it out in its combiner.' : '';
+	if (atF0) {
+		rule =
+			'Far above the zero the gain is -Cin/C, at DC it is -R/Rz. A notch stage of a band-pass built by transformation is set for gain 1 at f0, the centre of the band, which is neither: the gain far above the zero, K∞, takes the value that leaves |H(jω0)| = 1. That sets Cin = K∞ C, and then the zero fixes Rz:';
+		ruleTex =
+			'|H(j\\omega_0)| = K_\\infty\\,\\dfrac{|\\omega_z^2 - \\omega_0^2|}{|\\omega_n^2 - \\omega_0^2 + j\\,\\omega_n\\omega_0/Q|} = 1:\\ \\ C_{in} = K_\\infty C \\ \\Rightarrow\\ R_z = \\dfrac{R}{K_\\infty}\\left(\\dfrac{\\omega_n}{\\omega_z}\\right)^2';
+		tail = ' Rounding Cin scales the whole stage, so its gain at f0 moves by the same factor: a flat step across the band, which the spec, measured from the top of the passband, does not see.';
+	} else if (band && band.filterType !== 'bandstop') {
+		// a band-pass stage built without a gain at f0: no combiner to mention
+		if (low) tail = ' The small DC gain error from Cin is a flat step across the passband: the spec, measured from the top of the passband, does not see it.';
+	} else if (band) {
+		rule =
+			'Far above the zero the gain is -Cin/C, at DC it is -R/Rz. A notch stage of a band-stop built by transformation must pass DC at gain 1, whichever side of its poles the zero is on, which sets Rz = R, and then the zero fixes the capacitor ratio:';
+		tail = ' Rounding Cin scales the whole stage, at DC and above the band alike: a flat step that the spec, measured from the top of the passband, does not see. With no combiner to trim it, the Bode plot shows the level it leaves.';
+	}
+	// the realized gain at f0, when the page passes w0
+	const w0 = band && Number.isFinite(band.w0) ? band.w0 : null;
+	const gainAtW0 = w0 === null ? null : (Math.abs(a.gain) * Math.abs(a.wz * a.wz - w0 * w0)) / Math.hypot(a.wn * a.wn - w0 * w0, (a.wn * w0) / a.q);
+	let rounded;
+	if (atF0) {
+		rounded = [
+			eq(`C_{in} = K_\\infty C = ${n4(st.gainTarget)} \\times ${formatFarads(st.C)} = ${formatFarads(st.CinIdeal)} \\rightarrow ${formatFarads(c.Cin)}`),
+			p('Cin comes from the coarse capacitor series, so Rz is solved against the parts actually used, which puts the zero exactly where it belongs and moves the rounding into the gain instead:'),
+			eq(`R_z = \\dfrac{1}{C\\,C_{in} R\\,\\omega_z^2} = ${formatOhms(st.RzTarget)} \\rightarrow ${formatOhms(c.Rz)}, \\qquad H(\\infty) = -\\dfrac{C_{in}}{C} = ${a.gain.toFixed(4)}, \\qquad \\text{DC gain} = -\\dfrac{R}{R_z} = ${a.dcGain.toFixed(4)}`)
+		];
+	} else if (low) {
+		rounded = [
+			eq(`C_{in} = C\\left(\\dfrac{\\omega_n}{\\omega_z}\\right)^2 = ${formatFarads(st.CinIdeal)} \\rightarrow ${formatFarads(c.Cin)}`),
+			p('Cin comes from the coarse capacitor series, so Rz is solved against the parts actually used, which puts the zero exactly where it belongs and moves the rounding into the DC gain instead:'),
+			eq(`R_z = \\dfrac{1}{C\\,C_{in} R\\,\\omega_z^2} = ${formatOhms(st.RzTarget)} \\rightarrow ${formatOhms(c.Rz)}, \\qquad \\text{DC gain} = -\\dfrac{R}{R_z} = ${a.dcGain.toFixed(4)}\\ (${dcDb >= 0 ? '+' : ''}${dcDb.toFixed(2)}\\ \\text{dB})`)
+		];
+	} else {
+		rounded = [eq(`C_{in} = C = ${formatFarads(c.Cin)}, \\qquad R_z = \\dfrac{1}{C^2 R\\,\\omega_z^2} = ${formatOhms(st.RzTarget)} \\rightarrow ${formatOhms(c.Rz)}`)];
+	}
 	return [
 		p(
 			'A stage with zeros needs a circuit that can make them. The MFB and Sallen-Key stages here only make poles, so every stage with a pair of zeros is a Tow-Thomas biquad with feed-forward: the loop of the Tow-Thomas high-pass (A1 damped integrator, A2 integrator, A3 inverter, input through Cin into A1), plus one resistor Rz from the input into A2\'s summing node. Node by node:'
@@ -337,33 +389,20 @@ export function explainTowThomasNotch(stageDesign, targetWn, targetQ, targetWz) 
 		eq(
 			'\\dfrac{V_{out}}{V_{in}} = -\\dfrac{\\frac{C_{in}}{C}\\,s^2 + \\frac{1}{C^2 R R_z}}{s^2 + \\frac{s}{C R_d} + \\frac{1}{C^2 R^2}}, \\qquad \\omega_n = \\dfrac{1}{RC},\\ \\ Q = \\dfrac{R_d}{R},\\ \\ \\omega_z^2 = \\dfrac{1}{C\\,C_{in} R R_z}'
 		),
-		p(
-			low
-				? 'Far above the zero the gain is -Cin/C, at DC it is -R/Rz. A stage of a low-pass must pass DC at gain 1, which sets Rz = R, and then the zero fixes the capacitor ratio:'
-				: 'Far above the zero the gain is -Cin/C, at DC it is -R/Rz. A stage of a high-pass must pass high frequencies at gain 1, which sets Cin = C, and then the zero fixes Rz:'
-		),
-		eq(
-			low
-				? '\\text{DC gain } 1:\\ R_z = R \\ \\Rightarrow\\ C_{in} = C\\left(\\dfrac{\\omega_n}{\\omega_z}\\right)^2'
-				: '\\text{gain } 1 \\text{ above the zero}:\\ C_{in} = C \\ \\Rightarrow\\ R_z = R\\left(\\dfrac{\\omega_n}{\\omega_z}\\right)^2'
-		),
+		p(rule),
+		eq(ruleTex),
 		p(
 			`This stage's target: f0 = ${formatHz(f0)}, Q = ${targetQ.toFixed(4)}, zero at ${formatHz(targetWz / (2 * Math.PI))}. ${stageDesign.manual ? 'C below was entered by hand.' : `C is picked so that R lands near 10 kilo-ohm${low ? ' and a stocked Cin comes close to its ideal ratio' : ''}.`} R and Rd follow as in any Tow-Thomas stage:`
 		),
 		eq(`C = ${formatFarads(st.C)}\\ \\Rightarrow\\ R = \\dfrac{1}{\\omega_n C} = ${formatOhms(st.Rtarget)} \\rightarrow ${formatOhms(c.Ra)}, \\qquad R_d = QR \\rightarrow ${formatOhms(c.Rd)}`),
-		...(low
-			? [
-					eq(`C_{in} = C\\left(\\dfrac{\\omega_n}{\\omega_z}\\right)^2 = ${formatFarads(st.CinIdeal)} \\rightarrow ${formatFarads(c.Cin)}`),
-					p('Cin comes from the coarse capacitor series, so Rz is solved against the parts actually used, which puts the zero exactly where it belongs and moves the rounding into the DC gain instead:'),
-					eq(`R_z = \\dfrac{1}{C\\,C_{in} R\\,\\omega_z^2} = ${formatOhms(st.RzTarget)} \\rightarrow ${formatOhms(c.Rz)}, \\qquad \\text{DC gain} = -\\dfrac{R}{R_z} = ${a.dcGain.toFixed(4)}\\ (${dcDb >= 0 ? '+' : ''}${dcDb.toFixed(2)}\\ \\text{dB})`)
-				]
-			: [eq(`C_{in} = C = ${formatFarads(c.Cin)}, \\qquad R_z = \\dfrac{1}{C^2 R\\,\\omega_z^2} = ${formatOhms(st.RzTarget)} \\rightarrow ${formatOhms(c.Rz)}`)]),
+		...rounded,
 		p('Recomputing from the rounded values:'),
 		eq(
 			`f_0' = ${formatHz(a.wn / (2 * Math.PI))}, \\quad Q' = ${a.q.toFixed(4)}, \\quad f_z' = \\dfrac{1}{2\\pi\\sqrt{C\\,C_{in}RR_z}} = ${formatHz(a.wz / (2 * Math.PI))}, \\quad H(\\infty) = ${a.gain.toFixed(4)}`
 		),
+		...(gainAtW0 === null ? [] : [eq(`|H(j\\omega_0)| = ${n4(gainAtW0)}\\ \\ (${gainAtW0 >= 1 ? '+' : ''}${(20 * Math.log10(gainAtW0)).toFixed(2)}\\ \\text{dB at } f_0 = ${formatHz(w0 / (2 * Math.PI))})`)]),
 		p(
-			`The stage inverts, like the Tow-Thomas high-pass. Its sensitivities are those of the Tow-Thomas (1/2 and 1, whatever the Q); the zero depends on C, Cin, R and Rz each with sensitivity -1/2, and on nothing that sets the poles alone, which is why notch stages are usually built this way rather than with one op-amp.${low ? ' The small DC gain error from Cin is a flat step across the passband: the spec, measured from the top of the passband, does not see it, and a band-stop evens it out in its combiner.' : ''}`
+			`The stage inverts, like the Tow-Thomas high-pass. Its sensitivities are those of the Tow-Thomas (1/2 and 1, whatever the Q); the zero depends on C, Cin, R and Rz each with sensitivity -1/2, and on nothing that sets the poles alone, which is why notch stages are usually built this way rather than with one op-amp.${tail}`
 		)
 	];
 }

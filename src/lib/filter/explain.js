@@ -832,3 +832,534 @@ export function explainSummingAmp(R, { mode = 'sum', lpSign = 1, hpSign = 1, lpO
 		)
 	];
 }
+
+/* ------------------------------------------------------------------------ */
+/* 5. Band-pass and band-stop by transformation of a low-pass prototype      */
+/* ------------------------------------------------------------------------ */
+
+const TWO_PI = 2 * Math.PI;
+/** A frequency in Hz as a plain number inside a formula: 48989.8, 10000. */
+const hzNum = (f) => (Number.isFinite(f) ? String(Number(f.toPrecision(6))) : '-');
+/** An angular frequency as the Hz the page prints. */
+const hzOf = (w) => formatHz(w / TWO_PI);
+/** a + j b as TeX, with the sign of b written out. */
+const complexTex = (re, im) => `${n2(re)} ${im < 0 ? '-' : '+'} j\\,${n2(Math.abs(im))}`;
+/** A gain in dB with its sign. */
+const signedDb = (g) => {
+	const d = 20 * Math.log10(Math.abs(g));
+	return Number.isFinite(d) ? `${d >= 0 ? '+' : ''}${d.toFixed(2)}` : '-';
+};
+/** The upper pole -wn/(2Q) + j wn sqrt(1 - 1/(4Q^2)) of a second-order stage, rad/s. */
+function upperPole(wn, q) {
+	return { re: -wn / (2 * q), im: wn * Math.sqrt(Math.max(0, 1 - 1 / (4 * q * q))) };
+}
+const bandWord = (design) => (design.filterType === 'bandstop' ? 'band-stop' : 'band-pass');
+const stageCount = (design) => `${design.stages.length} second-order stage${design.stages.length === 1 ? '' : 's'}`;
+/** A response's name inside a sentence. */
+const RESPONSE_NAME = { butterworth: 'Butterworth', chebyshev: 'Chebyshev', legendre: 'Legendre', bessel: 'Bessel', inverseChebyshev: 'inverse Chebyshev', elliptic: 'elliptic' };
+
+/**
+ * How the band edges turn into one low-pass prototype and how its poles
+ * and zeros turn into band stages (shown once, in the Stages panel, next
+ * to the prototype's own response). Every number comes from the design.
+ */
+export function explainBandTransform(design) {
+	const stop = design.filterType === 'bandstop';
+	const { fl, fh, fsl, fsh, f0, B, w0, bw } = design;
+	const proto = design.lowpass;
+	const pairIndex = proto.stages.findIndex((s) => s.order === 2);
+	const realIndex = proto.stages.findIndex((s) => s.order === 1);
+	const zeroIndex = proto.stages.findIndex((s) => Number.isFinite(s.wz));
+	const blocks = [
+		p(
+			`A ${bandWord(design)} can also be built from a single low-pass, the prototype, moved onto the band by a change of variable, instead of from two filters ${stop ? 'added together' : 'in a row'}. The band is described by two numbers: its centre f0, the geometric mean of the passband edges (not the arithmetic one), and its width B:`
+		),
+		eq(`f_0 = \\sqrt{f_l f_h} = \\sqrt{${hzNum(fl)} \\times ${hzNum(fh)}} = ${formatHz(f0)}, \\qquad B = f_h - f_l = ${formatHz(B)}`),
+		p(
+			stop
+				? 'The prototype is an ordinary low-pass whose passband edge is B. Every s in its transfer function is replaced by a function of s that is zero at DC and far above the band, and infinite at f0: the passband of the prototype, around its DC, lands on both outer passbands, and its stopband folds into the middle of the band:'
+				: 'The prototype is an ordinary low-pass whose passband edge is B. Every s in its transfer function is replaced by a function of s that is zero at f0 and grows on both sides of it: the DC of the prototype lands on the centre of the band, and its stopband on both sides:'
+		),
+		eq(
+			stop
+				? 's \\ \\longrightarrow\\ \\dfrac{\\omega_B\\, s}{s^2 + \\omega_0^2}, \\qquad \\omega_0 = 2\\pi f_0,\\ \\ \\omega_B = 2\\pi B \\qquad \\Longrightarrow \\qquad \\Omega(f) = \\dfrac{f\\,B}{f_0^2 - f^2}'
+				: 's \\ \\longrightarrow\\ \\dfrac{s^2 + \\omega_0^2}{\\omega_B\\, s}, \\qquad \\omega_0 = 2\\pi f_0,\\ \\ \\omega_B = 2\\pi B \\qquad \\Longrightarrow \\qquad \\Omega(f) = \\dfrac{f^2 - f_0^2}{f\\,B}'
+		),
+		p(
+			'On the frequency axis, s = jω, the substitution gives jΩ: the band filter does at the frequency f what the prototype does at Ω, counted in units of its passband edge. Since f0^2 = fl fh, both passband edges land on Ω = ±1, where the prototype loses exactly Amax:'
+		),
+		eq(
+			stop
+				? '\\Omega(f_l) = \\dfrac{f_l B}{f_l f_h - f_l^2} = \\dfrac{B}{f_h - f_l} = 1, \\qquad \\Omega(f_h) = \\dfrac{f_h B}{f_l f_h - f_h^2} = -1'
+				: '\\Omega(f_h) = \\dfrac{f_h^2 - f_l f_h}{f_h B} = \\dfrac{f_h - f_l}{B} = 1, \\qquad \\Omega(f_l) = \\dfrac{f_l^2 - f_l f_h}{f_l B} = -1'
+		),
+		p(
+			'A magnitude only depends on the size of Ω, so the band filter is geometrically symmetric: f and f0^2/f lose the same. The stopband edges land beyond 1, each at its own Ω, and panel 02 counts the order from these two numbers:'
+		),
+		eq(
+			stop
+				? `\\Omega_{sl} = \\dfrac{${hzNum(fsl)} \\times ${hzNum(B)}}{|${hzNum(f0)}^2 - ${hzNum(fsl)}^2|} = ${n4(design.omegaLow)}, \\qquad \\Omega_{sh} = \\dfrac{${hzNum(fsh)} \\times ${hzNum(B)}}{|${hzNum(f0)}^2 - ${hzNum(fsh)}^2|} = ${n4(design.omegaHigh)}`
+				: `\\Omega_{sl} = \\dfrac{|${hzNum(fsl)}^2 - ${hzNum(f0)}^2|}{${hzNum(fsl)} \\times ${hzNum(B)}} = ${n4(design.omegaLow)}, \\qquad \\Omega_{sh} = \\dfrac{|${hzNum(fsh)}^2 - ${hzNum(f0)}^2|}{${hzNum(fsh)} \\times ${hzNum(B)}} = ${n4(design.omegaHigh)}`
+		),
+		p(
+			`With n = ${design.n} the prototype is designed like any low-pass of this tool, with its passband edge at B and Amax = ${design.amaxDb} dB, so Amax lands exactly on fl and fh whatever the response.`
+		)
+	];
+
+	if (pairIndex >= 0) {
+		const ps = proto.stages[pairIndex];
+		const P = upperPole(ps.wn, ps.q);
+		const [lo, hi] = design.stages.filter((s) => s.pole === pairIndex);
+		const size2 = P.re * P.re + P.im * P.im;
+		const split = stop ? `\\dfrac{\\omega_B^2}{p} = ${complexTex((bw * bw * P.re) / size2, (-bw * bw * P.im) / size2)}, \\quad ` : '';
+		blocks.push(
+			p(
+				stop
+					? 'At the scale of the prototype itself (passband edge ω_B instead of 1) the substitution reads s_lp = ω_B^2 s/(s^2 + ω0^2), and each prototype pole p turns into the two roots of one quadratic:'
+					: 'At the scale of the prototype itself (passband edge ω_B instead of 1) the factor ω_B drops out, s_lp = (s^2 + ω0^2)/s, and each prototype pole p turns into the two roots of one quadratic:'
+			),
+			eq(
+				stop
+					? '\\dfrac{\\omega_B^2\\, s}{s^2 + \\omega_0^2} = p \\ \\Longrightarrow\\ s^2 - \\dfrac{\\omega_B^2}{p}\\, s + \\omega_0^2 = 0, \\qquad s_1 s_2 = \\omega_0^2'
+					: '\\dfrac{s^2 + \\omega_0^2}{s} = p \\ \\Longrightarrow\\ s^2 - p\\, s + \\omega_0^2 = 0, \\qquad s_1 s_2 = \\omega_0^2'
+			),
+			p(
+				'The pole p is complex, so the two roots are not a mirror pair: the mirror image of each one comes from the conjugate pole p*. One prototype pole pair therefore becomes two second-order stages. Their roots multiply to ω0^2, so the two stages sit on either side of f0, symmetric on a log axis (fn1 fn2 = f0^2), and they share one Q: with s2 = ω0^2/s1, |s2| = ω0^2/|s1| and Re s2 = ω0^2 Re s1/|s1|^2, so |s|/(-2 Re s) is the same for both. For the first pole pair of this design:'
+			),
+			eq(
+				`p = ${complexTex(P.re, P.im)}\\ \\text{rad/s}, \\quad ${split}f_{n1} = ${hzOf(lo.wn)},\\ \\ f_{n2} = ${hzOf(hi.wn)},\\ \\ Q = ${n4(lo.q)}, \\qquad \\sqrt{f_{n1} f_{n2}} = ${hzOf(Math.sqrt(lo.wn * hi.wn))} = f_0`
+			)
+		);
+	}
+
+	if (realIndex >= 0) {
+		const tau = proto.stages[realIndex].tau;
+		const centre = design.stages.find((s) => s.pole === realIndex);
+		blocks.push(
+			p(`The real pole p = -1/τ of an odd order has no partner. Its quadratic has real coefficients, so it gives a single stage, centred exactly on f0${stop ? ', with its zeros there too: a symmetric notch' : ''}:`),
+			eq(
+				stop
+					? `\\dfrac{\\omega_B^2\\, s}{s^2 + \\omega_0^2} = -\\dfrac{1}{\\tau} \\ \\Longrightarrow\\ s^2 + \\tau\\,\\omega_B^2\\, s + \\omega_0^2 = 0, \\qquad \\omega_n = \\omega_0,\\ \\ Q = \\dfrac{\\omega_0}{\\omega_B^2\\,\\tau} = \\dfrac{${n2(w0)}}{${n2(bw)}^2 \\times ${formatSeconds(tau)}} = ${n4(centre.q)}`
+					: `\\dfrac{s^2 + \\omega_0^2}{s} = -\\dfrac{1}{\\tau} \\ \\Longrightarrow\\ s^2 + \\dfrac{s}{\\tau} + \\omega_0^2 = 0, \\qquad \\omega_n = \\omega_0,\\ \\ Q = \\omega_0\\,\\tau = ${n2(w0)} \\times ${formatSeconds(tau)} = ${n4(centre.q)}`
+			)
+		);
+	}
+
+	// zeros: where the prototype's zeros at infinity and its finite zeros land
+	if (zeroIndex >= 0) {
+		const wz = proto.stages[zeroIndex].wz;
+		const [lo, hi] = design.stages.filter((s) => s.pole === zeroIndex);
+		blocks.push(
+			p(
+				stop
+					? 'Zeros. A prototype zero at ±jωz turns into two zeros on the jω axis with product ω0^2, from the same kind of quadratic with r = ω_B^2/ωz in its place; the lower zero goes with the lower stage of the pair, the upper one with the upper stage. The zero at infinity left over by an odd order lands on f0, so the stage of the real pole is a symmetric notch:'
+					: 'Zeros. A prototype zero at ±jωz turns into two zeros on the jω axis with product ω0^2. The upper one goes with the upper stage of the pair, whose zero then sits above its poles (a low-pass notch); the lower one goes with the lower stage, a high-pass notch. The real pole of an odd order brings no finite zero and stays a plain band-pass stage:'
+			),
+			eq(
+				stop
+					? '\\dfrac{\\omega_B^2\\, s}{s^2 + \\omega_0^2} = j\\omega_z \\ \\Longrightarrow\\ \\omega_{z\\pm} = \\sqrt{\\dfrac{r^2}{4} + \\omega_0^2} \\pm \\dfrac{r}{2},\\ \\ r = \\dfrac{\\omega_B^2}{\\omega_z}, \\qquad \\omega_{z+}\\,\\omega_{z-} = \\omega_0^2'
+					: '\\dfrac{s^2 + \\omega_0^2}{s} = j\\omega_z \\ \\Longrightarrow\\ \\omega_{z\\pm} = \\sqrt{\\dfrac{\\omega_z^2}{4} + \\omega_0^2} \\pm \\dfrac{\\omega_z}{2}, \\qquad \\omega_{z+}\\,\\omega_{z-} = \\omega_0^2'
+			),
+			eq(`f_z = ${hzOf(wz)} \\ \\Longrightarrow\\ f_{z+} = ${hzOf(hi.wz)},\\ \\ f_{z-} = ${hzOf(lo.wz)}, \\qquad \\sqrt{f_{z+} f_{z-}} = ${hzOf(Math.sqrt(hi.wz * lo.wz))} = f_0`)
+		);
+	} else {
+		blocks.push(
+			p(
+				stop
+					? 'Zeros. The prototype has all its zeros at infinity, and they land where the substitution is infinite, s^2 + ω0^2 = 0: every stage has its zeros at ±jω0, a notch exactly at f0. The lower stage of each pair has its poles below f0, so its zero sits above them (a low-pass notch); the upper stage is a high-pass notch.'
+					: 'Zeros. The prototype has all its zeros at infinity, and the substitution is infinite at both s = 0 and s = ∞: every stage gets one zero at DC and one at infinity, the numerator s of a band-pass stage.'
+			)
+		);
+	}
+
+	if (stop) {
+		const product = design.stages.reduce((acc, s) => acc * (s.wn / s.wz) ** 2, 1);
+		blocks.push(
+			p(
+				'Gains. Every notch stage is set for gain 1 at DC, whichever side of its poles the zero sits on. Far above the band a stage then passes (ωn/ωz)^2, and each pair has poles and zeros whose products are both ω0^2, so these factors cancel pair by pair: the whole filter passes exactly 1 at DC and far above the band, with no summing amplifier.'
+			),
+			eq(
+				`H(s) = \\dfrac{\\omega_n^2}{\\omega_z^2}\\,\\dfrac{s^2 + \\omega_z^2}{s^2 + \\frac{\\omega_n}{Q}\\,s + \\omega_n^2}, \\qquad H(0) = 1,\\ \\ H(\\infty) = \\dfrac{\\omega_n^2}{\\omega_z^2}, \\qquad \\prod_i \\dfrac{\\omega_{n,i}^2}{\\omega_{z,i}^2} = ${n4(product)}`
+			)
+		);
+	} else {
+		const first = design.stages.find((s) => s.filterType === 'bandpass' && s.role !== 'centre');
+		const detune = first ? first.wn / w0 - w0 / first.wn : NaN;
+		const evenRipple = design.n % 2 === 0 && (design.response === 'chebyshev' || design.response === 'elliptic');
+		blocks.push(
+			// band-pass stages off f0 come only from pole pairs without zeros
+			...(first
+				? [
+						p(
+							'Gains. A band-pass stage peaks at its own centre fn, and each stage here is set so that the whole filter has gain exactly 1 at f0. A stage centred off f0 has already lost some gain by f0, so its gain K at its own centre is raised by just that much; both stages of a pair need the same K:'
+						),
+						eq(
+							'H(s) = K\\,\\dfrac{\\frac{\\omega_n}{Q}\\,s}{s^2 + \\frac{\\omega_n}{Q}\\,s + \\omega_n^2}, \\qquad |H(j\\omega_0)| = 1 \\ \\Longrightarrow\\ K = \\sqrt{1 + Q^2\\left(\\dfrac{\\omega_n}{\\omega_0} - \\dfrac{\\omega_0}{\\omega_n}\\right)^2}'
+						),
+						eq(`K = \\sqrt{1 + ${n4(first.q)}^2 \\times (${n4(detune)})^2} = ${n4(first.gain)}`)
+					]
+				: [p('Gains. Each stage here is set so that the whole filter has gain exactly 1 at f0.')]),
+			...(zeroIndex >= 0
+				? [
+						p('A notch stage has no single peak. It is set for gain 1 at f0 through its gain far above the zero, K∞:'),
+						eq(
+							'H(s) = K_\\infty\\,\\dfrac{s^2 + \\omega_z^2}{s^2 + \\frac{\\omega_n}{Q}\\,s + \\omega_n^2}, \\qquad K_\\infty = \\dfrac{|\\omega_n^2 - \\omega_0^2 + j\\,\\omega_n\\omega_0/Q|}{|\\omega_z^2 - \\omega_0^2|}'
+						)
+					]
+				: []),
+			p(
+				`${realIndex >= 0 ? 'The stage of the real pole sits on f0 and keeps K = 1. ' : ''}The product of all the stages is then exactly 1 at f0.${evenRipple ? ' With an even order of a rippled response f0 sits in a ripple trough, as the DC of the prototype does, so the passband peaks Amax above that level; the spec is measured from the peak.' : ''}`
+			)
+		);
+	}
+
+	if (design.response === 'bessel') {
+		blocks.push(
+			p(
+				'Bessel is used here for its magnitude only. Its flat delay does not survive the substitution: Ω is not proportional to f, so the delay of the band filter changes across the band, and a pulse does not keep its shape the way it does through a Bessel low-pass.'
+			)
+		);
+	}
+	blocks.push(p(`So the ${bandWord(design)} has order 2n = ${2 * design.n}, in ${stageCount(design)}; the math of each stage starts from the prototype stage it comes from.`));
+	return blocks;
+}
+
+/**
+ * The order of a transformed design: the prototype counted once per
+ * stopband edge (k = 1/Omega of that edge, its own Amin), then the larger
+ * count; for a response with zeros, the closer edge with the larger Amin,
+ * and an order lowered by fitting the prototype's stopband edge.
+ */
+export function explainTransformedOrder(design) {
+	const oi = design.orderInfo;
+	const stop = design.filterType === 'bandstop';
+	const { response, amaxDb } = design;
+	const [low, high] = oi.edges;
+	const label = RESPONSE_NAME[response] ?? response;
+	const edgeName = (e) => (e.edge === 'low' ? 'fsl' : 'fsh');
+	const same = Math.abs(low.omega - high.omega) <= 1e-9 * Math.abs(low.omega) && low.aminDb === high.aminDb;
+	const count = (e, aminDb, k, minOrder, nUsed, tried) =>
+		e.omega > 1 ? explainOrder({ response, amaxDb, aminDb, k, minOrder, filterType: 'lowpass', nUsed, tried }) : [p(`The edge ${edgeName(e)} does not lie beyond the passband edges, so no order can meet it.`)];
+	const blocks = [
+		p(
+			`In the terms of the prototype the passband edge is ωp, where fl and fh land, and a stopband edge at Ω lands at ωs = Ω ωp: for the prototype ωs/ωp = Ω, and k = 1/Ω. So each stopband edge of the ${bandWord(design)} is one low-pass spec for the prototype, with its own Ω and ${stop ? 'the one Amin of the band-stop' : 'its own Amin'}:`
+		),
+		eq(`f_{sl}:\\ \\Omega_{sl} = ${n4(low.omega)},\\ \\ A_{min} = ${low.aminDb}\\ \\text{dB}, \\qquad f_{sh}:\\ \\Omega_{sh} = ${n4(high.omega)},\\ \\ A_{min} = ${high.aminDb}\\ \\text{dB}`)
+	];
+
+	if (!oi.equiripple) {
+		if (same) {
+			blocks.push(p('Both edges give the same Ω and the same Amin here (the spec is geometrically symmetric), so one count serves both:'), ...count(low, low.aminDb, 1 / low.omega, low.value, low.n, low.tried));
+		} else {
+			for (const e of [low, high]) {
+				blocks.push(p(`Counted for ${edgeName(e)} alone (Ω = ${n4(e.omega)}, Amin = ${e.aminDb} dB), as if it were the only stopband edge:`), ...count(e, e.aminDb, 1 / e.omega, e.value, e.n, e.tried));
+			}
+		}
+		if (oi.n === null) {
+			blocks.push(p(`At least one edge is out of reach for the ${label} response at any order tried, so this method has no order for the spec.`));
+		} else {
+			blocks.push(
+				p(`A ${label} prototype loses more and more past its passband edge, so an order that meets the harder edge meets the other one too. The prototype takes the larger of the two counts:`),
+				eq(`n = \\max(n_{sl},\\ n_{sh}) = \\max(${low.n},\\ ${high.n}) = ${oi.n}`)
+			);
+		}
+	} else {
+		// the closed-form rule; a lowered order keeps it in `lowered`
+		const rule = oi.lowered ? { n: oi.lowered.from, value: oi.lowered.value, k: oi.lowered.k, aminDb: oi.lowered.aminDb } : { n: oi.n, value: oi.value, k: oi.k, aminDb: oi.aminDb };
+		const ruleN = rule.n ?? (Number.isFinite(rule.value) ? Math.max(1, Math.ceil(rule.value)) : null);
+		if (ruleN === null) {
+			blocks.push(p('A stopband edge does not lie beyond the passband edges, so no order can meet the spec.'));
+		} else if (same) {
+			blocks.push(p('Both edges give the same Ω and the same Amin here (the spec is geometrically symmetric), so one count serves both:'));
+		} else if (oi.binding !== 'both') {
+			// the closer edge asks for no less Amin than the far one: its own count is the larger one
+			blocks.push(
+				p('Counted for each edge alone, as for a response without zeros, the two edges ask for:'),
+				eq(`n_{sl} \\ge ${n4(low.value)}, \\qquad n_{sh} \\ge ${n4(high.value)}`),
+				p(
+					`For the ${label} response the count must take the closer edge (the smaller Ω). Its stopband does not keep falling: from the stopband edge of the prototype on, the loss bounces down to one floor, and that floor starts where the edge is put. Here the closer edge also asks for ${low.aminDb === high.aminDb ? 'the same Amin as the far one' : 'the larger Amin'}, so its own count is the one used, Ω = ${n4(1 / rule.k)} and Amin = ${rule.aminDb} dB:`
+				)
+			);
+		} else {
+			blocks.push(
+				p('Counted for each edge alone, as for a response without zeros, the two edges would ask for:'),
+				eq(`n_{sl} \\ge ${n4(low.value)}, \\qquad n_{sh} \\ge ${n4(high.value)}`),
+				p(
+					`For the ${label} response the larger of these can fall short. Its stopband does not keep falling: from the stopband edge of the prototype on, the loss bounces down to one floor, and that floor starts where the edge is put. A prototype counted for the far edge alone puts its edge there, and the closer edge then falls in its transition band, short of its Amin. So the count takes the closer edge (the smaller Ω)${low.aminDb !== high.aminDb ? ' and the larger Amin together' : ''}, Ω = ${n4(1 / rule.k)} and Amin = ${rule.aminDb} dB:`
+				)
+			);
+		}
+		if (ruleN !== null) blocks.push(...explainOrder({ response, amaxDb, aminDb: rule.aminDb, k: rule.k, minOrder: rule.value, filterType: 'lowpass', nUsed: ruleN, tried: null }));
+		if (oi.lowered) {
+			const L = oi.lowered;
+			blocks.push(
+				p(
+					`That count always holds, but here it is more than needed: the closer edge asks for less Amin than the far one, so the stopband edge of the prototype need not sit on the closer edge. Order ${oi.n} is tried with its stopband edge moved to where both edges keep the most room, Ωs = ${n4(L.omegaS)}. The least loss it keeps from each stopband edge outward still meets that edge's Amin, so the order drops from ${L.from} to ${oi.n}:`
+				),
+				eq(
+					`\\Omega_s = ${n4(L.omegaS)}: \\quad A_{least}(f_{sl}) = ${n2(L.lossLow)}\\ \\text{dB} \\ge ${low.aminDb}\\ \\text{dB}, \\qquad A_{least}(f_{sh}) = ${n2(L.lossHigh)}\\ \\text{dB} \\ge ${high.aminDb}\\ \\text{dB} \\ \\Longrightarrow\\ n = ${oi.n}`
+				)
+			);
+		}
+	}
+
+	if (Number.isFinite(oi.n) && design.n !== oi.n) blocks.push(p(`The order slider sets n = ${design.n} instead of ${oi.n}.`));
+	// with no order for the spec, design.n is only a placeholder
+	if (oi.n !== null) {
+		blocks.push(
+			p(
+				`Each prototype pole pair becomes two stages and the real pole of an odd order one, so n = ${design.n} gives the ${bandWord(design)} ${2 * design.n} poles in ${stageCount(design)}.`
+			)
+		);
+	}
+	return blocks;
+}
+
+/**
+ * One stage of a transformed design: the prototype stage it comes from
+ * (from design.lowpass, never from the stage index), the quadratic that
+ * splits it, its corner and Q, its zero, and the gain it is set for.
+ */
+export function explainTransformedStage(design, i) {
+	const st = design.stages[i];
+	const stop = design.filterType === 'bandstop';
+	const { w0, bw } = design;
+	const ps = design.lowpass.stages[st.pole];
+	const partnerIndex = design.stages.findIndex((s, j) => j !== i && s.pole === st.pole);
+	const partner = partnerIndex >= 0 ? design.stages[partnerIndex] : null;
+	const notch = Number.isFinite(st.wz);
+	const where = st.role === 'lower' ? 'below f0' : st.role === 'upper' ? 'above f0' : 'on f0';
+	let kind;
+	if (!notch) kind = `It is a band-pass stage centred ${where}.`;
+	else if (st.notch === 'symmetric') kind = 'It is a symmetric notch: poles and zero both on f0.';
+	else kind = `It is a notch stage with its poles ${where} and its zero ${st.notch === 'low' ? 'above them: a low-pass notch' : 'below them: a high-pass notch'}.`;
+	const blocks = [
+		p(
+			`Stage ${i + 1} comes from prototype stage ${st.pole + 1}, ${ps.order === 1 ? 'its real pole' : 'a pole pair'}${partner ? `, which it shares with stage ${partnerIndex + 1}` : ''}. ${kind}`
+		)
+	];
+
+	if (ps.order === 2) {
+		const P = upperPole(ps.wn, ps.q);
+		const root = upperPole(st.wn, st.q);
+		const size2 = P.re * P.re + P.im * P.im;
+		blocks.push(
+			p(`The prototype stage has fn = ${hzOf(ps.wn)} and Q = ${n4(ps.q)}, so its upper pole, at the real scale of the prototype, is:`),
+			eq(`p = -\\dfrac{\\omega_{n,p}}{2Q_p} + j\\,\\omega_{n,p}\\sqrt{1 - \\dfrac{1}{4Q_p^2}} = ${complexTex(P.re, P.im)}\\ \\text{rad/s}`),
+			eq(
+				stop
+					? `\\dfrac{\\omega_B^2}{p} = ${complexTex((bw * bw * P.re) / size2, (-bw * bw * P.im) / size2)}, \\qquad s^2 - \\dfrac{\\omega_B^2}{p}\\, s + \\omega_0^2 = 0, \\qquad \\omega_B = ${n2(bw)},\\ \\ \\omega_0 = ${n2(w0)}\\ \\text{rad/s}`
+					: `s^2 - p\\, s + \\omega_0^2 = 0, \\qquad \\omega_0 = ${n2(w0)}\\ \\text{rad/s}`
+			),
+			p(`Of its two roots this stage takes the ${st.role === 'lower' ? 'smaller' : 'larger'} one; its mirror image comes from the conjugate pole. Its size is ωn and its angle gives Q:`),
+			eq(
+				`s = ${n2(root.re)} \\pm j\\,${n2(root.im)} \\ \\Longrightarrow\\ \\omega_n = |s| = ${n2(st.wn)}\\ \\text{rad/s}\\ \\ (f_n = ${hzOf(st.wn)}), \\qquad Q = \\dfrac{|s|}{-2\\,\\mathrm{Re}\\,s} = ${n4(st.q)}`
+			)
+		);
+		if (partner) {
+			blocks.push(eq(`\\sqrt{f_n\\, f_n'} = \\sqrt{${hzNum(st.wn / TWO_PI)} \\times ${hzNum(partner.wn / TWO_PI)}} = ${hzOf(Math.sqrt(st.wn * partner.wn))} = f_0, \\qquad Q' = Q`));
+		}
+	} else {
+		blocks.push(
+			p(`The prototype's real pole has τ = ${formatSeconds(ps.tau)}. Its quadratic has real coefficients, so it gives this one stage, exactly on f0:`),
+			eq(
+				stop
+					? `s^2 + \\tau\\,\\omega_B^2\\, s + \\omega_0^2 = 0 \\ \\Longrightarrow\\ \\omega_n = \\omega_0 = ${n2(w0)}\\ \\text{rad/s}, \\qquad Q = \\dfrac{\\omega_0}{\\omega_B^2\\,\\tau} = ${n4(st.q)}`
+					: `s^2 + \\dfrac{s}{\\tau} + \\omega_0^2 = 0 \\ \\Longrightarrow\\ \\omega_n = \\omega_0 = ${n2(w0)}\\ \\text{rad/s}, \\qquad Q = \\omega_0\\,\\tau = ${n4(st.q)}`
+			)
+		);
+	}
+
+	if (notch) {
+		if (Number.isFinite(ps.wz)) {
+			const sign = st.role === 'lower' ? '-' : '+';
+			blocks.push(
+				p(`Its zero comes from the prototype zero at fz = ${hzOf(ps.wz)}, which splits the same way into two zeros with product ω0^2; this stage takes the ${st.role === 'lower' ? 'lower' : 'upper'} one:`),
+				eq(
+					stop
+						? `r = \\dfrac{\\omega_B^2}{\\omega_{z,p}} = ${n2((bw * bw) / ps.wz)}, \\qquad \\omega_z = \\sqrt{\\dfrac{r^2}{4} + \\omega_0^2} ${sign} \\dfrac{r}{2} = ${n2(st.wz)}\\ \\text{rad/s}\\ \\ (f_z = ${hzOf(st.wz)})`
+						: `\\omega_z = \\sqrt{\\dfrac{\\omega_{z,p}^2}{4} + \\omega_0^2} ${sign} \\dfrac{\\omega_{z,p}}{2} = ${n2(st.wz)}\\ \\text{rad/s}\\ \\ (f_z = ${hzOf(st.wz)})`
+				)
+			);
+		} else {
+			blocks.push(p(`Its zeros come from the prototype's zeros at infinity, which land where the substitution is infinite: at ±jω0, a notch exactly at f0 = ${hzOf(w0)}.`));
+		}
+	}
+
+	if (!notch) {
+		const detune = st.wn / w0 - w0 / st.wn;
+		blocks.push(
+			p(st.role === 'centre' ? 'It sits on f0, so the gain it is set for, at its own centre, is simply 1:' : 'The gain it is set for, at its own centre, is the one that leaves it at exactly 1 at f0:'),
+			eq(
+				`H(s) = K\\,\\dfrac{\\frac{\\omega_n}{Q}\\,s}{s^2 + \\frac{\\omega_n}{Q}\\,s + \\omega_n^2}, \\qquad K = \\sqrt{1 + Q^2\\left(\\dfrac{\\omega_n}{\\omega_0} - \\dfrac{\\omega_0}{\\omega_n}\\right)^2} = \\sqrt{1 + ${n4(st.q)}^2 \\times (${n4(detune)})^2} = ${n4(st.gain)}`
+			)
+		);
+	} else if (st.gainAt === 'f0') {
+		blocks.push(
+			p('A notch stage of a band-pass is set for gain 1 at f0 through its gain far above the zero:'),
+			eq(
+				`H(s) = K_\\infty\\,\\dfrac{s^2 + \\omega_z^2}{s^2 + \\frac{\\omega_n}{Q}\\,s + \\omega_n^2}, \\qquad K_\\infty = \\dfrac{|\\omega_n^2 - \\omega_0^2 + j\\,\\omega_n\\omega_0/Q|}{|\\omega_z^2 - \\omega_0^2|} = ${n4(st.hfGain)}`
+			)
+		);
+	} else {
+		blocks.push(
+			p('A notch stage of a band-stop is set for gain 1 at DC, so far above the band it passes (ωn/ωz)^2:'),
+			eq(
+				`H(s) = \\dfrac{\\omega_n^2}{\\omega_z^2}\\,\\dfrac{s^2 + \\omega_z^2}{s^2 + \\frac{\\omega_n}{Q}\\,s + \\omega_n^2}, \\qquad H(0) = 1, \\quad H(\\infty) = \\dfrac{\\omega_n^2}{\\omega_z^2} = ${n4((st.wn / st.wz) ** 2)}`
+			)
+		);
+	}
+	return blocks;
+}
+
+/** Multiple-feedback (Delyiannis-Friend) band-pass derivation for one realized stage. */
+export function explainMfbBp(stageDesign, targetWn, targetQ) {
+	const st = stageDesign.steps;
+	const c = stageDesign.components;
+	const t = stageDesign.theoretical;
+	const a = stageDesign.actual;
+	const f0 = targetWn / TWO_PI;
+	const paired = pairsSentence([['R1', c.R1], ['R2', c.R2], ['R3', c.R3]], st.resistorSeries);
+	const noise = st.noiseGain;
+	// built for a single-pole op-amp: the circuit is solved for its own, predistorted targets
+	const pre = Number.isFinite(st.gbw) ? st.predistorted : null;
+	return [
+		p(
+			'The multiple-feedback band-pass (Delyiannis-Friend) needs one op-amp. R1 runs from the input to a node A, R2 from A to ground, C2 from A to the inverting input M, C1 from the output back to A, and R3 from M to the output; the non-inverting input is grounded, so M is a virtual ground. R1 and R2 form an attenuator at the input. Two current balances describe the circuit:'
+		),
+		eq('\\text{at M:}\\ \\ sC_2 V_A = -\\dfrac{V_{out}}{R_3}, \\qquad \\text{at A:}\\ \\ \\dfrac{V_{in} - V_A}{R_1} = \\dfrac{V_A}{R_2} + sC_2 V_A + sC_1\\left(V_A - V_{out}\\right)'),
+		p('The first gives V_A = -V_out/(s C2 R3). Substituting it into the second and collecting the powers of s gives a band-pass, s on top over the standard second-order denominator:'),
+		eq('H(s) = -\\dfrac{s/(R_1 C_1)}{s^2 + s\\,\\dfrac{C_1 + C_2}{R_3 C_1 C_2} + \\dfrac{1/R_1 + 1/R_2}{R_3 C_1 C_2}}'),
+		p('Matching the denominator to s^2 + (ω0/Q)s + ω0^2, and reading H at s = jω0, where the s^2 term and the constant cancel:'),
+		eq('\\omega_0^2 = \\dfrac{1/R_1 + 1/R_2}{R_3 C_1 C_2}, \\qquad \\dfrac{\\omega_0}{Q} = \\dfrac{C_1 + C_2}{R_3 C_1 C_2}, \\qquad H_0 = H(j\\omega_0) = -\\dfrac{R_3 C_2}{R_1 (C_1 + C_2)}'),
+		p('Three targets and five parts. With the two capacitors chosen, R3 alone sets the bandwidth ω0/Q, R1 then sets the centre gain, and R2 only moves ω0. Solved in that order:'),
+		eq('R_3 = \\dfrac{Q\\,(C_1 + C_2)}{\\omega_0 C_1 C_2}, \\qquad R_1 = \\dfrac{Q}{|H_0|\\,\\omega_0 C_1}, \\qquad \\dfrac{1}{R_2} = \\dfrac{\\omega_0}{Q}\\left(Q^2 (C_1 + C_2) - |H_0|\\,C_1\\right)'),
+		p(
+			'R2 must stay positive, which caps the gain: |H0| < Q^2 (1 + C2/C1), so 2Q^2 with equal capacitors. At that ceiling R2 is open and the circuit is the plain MFB band-pass; below it R2 attenuates the input. A stage with Q under about 0.7 cannot reach gain 1 with equal capacitors, so the search then makes C2 the larger one.'
+		),
+		...(pre
+			? mfbBpOpampBlocks(stageDesign, targetWn, targetQ)
+			: [
+					p(
+						`This stage's target is f0 = ${formatHz(f0)} (ω0 = ${n2(targetWn)} rad/s), Q = ${targetQ.toFixed(4)} and a gain of ${n4(st.gainTarget)} at its centre. ${
+							stageDesign.manual
+								? 'C1 and C2 below were entered by hand.'
+								: 'C1 and C2 come from a search of the capacitor series, equal values preferred and a ratio up to 10:1 allowed, for the pair whose rounded resistors land closest to the targets with the resistors near 10 kilo-ohm.'
+						} The ideal resistors:`
+					)
+				]),
+		eq(`C_1 = ${formatFarads(c.C1)},\\ \\ C_2 = ${formatFarads(c.C2)}, \\qquad |H_0| < Q^2\\left(1 + \\dfrac{C_2}{C_1}\\right) = ${n2(st.maxGain)}`),
+		eq(`R_3 = ${formatOhms(t.R3)}, \\qquad R_1 = ${formatOhms(t.R1)}, \\qquad R_2 = ${formatOhms(t.R2)}`),
+		p(
+			`A narrow band moves with every percent of f0, so the rounding goes in steps, each part solved against the ones already rounded: R3 to the nearest ${stockValue(st.resistorSeries)}${pairedTail(st.resistorSeries, [c.R1, c.R2, c.R3])}, then R1 for the gain against the rounded R3, then R2 for ω0 against both (when the nearest values leave no room for R2, R3 and R1 both take the next value up):`
+		),
+		eq(
+			`R_3 \\rightarrow ${formatOhms(c.R3)}, \\qquad R_1 = \\dfrac{R_3 C_2}{|H_0|\\,(C_1 + C_2)} = ${formatOhms(st.R1Target)} \\rightarrow ${formatOhms(c.R1)}, \\qquad R_2 = \\dfrac{1}{\\omega_0^2 R_3 C_1 C_2 - 1/R_1} = ${formatOhms(st.R2Target)} \\rightarrow ${formatOhms(c.R2)}`
+		),
+		...(paired ? [p(paired)] : []),
+		...(pre
+			? mfbBpOpampResult(stageDesign, targetWn, targetQ)
+			: [
+					p('Recomputing from the rounded parts gives what the stage will actually do:'),
+					eq(`f_0' = ${formatHz(a.wn / TWO_PI)}, \\quad Q' = ${a.q.toFixed(4)}, \\quad H_0' = ${a.gain.toFixed(4)}\\ \\ (${signedDb(a.gain)}\\ \\text{dB})`),
+					p(
+						`The price of the single op-amp is in the ratios. R3/R2 grows like 4Q^2 (here ${(c.R3 / c.R2).toFixed(1)}:1), and at f0 the op-amp works with a noise gain of 1 + Q^2 (1 + C2/C1) = ${n2(noise)}. Its gain-bandwidth has to sit well above ${n2(noise)} × f0 = ${formatHz(noise * f0)}: ten times that, ${formatHz(10 * noise * f0)}, keeps the shift in f0 and Q small${10 * noise * f0 > 3e6 ? ', more than a TL08x (about 3 MHz) offers' : ', which a TL08x (about 3 MHz) covers'}. With a single-pole op-amp of gain-bandwidth f_T the peak gain holds, but f0 falls by 1/sqrt(1 + k) and Q rises by sqrt(1 + k), k = Q (1 + C2/C1) f0 / f_T: at 3 MHz, k = ${n2((a.q * (1 + c.C2 / c.C1) * (a.wn / TWO_PI)) / 3e6)} moves f0 by ${n2(100 * (1 - 1 / Math.sqrt(1 + (a.q * (1 + c.C2 / c.C1) * (a.wn / TWO_PI)) / 3e6)))} %. Where Q is high, the Tow-Thomas band-pass keeps every ratio small for three op-amps.`
+					)
+				])
+	];
+}
+
+/**
+ * A multiple-feedback band-pass stage built for a single-pole op-amp:
+ * what the op-amp does to it, and the circuit-alone targets it is solved
+ * for (mfbBandPassPredistorted in mfbBandPass.js).
+ */
+function mfbBpOpampBlocks(stageDesign, targetWn, targetQ) {
+	const st = stageDesign.steps;
+	const pre = st.predistorted;
+	const f0 = targetWn / TWO_PI;
+	const x = Math.sqrt(1 + st.k);
+	return [
+		p(
+			`This stage is built for a real op-amp, modelled with a single pole: A(s) = ω_t/s, ω_t = 2π × ${formatHz(st.gbw)}. The output is then -A(s) times the voltage at M, which is no longer zero. Solving the two current balances with that op-amp, the denominator becomes a cubic:`
+		),
+		eq('D(s) = \\left(1 + \\dfrac{s}{\\omega_t}\\right)\\left(s^2 + \\dfrac{\\omega_0}{Q}\\,s + \\omega_0^2\\right) + \\dfrac{s^2}{\\omega_t}\\,\\omega_0 Q\\left(1 + \\dfrac{C_2}{C_1}\\right)'),
+		p(
+			'Its roots are one fast real pole near ω_t and a pole pair, the one the band sees. The last term pulls that pair down and sharpens it. To first order its f0 falls by 1/sqrt(1 + k) and its Q rises by sqrt(1 + k), while the peak gain holds:'
+		),
+		eq(`k = \\dfrac{Q\\left(1 + C_2/C_1\\right) f_0}{\\text{GBW}} = ${n4(st.k)}, \\qquad f_0 \\rightarrow \\dfrac{f_0}{\\sqrt{1 + k}}, \\qquad Q \\rightarrow Q\\sqrt{1 + k}`),
+		p(
+			`So the circuit alone is designed ahead of the op-amp, at a higher f0 and a lower Q: about f0 sqrt(1 + k) = ${formatHz(f0 * x)} and Q/sqrt(1 + k) = ${n4(targetQ / x)}. The exact values split the cubic into (s + p)(s^2 + s ωn/q + ωn^2), with ωn and q the stage's target. The op-amp's pole p is then the one unknown. Matching the constant and the s terms gives the circuit's ω0^2 = p ωn^2/ω_t and ω0/Q = (p ωn/q + ωn^2 - ω0^2)/ω_t, and matching the s^2 terms leaves one equation in p, with one root past ω_t. The gain at ωn then fixes R1. For this stage:`
+		),
+		eq(`f_{0,c} = ${formatHz(pre.wn / TWO_PI)}, \\qquad Q_c = ${n4(pre.q)}, \\qquad |H_{0,c}| = ${n4(pre.gain)}`),
+		p(
+			`With the op-amp, these land on the target f0 = ${formatHz(f0)}, Q = ${targetQ.toFixed(4)} and a gain of ${n4(st.gainTarget)} at its centre. The parts below are solved for the circuit's values, f_0,c, Q_c and |H_0,c|. ${
+				stageDesign.manual
+					? 'C1 and C2 below were entered by hand.'
+					: 'C1 and C2 come from a search of the capacitor series, equal values preferred and a ratio up to 10:1 allowed, among the pairs that leave the op-amp a loop gain of at least 2 at f0, for the pair whose rounded resistors, with the op-amp, land closest to the targets with the resistors near 10 kilo-ohm. An f0 miss counts 2Q times there: near its band edges the stage moves about 2Q times as much for 1 % of f0 as for 1 % of Q.'
+			} The ideal resistors:`
+		)
+	];
+}
+
+/** What the rounded parts of a stage built for an op-amp do, alone and with it, and how far the correction can be trusted. */
+function mfbBpOpampResult(stageDesign, targetWn, targetQ) {
+	const st = stageDesign.steps;
+	const c = stageDesign.components;
+	const a = stageDesign.actual;
+	const alone = stageDesign.ideal;
+	const f0 = targetWn / TWO_PI;
+	return [
+		p('Recomputing from the rounded parts: the circuit alone, then with the op-amp (the pole pair of the cubic, and the gain at its f0):'),
+		eq(`f_0' = ${formatHz(alone.wn / TWO_PI)}, \\quad Q' = ${alone.q.toFixed(4)}, \\quad H_0' = ${alone.gain.toFixed(4)}`),
+		eq(`f_0'' = ${formatHz(a.wn / TWO_PI)}, \\quad Q'' = ${a.q.toFixed(4)}, \\quad H'' = ${a.gain.toFixed(4)}\\ \\ (${signedDb(a.gain)}\\ \\text{dB})`),
+		p(
+			`Against the target f0 = ${formatHz(f0)} and Q = ${targetQ.toFixed(4)}, what is left is the rounding of the parts. R3/R2 grows like 4Q^2 (here ${(c.R3 / c.R2).toFixed(1)}:1). At f0 the op-amp works at a noise gain of 1 + Q^2 (1 + C2/C1) = ${n2(st.noiseGain)}, so its loop gain there is GBW/(noise gain × f0) = ${n2(st.loopGain)}. ${
+				st.loopGain < 3
+					? 'That is under 3: the correction then leans on the op-amp having this exact gain-bandwidth, and a part a little slower or faster moves f0 and Q again.'
+					: 'That leaves some margin, but the correction still holds only for this gain-bandwidth.'
+			} Another op-amp needs another correction. Where Q is high, the Tow-Thomas band-pass keeps every ratio small for three op-amps.`
+		)
+	];
+}
+
+/** Tow-Thomas band-pass (the output of A1) derivation for one realized stage. */
+export function explainTowThomasBp(stageDesign, targetWn, targetQ) {
+	const st = stageDesign.steps;
+	const c = stageDesign.components;
+	const a = stageDesign.actual;
+	const f0 = targetWn / TWO_PI;
+	const paired = pairsSentence([['R', c.Ra], ['Rd', c.Rd], ['R1', c.R1]], st.resistorSeries);
+	return [
+		p(
+			'The same two-integrator loop as the Tow-Thomas low-pass: A1 is an inverting integrator with Rd across its capacitor C1, fed by R1 from the input and by Ra from the end of the loop; A2 is a plain inverting integrator (Rb in, C2 across); A3 is a unity-gain inverter (two equal resistors r). The low-pass comes out of A2; the band-pass is already there one step earlier, at the output of A1. The node balances:'
+		),
+		eq('\\text{at N1:}\\ \\dfrac{V_{in}}{R_1} + \\dfrac{V_3}{R_a} + V_1\\left(sC_1 + \\dfrac{1}{R_d}\\right) = 0, \\qquad \\text{at N2:}\\ \\dfrac{V_1}{R_b} + sC_2 V_2 = 0, \\qquad V_3 = -V_2'),
+		p('Eliminating V_2 and V_3 leaves V_1 over the denominator D(s) shared by every output of the loop, with s on top: a band-pass.'),
+		eq('D(s) = s^2 + \\dfrac{s}{C_1 R_d} + \\dfrac{1}{C_1 C_2 R_a R_b}, \\qquad V_{bp} = V_1 = -\\dfrac{s/(C_1 R_1)}{D(s)}\\,V_{in}'),
+		p('At ω0 the s^2 term and the constant of D cancel, and the gain at the centre is a ratio of two resistors:'),
+		eq('H_0 = H(j\\omega_0) = -\\dfrac{j\\omega_0/(C_1 R_1)}{j\\omega_0/(C_1 R_d)} = -\\dfrac{R_d}{R_1}'),
+		p('With C1 = C2 = C and Ra = Rb = R the three knobs are independent: R sets ω0, Rd alone sets Q, R1 alone sets the centre gain.'),
+		eq('\\omega_0 = \\dfrac{1}{RC}, \\qquad Q = \\dfrac{R_d}{R}, \\qquad |H_0| = \\dfrac{R_d}{R_1} \\ \\Longrightarrow\\ R_1 = \\dfrac{R_d}{|H_0|}'),
+		p(
+			`This stage's target is f0 = ${formatHz(f0)} (ω0 = ${n2(targetWn)} rad/s), Q = ${targetQ.toFixed(4)} and a gain of ${n4(st.gainTarget)} at its centre. ${
+				stageDesign.manual ? 'C below was entered by hand; both capacitors take that value.' : 'C is picked from a preferred series so that R lands near 10 kilo-ohm and the rounding of R, Rd and R1 costs least.'
+			} Each resistor is then solved against the ones already rounded:`
+		),
+		eq(`C = ${formatFarads(st.C)}\\ \\ \\Rightarrow\\ \\ R = \\dfrac{1}{\\omega_0 C} = ${formatOhms(st.Rtarget)} \\rightarrow ${formatOhms(st.Rrounded)}`),
+		eq(
+			`R_d = Q\\,R = ${formatOhms(st.RdTarget)} \\rightarrow ${formatOhms(c.Rd)}, \\qquad R_1 = \\dfrac{R_d}{|H_0|} = ${formatOhms(st.R1Target)} \\rightarrow ${formatOhms(c.R1)}, \\qquad r = ${formatOhms(c.r)}`
+		),
+		...(paired ? [p(paired)] : []),
+		p('Recomputing from the rounded values:'),
+		eq(
+			`f_0' = \\dfrac{1}{2\\pi R C} = ${formatHz(a.wn / TWO_PI)},\\quad Q' = \\dfrac{R_d}{R} = ${a.q.toFixed(4)},\\quad H_0' = -\\dfrac{R_d}{R_1} = ${a.gain.toFixed(4)}\\ \\ (${signedDb(a.gain)}\\ \\text{dB})`
+		),
+		p(
+			'Against the multiple-feedback band-pass: three op-amps instead of one, but no ratio grows with Q (there R3/R2 grows like 4Q^2), the sensitivities stay at 1/2 and 1 whatever the Q, and the gain is one resistor ratio. It earns its op-amps on narrow bands, where the stage Q is high.'
+		),
+		p(
+			`Gain-bandwidth check for this stage: with Q = ${targetQ.toFixed(2)} and f0 = ${formatHz(f0)}, an op-amp with f_T = 3 MHz (a TL08x) shifts Q by roughly ${((100 * 2 * targetQ * f0) / 3e6).toFixed(1)}%; keeping that under 1% needs f_T above ${formatHz(200 * targetQ * f0)}.`
+		)
+	];
+}

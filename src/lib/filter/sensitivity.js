@@ -74,6 +74,33 @@ export function mfbSensitivity({ R1, R2, R3 }) {
 	};
 }
 
+/**
+ * The Tow-Thomas band-pass (towThomasBp in towThomas.js) is the same loop
+ * read at A1's output: R1 only sets the gain, so Q has the same exponents.
+ */
+export const TOW_THOMAS_BP_SENSITIVITY = { R1: 0, Ra: -0.5, Rb: -0.5, Rd: 1, C1: 0.5, C2: -0.5 };
+
+/**
+ * MFB band-pass (mfbBandPass.js): Q = sqrt(G R3 C1 C2) / (C1 + C2), with
+ * G = G1 + G2 the two conductances from node A to the input and to ground.
+ * R3 sits under the square root alone, R1 and R2 share G in proportion to
+ * their conductance, and the capacitors cancel when they are equal:
+ *   S_R3^Q = +1/2,  S_R1^Q = -(1/2) G1/G,  S_R2^Q = -(1/2) G2/G,
+ *   S_C1^Q = (C2 - C1) / (2 (C1 + C2)),  S_C2^Q = (C1 - C2) / (2 (C1 + C2)).
+ */
+export function mfbBpSensitivity({ R1, R2, R3, C1, C2 }) {
+	const G1 = 1 / R1;
+	const G2 = 1 / R2;
+	const G = G1 + G2;
+	return {
+		R1: (-0.5 * G1) / G,
+		R2: (-0.5 * G2) / G,
+		R3: 0.5,
+		C1: (C2 - C1) / (2 * (C1 + C2)),
+		C2: (C1 - C2) / (2 * (C1 + C2))
+	};
+}
+
 /** Worst-case %error on Q from a component tolerance, root-sum-of-squares. */
 export function worstCaseQError(sensitivities, tolerancePercent) {
 	const sum = Object.values(sensitivities).reduce((acc, s) => acc + (s * tolerancePercent) ** 2, 0);

@@ -25,12 +25,20 @@
  *   attenuationAtFs, attenuationAtFp                  the flags under panel 05, low-pass and high-pass
  *   attenuationAtFsl, attenuationAtFsh, attenuationAtFl, attenuationAtFh   the same for the band types
  *   stock           'E24' | 'E96' | 'lab' | 'labR' | 'custom'
+ *   method          'transformed' when a band type is built from one low-pass prototype by
+ *                   transformation (designBandPassTransformed / designBandStopTransformed, also
+ *                   recognized from design.method); anything else keeps the cascade and
+ *                   parallel-sum text. For it: design is that design, topology is the
+ *                   Band-pass stages menu ('mfb' | 'towThomas'), order is not read, and the
+ *                   figures and counts follow the prototype (passband edge B, stopband edge
+ *                   Omega B, its own Amax and Amin) instead of a low-pass side
+ *   topologyNotch   transformed only: the Notch stages menu, 'boctor' | 'towThomas'
  */
 
 import { RESPONSES } from './approximations';
 import { nearestResistor } from './eseries';
 import { butterworthOrder, chebyshevOrder, transitionRatio } from './order';
-import { designLowPass, minimumOrder } from './stages';
+import { bandStopbandRatio, designLowPass, minimumOrder } from './stages';
 
 const h = (text) => ({ h: text });
 const p = (text) => ({ p: text });
@@ -105,8 +113,28 @@ function validDesign(d) {
 	return d && Array.isArray(d.stages) && d.stages.length > 0 && isNum(d.n);
 }
 
-/** The side of the design the figures and the counting use: the whole filter, or a band type's low-pass side. */
-function sideOf({ type, fp, fs, fl, fh, fsl, fsh, lpFp, lpFs, design }) {
+/**
+ * The side of the design the figures and the counting use: the whole
+ * filter, a band type's low-pass side, or, for a band type built by
+ * transformation, its low-pass prototype (passband edge B, stopband edge
+ * Omega B; without a design, the closer stopband edge's Omega).
+ */
+function sideOf({ type, fp, fs, fl, fh, fsl, fsh, lpFp, lpFs, design, transformed }) {
+	if (transformed) {
+		const proto = design && validDesign(design.lowpass) ? design.lowpass : null;
+		const omega = allPos(fl, fh, fsl, fsh) ? Math.min(bandStopbandRatio(type, fl, fh, fsl), bandStopbandRatio(type, fl, fh, fsh)) : NaN;
+		return {
+			kind: 'lowpass',
+			fp: proto ? proto.fp : fh - fl,
+			fs: proto ? proto.fs : (fh - fl) * omega,
+			a: 'B',
+			b: 'ΩB',
+			texA: 'B',
+			texB: '\\Omega B',
+			design: proto,
+			prototype: true
+		};
+	}
 	if (type === 'bandpass' || type === 'bandstop') {
 		const stop = type === 'bandstop';
 		return {
@@ -145,18 +173,31 @@ const TYPE_LINE = {
 	bandstop: 'This page is set to band-stop: one window is turned down and everything on either side passes. The tool builds it as a low-pass and a high-pass added together, so what follows applies to each branch.'
 };
 
-function whatAFilterDoes({ type, fp, fs, fl, fh, fsl, fsh, realizedStages, bandStopBranches, combineSigns }) {
+/** The band type's line when it is built from one low-pass prototype, with B and the centre when the edges allow. */
+function transformedTypeLine(type, fl, fh) {
+	const known = allPos(fl, fh) && fh > fl;
+	const width = known ? `, here ${hzText(fh - fl)}` : '';
+	const centre = known ? `, here ${hzText(Math.sqrt(fl * fh))}` : '';
+	return type === 'bandpass'
+		? `This page is set to band-pass: one window of frequencies passes and everything outside it is turned down. The tool builds it from one low-pass prototype whose passband edge is the bandwidth B = fh - fl${width}, moved up around the centre of the band, the geometric mean of fl and fh${centre}, so what follows applies to that prototype.`
+		: `This page is set to band-stop: one window is turned down and everything on either side passes. The tool builds it from one low-pass prototype whose passband edge is the bandwidth B = fh - fl${width}, folded around the centre of the band, the geometric mean of fl and fh${centre}, so what follows applies to that prototype.`;
+}
+
+function whatAFilterDoes({ type, fp, fs, fl, fh, fsl, fsh, realizedStages, bandStopBranches, combineSigns, transformed = false }) {
 	const band = type === 'bandpass' || type === 'bandstop';
 	const edgesOk = band ? allPos(fl, fh, fsl, fsh) : allPos(fp, fs);
 	const stagesOk = Array.isArray(realizedStages) && realizedStages.length > 0;
 	const branchesOk = Array.isArray(bandStopBranches) && bandStopBranches.length === 2 && bandStopBranches.every((b) => Array.isArray(b) && b.length > 0);
-	const live = edgesOk && stagesOk && (type !== 'bandstop' || branchesOk);
+	// a band-stop built by transformation is one chain of notch stages, with no branches
+	const parallel = type === 'bandstop' && !transformed;
+	const live = edgesOk && stagesOk && (!parallel || branchesOk);
 	const props = live
 		? {
 				filterType: type,
 				...(band ? { fl, fh, fsl, fsh } : { fp, fs }),
 				stages: realizedStages,
-				...(type === 'bandstop' ? { branches: bandStopBranches, signs: Array.isArray(combineSigns) ? combineSigns : [1, 1] } : {})
+				...(parallel ? { branches: bandStopBranches, signs: Array.isArray(combineSigns) ? combineSigns : [1, 1] } : {}),
+				...(type === 'bandstop' && transformed ? { cascade: true } : {})
 			}
 		: {};
 	return [
@@ -165,7 +206,7 @@ function whatAFilterDoes({ type, fp, fs, fl, fh, fsl, fsh, realizedStages, bandS
 			'Any signal is a sum of sine waves at different frequencies. A recorded voice holds low notes and high notes at once. A sensor wire carries a slow reading plus fast noise picked up along the way. A filter is a circuit whose gain, output amplitude divided by input amplitude, depends on frequency: near 1 for the frequencies that should pass, near 0 for the rest.'
 		),
 		p(
-			`${TYPE_LINE[type]} Active means the circuit is built around an op-amp, a small amplifier chip, with resistors and capacitors around it instead of coils. ${
+			`${transformed ? transformedTypeLine(type, fl, fh) : TYPE_LINE[type]} Active means the circuit is built around an op-amp, a small amplifier chip, with resistors and capacitors around it instead of coils. ${
 				live
 					? 'The figure sends two test tones through the circuit designed on this page, with the rounded part values of panel 04.'
 					: 'The page has no valid design yet, so the figure sends two test tones through a default one, a fourth-order low-pass at 10 kHz.'
@@ -190,7 +231,49 @@ const LIMITS = {
 /** 10^(-A/20) to two significant figures: 0.71, 0.01. */
 const ratioText = (db) => String(Number((10 ** (-db / 20)).toPrecision(2)));
 
-function decibels({ type, amaxDb, aminDb, bandLimits = null }) {
+/**
+ * The decibels section of a band type built by transformation: one Amax,
+ * and for a band-pass one Amin per stopband edge (named per edge when they
+ * differ). The limits come from the design when there is one.
+ */
+function transformedDecibels({ type, amaxDb, aminDb, bandLimits, design }) {
+	const limits = LIMITS[type];
+	const valid = design && validDesign(design);
+	const amax = valid && allPos(design.amaxDb) ? design.amaxDb : amaxDb;
+	let aminLow = aminDb;
+	let aminHigh = aminDb;
+	if (valid && allPos(design.aminDbLow, design.aminDbHigh)) [aminLow, aminHigh] = [design.aminDbLow, design.aminDbHigh];
+	else if (bandLimits && allPos(bandLimits.aminAtFsl, bandLimits.aminAtFsh)) [aminLow, aminHigh] = [bandLimits.aminAtFsl, bandLimits.aminAtFsh];
+	const amaxOk = allPos(amax);
+	const aminOk = allPos(aminLow, aminHigh);
+	const split = aminOk && aminLow !== aminHigh;
+	const limitsSentence = `Amax${amaxOk ? `, here ${plain(amax)} dB,` : ''} is how much the passband may sag. Amin${
+		split ? `, ${plain(aminLow)} dB below fsl and ${plain(aminHigh)} dB above fsh,` : aminOk ? `, here ${plain(aminLow)} dB,` : ''
+	} is how far down the stopband must be.`;
+	const lines = ['A_{\\text{dB}} &= 20\\log_{10}\\dfrac{V_{in}}{V_{out}}'];
+	const ratioLine = (name, db) => `${name} = ${plain(db)}\\ \\text{dB} &\\Rightarrow \\dfrac{V_{out}}{V_{in}} = 10^{-${plain(db)}/20} = ${ratioText(db)}`;
+	if (amaxOk) lines.push(ratioLine('A_{max}', amax));
+	if (split) lines.push(ratioLine('A_{min}(f_{sl})', aminLow), ratioLine('A_{min}(f_{sh})', aminHigh));
+	else if (aminOk) lines.push(ratioLine('A_{min}', aminLow));
+	const tex = lines.length === 1 ? 'A_{\\text{dB}} = 20\\log_{10}\\dfrac{V_{in}}{V_{out}}' : `\\begin{aligned} ${lines.join(' \\\\[4pt] ')} \\end{aligned}`;
+	const intro =
+		lines.length === 1
+			? 'A decibel figure is a ratio in disguise. The loss in dB from the voltage ratio:'
+			: `A decibel figure is a ratio in disguise. The loss in dB from the voltage ratio, then the page's ${lines.length === 2 ? 'limit' : 'limits'} turned back into ${lines.length === 2 ? 'a ratio' : 'ratios'}:`;
+	return [
+		h('Decibels and the two limits'),
+		p(
+			'Gain ratios run from 1 down to 0.001 and lower, which is awkward on one graph. The page counts them in decibels instead: 20 times the logarithm of the ratio. A ratio of 1 is 0 dB, 0.5 is about 6 dB down, 0.1 is 20 dB down, 0.01 is 40 dB down. Every factor of ten is another 20 dB, so a plot of dB against a log frequency axis turns the curves into near straight lines. That plot is a Bode plot, and panel 05 draws one.'
+		),
+		p(
+			`The specification in panel 01 is written in this unit. ${limits.bands} ${limitsSentence} ${limits.slide} The limits and the edges draw forbidden zones on the Bode plot, under each passband and over each stopband, and any curve that misses them all is a valid design.`
+		),
+		eq(tex, intro)
+	];
+}
+
+function decibels({ type, amaxDb, aminDb, bandLimits = null, transformed = false, design = null }) {
+	if (transformed) return transformedDecibels({ type, amaxDb, aminDb, bandLimits, design });
 	const band = type === 'bandpass' || type === 'bandstop';
 	const limits = LIMITS[type];
 	const amaxOk = allPos(amaxDb);
@@ -235,8 +318,11 @@ function decibels({ type, amaxDb, aminDb, bandLimits = null }) {
 function specProps(side, amaxDb, aminDb, type, ok) {
 	if (!ok) return {};
 	const band = type === 'bandpass' || type === 'bandstop';
-	return { kind: side.kind, fp: side.fp, fs: side.fs, amaxDb, aminDb, live: true, ...(band ? { side: type } : {}) };
+	return { kind: side.kind, fp: side.fp, fs: side.fs, amaxDb, aminDb, live: true, ...(band ? { side: side.prototype ? 'prototype' : type } : {}) };
 }
+
+/** 'band-pass' or 'band-stop'. */
+const bandName = (type) => (type === 'bandpass' ? 'band-pass' : 'band-stop');
 
 function oneRc({ type, side, amaxDb, aminDb, ok }) {
 	const band = type === 'bandpass' || type === 'bandstop';
@@ -253,6 +339,8 @@ function oneRc({ type, side, amaxDb, aminDb, ok }) {
 			nOne > 1
 				? ", and with this page's spec no corner position clears both zones."
 				: ". This page's spec is loose enough that one corner position does clear both zones, and the tool then builds a single first-order stage.";
+		// a one-pole prototype becomes one band stage, not a first-order one
+		if (side.prototype && nOne <= 1) verdict = ". This page's spec is loose enough that one corner position does clear both zones, so the prototype is a single RC section.";
 	}
 	const slope = high
 		? 'Below it, every tenfold step down in frequency, a decade, costs another 20 dB, and that slope is fixed.'
@@ -274,7 +362,11 @@ function oneRc({ type, side, amaxDb, aminDb, ok }) {
 		),
 		p(
 			`The frequency where the two behaviours meet is the corner, fc, set by the product R times C alone. At fc the output is 3 dB down. ${slope} The figure draws this one section on the Bode axes with the spec's two forbidden zones. R and C move the corner. Nothing moves the slope${verdict}${
-				band ? ` For a ${type === 'bandpass' ? 'band-pass' : 'band-stop'} the figure and the numbers use the low-pass side, ${side.a} and ${side.b}.` : ''
+				side.prototype
+					? ` For a ${bandName(type)} built by transformation the figure and the numbers use the low-pass prototype: its passband edge is the bandwidth B and its stopband edge sits at Ω times B.`
+					: band
+						? ` For a ${type === 'bandpass' ? 'band-pass' : 'band-stop'} the figure and the numbers use the low-pass side, ${side.a} and ${side.b}.`
+						: ''
 			}`
 		),
 		eq(tex, intro),
@@ -360,9 +452,12 @@ function theOrder({ type, response, side, amaxDb, aminDb, ok, order }) {
 				? `Panel 02 does the same count exactly, with Amax included; with Amax at ${plain(amaxDb)} dB the two agree.`
 				: `Panel 02 does the same count exactly, with Amax included, and with Amax at ${plain(amaxDb)} dB it asks for ${nButter}: the rough count leaves Amax out.`;
 	}
-	const sideNote = band
+	let sideNote = band
 		? ` For a ${type === 'bandpass' ? 'band-pass' : 'band-stop'} the count is done once per side and panel 02 reports both orders; the numbers here and the figure follow the low-pass side.`
 		: '';
+	if (side.prototype) {
+		sideNote = ` For a ${bandName(type)} built by transformation the count is done on the prototype, from the Ω of each stopband edge, and panel 02 shows both; the numbers here and the figure use the edges the prototype is designed with, B and ΩB.`;
+	}
 	blocks.push(
 		p(
 			`Take the drop demanded, Amin, and divide it by the drop one slope gives across the gap from ${lowEdge} to ${highEdge}. Here ${highEdge} is ${gapText} times ${lowEdge}, one slope loses ${perText} dB across that gap, and ${plain(aminDb)} dB of drop needs ${roughText} slopes, so ${roughN}. ${exact}${sideNote}`
@@ -375,7 +470,8 @@ function theOrder({ type, response, side, amaxDb, aminDb, ok, order }) {
 			`The figure draws the whole family of orders against the two zones, and the smallest n that clears both is the minimum panel 02 reports.${chebyLine}${limitLine}`
 		)
 	);
-	const introEdges = band ? "the page's Amin and the low-pass side's edges" : high ? "the page's Amin, fp and fs; for a high-pass fp is the upper edge" : "the page's Amin, fp and fs";
+	let introEdges = band ? "the page's Amin and the low-pass side's edges" : high ? "the page's Amin, fp and fs; for a high-pass fp is the upper edge" : "the page's Amin, fp and fs";
+	if (side.prototype) introEdges = "the prototype's Amin and edges, B and ΩB";
 	blocks.push(
 		eq(
 			`n \\ge \\dfrac{A_{min}}{20\\log_{10}(${highTex}/${lowTex})} = \\dfrac{${plain(aminDb)}}{20\\log_{10}(${plain(highVal)}/${plain(lowVal)})} = \\dfrac{${plain(aminDb)}}{${perText}} = ${roughText} \\;\\Rightarrow\\; n = ${roughN}`,
@@ -406,6 +502,17 @@ function responseStory(resp, { high, side }) {
 	}
 }
 
+/** What the transformation makes of the prototype's stages, after the prototype's own listing. */
+function prototypeTail(type, pairs, real, zeros = false) {
+	const kind = type === 'bandpass' ? 'band-pass' : 'notch';
+	// a pair that carries zeros becomes notch stages, in a band-pass too
+	const pairKind = zeros ? 'notch' : kind;
+	const total = 2 * pairs + (real ? 1 : 0);
+	if (pairs === 0) return ` The transformation turns that RC stage into the one ${kind} stage of panel 03.`;
+	const rc = real ? (pairKind === kind ? ' and the RC stage into one' : ` and the RC stage into one ${kind} stage`) : '';
+	return ` The transformation then turns each pair into two ${pairKind} stages${rc}: the ${total} stages of panel 03.`;
+}
+
 function opampAndQ({ type, response, side, amaxDb, aminDb, ok }) {
 	const band = type === 'bandpass' || type === 'bandstop';
 	const high = side.kind === 'highpass';
@@ -432,7 +539,9 @@ function opampAndQ({ type, response, side, amaxDb, aminDb, ok }) {
 	} else {
 		const n = d.n;
 		const { second, fc } = stageTable(d);
-		const lead = band ? 'On the low-pass side, order' : 'Order';
+		const lead = side.prototype ? 'In the prototype, order' : band ? 'On the low-pass side, order' : 'Order';
+		// the prototype's stages are not the ones panel 03 lists: the transformation comes after
+		const listed = side.prototype ? 'with' : 'listed in panel 03 with';
 		const qs = second.map((s) => s.q.toFixed(2));
 		const f0s = second.map((s) => hzText(s.f0));
 		const sameF0 = second.every((s) => Math.abs(s.f0 / second[0].f0 - 1) < 1e-3);
@@ -443,17 +552,17 @@ function opampAndQ({ type, response, side, amaxDb, aminDb, ok }) {
 		const beyond = high ? ' below it' : '';
 		let text;
 		if (n === 1 || second.length === 0) {
-			text = `${lead} 1 is a single RC stage, listed in panel 03: with one slope there is no knee to sharpen, so no Q.`;
+			text = `${lead} 1 is a single RC stage${side.prototype ? '' : ', listed in panel 03'}: with one slope there is no knee to sharpen, so no Q.`;
 		} else if (resp !== 'butterworth' && resp !== 'chebyshev') {
-			const listing = `${lead} ${n} is ${count}${fc ? ' plus one plain RC stage' : ''}, listed in panel 03 with ${f0Text} and Q = ${listText(qs)}${fc ? `, the RC stage at ${hzText(fc)}` : ''}.`;
+			const listing = `${lead} ${n} is ${count}${fc ? ' plus one plain RC stage' : ''}, ${listed} ${f0Text} and Q = ${listText(qs)}${fc ? `, the RC stage at ${hzText(fc)}` : ''}.`;
 			text = `${listing}${responseStory(resp, { high, side })}`;
 		} else if (!cheby) {
 			const parts = second.length + (fc ? 1 : 0);
-			const listing = `${lead} ${n} is ${count}${fc ? ' plus one plain RC stage for the leftover slope' : ''}, listed in panel 03 with ${f0Text} and Q = ${listText(qs)}${fc ? `, the RC stage at ${hzText(fc)}` : ''}.`;
+			const listing = `${lead} ${n} is ${count}${fc ? ' plus one plain RC stage for the leftover slope' : ''}, ${listed} ${f0Text} and Q = ${listText(qs)}${fc ? `, the RC stage at ${hzText(fc)}` : ''}.`;
 			const alone = parts >= 2 ? ` ${parts === 2 ? 'Neither' : 'None of them'} is flat alone. Their product is flat ${upTo}, ${amaxText} down there, then falls at ${20 * n} dB per decade${beyond}. That flat product is what Butterworth means.` : ` With Q = ${qs[0]} it is already the flattest on its own: flat ${upTo}, ${amaxText} down there, then falling at ${20 * n} dB per decade${beyond}. That flat curve is what Butterworth means.`;
 			text = `${listing}${alone} Chebyshev picks higher Q values and keeps the bumps on purpose: they are the ripple, at most Amax high, and they buy the steeper drop.`;
 		} else {
-			const listing = `${lead} ${n} is ${count}${fc ? ' plus one plain RC stage' : ''}, listed in panel 03 with ${f0Text} and Q = ${listText(qs)}${fc ? `, the RC stage at ${hzText(fc)}` : ''}.`;
+			const listing = `${lead} ${n} is ${count}${fc ? ' plus one plain RC stage' : ''}, ${listed} ${f0Text} and Q = ${listText(qs)}${fc ? `, the RC stage at ${hzText(fc)}` : ''}.`;
 			const bump =
 				second.length === 1
 					? ` The bump of the high-Q stage is kept on purpose: it is the ripple, at most Amax high, ${amaxText} here, and it buys the steeper drop.`
@@ -469,6 +578,7 @@ function opampAndQ({ type, response, side, amaxDb, aminDb, ok }) {
 			}
 			text = `${listing}${bump}${versus}`;
 		}
+		if (side.prototype) text += prototypeTail(type, second.length, Boolean(fc), second.some((s) => isNum(s.fz)));
 		blocks.push(p(text));
 	}
 
@@ -484,7 +594,7 @@ function opampAndQ({ type, response, side, amaxDb, aminDb, ok }) {
 			order: d.n,
 			...(isNum(fc) ? { fc } : {}),
 			live: true,
-			...(band ? { side: type } : {})
+			...(band ? { side: side.prototype ? 'prototype' : type } : {})
 		};
 	} else {
 		const fallback = designLowPass(DEFAULT_SPEC);
@@ -523,13 +633,26 @@ const CORNER = {
 	towThomas: { sym: 'f_0 = \\dfrac{1}{2\\pi R C}, \\quad R = R_a = R_b,\\ \\ C = C_1 = C_2', parts: ['Ra', 'C1'], simple: true },
 	towThomasHp: { sym: 'f_0 = \\dfrac{1}{2\\pi R C}, \\quad R = R_a = R_b,\\ \\ C = C_1 = C_2', parts: ['Ra', 'C1'], simple: true },
 	towThomasNotch: { sym: 'f_0 = \\dfrac{1}{2\\pi R C}, \\quad R = R_a = R_b,\\ \\ C = C_1 = C_2', parts: ['Ra', 'C1'], simple: true },
+	towThomasBp: { sym: 'f_0 = \\dfrac{1}{2\\pi R C}, \\quad R = R_a = R_b,\\ \\ C = C_1 = C_2', parts: ['Ra', 'C1'], simple: true },
 	firstOrder: { sym: 'f_c = \\dfrac{1}{2\\pi R C}', parts: ['R', 'C'], simple: true },
 	firstOrderHp: { sym: 'f_c = \\dfrac{1}{2\\pi R C}', parts: ['R', 'C'], simple: true }
 };
 
 const partTex = (name, v) => (/^R/.test(name) ? ohmTex(v) : faradTex(v));
 
+// the multiple-feedback band-pass: R1 and R2 count together, in parallel
+const MFB_BP_CORNER = 'f_0 = \\dfrac{1}{2\\pi}\\sqrt{\\dfrac{1/R_1 + 1/R_2}{R_3 C_1 C_2}}';
+
 function stageCorner(stage) {
+	if (stage?.topology === 'mfbBp') {
+		const c = stage.components;
+		if (!c || !['R1', 'R2', 'R3', 'C1', 'C2'].every((name) => allPos(c[name]))) return null;
+		const f = Math.sqrt((1 / c.R1 + 1 / c.R2) / (c.R3 * c.C1 * c.C2)) / TWO_PI;
+		return {
+			f,
+			tex: `${MFB_BP_CORNER} = \\dfrac{1}{2\\pi}\\sqrt{\\dfrac{1/${ohmTex(c.R1)} + 1/${ohmTex(c.R2)}}{${ohmTex(c.R3)} \\cdot ${faradTex(c.C1)} \\cdot ${faradTex(c.C2)}}} = ${hzTex(f)}`
+		};
+	}
 	if (stage?.topology === 'boctor' || stage?.topology === 'boctorHp') {
 		const f = stage.actual.wn / TWO_PI;
 		const formula = stage.topology === 'boctor'
@@ -607,13 +730,87 @@ function stagesToParts({ topology, stock, design, realizedStages, needsTowThomas
 	];
 }
 
+const BAND_LINE = {
+	mfb: 'Multiple feedback (Delyiannis-Friend) builds each band-pass stage with one op-amp; its resistor ratios grow with Q squared, so a narrow band, with its high Q, asks a lot of it.',
+	towThomas: 'Tow-Thomas spends three op-amps per stage so that f0, Q and the gain are set by separate resistors, which suits the high Q of a narrow band.'
+};
+const NOTCH_LINE = {
+	boctor: TOPOLOGY_LINE.boctor,
+	towThomas: 'A Tow-Thomas notch spends three op-amps per stage and builds every notch, the symmetric one on the centre of the band included.'
+};
+
+/**
+ * From stages to parts for a band type built by transformation: the
+ * Band-pass stages menu, and the Notch stages menu for the notch stages
+ * (every stage of a band-stop, the pole pairs of a band-pass with zeros).
+ */
+function transformedStagesToParts({ type, topology, topologyNotch, stock, design, realizedStages, pairs = false }) {
+	const stop = type === 'bandstop';
+	const stages = design && Array.isArray(design.stages) ? design.stages : [];
+	const realized = Array.isArray(realizedStages) ? realizedStages.filter(Boolean) : [];
+	const hasNotches = stop || stages.some((s) => isNum(s.wz));
+	const bandMenu = topology === 'towThomas' ? 'towThomas' : 'mfb';
+	const notchMenu = topologyNotch === 'boctor' || topologyNotch === 'towThomas' ? topologyNotch : realized.some((s) => /^boctor/.test(s.topology ?? '')) ? 'boctor' : 'towThomas';
+	// a stage Boctor cannot build, the symmetric notch among them, is a Tow-Thomas notch instead
+	const fallback = notchMenu === 'boctor' && realized.some((s) => s.topology === 'towThomasNotch');
+	const notchText = `${TOPOLOGY_NAME[notchMenu]}${fallback ? ", with a Tow-Thomas notch wherever Boctor cannot build the stage, or where Boctor's own gain would move the passband by more than 1 dB or leave its zero off target" : ''}`;
+	let menu;
+	if (stop) {
+		menu = `In a band-stop built by transformation every stage is a notch, whatever the response, and the Notch stages menu sets how they are wired around the op-amp: this page is set to ${notchText}.`;
+	} else {
+		menu = `The Band-pass stages menu sets how they are wired around the op-amp, and this page is set to ${TOPOLOGY_NAME[bandMenu]}.`;
+		if (hasNotches) menu += ` With zeros in the response the pole pairs become notch stages, which the Notch stages menu builds, set to ${notchText}.`;
+	}
+	const otherNotch = notchMenu === 'boctor' ? 'towThomas' : 'boctor';
+	const lines = stop ? [NOTCH_LINE[notchMenu], NOTCH_LINE[otherNotch]] : [BAND_LINE[bandMenu], BAND_LINE[bandMenu === 'mfb' ? 'towThomas' : 'mfb'], ...(hasNotches ? [NOTCH_LINE[notchMenu]] : [])];
+	const rounding =
+		(ROUNDING[stock] ?? 'fixes the capacitors from the values in stock, solves for the resistors, rounds each to the nearest value in stock') +
+		(pairs ? ' (or to two resistors in series where no single one comes close)' : '');
+
+	const stage = realized[0] ?? null;
+	const corner = stageCorner(stage);
+	const target = stages[0] ?? null;
+	// a band-pass stage peaks at its f0, its centre; a notch stage turns there, its corner
+	const word = target && target.filterType !== 'bandpass' ? 'corner' : 'centre';
+	let parts = `The ${word} still comes from R times C, as in the one-section formula, only now four parts share the job under a square root.`;
+	if (stage?.topology === 'mfbBp') parts = 'The centre still comes from R times C, as in the one-section formula, only now five parts share the job: R1 and R2 count together, in parallel, with R3, C1 and C2 under a square root.';
+	else if (/^towThomas/.test(stage?.topology ?? '')) parts = `The ${word} still comes from R times C, as in the one-section formula. The wiring chosen here uses two equal resistors and two equal capacitors, so the formula keeps its one-section form.`;
+	const asked = target && allPos(target.wn) ? target.wn / TWO_PI : NaN;
+	let tex;
+	let intro;
+	if (corner) {
+		tex = corner.tex;
+		intro = isNum(asked)
+			? `Stage 1's ${word} from its own rounded parts, with the values in panel 04, next to the ${hzText(asked)} it was asked for; the difference is the cost of rounding:`
+			: `Stage 1's ${word} from its own rounded parts, with the values in panel 04:`;
+	} else {
+		tex = CORNER[stage?.topology]?.sym ?? (stop ? CORNER.towThomasNotch.sym : bandMenu === 'towThomas' ? CORNER.towThomasBp.sym : MFB_BP_CORNER);
+		intro = `A stage's ${word} from its parts, for the wiring chosen:`;
+	}
+
+	return [
+		h('From stages to parts'),
+		p(`f0 and Q are what a stage must produce; the resistors and capacitors are how. ${parts} ${menu}`),
+		p(lines.join(' ')),
+		p(
+			`Whatever the wiring, the exact values the formulas want are in no drawer. Panel 04 ${rounding}, then recomputes f0 and Q from the rounded parts and lists the shift in percent.`
+		),
+		eq(tex, intro)
+	];
+}
+
 /* ------------------------------------------------ 7. the rest of the page */
 
-function restOfPage({ type, amaxDb, aminDb, bandLimits = null, k, stages, attenuationAtFs, attenuationAtFp, attenuationAtFsl, attenuationAtFsh, attenuationAtFl, attenuationAtFh }) {
+function restOfPage({ type, amaxDb, aminDb, bandLimits = null, k, stages, attenuationAtFs, attenuationAtFp, attenuationAtFsl, attenuationAtFsh, attenuationAtFl, attenuationAtFh, transformed = false, design = null }) {
 	const band = type === 'bandpass' || type === 'bandstop';
 	const high = type === 'highpass';
+	// a transformed design has one Amax and the Amin of each stopband edge
+	if (transformed && design && validDesign(design) && allPos(design.amaxDb, design.aminDbLow, design.aminDbHigh)) {
+		bandLimits = { amaxAtFl: design.amaxDb, amaxAtFh: design.amaxDb, aminAtFsl: design.aminDbLow, aminAtFsh: design.aminDbHigh };
+	}
 	let kText;
-	if (band) kText = 'computes k, the transition ratio, once per side';
+	if (transformed) kText = 'maps each stopband edge onto the prototype, Ω at fsl and fsh, before the count';
+	else if (band) kText = 'computes k, the transition ratio, once per side';
 	else if (isNum(k)) kText = `shows k = ${high ? 'fs/fp' : 'fp/fs'}, the transition ratio, ${k.toFixed(4)} here`;
 	else kText = `shows k = ${high ? 'fs/fp' : 'fp/fs'}, the transition ratio`;
 	const everyStage = !isNum(stages) || stages < 1 ? 'every stage' : stages === 1 ? 'the one stage' : stages === 2 ? 'both stages' : `all ${stages} stages`;
@@ -653,6 +850,11 @@ const GLOSSARY = [
 	['zero (fz)', 'a frequency a stage blocks completely; elliptic and inverse Chebyshev stages each carry a pair'],
 	['op-amp', 'the amplifier chip each stage is built around; it is what makes the filter active']
 ];
+// added for a band type built by transformation
+const BAND_TERMS = [
+	['centre and bandwidth (B)', 'the middle of a band on a log axis, the geometric mean of fl and fh, and its width, B = fh - fl'],
+	['prototype', 'the low-pass a band filter is built from by transformation, with its passband edge at B']
+];
 
 export function filterBasics({
 	filterType,
@@ -684,20 +886,27 @@ export function filterBasics({
 	attenuationAtFh,
 	stock,
 	needsTowThomas,
-	pairs = false
+	pairs = false,
+	method,
+	topologyNotch
 } = {}) {
 	const type = TYPES.includes(filterType) ? filterType : 'lowpass';
-	const side = sideOf({ type, fp, fs, fl, fh, fsl, fsh, lpFp, lpFs, design });
-	const ok = specOk(side, amaxDb, aminDb);
+	const transformed = (type === 'bandpass' || type === 'bandstop') && (method === 'transformed' || design?.method === 'transformed');
+	const side = sideOf({ type, fp, fs, fl, fh, fsl, fsh, lpFp, lpFs, design, transformed });
+	// the prototype's own limits: Amax, and the Amin it is designed with (a fitted floor kept to two decimals, rounded down)
+	const limits = side.prototype && side.design ? { amaxDb: side.design.amaxDb, aminDb: Math.floor(side.design.aminDb * 100 + 1e-9) / 100 } : { amaxDb, aminDb };
+	const ok = specOk(side, limits.amaxDb, limits.aminDb);
 	return [
-		...whatAFilterDoes({ type, fp, fs, fl, fh, fsl, fsh, realizedStages, bandStopBranches, combineSigns }),
-		...decibels({ type, amaxDb, aminDb, bandLimits }),
-		...oneRc({ type, side, amaxDb, aminDb, ok }),
-		...theOrder({ type, response, side, amaxDb, aminDb, ok, order }),
-		...opampAndQ({ type, response, side, amaxDb, aminDb, ok }),
-		...stagesToParts({ topology, stock, design, realizedStages, needsTowThomas, pairs }),
-		...restOfPage({ type, amaxDb, aminDb, bandLimits, k, stages, attenuationAtFs, attenuationAtFp, attenuationAtFsl, attenuationAtFsh, attenuationAtFl, attenuationAtFh }),
+		...whatAFilterDoes({ type, fp, fs, fl, fh, fsl, fsh, realizedStages, bandStopBranches, combineSigns, transformed }),
+		...decibels({ type, amaxDb, aminDb, bandLimits, transformed, design }),
+		...oneRc({ type, side, ...limits, ok }),
+		...theOrder({ type, response, side, ...limits, ok, order }),
+		...opampAndQ({ type, response, side, ...limits, ok }),
+		...(transformed
+			? transformedStagesToParts({ type, topology, topologyNotch, stock, design, realizedStages, pairs })
+			: stagesToParts({ topology, stock, design, realizedStages, needsTowThomas, pairs })),
+		...restOfPage({ type, amaxDb, aminDb, bandLimits, k, stages, attenuationAtFs, attenuationAtFp, attenuationAtFsl, attenuationAtFsh, attenuationAtFl, attenuationAtFh, transformed, design }),
 		h('Words used on this page'),
-		terms(GLOSSARY)
+		terms(transformed ? [...GLOSSARY, ...BAND_TERMS] : GLOSSARY)
 	];
 }
