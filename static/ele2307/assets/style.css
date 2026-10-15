@@ -279,6 +279,11 @@ details.sol { border-color: color-mix(in srgb, var(--ok) 45%, var(--border)); }
   details { display: block; }
   details > *:not(summary) { display: block; }
   .formulaire td, .formulaire th { border: 1px solid #999; }
+  /* Pas de coupure de page au milieu d'une ligne de tableau, d'un encadre ou d'une formule */
+  table, .formulaire { break-inside: auto; page-break-inside: auto; }
+  tr, th, td, .box, .formula, .q, .exo header, .katex-display { break-inside: avoid; page-break-inside: avoid; }
+  h2, h3, h4 { break-after: avoid; page-break-after: avoid; }
+}
 }
 .sr-only { position: absolute; left: -9999px; }
 .footer { color: var(--muted); font-size: .85em; text-align: center; padding: 2rem 1rem; border-top: 1px solid var(--border); margin-top: 2rem; }
