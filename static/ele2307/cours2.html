@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cours 2 - Énergie interne et états accessibles | ELE2307</title>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<link rel="stylesheet" href="assets/style.css?v=8">
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="index.html">ELE2307 <small>Thermodynamique statistique et semiconducteurs</small></a>
+  <nav>
+    <a href="index.html">Accueil</a>
+    <a href="cours1.html">Cours 1</a>
+    <a href="cours2.html">Cours 2</a>
+    <a href="cours3.html">Cours 3</a>
+    <a href="cours4.html">Cours 4</a>
+    <a href="cours5.html">Cours 5</a>
+    <a href="cours6.html">Cours 6</a>
+    <a href="formulaire.html">Formulaire</a>
+    <a href="errata.html">Errata</a>
+    <button class="theme-btn" type="button">Thème</button>
+  </nav>
+</header>
+
+<main class="layout">
+<aside class="toc"></aside>
+<article class="content">
+
+<div class="course-hero">
+  <div class="kicker">Cours 2 - Chapitre 2 du cours</div>
+  <h1>Énergie interne et états accessibles</h1>
+  <p class="meta">Manuel (Stowe, <em>TSM</em>) : chapitres 4, 5 et 6 (sections A à D) | Diapos « Cours 2 » (34 pages) | Diapos d’exercices du 10 septembre</p>
+  <p><span class="pill accent">Degrés de liberté</span><span class="pill accent">Équipartition</span><span class="pill accent">Chaleur, travail, diffusion</span><span class="pill accent">1<sup>er</sup> principe</span><span class="pill accent">Nombre d’états Ω</span><span class="pill accent">Heisenberg</span><span class="pill accent">Densité d’états</span></p>
+  <p class="small">Fil conducteur : l’énergie d’un système est répartie sur des <em>degrés de liberté</em> ; le nombre d’états accessibles \(\Omega\) dépend énormément de cette énergie (et du volume). Au cours 3, \(S = k\ln\Omega\) transformera ce comptage en entropie et température.</p>
+</div>
+
+<h2>1. Énergie interne et degrés de liberté</h2>
+<h3>1.1 Les formes d’énergie d’une particule</h3>
+<p>On distingue quatre types d’énergie pour une particule (ou un système) : <strong>potentielle</strong>, <strong>cinétique</strong> (mouvement de l’élément), <strong>vibrationnelle</strong> (vibration interne) et <strong>rotationnelle</strong>. L’énergie \(\varepsilon\) de la particule est la somme de ces énergies.</p>
+<div class="formula"><div class="title">Énergie potentielle près de l’équilibre</div>
+\[u(x) = u(0) + \frac{x^2}{2}\,\frac{\partial^2 u}{\partial x^2}\Big|_{x=0} = u_0 + \tfrac12\kappa x^2\]
+<div class="cond">Au voisinage d’un point d’équilibre (minimum local), la dérivée première est nulle : le développement de Taylor donne un terme constant \(u_0\) (niveau de référence, négatif pour des particules liées) plus un terme <em>quadratique</em> - un oscillateur harmonique de constante de rappel \(\kappa\).</div>
+</div>
+<div class="formula"><div class="title">Énergie cinétique et énergie de rotation</div>
+\[\varepsilon_c = \frac{1}{2}\frac{p^2}{m} = \frac{p_x^2}{2m}+\frac{p_y^2}{2m}+\frac{p_z^2}{2m}\qquad\qquad \varepsilon_{r,i} = \frac{1}{2}\frac{L_i^2}{I_i}\]
+<div class="cond">\(p\) : quantité de mouvement, \(m\) : masse ; \(L_i\) : moment cinétique (angulaire) autour de l’axe \(i\), \(I_i\) : moment d’inertie autour de cet axe.</div>
+</div>
+
+<h3>1.2 Degrés de liberté</h3>
+<div class="box def"><span class="label">Point important</span>
+<p>Toutes ces énergies s’écrivent sous la forme \(\alpha + \beta\xi^2\), où \(\alpha,\beta\) sont des constantes et \(\xi\) une coordonnée de l’élément (\(x\), \(p_x\), \(L_y\)...). <strong>Chaque terme \(\beta\xi^2\) décrit une façon de stocker de l’énergie : c’est un degré de liberté (ddl) de la particule.</strong></p>
+</div>
+<div class="formula"><div class="title">Forme générale de l’énergie et énergie thermique</div>
+\[\varepsilon = u_0 + \sum_{\text{degrés de liberté}}\beta\xi^2\qquad\qquad \varepsilon_{therm} = \sum_{\text{degrés de liberté}}\beta\xi^2\]
+<div class="cond">L’énergie thermique est l’énergie mesurée par rapport au niveau de référence \(u_0\).</div>
+</div>
+<div class="formula"><div class="title">Équipartition de l’énergie (démontrée au cours 3)</div>
+\[\overline{\varepsilon_{\text{par ddl}}} = \tfrac12 kT\qquad\quad \varepsilon_{therm} = \frac{\nu}{2}kT\qquad\quad E_{therm} = \frac{N\nu}{2}kT\qquad\quad E = N u_0 + \frac{N\nu}{2}kT\]
+<div class="cond">\(k = 1{,}381\times10^{-23}\) J/K (constante de Boltzmann), \(T\) en kelvins, \(\nu\) : nombre de ddl par particule, \(N\) : nombre de particules. <strong>L’énergie thermique est équirépartie sur chaque degré de liberté.</strong> Pour la plupart des solides et des gaz \(u_0\) ne varie pas : mesurer \(\Delta T\) pour un \(\Delta E\) donné permet de compter \(\nu\) (c’est l’idée de la capacité thermique, TD1).</div>
+</div>
+
+<h3>1.3 Gaz monoatomique, gaz diatomique, solide</h3>
+<table>
+  <tr><th>Système</th><th>Degrés de liberté</th><th>\(\nu\)</th><th>Énergie d’une particule</th></tr>
+  <tr><td><strong>Gaz monoatomique</strong> (He, Ar...)</td><td>3 translations ; particules isolées, pas d’interaction, \(u = 0\)</td><td class="num">3</td><td>\(\varepsilon = \dfrac{p_x^2}{2m}+\dfrac{p_y^2}{2m}+\dfrac{p_z^2}{2m}\)</td></tr>
+  <tr><td><strong>Gaz diatomique</strong> (N<sub>2</sub>, O<sub>2</sub>...)</td><td>3 translations + 2 rotations (axes \(y\) et \(z\), perpendiculaires à la liaison)</td><td class="num">5</td><td>\(\varepsilon = \dfrac{p_x^2}{2m}+\dfrac{p_y^2}{2m}+\dfrac{p_z^2}{2m}+\dfrac{L_y^2}{2I_y}+\dfrac{L_z^2}{2I_z}\)</td></tr>
+  <tr><td><strong>Solide</strong></td><td>3 ddl d’énergie potentielle (force de rappel vers les voisins, \(\kappa\)) + 3 ddl cinétiques</td><td class="num">6</td><td>\(\varepsilon = \dfrac{p_x^2+p_y^2+p_z^2}{2m} + u_0 + \dfrac{\kappa_x x^2}{2}+\dfrac{\kappa_y y^2}{2}+\dfrac{\kappa_z z^2}{2}\)</td></tr>
+</table>
+<div class="box warn"><span class="label">Pourquoi pas plus de degrés de liberté ?</span>
+<p>Les énergies sont quantifiées : un ddl n’est « actif » que si \(kT\) suffit à atteindre son premier état excité. Pour N<sub>2</sub>, la rotation autour de l’axe de la liaison a un moment d’inertie minuscule (énergie d’excitation énorme) → inaccessible ; la vibration de la liaison demande \(\sim 10^3\) K → gelée à température ambiante. À très basse température seuls les 3 ddl de translation restent (\(\nu = 3\)), à très haute température la vibration s’ajoute (\(\nu = 7\) : énergie cinétique + potentielle de vibration). Exercices 8, 9, 13 et 16 du chapitre 4.</p>
+</div>
+<div class="widget" data-widget="dof"></div>
+
+<h2>2. Interactions entre systèmes</h2>
+<p>Comment amener ou enlever de l’énergie à un système ? Par trois mécanismes : <strong>transfert de chaleur \(\Delta Q\)</strong> (interaction thermique), <strong>travail \(\Delta W\)</strong> (interaction mécanique) et <strong>échange de particules \(\Delta N\)</strong> (interaction diffusive).</p>
+<h3>2.1 Transfert de chaleur</h3>
+<ul>
+  <li><strong>Conduction</strong> : l’agitation thermique fait que les particules rapides (côté chaud) transfèrent leur énergie cinétique par collisions aux particules lentes (côté froid).</li>
+  <li><strong>Radiation</strong> : une particule chargée qui oscille génère un champ électromagnétique capté par d’autres particules (aucun milieu nécessaire).</li>
+  <li><strong>Convection</strong> : transport d’énergie par le déplacement macroscopique d’un fluide (panaches chauds qui montent).</li>
+</ul>
+<h3>2.2 Interaction mécanique : le travail</h3>
+<p>Comprimer un gaz augmente l’énergie cinétique de ses molécules (elles rebondissent sur un piston qui avance) ; une décompression la diminue.</p>
+<div class="formula"><div class="title">Formes du travail</div>
+\[\Delta W = F\Delta x\qquad \Delta W = p\,\Delta V\qquad \Delta W = -\vec B\cdot\Delta\vec\mu\qquad \Delta W = -\vec E\cdot\Delta\vec p\]
+<div class="cond">Force \(F\) sur un déplacement \(\Delta x\) ; pression \(p\) et variation de volume \(\Delta V\) ; champ magnétique \(B\) et variation du moment magnétique \(\mu\) ; champ électrique \(E\) et variation du moment dipolaire électrique \(p\). Pour une pression variable : \(\Delta W = \int p\,dV\).</div>
+</div>
+<h3>2.3 Échange de particules</h3>
+<p>Des particules diffusent du système le plus concentré vers le moins concentré, et modifient l’énergie des deux systèmes : \(\Delta E_1 = \mu_1\Delta N\), \(\Delta E_2 = -\mu_2\Delta N\), où \(\mu_1,\mu_2\) sont les <strong>potentiels chimiques</strong> des particules dans chaque système (énergie apportée par particule ajoutée).</p>
+<h3>2.4 Le premier principe de la thermodynamique</h3>
+<div class="formula"><div class="title">Premier principe</div>
+\[\Delta E = \Delta Q - \Delta W + \mu\,\Delta N\]
+<div class="cond"><strong>Conventions du cours</strong> : \(\Delta Q\) est la chaleur <em>reçue</em> par le système, \(\Delta N\) le nombre de particules <em>reçues</em>, mais \(\Delta W\) est le travail <em>fourni par</em> le système - d’où le signe moins. Lecture : la variation d’énergie = ce qui entre − ce qui sort.</div>
+</div>
+<div class="box ex"><span class="label">Exemple : gaz sous un piston (diapo d’exercices, 10 septembre)</span>
+<p>Un gaz scellé sous un piston de surface \(S\), parois isolantes, pression \(P\) constante. On abaisse le piston d’une distance \(\Delta x\). Bilan : transfert thermique ? non (isolé). Travail ? oui : le système <em>reçoit</em> \(PS\Delta x\), donc le travail fourni <em>par</em> le système est \(\Delta W = -PS\Delta x\). Transfert de particules ? non (système fermé). Donc \(\Delta E = -\Delta W = +PS\Delta x\) : le système gagne de l’énergie.</p>
+</div>
+<div class="widget" data-widget="first-law"></div>
+
+<h2>3. Notion d’états</h2>
+<h3>3.1 États, énergie et densité d’états</h3>
+<p>On identifie souvent les états d’un système par leur énergie. Pour les grands systèmes, il existe un nombre énorme d’états de même énergie (ou presque) : on parle alors de <strong>densité d’états par unité d’énergie</strong> \(g(E)\).</p>
+<div class="formula">
+\[\Omega(E,\Delta E) = g(E)\,\Delta E\]
+<div class="cond">\(\Omega(E,\Delta E)\) : nombre d’états dont l’énergie est comprise entre \(E\) et \(E+\Delta E\).</div>
+</div>
+<h3>3.2 Particules distinctes ou identiques</h3>
+<div class="formula"><div class="title">Nombre d’états d’un système de \(N\) particules</div>
+\[\text{Particules distinctes : }\ \Omega = \omega\times\omega\times\cdots\times\omega = \omega^N\]
+\[\text{Particules identiques : }\ \Omega = \frac{\omega^N}{N!} \approx \left(\frac{e\omega}{N}\right)^N = \omega_c^{\,N}\qquad \omega_c = \frac{e\omega}{N}\]
+<div class="cond">\(\omega\) : nombre d’états accessibles à <em>une</em> particule. Pour des particules identiques, les \(N!\) permutations des particules entre leurs états donnent le même état du système : on divise par \(N!\), puis on utilise Stirling, \(N! \approx \sqrt{2\pi N}(N/e)^N \approx (N/e)^N\). \(\omega_c\) est le <em>nombre d’états corrigé</em> par particule. Valable quand il y a beaucoup plus d’états que de particules (cas classique ; la statistique quantique du cours 7 traite le reste).</div>
+</div>
+<div class="box ex"><span class="label">Permutations (diapos 20-22)</span>
+<p>Combien de façons de permuter \(N\) particules distinctes ? \(1! = 1\) ; \(2! = 2\) (12, 21) ; \(3! = 6\) (123, 132, 213, 231, 312, 321) ; \(4! = 24\). Démonstration avec 5 jetons : 5 choix pour la première case, puis 4, 3, 2, 1 → \(5\times4\times3\times2\times1 = 5!\) arrangements. Si les particules sont identiques, il ne reste <em>qu’un seul</em> état dans chaque cas.</p>
+</div>
+<h3>3.3 Postulat fondamental de la physique statistique</h3>
+<div class="box def"><span class="label">Principe fondamental</span>
+<p><strong>Les différents états accessibles d’un système à l’équilibre ont tous la même probabilité d’être atteints</strong> (les états sont équiprobables à l’équilibre).</p>
+</div>
+<div class="formula">
+\[p_{\text{un état}} = \frac{1}{\Omega}\qquad\qquad P_{\text{sous-ensemble } i} = \frac{\Omega_i}{\Omega}\]
+<div class="cond">Conséquence directe : la probabilité d’une <em>configuration</em> (ex. « \(n\) molécules dans le tiers gauche ») est proportionnelle au nombre d’états qui lui correspondent. Attention : équiprobabilité des états ne veut pas dire que les particules sont uniformément réparties (exercice 4 du chapitre 6).</div>
+</div>
+
+<h2>4. Discrétisation des états</h2>
+<h3>4.1 Le principe d’incertitude d’Heisenberg</h3>
+<p>Une particule est caractérisée par sa position \(\vec r\) et sa quantité de mouvement \(\vec p\), qui semblent former un continuum. Mais la mécanique quantique impose que le produit des incertitudes sur la position et la quantité de mouvement délimitant un état ne peut être plus petit que \(h\) :</p>
+<div class="formula"><div class="title">Principe d’incertitude</div>
+\[\Delta x\,\Delta p_x \ge h\qquad (h = 6{,}626\times10^{-34}\ \text{J s})\]
+<div class="cond">Dans le cas critique \(\Delta x\Delta p_x = h\). Si deux positions \(x_1, x_2\) vérifient \(|x_1-x_2| \lt h/\Delta p\), on ne peut pas les distinguer : elles appartiennent au même état. On découpe donc l’axe \(x\) en intervalles de longueur \(h/\Delta p\), chacun correspondant à un état différent - et le résultat ne dépend pas de la précision \(\Delta p\) choisie.</div>
+</div>
+<h3>4.2 Compter les états dans l’espace des phases</h3>
+<div class="formula"><div class="title">Nombre d’états accessibles à une particule</div>
+\[\text{1D : }\ \omega = \frac{[x]\,[p_x]}{h}\qquad\qquad \text{3D : }\ \omega = \frac{V_r\,V_p}{h^3} = \iiint\frac{dx\,dy\,dz\,dp_x\,dp_y\,dp_z}{h^3} = \frac{V}{h^3}\iiint dp^3\]
+<div class="cond">\(V_r\) : volume accessible en position (le volume \(V\) du récipient pour un gaz) ; \(V_p\) : volume accessible en quantité de mouvement. L’aire minimale d’un état est \(h\) (1D), son volume minimal \(h^3\) (3D).</div>
+</div>
+<div class="formula"><div class="title">Quantité de mouvement comprise entre \(p_1\) et \(p_2\) (coordonnées sphériques)</div>
+\[dp^3 = p^2\,dp\,\sin\theta\,d\theta\,d\varphi\qquad\Longrightarrow\qquad \omega = \frac{V}{h^3}\iiint p^2\sin\theta\,dp\,d\theta\,d\varphi = \frac{4\pi V}{3h^3}\left[p^3\right]_{p_1}^{p_2}\]
+<div class="cond">Formule utilisable pour une particule isolée caractérisée par sa position et \(p\) ; attention aux conditions de l’exercice (bornes en \(p\), fraction du volume, etc.).</div>
+</div>
+<div class="box ex"><span class="label">Exemple 3 : électrons d’un plasma</span>
+<p>Les électrons sont contraints à une quantité de mouvement maximale \(p_0\). Probabilité qu’un électron ait \(p \le p_0/10\) ? Par équiprobabilité, \(P = \Omega_i/\Omega\) = rapport des volumes de quantité de mouvement : \(\dfrac{(p_0/10)^3}{p_0^3} = 10^{-3}\).</p>
+</div>
+<div class="widget" data-widget="phase-space"></div>
+
+<h3>4.3 Généralisation aux autres degrés de liberté</h3>
+<p>On étend l’idée à tous les degrés de liberté \(\xi\) : ils définissent un volume de dimension \(\nu\), et le nombre d’états est ce volume divisé par le volume minimal d’un état. Pour un gaz, l’énergie ne dépend pas de la position : on intègre aussi sur les positions, ce qui donne \(V\). Pour un solide, la position n’apparaît pas (les particules sont fixées).</p>
+<div class="formula">
+\[\text{Gaz : }\ \omega \propto \iiint\frac{dx\,dy\,dz}{h^3}\prod_{\text{ddl}}\int d\xi \propto \frac{V}{h^3}\prod_{\text{ddl}}\int d\xi\qquad\qquad \text{Solide : }\ \omega\propto\prod_{\text{ddl}}\int d\xi\]
+</div>
+
+<h2>5. États accessibles pour \(N\) particules</h2>
+<p>L’énergie thermique est équirépartie sur les \(N\nu\) degrés de liberté du système ; l’énergie d’un ddl est donc \(\varepsilon = \dfrac{E_{therm}}{N\nu} \propto \xi^2\), d’où \(\xi \propto \sqrt{\dfrac{E_{therm}}{N\nu}}\) et \(\displaystyle\int d\xi \propto \xi \propto \sqrt{\frac{E_{therm}}{N\nu}}\). Chaque ddl apporte donc un facteur \((E_{therm}/N\nu)^{1/2}\) :</p>
+<div class="formula"><div class="title">Une particule, puis correction pour particules identiques</div>
+\[\text{Gaz : }\ \omega \propto V\left(\frac{E_{therm}}{N\nu}\right)^{\nu/2}\qquad \omega_c \propto \frac{V}{N}\left(\frac{E_{therm}}{N\nu}\right)^{\nu/2}\qquad\qquad \text{Solide : }\ \omega = \omega_c \propto \left(\frac{E_{therm}}{N\nu}\right)^{\nu/2}\]
+<div class="cond">La correction \(e/N\) ne s’applique qu’aux gaz : dans un solide, les particules sont maintenues en place, donc identifiables par leur position.</div>
+</div>
+<div class="formula"><div class="title">Nombre d’états accessibles et densité d’états du système</div>
+\[\text{Gaz : }\ \Omega = \omega_c^{\,N} \propto \left(\frac{V}{N}\right)^N\left(\frac{E_{therm}}{N\nu}\right)^{N\nu/2}\qquad\qquad \text{Solide : }\ \Omega = \omega_c^{\,N}\propto\left(\frac{E_{therm}}{N\nu}\right)^{N\nu/2}\]
+\[g(E) = \frac{d\Omega}{dE}\ \propto\ \text{les mêmes expressions}\quad(\text{l’exposant } N\nu/2 - 1 \approx N\nu/2)\]
+<div class="cond">Avec \(E_{therm} = N\nu\,kT/2\) : gaz monoatomique (\(\nu=3\)) \(g(E) \propto (V/N)^N (kT/2)^{3N/2}\) ; gaz diatomique (\(\nu=5\)) \(g(E)\propto (V/N)^N(kT/2)^{5N/2}\) ; solide (\(\nu=6\)) \(g(E)\propto (kT/2)^{3N}\). Les constantes exactes sont dans la table 6.2 du manuel ; au cours, seules les <em>dépendances</em> (et les <em>rapports</em>) comptent.</div>
+</div>
+<div class="box method"><span class="label">Méthode : comparer deux situations avec des logarithmes</span>
+<p>Les constantes disparaissent dans un rapport : \(\dfrac{\Omega_f}{\Omega_i} = \left(\dfrac{E_f}{E_i}\right)^{N\nu/2}\left(\dfrac{V_f}{V_i}\right)^N\). On calcule \(\log_{10}(\Omega_f/\Omega_i) = \dfrac{N\nu}{2}\log_{10}\dfrac{E_f}{E_i} + N\log_{10}\dfrac{V_f}{V_i}\) et on écrit la réponse sous la forme \(10^{(\ldots)}\). Rappels : \(e^x = 10^{0{,}4343x}\) et \(\ln(1+\epsilon)\approx\epsilon\) pour \(\epsilon\) petit.</p>
+</div>
+<div class="box ex"><span class="label">Exemple 4 : une salle chauffée de 1 K (exemple 6.3 du manuel)</span>
+<p>\(10^{28}\) molécules d’air (\(\nu = 5\), soit \(N\nu/2 = 2{,}5\times10^{28}\)), de 295 K à 296 K : \(E_f/E_i = 296/295 = 1{,}0034\). \(\log_{10}(\Omega_f/\Omega_i) = 2{,}5\times10^{28}\times\log_{10}(1{,}0034) = 2{,}5\times10^{28}\times1{,}47\times10^{-3} = 3{,}7\times10^{25}\). Le nombre d’états est multiplié par \(10^{3{,}7\times10^{25}}\) : <em>une variation infime de température produit une variation phénoménale de \(\Omega\)</em>. C’est cette sensibilité extrême qui fonde toute la thermodynamique (cours 3).</p>
+</div>
+<div class="widget" data-widget="omega-growth"></div>
+
+<h2>6. À retenir</h2>
+<ul class="summary-list">
+  <li>Chaque terme \(\beta\xi^2\) de l’énergie est un <strong>degré de liberté</strong> ; \(\nu = 3\) (gaz monoatomique), 5 (diatomique), 6 (solide). Chaque ddl porte en moyenne \(kT/2\) : \(E_{therm} = N\nu kT/2\), \(E = Nu_0 + E_{therm}\).</li>
+  <li>Trois interactions : thermique (\(\Delta Q\) par conduction, radiation, convection), mécanique (\(\Delta W = p\Delta V\), ...), diffusive (\(\mu\Delta N\)). <strong>Premier principe</strong> : \(\Delta E = \Delta Q - \Delta W + \mu\Delta N\), \(\Delta W\) étant le travail fourni par le système.</li>
+  <li>\(\Omega = \omega^N\) (distinctes), \(\Omega = \omega^N/N! \approx (e\omega/N)^N = \omega_c^N\) (identiques) ; \(\Omega(E,\Delta E) = g(E)\Delta E\).</li>
+  <li>Postulat fondamental : états équiprobables à l’équilibre, \(p = 1/\Omega\), \(P_i = \Omega_i/\Omega\).</li>
+  <li>Heisenberg \(\Delta x\Delta p_x \ge h\) → un état occupe \(h^3\) : \(\omega = V_rV_p/h^3 = \dfrac{4\pi V}{3h^3}(p_2^3-p_1^3)\).</li>
+  <li>\(\Omega_{gaz}\propto (V/N)^N (E_{therm}/N\nu)^{N\nu/2}\), \(\Omega_{solide}\propto (E_{therm}/N\nu)^{N\nu/2}\) ; on compare toujours par des rapports et des logarithmes.</li>
+</ul>
+
+<!-- ===================================================== QUIZ ===================================================== -->
+<section class="quiz" data-quiz-id="c2" id="quiz-c2">
+<h2>Quiz rapide - Cours 2</h2>
+<p class="small">Une seule bonne réponse par question. Cliquez pour vérifier immédiatement.</p>
+
+<div class="q" data-answer="1">
+  <p class="q-text">Combien de degrés de liberté possède une molécule de gaz diatomique à température ambiante ?</p>
+  <ul class="choices"><li>3</li><li>5</li><li>6</li><li>7</li></ul>
+  <div class="explain">3 translations + 2 rotations (axes perpendiculaires à la liaison). La vibration (2 ddl de plus) n’est active qu’à haute température ; la rotation autour de l’axe de la liaison est inaccessible.</div>
+</div>
+<div class="q" data-answer="2">
+  <p class="q-text">Combien de degrés de liberté possède un atome dans un solide ?</p>
+  <ul class="choices"><li>3</li><li>5</li><li>6</li><li>2</li></ul>
+  <div class="explain">3 ddl cinétiques (\(p_x^2/2m\), ...) + 3 ddl d’énergie potentielle (\(\kappa x^2/2\), ...) = 6.</div>
+</div>
+<div class="q" data-answer="1">
+  <p class="q-text">Énergie thermique moyenne stockée par un degré de liberté ?</p>
+  <ul class="choices"><li>\(kT\)</li><li>\(\tfrac12 kT\)</li><li>\(\tfrac32 kT\)</li><li>\(\nu kT\)</li></ul>
+  <div class="explain">Équipartition : \(kT/2\) par ddl. Une particule à \(\nu\) ddl a \(\nu kT/2\) ; \(3kT/2\) est l’énergie cinétique de translation d’un atome (3 ddl).</div>
+</div>
+<div class="q" data-answer="0">
+  <p class="q-text">Énergie thermique totale d’un système de \(N\) particules ayant \(\nu\) ddl chacune ?</p>
+  <ul class="choices"><li>\(N\nu kT/2\)</li><li>\(NkT\)</li><li>\(\nu kT/2\)</li><li>\(Nu_0\)</li></ul>
+  <div class="explain">\(E_{therm} = N\nu kT/2\) ; l’énergie interne totale est \(E = Nu_0 + N\nu kT/2\).</div>
+</div>
+<div class="q" data-answer="0">
+  <p class="q-text">Dans \(\Delta E = \Delta Q - \Delta W + \mu\Delta N\), \(\Delta W\) représente :</p>
+  <ul class="choices"><li>le travail fourni <em>par</em> le système</li><li>le travail reçu par le système</li><li>la chaleur reçue</li><li>une quantité toujours nulle</li></ul>
+  <div class="explain">Convention du cours : \(\Delta W\) est le travail fourni par le système, d’où le signe moins ; \(\Delta Q\) et \(\Delta N\) sont reçus.</div>
+</div>
+<div class="q" data-answer="0">
+  <p class="q-text">Un gaz fermé est comprimé rapidement sans échange de chaleur. Son énergie interne :</p>
+  <ul class="choices"><li>augmente</li><li>diminue</li><li>reste constante</li><li>dépend de \(\mu\)</li></ul>
+  <div class="explain">\(\Delta Q = 0\), \(\Delta N = 0\), et le travail fourni par le système est négatif (on le comprime) : \(\Delta E = -\Delta W \gt 0\). Les molécules rebondissent sur un piston qui avance et gagnent de l’énergie cinétique.</div>
+</div>
+<div class="q" data-answer="0">
+  <p class="q-text">Les trois mécanismes de transfert de chaleur sont :</p>
+  <ul class="choices"><li>conduction, radiation, convection</li><li>travail, chaleur, diffusion</li><li>translation, rotation, vibration</li><li>pression, volume, température</li></ul>
+  <div class="explain">Travail / chaleur / diffusion sont les trois <em>types d’interaction</em> ; conduction / radiation / convection sont les trois <em>mécanismes du transfert de chaleur</em>.</div>
+</div>
+<div class="q" data-answer="1">
+  <p class="q-text">\(N\) particules distinctes ayant chacune \(\omega\) états accessibles. Nombre d’états du système ?</p>
+  <ul class="choices"><li>\(N\omega\)</li><li>\(\omega^N\)</li><li>\(\omega^N/N!\)</li><li>\(N!\)</li></ul>
+  <div class="explain">Les états se multiplient : \(\Omega = \omega\times\omega\times\cdots = \omega^N\). La division par \(N!\) ne s’applique qu’aux particules identiques.</div>
+</div>
+<div class="q" data-answer="1">
+  <p class="q-text">Pour des particules identiques, le nombre d’états corrigé par particule est :</p>
+  <ul class="choices"><li>\(\omega/N\)</li><li>\(e\omega/N\)</li><li>\(\omega^N\)</li><li>\(\omega - N\)</li></ul>
+  <div class="explain">\(\Omega = \omega^N/N! \approx (e\omega/N)^N\) grâce à Stirling (\(N!\approx(N/e)^N\)), donc \(\omega_c = e\omega/N\).</div>
+</div>
+<div class="q" data-answer="0">
+  <p class="q-text">Le postulat fondamental de la physique statistique affirme qu’à l’équilibre :</p>
+  <ul class="choices"><li>tous les états accessibles sont équiprobables</li><li>l’état de plus basse énergie est le plus probable</li><li>les particules sont uniformément réparties</li><li>l’énergie de chaque particule est la même</li></ul>
+  <div class="explain">Chaque état a la probabilité \(1/\Omega\). Une <em>configuration</em> est d’autant plus probable qu’elle correspond à plus d’états - c’est ce qui rend la répartition uniforme <em>probable</em>, pas obligatoire.</div>
+</div>
+<div class="q" data-answer="2">
+  <p class="q-text">Volume minimal d’un état dans l’espace des phases (position et quantité de mouvement) à trois dimensions ?</p>
+  <ul class="choices"><li>\(h\)</li><li>\(h^2\)</li><li>\(h^3\)</li><li>\(kT\)</li></ul>
+  <div class="explain">\(\Delta x\Delta p_x \ge h\) pour chaque dimension, donc \(h^3\) en 3D : \(\omega = V_rV_p/h^3\).</div>
+</div>
+<div class="q" data-answer="0">
+  <p class="q-text">De quoi dépend le nombre d’états accessibles \(\Omega\) d’un gaz parfait ?</p>
+  <ul class="choices"><li>du volume \(V\), de l’énergie thermique et de \(N\)</li><li>de la température seulement</li><li>du volume seulement</li><li>du nombre de particules seulement</li></ul>
+  <div class="explain">\(\Omega_{gaz}\propto (V/N)^N(E_{therm}/N\nu)^{N\nu/2}\). Pour un solide, le volume n’intervient pas.</div>
+</div>
+<div class="q" data-answer="0">
+  <p class="q-text">L’énergie thermique d’un système macroscopique augmente de 0,1 %. Le nombre d’états accessibles :</p>
+  <ul class="choices"><li>est multiplié par un facteur astronomique, du type \(10^{10^{20}}\)</li><li>augmente de 0,1 %</li><li>ne change pas</li><li>diminue</li></ul>
+  <div class="explain">\(\Omega_f/\Omega_i = (1{,}001)^{N\nu/2}\) avec \(N\nu/2\sim10^{24}\) : \(\log_{10} = 10^{24}\times4{,}3\times10^{-4} = 4{,}3\times10^{20}\).</div>
+</div>
+<div class="q" data-answer="0">
+  <p class="q-text">On ajoute de la chaleur à de la glace à 0 °C qui fond sans changer de température. Où va l’énergie ?</p>
+  <ul class="choices"><li>Dans le niveau de référence \(u_0\) (et éventuellement un changement de \(\nu\))</li><li>Dans \(k\)</li><li>Dans le nombre de particules \(N\)</li><li>Nulle part, elle est perdue</li></ul>
+  <div class="explain">\(E = Nu_0 + N\nu kT/2\) avec \(N\) et \(T\) constants : seuls \(u_0\) (arrangement moléculaire, interactions) et \(\nu\) peuvent changer. Exercice 19 du chapitre 4.</div>
+</div>
+<div class="q" data-answer="2">
+  <p class="q-text">Combien de permutations (arrangements) pour 4 éléments distincts ?</p>
+  <ul class="choices"><li>4</li><li>16</li><li>24</li><li>256</li></ul>
+  <div class="explain">\(4! = 4\times3\times2\times1 = 24\). Si les éléments sont identiques, il n’y a plus qu’un seul état.</div>
+</div>
+<div class="q" data-answer="0">
+  <p class="q-text">La densité d’états \(g(E)\) représente :</p>
+  <ul class="choices"><li>le nombre d’états par unité d’énergie</li><li>l’énergie moyenne par état</li><li>la probabilité d’un état</li><li>le nombre de particules par unité de volume</li></ul>
+  <div class="explain">\(\Omega(E,\Delta E) = g(E)\Delta E\) et \(g(E) = d\Omega/dE\).</div>
+</div>
+<div class="quiz-footer"></div>
+</section>
+
+<!-- ===================================================== EXERCICES À DÉVELOPPEMENT ===================================================== -->
+<h2 id="dev-c2">Exercices à développement (à faire sur papier)</h2>
+<p>Exemples des diapos et exercices résolus en classe (10 septembre). Gardez les logarithmes pour les grands nombres et écrivez les unités.</p>
+<div class="exo-tools" data-scope="dev-c2-list">
+  <button class="btn secondary" type="button" data-action="open-all">Tout ouvrir</button>
+  <button class="btn secondary" type="button" data-action="close-all">Tout fermer</button>
+  <div class="progress-bar"><span></span></div><span class="progress-label small"></span>
+</div>
+<div id="dev-c2-list">
+
+<article class="exo" data-exo-id="c2-d1">
+  <header><span class="tag">Classe - 1er principe</span><span class="tag theme">Bilan d’énergie</span><h4>D1. Gaz sous un piston</h4></header>
+  <div class="enonce"><p>Un gaz est scellé sous un piston de surface \(S\) dans un volume \(V\) aux parois isolantes ; la pression \(P\) est supposée constante. On abaisse le piston d’une distance \(\Delta x\). Faire le bilan des trois types d’échange d’énergie et donner la variation d’énergie interne du gaz (avec son signe).</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>Transfert thermique : non, le système est thermiquement isolé → \(\Delta Q = 0\).</li>
+      <li>Transfert mécanique : oui. Le piston pousse le gaz : le gaz <em>reçoit</em> \(F\Delta x = PS\Delta x\). Le travail fourni <em>par</em> le système est donc \(\Delta W = -PS\Delta x\) (équivalent : \(\Delta W = P\Delta V\) avec \(\Delta V = -S\Delta x \lt 0\)).</li>
+      <li>Transfert de particules : non, système fermé → \(\Delta N = 0\).</li>
+      <li>Premier principe : \(\Delta E = \Delta Q - \Delta W + \mu\Delta N = 0 - (-PS\Delta x) + 0 = +PS\Delta x\).</li>
+    </ol>
+    <p class="answer">ΔE = +PSΔx : le système reçoit de l’énergie (ses molécules accélèrent).</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c2-d2">
+  <header><span class="tag">Diapos 20-22</span><span class="tag theme">Permutations</span><h4>D2. Permutations de quatre éléments</h4></header>
+  <div class="enonce"><p>(a) Combien de permutations (arrangements) sont possibles pour un ensemble de 4 éléments distincts ? (b) Justifier la formule générale \(N!\) avec le raisonnement « choix après choix ». (c) Qu’advient-il si les éléments sont identiques, et quel lien avec \(\Omega = \omega^N/N!\) ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(4! = 4\times3\times2\times1 = 24\).</li>
+      <li>(b) Pour remplir \(N\) cases avec \(N\) jetons numérotés : \(N\) choix pour la première case, \(N-1\) pour la deuxième, ..., 1 pour la dernière → \(N\times(N-1)\times\cdots\times1 = N!\).</li>
+      <li>(c) Si les éléments sont identiques, les \(N!\) arrangements sont le même état : il n’en reste qu’un. Pour un système de \(N\) particules identiques ayant chacune \(\omega\) états, les \(\omega^N\) états « étiquetés » sont donc regroupés par paquets de \(N!\), d’où \(\Omega = \omega^N/N!\) (valable quand les particules occupent presque toujours des états différents).</li>
+    </ol>
+    <p class="answer">(a) 24</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c2-d3">
+  <header><span class="tag">Classe - Ex. 3</span><span class="tag theme">Équiprobabilité</span><h4>D3. Électrons dans un plasma</h4></header>
+  <div class="enonce"><p>Les électrons d’un plasma sont contraints à une quantité de mouvement maximale \(p_0\). Quelle est la probabilité qu’un électron possède une quantité de mouvement inférieure ou égale à \(p_0/10\) ?</p></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>À l’équilibre tous les états sont équiprobables : \(P = \Omega_i/\Omega\). Le nombre d’états est proportionnel au volume accessible dans l’espace des \(p\) (une sphère de rayon \(p\)).</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    \[P_{p\le p_0/10} = \frac{\Omega_i}{\Omega} = \frac{\dfrac{V}{h^3}\cdot\dfrac{4\pi}{3}\left(\dfrac{p_0}{10}\right)^3}{\dfrac{V}{h^3}\cdot\dfrac{4\pi}{3}p_0^3} = \frac{1}{1000}\]
+    <p class="answer">P = 10⁻³</p>
+    <p class="small">Le volume en position et les constantes s’éliminent dans le rapport : seule la géométrie en \(p\) compte. Les états à faible \(p\) sont rares parce que le volume d’une sphère croît comme \(p^3\).</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c2-d4">
+  <header><span class="tag">Diapo 33 - Ex. 4</span><span class="tag theme">Nombre d’états</span><h4>D4. Une salle chauffée de 1 K</h4></header>
+  <div class="enonce"><p>Une salle remplie d’air contient \(10^{28}\) molécules à 295 K. Évaluer l’augmentation du nombre d’états accessibles si la température de la pièce augmente de 1 K.</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>Air ≈ gaz diatomique : \(\nu = 5\), donc \(N\nu/2 = 2{,}5\times10^{28}\). Le volume ne change pas.</li>
+      <li>\(\Omega\propto E_{therm}^{N\nu/2}\) et \(E_{therm}\propto T\) : \(\dfrac{\Omega_f}{\Omega_i} = \left(\dfrac{296}{295}\right)^{2{,}5\times10^{28}}\).</li>
+      <li>\(\log_{10}\dfrac{\Omega_f}{\Omega_i} = 2{,}5\times10^{28}\times\log_{10}(1{,}00339) = 2{,}5\times10^{28}\times1{,}47\times10^{-3} = 3{,}7\times10^{25}\).</li>
+    </ol>
+    <p class="answer">Ω_f / Ω_i = 10^(3,7 × 10²⁵)</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c2-d5">
+  <header><span class="tag">Diapo 34 - Ex. 5 = chap. 6, ex. 7</span><span class="tag theme">Discrétisation</span><h4>D5. Une particule dans une boîte</h4></header>
+  <div class="enonce"><p>Une particule est confinée dans une boîte de 1 cm × 1 cm × 2 cm ; sa quantité de mouvement est au plus \(3\times10^{-24}\) kg m/s. (a) Probabilité qu’elle se trouve dans un état quantique donné ? (b) Probabilité que \(p \lt 2\times10^{-24}\) kg m/s ? (c) Probabilité que \(10^{-24} \lt p \lt 3\times10^{-24}\) kg m/s <em>et</em> qu’elle soit dans la moitié droite de la boîte ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(V_r = 2\times10^{-6}\) m³ ; \(V_p = \tfrac43\pi p_0^3 = \tfrac43\pi(3\times10^{-24})^3 = 1{,}13\times10^{-70}\) (kg m/s)³. \(\omega = \dfrac{V_rV_p}{h^3} = \dfrac{2\times10^{-6}\times1{,}13\times10^{-70}}{(6{,}626\times10^{-34})^3} = \dfrac{2{,}26\times10^{-76}}{2{,}91\times10^{-100}} = 7{,}8\times10^{23}\) états, donc \(P = 1/\omega = 1{,}3\times10^{-24}\).</li>
+      <li>(b) Rapport des volumes en \(p\) : \(\left(\dfrac{2}{3}\right)^3 = 0{,}30\).</li>
+      <li>(c) Fraction des \(p\) : \(1 - \left(\dfrac13\right)^3 = \dfrac{26}{27}\) ; fraction de la position : \(\dfrac12\). \(P = \dfrac{26}{27}\times\dfrac12 = 0{,}48\).</li>
+    </ol>
+    <p class="answer">(a) 1,3 × 10⁻²⁴ | (b) 0,30 | (c) 0,48</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c2-d6">
+  <header><span class="tag">Classe - Chap. 6, ex. 1</span><span class="tag theme">Nombre d’états</span><h4>D6. 10²⁴ molécules identiques</h4></header>
+  <div class="enonce"><p>Un système possède \(N = 10^{24}\) particules identiques. De quel facteur le nombre d’états du système augmente-t-il si le nombre d’états accessibles à chaque particule passe (a) de 2 à 3 ; (b) de 100 à 101 ; (c) de \(1{,}000\times10^{30}\) à \(1{,}001\times10^{30}\) ? (Réponses en puissances de 10.)</p></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>\(\Omega = \omega_c^N\) avec \(\omega_c = e\omega/N\) : le facteur \(e/N\) est le même avant et après, donc \(\Omega_f/\Omega_i = (\omega_f/\omega_i)^N\). Passez au \(\log_{10}\).</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(\left(\tfrac32\right)^{10^{24}} = 10^{10^{24}\log_{10}1{,}5} = 10^{0{,}176\times10^{24}} = 10^{1{,}8\times10^{23}}\).</li>
+      <li>(b) \(\left(1{,}01\right)^{10^{24}} = 10^{10^{24}\times4{,}32\times10^{-3}} = 10^{4{,}3\times10^{21}}\).</li>
+      <li>(c) \(\left(1{,}001\right)^{10^{24}} = 10^{10^{24}\times4{,}34\times10^{-4}} = 10^{4{,}3\times10^{20}}\).</li>
+    </ol>
+    <p class="answer">(a) 10^(1,8 × 10²³) | (b) 10^(4,3 × 10²¹) | (c) 10^(4,3 × 10²⁰)</p>
+    <p class="small">Même une variation de 0,1 % par particule, élevée à la puissance \(10^{24}\), donne un facteur inimaginable.</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c2-d7">
+  <header><span class="tag">Classe - Chap. 6, ex. 21</span><span class="tag theme">Densité d’états</span><h4>D7. Une tasse d’eau qu’on fait bouillir</h4></header>
+  <div class="enonce"><p>Une tasse contient 1/4 L d’eau ; chaque molécule a 6 degrés de liberté. (a) Combien de molécules ? (b) On chauffe de 295 K à l’ébullition : l’énergie thermique augmente de quel facteur (\(u_0\) constant) ? (c) Estimer le facteur d’augmentation de la densité d’états.</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) 250 g d’eau, \(M = 18\) g/mol : \(N = \dfrac{250}{18}\times6{,}022\times10^{23} = 8{,}4\times10^{24}\) molécules.</li>
+      <li>(b) \(E_{therm}\propto T\) : facteur \(\dfrac{373}{295} = 1{,}26\).</li>
+      <li>(c) \(g(E)\propto E_{therm}^{N\nu/2}\) avec \(N\nu/2 = 3N = 2{,}5\times10^{25}\) : \(\log_{10}\dfrac{g_f}{g_i} = 2{,}5\times10^{25}\times\log_{10}1{,}26 = 2{,}5\times10^{25}\times0{,}102 = 2{,}6\times10^{24}\).</li>
+    </ol>
+    <p class="answer">(a) 8,4 × 10²⁴ | (b) 1,26 | (c) ≈ 10^(2,6 × 10²⁴)</p>
+    <p class="small">Le manuel donne \(10^{1{,}9\times10^{24}}\) pour (c) : l’ordre de grandeur de l’exposant (\(\sim10^{24}\)) est ce qui compte ; la valeur exacte dépend des arrondis sur \(N\) et sur le rapport des températures.</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c2-d8">
+  <header><span class="tag">Classe - Chap. 6, ex. 22</span><span class="tag theme">Nombre d’états d’un gaz</span><h4>D8. L’air d’un four à 500 K</h4></header>
+  <div class="enonce"><p>Un four à 500 K, de volume 0,15 m³, contient \(2{,}2\times10^{24}\) molécules identiques de diazote (5 ddl, masse \(4{,}8\times10^{-26}\) kg). (a) Énergie thermique du système ? (b) La quantité de mouvement varie de 0 à \(p_0\), estimé au double de la valeur quadratique moyenne : volume accessible dans l’espace des quantités de mouvement ? (c) En ne considérant que les translations, combien d’états sont accessibles à une particule isolée ? (d) Nombre d’états par particule corrigé pour des particules identiques ? (e) Nombre d’états accessibles à tout le système ?</p></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>Par équipartition, les 3 ddl de translation portent \(\overline{p^2}/2m = 3kT/2\), donc \(p_{rms} = \sqrt{3mkT}\).</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(E_{therm} = \dfrac{N\nu kT}{2} = \dfrac{2{,}2\times10^{24}\times5\times1{,}381\times10^{-23}\times500}{2} = 3{,}8\times10^4\) J.</li>
+      <li>(b) \(p_{rms} = \sqrt{3mkT} = \sqrt{3\times4{,}8\times10^{-26}\times1{,}381\times10^{-23}\times500} = 3{,}15\times10^{-23}\) kg m/s, donc \(p_0 = 6{,}3\times10^{-23}\) kg m/s et \(V_p = \tfrac43\pi p_0^3 = 1{,}05\times10^{-66}\) (kg m/s)³.</li>
+      <li>(c) \(\omega = \dfrac{V_rV_p}{h^3} = \dfrac{0{,}15\times1{,}05\times10^{-66}}{(6{,}626\times10^{-34})^3} = \dfrac{1{,}58\times10^{-67}}{2{,}91\times10^{-100}} = 5{,}4\times10^{32}\) états.</li>
+      <li>(d) \(\omega_c = \dfrac{e\omega}{N} = \dfrac{2{,}718\times5{,}4\times10^{32}}{2{,}2\times10^{24}} = 6{,}7\times10^8\) états.</li>
+      <li>(e) \(\Omega = \omega_c^N\) : \(\log_{10}\Omega = N\log_{10}\omega_c = 2{,}2\times10^{24}\times8{,}83 = 1{,}9\times10^{25}\).</li>
+    </ol>
+    <p class="answer">(a) 3,8 × 10⁴ J | (b) 1,05 × 10⁻⁶⁶ (kg m/s)³ | (c) 5,4 × 10³² | (d) 6,7 × 10⁸ | (e) 10^(1,9 × 10²⁵)</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c2-d9">
+  <header><span class="tag">Lien avec le TD1</span><span class="tag theme">Équipartition</span><h4>D9. Énergie thermique d’une mole de diazote</h4></header>
+  <div class="enonce"><p>Une mole de N<sub>2</sub> à 300 K. (a) Combien de degrés de liberté par molécule et pour le système ? (b) Énergie thermique totale ? (c) De combien faut-il fournir d’énergie (sans travail) pour élever la température de 1 K ? Exprimer ce résultat par mole et par kelvin.</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(\nu = 5\) ; \(N\nu = 6{,}022\times10^{23}\times5 = 3{,}0\times10^{24}\) ddl.</li>
+      <li>(b) \(E_{therm} = \dfrac{N\nu kT}{2} = \dfrac{5}{2}N_AkT = \dfrac52\times8{,}314\times300 = 6{,}2\times10^3\) J.</li>
+      <li>(c) \(\Delta E = \dfrac{N\nu k}{2}\Delta T = \dfrac52 R\,\Delta T = 20{,}8\) J pour 1 K : c’est la capacité thermique molaire à volume constant \(c_V = \dfrac{\nu}{2}R = 20{,}8\) J/(mol K) (exercice 17 du chapitre 4).</li>
+    </ol>
+    <p class="answer">(a) 5 ; 3,0 × 10²⁴ | (b) 6,2 kJ | (c) 20,8 J/(mol K)</p>
+  </div></details>
+</article>
+
+</div>
+
+<!-- ===================================================== EXERCICES SUGGÉRÉS ===================================================== -->
+<h2 id="sugg-c2">Exercices suggérés du manuel (liste officielle du cours)</h2>
+<p>Énoncés paraphrasés en français d’après Stowe (chapitres 4, 5 et 6). Les exercices <span class="tag hard">***</span> dépassent le cadre du cours (notions du chapitre 1 ou calculs plus longs) ; ils sont tout de même corrigés ici.</p>
+<div class="exo-tools" data-scope="sugg-c2-list">
+  <button class="btn secondary" type="button" data-action="open-all">Tout ouvrir</button>
+  <button class="btn secondary" type="button" data-action="close-all">Tout fermer</button>
+  <div class="progress-bar"><span></span></div><span class="progress-label small"></span>
+</div>
+<div id="sugg-c2-list">
+<h3>Chapitre 4 - Énergie interne</h3>
+
+<article class="exo" data-exo-id="c2-s4-1">
+  <header><span class="tag">Chap. 4, ex. 1, p. 74</span><span class="tag theme">Types d’énergie</span><h4>Énergie interne de votre corps</h4></header>
+  <div class="enonce"><p>Donner des exemples de types d’énergie qui font partie de l’énergie interne de votre corps, et d’autres qui n’en font pas partie (sauf si l’on élargit le système à votre environnement).</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p><strong>Énergie interne</strong> (stockée dans les mouvements et interactions des particules <em>à l’intérieur</em> du système) : énergie cinétique d’agitation thermique des molécules (translation, rotation, vibration), énergie potentielle des liaisons chimiques (graisses, sucres, ATP), interactions intermoléculaires (\(u_0\)), énergie des électrons dans les atomes.</p>
+    <p><strong>Pas interne</strong> : énergie cinétique de votre corps qui marche ou court (mouvement d’ensemble), énergie potentielle gravitationnelle (vous dans le champ de la Terre), énergie potentielle dans un champ électrique ou magnétique externe. Elles dépendent de l’environnement : elles deviennent internes seulement si le système inclut la Terre, le champ, etc.</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c2-s4-6">
+  <header><span class="tag">Chap. 4, ex. 6, p. 75</span><span class="tag theme">Énergie potentielle de référence</span><span class="tag hard">***</span><h4>Comprimer un solide jusqu’à \(u_0 \gt 0\)</h4></header>
+  <div class="enonce"><p>Dans un solide typique, \(u_0\approx-0{,}2\) eV. (a) Si l’espacement interatomique est 0,2 nm, combien d’atomes par m³ ? (b) Quel travail (en J) faut-il fournir à 1 m³ de solide pour amener \(u_0\) à zéro ? (c) Le travail \(F\,dx\) peut s’écrire \(-p\,dV\) ; pour un solide élastique \(dV = -C\,dp\) avec \(C\approx10^{-17}\) m⁵/N. Calculer le travail fourni lorsque la pression passe de 0 à \(p_f\). (d) En déduire la pression nécessaire pour rendre \(u_0\) positif. (e) Valeur typique de \(\partial u_0/\partial p\) à température constante et pression atmosphérique ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) Un atome par cube de \((2\times10^{-10})^3 = 8\times10^{-30}\) m³ → \(1{,}25\times10^{29}\) atomes/m³.</li>
+      <li>(b) Il faut fournir 0,2 eV par atome : \(W = 0{,}2\times1{,}25\times10^{29} = 2{,}5\times10^{28}\) eV \(= 2{,}5\times10^{28}\times1{,}6\times10^{-19} = 4\times10^9\) J.</li>
+      <li>(c) \(\Delta W = \int -p\,dV = \int_0^{p_f} C\,p\,dp = \dfrac{C}{2}p_f^2\).</li>
+      <li>(d) \(p_f = \sqrt{\dfrac{2\Delta W}{C}} = \sqrt{\dfrac{2\times4\times10^9}{10^{-17}}} = 2{,}8\times10^{13}\) Pa (environ \(3\times10^8\) atm : irréaliste en laboratoire, mais c’est le cas au cœur des planètes).</li>
+      <li>(e) Ordre de grandeur : \(u_0\) varie de 0,2 eV sur \(\sim3\times10^{13}\) Pa → \(\partial u_0/\partial p\sim7\times10^{-15}\) eV/Pa : à pression atmosphérique, \(u_0\) ne dépend pratiquement pas de la pression.</li>
+    </ol>
+    <p class="answer">(a) 1,25 × 10²⁹ m⁻³ | (b) 4 × 10⁹ J | (c) C p_f²/2 | (d) ≈ 3 × 10¹³ Pa | (e) ~10⁻¹⁴ eV/Pa</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c2-s4-7">
+  <header><span class="tag">Chap. 4, ex. 7, p. 75</span><span class="tag theme">Degrés de liberté</span><h4>Reconnaître le système à son énergie</h4></header>
+  <div class="enonce"><p>Trois systèmes : (A) les molécules d’eau d’une boisson froide ; (B) les atomes de cuivre d’une poignée de porte en laiton ; (C) les atomes d’hélium d’un dirigeable. Attribuer à chaque expression l’un des systèmes :</p>
+  <p>\(\varepsilon = u_0 + \tfrac12\kappa x^2 + \tfrac12\kappa y^2 + \tfrac12\kappa z^2 + \dfrac{p_x^2+p_y^2+p_z^2}{2m}\) ; \(\varepsilon = \dfrac{p_x^2+p_y^2+p_z^2}{2m}\) ; \(\varepsilon = u_0 + \dfrac{p_x^2+p_y^2+p_z^2}{2m}\).</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p>1<sup>re</sup> expression (3 ddl potentiels + 3 cinétiques, atomes liés à des positions fixes) → <strong>B</strong>, le solide. 2<sup>e</sup> (cinétique seulement, \(u_0 = 0\)) → <strong>C</strong>, le gaz monoatomique. 3<sup>e</sup> (\(u_0 \lt 0\) mais molécules libres de se déplacer, pas de rappel vers une position) → <strong>A</strong>, le liquide.</p>
+    <p class="answer">B, C, A</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c2-s4-8">
+  <header><span class="tag">Chap. 4, ex. 8, p. 76</span><span class="tag theme">Énergie vibrationnelle</span><span class="tag hard">***</span><h4>Température d’activation de la vibration de N<sub>2</sub></h4></header>
+  <div class="enonce"><p>Chaque atome d’une molécule N<sub>2</sub> est dans un puits de potentiel d’environ 0,02 nm de large. (a) Longueurs d’onde des deux plus grandes ondes stationnaires qui tiennent dans ce puits ? (b) Quantités de mouvement correspondantes (\(p = h/\lambda\)) ? (c) En ne considérant que l’énergie cinétique, quelle énergie (en eV) faut-il pour passer de l’état fondamental au premier état excité (\(m_N = 2{,}34\times10^{-26}\) kg) ? (d) En comparant \(kT\) à cette énergie, température minimale pour exciter les vibrations ?</p></div>
+  <details class="sol"><summary>Corrigé (corrigé du professeur)</summary><div class="body">
+    <ol class="steps">
+      <li>(a) D’après la figure 1.9 (p. 16) : \(\lambda_1 = 0{,}02\) nm (la largeur du puits) et \(\lambda_2 = 0{,}01\) nm (la moitié).</li>
+      <li>(b) \(p = h/\lambda\) : \(p_1 = 3{,}3\times10^{-23}\) kg m/s, \(p_2 = 6{,}6\times10^{-23}\) kg m/s.</li>
+      <li>(c) \(\Delta E_c = \dfrac{p_2^2-p_1^2}{2m} = \dfrac{(4{,}4-1{,}1)\times10^{-45}}{2\times2{,}34\times10^{-26}} = 7{,}0\times10^{-20}\) J \(= 0{,}44\) eV.</li>
+      <li>(d) \(kT = \Delta E_c\) → \(T = \dfrac{7{,}0\times10^{-20}}{1{,}38\times10^{-23}}\approx5100\) K.</li>
+    </ol>
+    <p class="answer">(a) 0,02 nm ; 0,01 nm | (b) 3,3 × 10⁻²³ ; 6,6 × 10⁻²³ kg m/s | (c) 0,44 eV | (d) ≈ 5 × 10³ K</p>
+    <p class="small">Remarque : avec la convention des ondes stationnaires sur une corde fixée (\(\lambda_n = 2L/n\), soit \(\lambda_1 = 0{,}04\) nm et \(\lambda_2 = 0{,}02\) nm) on trouve \(\Delta E = 0{,}11\) eV et \(T\approx1300\) K. Dans les deux cas la conclusion est la même : les vibrations sont « gelées » à température ambiante (\(\sim300\) K), ce qui justifie \(\nu = 5\) pour N<sub>2</sub>. La valeur expérimentale est \(\approx3400\) K.</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c2-s4-9">
+  <header><span class="tag">Chap. 4, ex. 9, p. 76</span><span class="tag theme">Énergie rotationnelle</span><h4>Rotation de N<sub>2</sub></h4></header>
+  <div class="enonce"><p>Rotation d’une molécule diatomique autour d’un axe perpendiculaire à la liaison passant par son milieu. Masse d’un atome d’azote \(2{,}34\times10^{-26}\) kg, distance interatomique \(1{,}10\times10^{-10}\) m. (a) Moment d’inertie \(I = \sum m_ir_i^2\) ? (b) Énergie (en eV) pour passer de \(l = 0\) à \(l = 1\), sachant \(L^2 = l(l+1)\hbar^2\) ? (c) Température minimale pour les excitations rotationnelles ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(I = 2m\left(\dfrac d2\right)^2 = 2\times2{,}34\times10^{-26}\times(0{,}55\times10^{-10})^2 = 1{,}42\times10^{-46}\) kg m².</li>
+      <li>(b) \(\varepsilon_r = \dfrac{L^2}{2I}\) ; de \(l=0\) à \(l=1\) : \(\Delta\varepsilon = \dfrac{2\hbar^2}{2I} = \dfrac{\hbar^2}{I} = \dfrac{(1{,}055\times10^{-34})^2}{1{,}42\times10^{-46}} = 7{,}8\times10^{-23}\) J \(= 4{,}9\times10^{-4}\) eV.</li>
+      <li>(c) \(T = \Delta\varepsilon/k = 5{,}7\) K : les rotations sont actives bien en dessous de la température ambiante, d’où les 2 ddl de rotation.</li>
+    </ol>
+    <p class="answer">(a) 1,42 × 10⁻⁴⁶ kg m² | (b) 4,9 × 10⁻⁴ eV | (c) 5,7 K</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c2-s4-13">
+  <header><span class="tag">Chap. 4, ex. 13, p. 76</span><span class="tag theme">Degrés de liberté</span><h4>H<sub>2</sub>O contre N<sub>2</sub></h4></header>
+  <div class="enonce"><p>Pourquoi, à haute température, une molécule de vapeur d’eau (H<sub>2</sub>O) possède-t-elle trois degrés de liberté de rotation alors que N<sub>2</sub> n’en a que deux ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p>H<sub>2</sub>O n’est pas linéaire : elle possède un moment d’inertie appréciable autour des trois axes, donc les rotations autour des trois axes peuvent être excitées. N<sub>2</sub> est linéaire : le moment d’inertie autour de l’axe passant par les deux noyaux est extrêmement petit, donc l’énergie du premier état excité de cette rotation (\(\hbar^2/I\)) est beaucoup trop élevée pour être atteinte : ce ddl est gelé.</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c2-s4-16">
+  <header><span class="tag">Chap. 4, ex. 16, p. 77</span><span class="tag theme">Degrés de liberté</span><h4>3, 5 puis 7 degrés de liberté</h4></header>
+  <div class="enonce"><p>Les capacités thermiques de certains gaz diatomiques montrent 3 degrés de liberté à très basse température, 5 à température intermédiaire et 7 à très haute température. Comment l’expliquer ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ul>
+      <li><strong>Très basse température</strong> : \(kT\) est insuffisant pour exciter la rotation (exercice 9 : quelques kelvins) → seules les 3 translations : \(\nu = 3\).</li>
+      <li><strong>Température intermédiaire</strong> (cas du cours) : les 2 rotations perpendiculaires à la liaison s’activent → \(\nu = 5\).</li>
+      <li><strong>Très haute température</strong> (\(\sim10^3\) K, exercice 8) : la vibration de la liaison s’active ; elle apporte 2 ddl (énergie cinétique de vibration + énergie potentielle \(\tfrac12\kappa x^2\)) → \(\nu = 7\).</li>
+    </ul>
+    <p class="small">Le corrigé manuscrit du cours compte « 3 ddl de vibration » (\(\nu = 8\)) ; pour une molécule diatomique il n’y a qu’un seul mode de vibration, soit 2 ddl, ce qui donne les 7 de l’énoncé.</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c2-s4-19">
+  <header><span class="tag">Chap. 4, ex. 19, p. 77</span><span class="tag theme">Chaleur latente de fusion</span><h4>Fonte de la glace à 0 °C</h4></header>
+  <div class="enonce"><p>À 0 °C, une molécule d’eau a six degrés de liberté dans la glace comme dans l’eau liquide. Une mole pèse 18 g et la chaleur latente de fusion vaut 6025 J/mol. Calculer en eV : (a) l’énergie thermique moyenne par molécule dans l’eau liquide et dans la glace à 0 °C ; (b) l’énergie ajoutée par molécule lors du changement d’état ; (c) la variation de \(u_0\) du solide au liquide. L’énergie thermique augmente-t-elle, diminue-t-elle ou reste-t-elle la même pendant la fonte ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(\varepsilon_{therm} = \dfrac{\nu kT}{2} = 3kT = 3\times1{,}381\times10^{-23}\times273 = 1{,}13\times10^{-20}\) J \(= 0{,}0707\) eV, identique dans les deux phases (même \(\nu\), même \(T\)).</li>
+      <li>(b) \(\dfrac{6025}{6{,}022\times10^{23}} = 1{,}0\times10^{-20}\) J \(= 0{,}0625\) eV par molécule.</li>
+      <li>(c) \(E = Nu_0 + E_{therm}\) avec \(E_{therm}\) inchangée : toute l’énergie va dans \(u_0\) : \(\Delta u_0 = +0{,}0625\) eV (le puits de potentiel est moins profond dans le liquide). L’énergie thermique reste la même.</li>
+    </ol>
+    <p class="answer">(a) 0,0707 eV | (b) 0,0625 eV | (c) Δu₀ = +0,0625 eV ; E_therm inchangée</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c2-s4-22">
+  <header><span class="tag">Chap. 4, ex. 22, p. 78</span><span class="tag theme">Énergie et travail</span><h4>Bilan d’énergie d’un alpiniste</h4></header>
+  <div class="enonce"><p>Vous et votre équipement pesez 700 N. Un quart de l’énergie alimentaire sert au travail (monter) et trois quarts deviennent de la chaleur perdue, dont la moitié sert à évaporer la sueur. Par kilomètre d’élévation, combien de kg de nourriture brûlez-vous et combien de kg d’eau perdez-vous ? (Nourriture : \(4\times10^6\) J/kg ; chaleur latente d’évaporation : \(2{,}5\times10^6\) J/kg.)</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>Travail pour monter 1 km : \(\Delta W = F\Delta x = 700\times10^3 = 7\times10^5\) J.</li>
+      <li>C’est 1/4 de l’énergie fournie : \(\Delta E = 2{,}8\times10^6\) J → \(2{,}8\times10^6/4\times10^6 = 0{,}7\) kg de nourriture.</li>
+      <li>Chaleur perdue : \(\tfrac34\times2{,}8\times10^6 = 2{,}1\times10^6\) J, dont la moitié (\(1{,}05\times10^6\) J) évapore la sueur : \(1{,}05\times10^6/2{,}5\times10^6 = 0{,}42\) kg d’eau.</li>
+    </ol>
+    <p class="answer">0,7 kg de nourriture et 0,42 L d’eau par kilomètre d’élévation</p>
+  </div></details>
+</article>
+
+<h3>Chapitre 5 - Interactions entre systèmes</h3>
+
+<article class="exo" data-exo-id="c2-s5-1">
+  <header><span class="tag">Chap. 5, ex. 1, p. 92</span><span class="tag theme">Transfert thermique</span><h4>Une pierre chaude dans une pièce froide</h4></header>
+  <div class="enonce"><p>Une petite pierre à 390 K est dans un bâtiment dont l’air et les murs sont à 273 K. L’air conduisant très mal, le transfert est surtout radiatif. (a) Les molécules des murs et de l’air émettent-elles aussi des ondes électromagnétiques ? (b) Le système froid étant bien plus grand, ne rayonne-t-il pas plus d’énergie au total que la pierre ? (c) Alors pourquoi l’énergie va-t-elle nettement de la pierre vers l’air et non l’inverse ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p>(a) Oui : tout corps dont les particules chargées s’agitent rayonne. (b) Oui, au total les murs et l’air rayonnent beaucoup plus d’énergie, mais... (c) seule une infime fraction de ce rayonnement atteint la petite pierre, alors que la pierre, plus chaude, rayonne plus <em>par unité de surface</em> (\(\propto T^4\), cours 8) ; le bilan net va de la pierre vers l’environnement.</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c2-s5-2">
+  <header><span class="tag">Chap. 5, ex. 2, p. 92</span><span class="tag theme">Énergie et travail</span><h4>Un volume qui diminue sans pression</h4></header>
+  <div class="enonce"><p>Un système n’est soumis à aucune pression, mais son volume diminue parce qu’une paroi du récipient avance. (a) Un travail est-il effectué sur le système ? (b) Expliquer, d’un point de vue microscopique, pourquoi l’énergie interne n’augmente pas.</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p>(a) \(\Delta W = p\Delta V = 0\) puisque \(p = 0\) : aucun travail. (b) La pression vient des collisions des molécules sur les parois ; s’il n’y a pas de pression, aucune molécule ne frappe la paroi mobile et aucune n’en reçoit d’énergie cinétique.</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c2-s5-5">
+  <header><span class="tag">Chap. 5, ex. 5, p. 93</span><span class="tag theme">Énergie et travail</span><h4>Détente adiabatique dans un cylindre de moteur</h4></header>
+  <div class="enonce"><p>À l’explosion, le gaz est à 2000 K, \(8\times10^5\) Pa, 100 cm³ ; le piston a une section de 80 cm². Le gaz se détend adiabatiquement (\(pV^\gamma = \) cte, \(\gamma = 1{,}4\)) jusqu’à dix fois son volume. (a) Travail fourni par le gaz ? (b) Température finale (gaz parfait, \(pV/T = \) cte) ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(\Delta W = \displaystyle\int_{V_1}^{V_2}p\,dV\) avec \(p = p_1V_1^\gamma V^{-\gamma}\) : \(\Delta W = \dfrac{p_1V_1 - p_2V_2}{\gamma-1}\). Or \(p_2 = p_1(V_1/V_2)^\gamma = 8\times10^5\times10^{-1{,}4} = 3{,}18\times10^4\) Pa, \(V_1 = 10^{-4}\) m³, \(V_2 = 10^{-3}\) m³ : \(\Delta W = \dfrac{80 - 31{,}8}{0{,}4} = 120\) J.</li>
+      <li>(b) \(T_2 = T_1\dfrac{p_2V_2}{p_1V_1} = 2000\times\dfrac{31{,}8}{80} = 796\) K.</li>
+    </ol>
+    <p class="answer">(a) 120 J | (b) ≈ 800 K</p>
+    <p class="small">L’énergie interne diminue de 120 J (\(\Delta Q = 0\)) : c’est ce qui fait chuter la température (cours 4, processus adiabatique).</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c2-s5-7">
+  <header><span class="tag">Chap. 5, ex. 7, p. 93</span><span class="tag theme">Énergie potentielle de référence</span><h4>Acide sulfurique dans l’eau</h4></header>
+  <div class="enonce"><p>Une molécule de H<sub>2</sub>SO<sub>4</sub> entre dans de l’eau pure et la température monte. Le niveau \(u_0\) de la molécule dans l’eau est-il positif ou négatif ? La variation de potentiel chimique des molécules qui entrent en solution est-elle positive ou négative ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p>\(u_0\) est négatif (plus profond qu’avant) : de l’énergie potentielle est libérée sous forme d’énergie thermique, d’où l’échauffement. La variation de potentiel chimique est négative : les particules diffusent spontanément vers le système où leur potentiel chimique est le plus bas (ici la solution).</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c2-s5-10">
+  <header><span class="tag">Chap. 5, ex. 10, p. 94</span><span class="tag theme">Bilan d’énergie</span><span class="tag hard">***</span><h4>Mélange de deux systèmes</h4></header>
+  <div class="enonce"><p>Le système B a \(2\times10^{25}\) particules avec \(u_{0,B} = -0{,}35\) eV et 5 ddl ; le système A a \(10^{26}\) particules avec \(u_{0,A} = -0{,}40\) eV et 3 ddl. Après mélange, les particules de A sont inchangées, mais celles de B ont \(u_{0,B} = -0{,}25\) eV et 3 ddl. Les deux systèmes sont à 290 K avant le mélange : température finale ?</p></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>Système isolé : l’énergie totale \(E = \sum N u_0 + \sum N\nu kT/2\) est conservée. Attention aux conversions eV ↔ J (\(1\ \text{eV} = 1{,}602\times10^{-19}\) J).</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li><strong>Avant.</strong> Thermique : \(E_A = \dfrac{10^{26}\times3\times1{,}381\times10^{-23}\times290}{2} = 6{,}0\times10^5\) J ; \(E_B = \dfrac{2\times10^{25}\times5\times1{,}381\times10^{-23}\times290}{2} = 2{,}0\times10^5\) J. Potentielle : \(10^{26}(-0{,}40) + 2\times10^{25}(-0{,}35) = -4{,}7\times10^{25}\) eV \(= -7{,}53\times10^6\) J. Total : \(E = -6{,}73\times10^6\) J.</li>
+      <li><strong>Après.</strong> Potentielle : \(10^{26}(-0{,}40)+2\times10^{25}(-0{,}25) = -4{,}5\times10^{25}\) eV \(= -7{,}21\times10^6\) J. Thermique : \((10^{26}+2\times10^{25})\times3\times\dfrac{k T_0}{2} = 2{,}49\times10^3\,T_0\) J/K.</li>
+      <li><strong>Conservation.</strong> \(-7{,}21\times10^6 + 2{,}49\times10^3\,T_0 = -6{,}73\times10^6\) → \(T_0 = \dfrac{0{,}48\times10^6}{2{,}49\times10^3} = 1{,}9\times10^2\) K.</li>
+    </ol>
+    <p class="answer">T₀ ≈ 190 K : le mélange se refroidit (principe des compresses froides, exercice 9).</p>
+    <p class="small">Physiquement : \(u_{0,B}\) remonte de 0,10 eV par particule, ce qui absorbe \(3{,}2\times10^5\) J d’énergie thermique, et le nombre total de ddl diminue aussi. Le corrigé manuscrit distribué aboutit à 744,8 K après avoir posé le même bilan ; en refaisant le calcul avec les nombres ci-dessus on obtient ≈ 190 K, et la température doit effectivement <em>baisser</em> puisque l’énergie potentielle totale augmente. Vérifiez le calcul vous-même et demandez au professeur en cas de doute.</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c2-s5-11">
+  <header><span class="tag">Chap. 5, ex. 11-13, p. 94</span><span class="tag theme">Changement d’état</span><span class="tag hard">***</span><h4>Chaleur latente et niveau \(u_0\)</h4></header>
+  <div class="enonce">
+    <p><strong>11.</strong> Un matériau se vaporise à 700 K ; les molécules ont 3 ddl dans les deux phases ; \(u_0 = -0{,}12\) eV dans le liquide. Chaleur latente de vaporisation en J/mol ?</p>
+    <p><strong>12.</strong> Même question avec 3 ddl dans le liquide mais 5 dans le gaz.</p>
+    <p><strong>13.</strong> Un solide se sublime à 300 K : 6 ddl et \(u_0 = -0{,}15\) eV dans le solide, 3 ddl et \(u_0 = 0\) dans le gaz. Chaleur latente de sublimation en J/mol ?</p>
+  </div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>La chaleur latente \(L\) est l’énergie à fournir, à \(T\) constante, pour passer d’une phase à l’autre : \(E_{\text{phase 1}} + L = E_{\text{phase 2}}\) avec \(E = Nu_0 + N\nu kT/2\) et \(u_0 = 0\) dans le gaz. Prendre \(N = N_A\) pour une mole.</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p>Bilan par mole : \(N_Au_0 + N_A\dfrac{\nu_1 kT}{2} + L = N_A\dfrac{\nu_2 kT}{2}\), donc \(L = N_A\left[\dfrac{(\nu_2-\nu_1)kT}{2} - u_0\right]\).</p>
+    <ol class="steps">
+      <li><strong>11.</strong> \(\nu_2 = \nu_1\) : \(L = -N_Au_0 = 6{,}022\times10^{23}\times0{,}12\times1{,}602\times10^{-19} = 1{,}16\times10^4\) J/mol.</li>
+      <li><strong>12.</strong> \(L = 6{,}022\times10^{23}\left[\dfrac{2\times1{,}381\times10^{-23}\times700}{2}\right] + 1{,}16\times10^4 = 5{,}8\times10^3 + 1{,}16\times10^4 = 1{,}74\times10^4\) J/mol (corrigé du professeur : 17 374 J/mol).</li>
+      <li><strong>13.</strong> \(L = 6{,}022\times10^{23}\left[\dfrac{(3-6)\times1{,}381\times10^{-23}\times300}{2} + 0{,}15\times1{,}602\times10^{-19}\right] = 6{,}022\times10^{23}\left[-6{,}2\times10^{-21} + 2{,}40\times10^{-20}\right] = 1{,}07\times10^4\) J/mol.</li>
+    </ol>
+    <p class="answer">11 : 1,16 × 10⁴ J/mol | 12 : 1,74 × 10⁴ J/mol | 13 : 1,07 × 10⁴ J/mol</p>
+    <p class="small">Le manuel indique 15 600 J/mol pour le 11 ; avec les données de l’énoncé et le bilan du cours, on obtient 11 600 J/mol. Pour le 13, le résultat (10 700 J/mol) coïncide avec le manuel.</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c2-s5-16">
+  <header><span class="tag">Chap. 5, ex. 16, p. 94</span><span class="tag theme">Réaction</span><h4>Combustion du carbone</h4></header>
+  <div class="enonce"><p>Combustion du carbone dans l’oxygène : estimer \(u_0(\text{CO}_2) - [u_0(\text{C}) + u_0(\text{O}_2)]\) sachant que le carbone et l’oxygène partent de 295 K et que la flamme est à 3000 K. Le carbone (graphite) a 6 ddl par atome ; O<sub>2</sub> et CO<sub>2</sub> ont 5 ddl chacune.</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p>Réaction C + O<sub>2</sub> → CO<sub>2</sub> : on prend une molécule de chaque. Système isolé → l’énergie est conservée :</p>
+    \[u_0(\text{C}) + u_0(\text{O}_2) + \frac{(\nu_C + \nu_{O_2})kT_1}{2} = u_0(\text{CO}_2) + \frac{\nu_{CO_2}kT_2}{2}\]
+    \[\Delta u_0 = \frac{k}{2}\left[(\nu_C+\nu_{O_2})T_1 - \nu_{CO_2}T_2\right] = \frac{1{,}381\times10^{-23}}{2}\left[11\times295 - 5\times3000\right] = -8{,}1\times10^{-20}\ \text{J} = -0{,}51\ \text{eV}\]
+    <p class="answer">Δu₀ ≈ −0,5 eV par molécule de CO₂ formée (l’énergie potentielle libérée chauffe la flamme)</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c2-s5-20">
+  <header><span class="tag">Chap. 5, ex. 20, p. 95</span><span class="tag theme">Changement d’état</span><span class="tag hard">***</span><h4>Vaporisation d’un acide : travail et \(u_0\)</h4></header>
+  <div class="enonce"><p>La chaleur latente de vaporisation d’un acide à température ambiante est 19 260 J/mol ; les molécules ont 6 ddl dans les deux phases ; le travail dû au changement de volume pendant la condensation est \(p\Delta V\approx nRT\). (a) En négligeant \(u_0\) dans la vapeur, calculer \(u_0\) (en eV) de l’acide liquide à température ambiante. (b) Quand \(10^{-2}\) mol d’acide liquide est ajouté à 1 L d’eau (tous deux à température ambiante), la température monte de 0,1 °C. Profondeur du puits de potentiel de cet acide dans l’eau ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) Bilan pour une mole à \(T = 293\) K, en comptant le travail \(nRT = N_AkT\) fourni à l’atmosphère par la vapeur qui se forme : \(N_Au_0 + N_A\dfrac{\nu kT}{2} + L = N_A\dfrac{\nu kT}{2} + N_AkT\), donc \(u_0 = kT - \dfrac{L}{N_A} = 4{,}05\times10^{-21} - 3{,}20\times10^{-20} = -2{,}8\times10^{-20}\) J \(= -0{,}17\) eV.</li>
+      <li>(b) Chaleur libérée : \(4186\times0{,}1 = 419\) J pour \(10^{-2}\times6{,}022\times10^{23} = 6{,}0\times10^{21}\) molécules, soit \(7{,}0\times10^{-20}\) J \(= 0{,}43\) eV par molécule. Le puits dans l’eau est donc plus profond de 0,43 eV : \(u_0 = -0{,}17 - 0{,}43 = -0{,}60\) eV.</li>
+    </ol>
+    <p class="answer">(a) −0,17 eV | (b) ≈ −0,60 eV</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c2-s5-22">
+  <header><span class="tag">Chap. 5, ex. 22, p. 95</span><span class="tag theme">Moment magnétique et travail</span><span class="tag hard">***</span><h4>Aimantation de l’aluminium</h4></header>
+  <div class="enonce"><p>Pour l’aluminium, le moment magnétique induit est proportionnel au champ et parallèle à lui : \(\mu = cB\) avec \(c = 1830\) A² m³/N pour 1 m³. Le champ passe de 0 à 1,3 T (1 T = 1 N/(A m)). (a) Travail effectué sur l’échantillon ? (b) Ce travail augmente l’énergie interne, mais l’énergie potentielle des aimants atomiques <em>diminue</em> quand ils s’alignent : comment l’énergie interne peut-elle augmenter ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(dW = -B\,d\mu = -cB\,dB\) : \(\Delta W = -\displaystyle\int_0^{1{,}3}cB\,dB = -\frac{c}{2}B^2 = -\frac{1830\times1{,}69}{2} = -1546\) J. Le travail fourni <em>par</em> le système est négatif : on a fourni 1546 J <em>à</em> l’échantillon (\(\Delta E = -\Delta W = +1546\) J).</li>
+      <li>(b) L’énergie interne n’inclut pas l’énergie potentielle d’interaction avec le champ <em>externe</em> (comme elle n’inclut pas l’énergie potentielle gravitationnelle) ; le travail reçu augmente l’énergie thermique, et on peut s’attendre à une élévation de température.</li>
+    </ol>
+    <p class="answer">(a) 1546 J fournis à l’échantillon (ΔW = −1546 J) | (b) l’énergie interne contient l’énergie thermique, pas l’énergie potentielle dans le champ externe</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c2-s5-23">
+  <header><span class="tag">Chap. 5, ex. 23, p. 96</span><span class="tag theme">Travail de pression</span><h4>Détente d’un gaz à 150 atm</h4></header>
+  <div class="enonce"><p>Un gaz possédant \(10^{27}\) degrés de liberté est sous 150 atm. On le laisse se détendre de 0,01 m³ sans échange de chaleur ni de particules. (a) Travail fourni par le gaz ? (b) Variation de température ? (Trouver d’abord la variation d’énergie interne.)</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(\Delta W = p\Delta V = 150\times1{,}013\times10^5\times0{,}01 = 1{,}52\times10^5\) J.</li>
+      <li>(b) \(\Delta E = \Delta Q - \Delta W = -1{,}52\times10^5\) J. Or \(E_{therm} = \dfrac{N\nu kT}{2}\) → \(\Delta T = \dfrac{2\Delta E}{N\nu k} = \dfrac{-2\times1{,}52\times10^5}{10^{27}\times1{,}381\times10^{-23}} = -22\) K.</li>
+    </ol>
+    <p class="answer">(a) 1,52 × 10⁵ J | (b) ΔT = −22 K</p>
+  </div></details>
+</article>
+
+<h3>Chapitre 6 - Énergie interne et nombre d’états accessibles</h3>
+
+<article class="exo" data-exo-id="c2-s6-1">
+  <header><span class="tag">Chap. 6, ex. 1, p. 112</span><span class="tag theme">Nombre d’états</span><h4>10²⁴ particules identiques</h4></header>
+  <div class="enonce"><p>Voir l’exercice à développement <a href="#dev-c2">D6</a> (résolu en classe).</p></div>
+</article>
+
+<article class="exo" data-exo-id="c2-s6-2">
+  <header><span class="tag">Chap. 6, ex. 2, p. 112</span><span class="tag theme">Nombre d’états</span><h4>10²⁸ molécules distinctes</h4></header>
+  <div class="enonce"><p>Une salle contient \(10^{28}\) molécules d’air distinctes. (a) Si l’on ne s’intéresse qu’à leur répartition entre les moitiés avant et arrière, chaque molécule a deux états : combien de configurations pour le système (en puissances de 10) ? (b) Si la salle est divisée en quarts ? (c) En 156 compartiments ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p>Particules distinctes : \(\Omega = \omega^N\), \(\log_{10}\Omega = N\log_{10}\omega\).</p>
+    <ol class="steps">
+      <li>(a) \(2^{10^{28}} = 10^{0{,}301\times10^{28}} = 10^{3\times10^{27}}\).</li>
+      <li>(b) \(4^{10^{28}} = 10^{0{,}602\times10^{28}} = 10^{6\times10^{27}}\).</li>
+      <li>(c) \(156^{10^{28}} = 10^{2{,}19\times10^{28}}\).</li>
+    </ol>
+    <p class="answer">10^(3 × 10²⁷) ; 10^(6 × 10²⁷) ; 10^(2,2 × 10²⁸)</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c2-s6-7">
+  <header><span class="tag">Chap. 6, ex. 7, p. 113</span><span class="tag theme">Discrétisation du volume accessible</span><h4>Particule dans une boîte</h4></header>
+  <div class="enonce"><p>Voir l’exercice à développement <a href="#dev-c2">D5</a> (vu en classe).</p></div>
+</article>
+
+<article class="exo" data-exo-id="c2-s6-9">
+  <header><span class="tag">Chap. 6, ex. 9, p. 113</span><span class="tag theme">Niveaux d’énergie</span><span class="tag hard">***</span><h4>Espacement des niveaux d’énergie dans une salle</h4></header>
+  <div class="enonce"><p>\(10^{28}\) molécules d’air dans une salle de 5 m de large. Une particule confinée est représentée par une onde stationnaire dont seules certaines longueurs d’onde tiennent (figure 1.9). \(p = h/\lambda\), \(E = p^2/2m\), \(m = 4{,}8\times10^{-26}\) kg. (a) Plus petite énergie possible d’une molécule (plus grande longueur d’onde) ? (b) Énergie suivante ? (c) Si l’on ajoute à l’air une énergie infime prise par la molécule la plus lente, quelle est la plus petite énergie qu’on puisse ajouter ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) Plus grande onde stationnaire : \(\lambda_1 = 2L = 10\) m → \(p_1 = \dfrac{6{,}626\times10^{-34}}{10} = 6{,}6\times10^{-35}\) kg m/s → \(E_1 = \dfrac{p_1^2}{2m} = \dfrac{4{,}39\times10^{-69}}{9{,}6\times10^{-26}} = 4{,}6\times10^{-44}\) J \(= 2{,}9\times10^{-25}\) eV.</li>
+      <li>(b) \(\lambda_2 = L = 5\) m → \(p_2 = 2p_1\), \(E_2 = 4E_1 = 1{,}14\times10^{-24}\) eV.</li>
+      <li>(c) \(E_2 - E_1 = 3E_1 = 8{,}6\times10^{-25}\) eV : les niveaux sont si serrés que l’énergie est pratiquement continue - d’où la densité d’états \(g(E)\).</li>
+    </ol>
+    <p class="answer">(a) 2,9 × 10⁻²⁵ eV | (b) 1,1 × 10⁻²⁴ eV | (c) 8,6 × 10⁻²⁵ eV</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c2-s6-12">
+  <header><span class="tag">Chap. 6, ex. 12, p. 114</span><span class="tag theme">Éléments distincts ou identiques</span><h4>Deux dés distinguables ou non</h4></header>
+  <div class="enonce"><p>On lance deux dés. Combien de configurations différentes si les dés sont (a) distinguables ; (b) indistinguables ? (Remarquer que \(2!\) n’est pas le bon facteur de correction : le facteur \(N!\) n’est valable que si deux particules ont peu de chances d’occuper le même état - or deux dés peuvent montrer le même nombre.)</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p>(a) \(6\times6 = 36\). (b) Les paires \((a,b)\) et \((b,a)\) sont confondues, mais les 6 doubles \((a,a)\) n’ont pas de jumeau : \(\dfrac{36-6}{2} + 6 = 21\) configurations (et non \(36/2! = 18\)).</p>
+    <p class="answer">(a) 36 | (b) 21</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c2-s6-15">
+  <header><span class="tag">Chap. 6, ex. 15, p. 114</span><span class="tag theme">États d’un système</span><h4>Combiner deux systèmes</h4></header>
+  <div class="enonce"><p>Le système A a 30 particules à 2 états chacune, le système B 20 particules à 3 états chacune ; toutes les particules sont distinguables. Nombre d’états de (a) A ; (b) B ; (c) du système combiné A + B ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p>(a) \(\Omega_A = 2^{30} = 1{,}07\times10^9\). (b) \(\Omega_B = 3^{20} = 3{,}49\times10^9\). (c) \(\Omega_{A+B} = \Omega_A\Omega_B = 3{,}7\times10^{18}\) : les nombres d’états se <em>multiplient</em> (c’est pourquoi, au cours 3, les entropies \(S = k\ln\Omega\) s’<em>additionnent</em>).</p>
+    <p class="answer">1,1 × 10⁹ ; 3,5 × 10⁹ ; 3,7 × 10¹⁸</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c2-s6-18">
+  <header><span class="tag">Chap. 6, ex. 18, p. 114</span><span class="tag theme">Densité d’états</span><h4>La densité d’états double quand l’énergie double</h4></header>
+  <div class="enonce"><p>Dans un certain système, la densité d’états double lorsque l’énergie interne double. (a) Système macroscopique ou microscopique ? (b) Combien de degrés de liberté ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p>(a) Une augmentation aussi faible de \(\Omega\) ne peut venir que d’un système microscopique (pour un système macroscopique on obtiendrait \(10^{10^{20}}\)). (b) \(g(E)\propto E_{therm}^{N\nu/2}\) : \(2^{N\nu/2} = 2\) → \(N\nu/2 = 1\) → \(N\nu = 2\) degrés de liberté.</p>
+    <p class="answer">(a) microscopique | (b) 2 ddl</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c2-s6-21">
+  <header><span class="tag">Chap. 6, ex. 21, p. 115</span><span class="tag theme">Nombre d’états</span><h4>Une tasse d’eau</h4></header>
+  <div class="enonce"><p>Voir l’exercice à développement <a href="#dev-c2">D7</a> (résolu en classe).</p></div>
+</article>
+
+<article class="exo" data-exo-id="c2-s6-22">
+  <header><span class="tag">Chap. 6, ex. 22, p. 115</span><span class="tag theme">Volumes accessibles</span><h4>L’air d’un four</h4></header>
+  <div class="enonce"><p>Voir l’exercice à développement <a href="#dev-c2">D8</a> (résolu en classe).</p></div>
+</article>
+
+<article class="exo" data-exo-id="c2-s6-23">
+  <header><span class="tag">Chap. 6, ex. 23, p. 115</span><span class="tag theme">Volumes accessibles</span><h4>L’air d’une salle de classe</h4></header>
+  <div class="enonce"><p>Une salle de classe à 290 K contient \(3\times10^{27}\) molécules d’air (5 ddl, masse \(4{,}8\times10^{-26}\) kg) ; dimensions 3 m × 6 m × 7 m. (a) Énergie thermique du système ? (b) Volume accessible dans l’espace des quantités de mouvement, avec \(p_0\approx2p_{rms}\) ? (c) Nombre d’états de translation accessibles à une particule seule ? (d) \(\omega_c\) si toutes les particules sont identiques ? (e) Nombre d’états du système ? (f) Reprendre (d) et (e) avec 79 % de molécules N<sub>2</sub> identiques et 21 % de molécules O<sub>2</sub> identiques (masses semblables).</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(E_{therm} = \dfrac{3\times10^{27}\times5\times1{,}381\times10^{-23}\times290}{2} = 3{,}0\times10^7\) J.</li>
+      <li>(b) \(p_{rms} = \sqrt{3mkT} = \sqrt{3\times4{,}8\times10^{-26}\times1{,}381\times10^{-23}\times290} = 2{,}40\times10^{-23}\) kg m/s ; \(p_0 = 4{,}8\times10^{-23}\) ; \(V_p = \tfrac43\pi p_0^3 = 4{,}6\times10^{-67}\) (kg m/s)³.</li>
+      <li>(c) \(V = 126\) m³ : \(\omega = \dfrac{126\times4{,}6\times10^{-67}}{2{,}91\times10^{-100}} = 2{,}0\times10^{35}\).</li>
+      <li>(d) \(\omega_c = \dfrac{e\omega}{N} = \dfrac{2{,}718\times2{,}0\times10^{35}}{3\times10^{27}} = 1{,}8\times10^8\).</li>
+      <li>(e) \(\log_{10}\Omega = N\log_{10}\omega_c = 3\times10^{27}\times8{,}26 = 2{,}5\times10^{28}\) → \(\Omega = 10^{2{,}5\times10^{28}}\).</li>
+      <li>(f) Deux populations identiques entre elles : \(N_1 = 2{,}37\times10^{27}\) (N<sub>2</sub>) → \(\omega_{c1} = e\omega/N_1 = 2{,}3\times10^8\) ; \(N_2 = 6{,}3\times10^{26}\) (O<sub>2</sub>) → \(\omega_{c2} = 8{,}6\times10^8\). \(\Omega = \omega_{c1}^{N_1}\omega_{c2}^{N_2}\) : \(\log_{10}\Omega = 2{,}37\times10^{27}\times8{,}36 + 6{,}3\times10^{26}\times8{,}94 = 2{,}54\times10^{28}\).</li>
+    </ol>
+    <p class="answer">(a) 3,0 × 10⁷ J | (b) 4,6 × 10⁻⁶⁷ (kg m/s)³ | (c) 2,0 × 10³⁵ | (d) 1,8 × 10⁸ | (e) 10^(2,5 × 10²⁸) | (f) 2,3 × 10⁸ et 8,6 × 10⁸ ; 10^(2,54 × 10²⁸)</p>
+  </div></details>
+</article>
+
+</div>
+
+</article>
+</main>
+<footer class="footer">ELE2307 - site d’étude personnel généré à partir des diapos du cours, des corrigés du professeur et du manuel de Stowe. Vérifiez toujours avec les documents officiels sur Moodle.</footer>
+<script defer src="assets/katex/katex.min.js"></script>
+<script defer src="assets/katex/contrib/auto-render.min.js"></script>
+<script defer src="assets/app.js?v=4"></script>
+<script defer src="assets/widgets.js?v=4"></script>
+</body>
+</html>

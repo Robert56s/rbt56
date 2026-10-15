@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cours 3 - Entropie et interaction thermique | ELE2307</title>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<link rel="stylesheet" href="assets/style.css?v=8">
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="index.html">ELE2307 <small>Thermodynamique statistique et semiconducteurs</small></a>
+  <nav>
+    <a href="index.html">Accueil</a>
+    <a href="cours1.html">Cours 1</a>
+    <a href="cours2.html">Cours 2</a>
+    <a href="cours3.html">Cours 3</a>
+    <a href="cours4.html">Cours 4</a>
+    <a href="cours5.html">Cours 5</a>
+    <a href="cours6.html">Cours 6</a>
+    <a href="formulaire.html">Formulaire</a>
+    <a href="errata.html">Errata</a>
+    <button class="theme-btn" type="button">Thème</button>
+  </nav>
+</header>
+
+<main class="layout">
+<aside class="toc"></aside>
+<article class="content">
+
+<div class="course-hero">
+  <div class="kicker">Cours 3 - Chapitre 3 du cours</div>
+  <h1>Entropie et interaction thermique</h1>
+  <p class="meta">Manuel (Stowe, <em>TSM</em>) : chapitres 7 et 8 | Diapos « Cours 3 » (22 pages) | Classe d'exercices du 17 septembre</p>
+  <p><span class="pill accent">Interaction entre systèmes</span><span class="pill accent">Entropie S = k ln Ω</span><span class="pill accent">2e principe</span><span class="pill accent">Température</span><span class="pill accent">Équipartition</span><span class="pill accent">Capacité thermique</span><span class="pill accent">Gaz parfaits</span><span class="pill accent">3e principe</span></p>
+  <p class="small">Fil conducteur : quand deux systèmes échangent de l'énergie, la répartition qui l'emporte est celle qui maximise le nombre d'états \(\Omega_0 = \Omega_1\Omega_2\). L'entropie \(S = k\ln\Omega\) rend ce comptage additif et manipulable ; sa dérivée par rapport à l'énergie définit la température.</p>
+</div>
+
+<h2>0. D'où vient ce cours</h2>
+<p>Au cours 2 on a vu que le nombre d'états accessibles d'un système est une fonction extraordinairement sensible de son énergie, \(\Omega \propto E_{therm}^{N\nu/2}\). Ce cours exploite cette sensibilité. Lorsque deux systèmes se partagent une énergie fixée, le produit \(\Omega_1\Omega_2\) présente un pic si étroit que la répartition la plus probable est, en pratique, la seule observée : c'est l'<strong>équilibre thermique</strong>. Le logarithme de \(\Omega\) devient l'<strong>entropie</strong>, qui ne peut qu'augmenter (2<sup>e</sup> principe), et sa pente en fonction de l'énergie définit la <strong>température</strong>. On en déduit l'équipartition, la loi des gaz parfaits, le lien entre chaleur et entropie (\(dQ = T\,dS\)), les capacités thermiques et le 3<sup>e</sup> principe.</p>
+
+<h2>1. Interaction entre systèmes</h2>
+<p>Deux systèmes combinés échangent de l'énergie, mais la somme reste constante :</p>
+<div class="formula">
+\[E_1 + E_2 = E_0 = \text{constante}\qquad\qquad \Omega_0 = \Omega_1\Omega_2 \propto E_1^{N_1\nu_1/2}\,E_2^{N_2\nu_2/2} = E_1^{n_1/2}\,(E_0 - E_1)^{n_2/2}\]
+<div class="cond">\(n_1 = N_1\nu_1\) et \(n_2 = N_2\nu_2\) sont les nombres de degrés de liberté de chaque système (\(\nu\) : ddl par élément). Le nombre d'états du système combiné est le produit des nombres d'états.</div>
+</div>
+<div class="box def"><span class="label">Principe</span>
+<p><strong>La distribution des énergies d'un système combiné se fait toujours de façon à maximiser le nombre d'états accessibles.</strong> Comme tous les états sont équiprobables (postulat fondamental), la répartition \((E_1, E_2)\) qui correspond au plus grand nombre d'états est la plus probable.</p>
+</div>
+<div class="box ex"><span class="label">Exemple 1 (diapo 3) : 6 et 10 degrés de liberté, \(E_0 = 5\) eV par pas de 1 eV</span>
+<p>\(\Omega_1\propto E_1^3\), \(\Omega_2\propto E_2^5\).</p>
+<table>
+  <tr><th>\(E_1\) (eV)</th><th>\(E_2\) (eV)</th><th>\(\Omega_1\propto E_1^3\)</th><th>\(\Omega_2\propto E_2^5\)</th><th>\(\Omega_0\propto\Omega_1\Omega_2\)</th></tr>
+  <tr><td>0</td><td>5</td><td>0</td><td>3125</td><td>0</td></tr>
+  <tr><td>1</td><td>4</td><td>1</td><td>1024</td><td>1024</td></tr>
+  <tr><td><strong>2</strong></td><td><strong>3</strong></td><td>8</td><td>243</td><td><strong>1944</strong> (50 % des états)</td></tr>
+  <tr><td>3</td><td>2</td><td>27</td><td>32</td><td>864</td></tr>
+  <tr><td>4</td><td>1</td><td>64</td><td>1</td><td>64</td></tr>
+  <tr><td>5</td><td>0</td><td>125</td><td>0</td><td>0</td></tr>
+</table>
+<p>Total 3896 états ; la répartition \(E_1 = 2\) eV, \(E_2 = 3\) eV contient la moitié d'entre eux.</p>
+</div>
+<div class="box ex"><span class="label">Exemple 2 (diapo 4) : 60 et 100 degrés de liberté, même énergie</span>
+<p>\(\Omega_1\propto E_1^{30}\), \(\Omega_2\propto E_2^{50}\) : \(\Omega_0 = 1{,}27\times10^{30}\) pour \(E_1 = 1\), \(7{,}71\times10^{32}\) pour \(E_1 = 2\), \(2{,}32\times10^{29}\) pour \(E_1 = 3\), \(1{,}15\times10^{18}\) pour \(E_1 = 4\). La répartition (2, 3) contient maintenant <strong>99,9 %</strong> des états. En multipliant les degrés de liberté par 10, le pic est passé de \(\sigma = 0{,}86\) eV à \(\sigma = 0{,}27\) eV (diapo 5).</p>
+</div>
+<div class="formula"><div class="title">Répartition la plus probable (chap. 7, ex. 18)</div>
+\[\frac{d\Omega_0}{dE_1} = 0 \quad\Longrightarrow\quad \frac{n_1/2}{E_1} = \frac{n_2/2}{E_0-E_1}\quad\Longrightarrow\quad E_1^* = \frac{n_1}{n_1+n_2}\,E_0,\qquad E_2^* = \frac{n_2}{n_1+n_2}\,E_0\]
+<div class="cond">L'énergie se répartit au prorata des degrés de liberté : chaque ddl reçoit en moyenne la même énergie dans les deux systèmes. C'est l'équipartition, démontrée proprement à la section 3.2. Au fur et à mesure que le nombre de particules augmente, une distribution ayant une énergie bien précise devient de plus en plus probable : la largeur relative du pic décroît comme \(1/\sqrt{n_1+n_2}\).</div>
+</div>
+<div class="widget" data-widget="thermal-contact"></div>
+
+<h2>2. Le deuxième principe de la thermodynamique</h2>
+<div class="formula"><div class="title">Entropie</div>
+\[S = k\ln\Omega\qquad\qquad k = 1{,}381\times10^{-23}\ \text{J/K}\]
+<div class="cond">L'entropie permet d'exprimer les nombres démesurés d'états accessibles en une quantité facile à manipuler. C'est aussi une métrique du <em>désordre</em> d'un système : plus il y a d'états accessibles, plus l'entropie est élevée.</div>
+</div>
+<div class="box ex"><span class="label">Exemple (diapo 6) : un verre d'eau</span>
+<p>\(10^{24}\) molécules ayant chacune 10 états : \(\Omega = 10^{10^{24}}\), donc \(S = k\ln\Omega = k\times10^{24}\times\ln 10 = 1{,}38\times10^{-23}\times10^{24}\times2{,}3 \approx 32\) J/K. Un nombre inimaginable devient quelques joules par kelvin.</p>
+</div>
+<div class="formula"><div class="title">Additivité</div>
+\[\Omega_0 = \Omega_1\Omega_2\quad\Longrightarrow\quad S_0 = k\ln(\Omega_1\Omega_2) = S_1 + S_2\]
+<div class="cond">L'entropie s'additionne lors de la combinaison de systèmes, au même titre que le volume, l'énergie et le nombre de particules : c'est tout l'intérêt du logarithme.</div>
+</div>
+<div class="formula"><div class="title">Deuxième principe</div>
+\[\Delta\Omega \ge 0\qquad\qquad \Delta S_0 \ge 0\]
+<div class="cond">Lors de la combinaison de plusieurs systèmes, le nombre d'états accessibles ne peut qu'augmenter à l'approche de l'équilibre ; l'entropie du système résultant ne peut diminuer, même si le système n'a pas encore atteint l'équilibre. Dans les deux cas, ces valeurs atteignent un <strong>maximum à l'équilibre</strong> et les variations deviennent nulles. Un processus qui conserverait l'énergie mais ferait diminuer \(S_0\) (chaleur allant du froid vers le chaud, gaz se recomprimant spontanément) est interdit.</div>
+</div>
+
+<h2>3. La température</h2>
+<div class="formula"><div class="title">Définition de la température</div>
+\[\left(\frac{\partial S}{\partial E}\right)_{V,N} = \frac{1}{T}\]
+<div class="cond">Pour un système à volume et nombre de particules constants, la température relie la variation d'entropie à la variation d'énergie interne. À \(V\) et \(N\) constants le premier principe donne \(dE = dQ\), donc :</div>
+\[dQ = T\,dS\]
+</div>
+<div class="formula"><div class="title">Variations d'entropie avec le volume et le nombre de particules</div>
+\[\left(\frac{\partial S}{\partial V}\right)_{E,N} = \frac{p}{T}\qquad\qquad \left(\frac{\partial S}{\partial N}\right)_{E,V} = -\frac{\mu}{T}\]
+<div class="cond">Ces relations découlent du premier principe écrit sous la forme \(dE = T\,dS - p\,dV + \mu\,dN\), soit \(dS = \dfrac{dE}{T} + \dfrac{p}{T}dV - \dfrac{\mu}{T}dN\). Elles servent à retrouver la loi des gaz parfaits (section 3.5) et, plus tard, les processus thermodynamiques.</div>
+</div>
+
+<h3>3.1 Équilibre thermique</h3>
+<p>À \(V\) et \(N\) constants, deux systèmes de températures différentes mis en contact échangent de l'énergie : \(dE_1 = -dE_2\). Quand le système combiné atteint l'équilibre, son entropie est maximale :</p>
+<div class="formula">
+\[S_0 = S_1 + S_2\qquad dS_0 = 0 = \frac{dE_1}{T_1} + \frac{dE_2}{T_2} = \left(\frac{1}{T_1} - \frac{1}{T_2}\right)dE_1\quad\Longrightarrow\quad T_1 = T_2\]
+<div class="cond">Tant que \(T_1 \ne T_2\), l'entropie totale augmente si l'énergie passe du système chaud vers le système froid (\(dE_1 \gt 0\) exige \(1/T_1 \gt 1/T_2\), donc \(T_1 \lt T_2\)) : la chaleur va du chaud vers le froid, et l'échange cesse quand les températures sont égales.</div>
+</div>
+
+<h3>3.2 Équipartition</h3>
+<p>À l'aide de l'entropie on démontre enfin que l'énergie moyenne d'un degré de liberté vaut \(\tfrac12 kT\). Pour un gaz monoatomique (cours 2) :</p>
+<div class="formula">
+\[\Omega_g = C_g\left(\frac{V}{N}\right)^N\left(\frac{E_{therm}}{N\nu}\right)^{N\nu/2}\quad\Longrightarrow\quad S = k\ln C_g + kN\ln\frac{V}{N} + k\frac{N\nu}{2}\ln\frac{E_{therm}}{N\nu}\]
+\[\frac{dS}{dE} = \frac{1}{T} = k\frac{N\nu}{2}\frac{1}{E_{therm}}\quad\Longrightarrow\quad \boxed{\frac{E_{therm}}{N\nu} = \frac12 kT}\]
+<div class="cond">Chaque degré de liberté porte en moyenne \(kT/2\) ; \(E_{therm} = \tfrac{N\nu}{2}kT\). Le résultat est le même pour un solide (seul le terme en \(V\) change, et il ne dépend pas de \(E\)).</div>
+</div>
+
+<h3>3.3 Changement d'entropie et nombre d'états</h3>
+<div class="formula">
+\[\Delta S = S_f - S_i = k\ln\Omega_f - k\ln\Omega_i = k\ln\frac{\Omega_f}{\Omega_i}\qquad\Longleftrightarrow\qquad \frac{\Omega_f}{\Omega_i} = e^{\Delta S/k} = e^{\Delta Q/kT}\]
+<div class="cond">La seconde égalité suppose un échange de chaleur à température pratiquement constante (\(\Delta S = \Delta Q/T\)). Pour convertir en puissance de 10 : \(e^x = 10^{0{,}4343x}\).</div>
+</div>
+<div class="box ex"><span class="label">Exemple 3 (diapo 12) : 1 joule à 295 K</span>
+<p>\(\dfrac{\Omega_f}{\Omega_i} = e^{\Delta Q/kT} = \exp\!\left(\dfrac{1}{1{,}381\times10^{-23}\times295}\right) = e^{2{,}45\times10^{20}} = 10^{1{,}07\times10^{20}}\). Un seul joule multiplie le nombre d'états par \(10\) à la puissance cent milliards de milliards.</p>
+</div>
+<div class="widget" data-widget="entropy-calc"></div>
+
+<h3>3.4 La capacité thermique et la chaleur spécifique</h3>
+<p>Selon la nature de la substance chauffée, l'accroissement de température pour une même chaleur reçue est différent : certains matériaux stockent mieux la chaleur, comme l'eau (rôle des océans dans la stabilisation du climat).</p>
+<div class="formula"><div class="title">Capacité thermique</div>
+\[C_y = \left(\frac{dQ}{dT}\right)_y\qquad C_p = \left(\frac{dQ}{dT}\right)_p\quad(\text{pression constante}),\qquad C_V = \left(\frac{dQ}{dT}\right)_V\quad(\text{volume constant})\]
+<div class="cond">En J/K pour le système entier. Rapportée à une mole : capacité thermique molaire \(C = \tfrac1n C_y\) (J/(mol K)). Rapportée au kilogramme : <strong>chaleur spécifique</strong> \(c = \tfrac1m C_y\) (J/(kg K)). L'indice précise ce qui est maintenu constant pendant la mesure.</div>
+</div>
+<div class="formula"><div class="title">Entropie d'un chauffage</div>
+\[\Delta S = \int_{T_i}^{T_f}\frac{dQ}{T} = \int_{T_i}^{T_f}\frac{C\,dT}{T} = m\,c\ln\frac{T_f}{T_i}\quad(c\ \text{constante})\qquad\qquad \Delta S_{\text{phase}} = \frac{Q_{\text{latente}}}{T_{\text{phase}}}\]
+</div>
+<table>
+  <tr><th>Substance</th><th>\(c_p\) (kJ/(kg K))</th><th>Substance</th><th>\(c_p\) (kJ/(kg K))</th></tr>
+  <tr><td>Aluminium</td><td>0,90</td><td>Sucre</td><td>1,13</td></tr>
+  <tr><td>Cuivre</td><td>0,39</td><td>Sel de table</td><td>0,88</td></tr>
+  <tr><td>Or</td><td>0,126</td><td>Bois</td><td>1,8</td></tr>
+  <tr><td>Acétone (liquide)</td><td>2,22</td><td>Air</td><td>1,05</td></tr>
+  <tr><td>Alcool éthylique</td><td>2,43</td><td>Hélium (gaz)</td><td>5,23</td></tr>
+  <tr><td>Marbre</td><td>0,88</td><td>Eau</td><td>4,19</td></tr>
+  <tr><td>Caoutchouc synthétique</td><td>1,9</td><td>Glace (sous 0 °C)</td><td>2,09</td></tr>
+</table>
+<p class="small">Table 8.1 du manuel, à température ambiante et pression constante. Attention : la diapo 14 du cours indique 2,43 kJ/(kg K) pour le marbre ; c'est la valeur de l'alcool éthylique (ligne omise sur la diapo), le manuel donne 0,88 pour le marbre.</p>
+<div class="box ex"><span class="label">Application (diapo 15) : cryo-microscopie électronique</span>
+<p>Pour cryofixer un échantillon hydraté en glace amorphe, l'azote liquide (−195 °C) donne de mauvais résultats : sa capacité thermique molaire est trop faible (\(C_p = 56\) J/(mol K)) et il se forme une couche de vapeur isolante autour de l'échantillon (effet Leidenfrost). On utilise plutôt le propane liquide (\(C_p = 98\) J/(mol K)), qui absorbe plus de chaleur par degré sans bouillir.</p>
+</div>
+
+<h3>3.5 Loi des gaz parfaits</h3>
+<p>Un gaz parfait est un gaz dont les molécules sont suffisamment distantes pour ne pas interagir. De l'entropie du gaz monoatomique et de la relation \((\partial S/\partial V)_{E,N} = p/T\) :</p>
+<div class="formula">
+\[S = k\ln\!\left(C_{gm}\left(\frac{V}{N}\right)^N\left(\frac{E}{N\nu}\right)^{N\nu/2}\right)\quad\Longrightarrow\quad \left(\frac{\partial S}{\partial V}\right)_{E,N} = \frac{kN}{V} = \frac{p}{T}\quad\Longrightarrow\quad \boxed{pV = NkT}\]
+\[pV = nRT\qquad R = N_Ak = 8{,}314\ \text{J/(mol K)}\quad(\text{forme molaire}, n \text{ en moles})\]
+</div>
+
+<h3>3.6 Capacités thermiques d'un gaz parfait (chap. 8, ex. 41)</h3>
+<div class="formula">
+\[E = \frac{\nu}{2}NkT\ \text{ et }\ dE = dQ - p\,dV\qquad\Longrightarrow\qquad C_V = \left(\frac{dQ}{dT}\right)_V = \frac{\nu}{2}nR,\qquad C_p = C_V + nR\]
+\[\text{par mole : } C_V = \frac{\nu}{2}R,\quad C_p = \frac{\nu+2}{2}R,\quad \gamma = \frac{C_p}{C_V} = \frac{\nu+2}{\nu}\]
+<div class="cond">À volume constant, toute la chaleur va dans l'énergie interne. À pression constante, le gaz se dilate et fournit en plus le travail \(p\,dV = nR\,dT\) : il faut \(nR\,dT\) de chaleur supplémentaire. Ces résultats servent dans tout le cours 4 et 5.</div>
+</div>
+
+<h2>4. Le troisième principe de la thermodynamique</h2>
+<div class="formula">
+\[dQ = T\,dS\quad\Longrightarrow\quad S(T) = S(0) + \int_0^T\frac{dQ}{T'}\qquad\qquad \boxed{S(T=0\ \text{K}) = 0}\]
+<div class="cond">Lorsqu'on diminue la température, le nombre d'états diminue jusqu'à ce qu'il ne subsiste qu'un seul état possible (\(\Omega = 1\), cristal parfait figé : chaque \(\xi\) est constant puisque \(kT \propto \xi^2 \to 0\)). Donc \(S(0) = k\ln 1 = 0\) pour tout système, et l'entropie se calcule par une intégrale depuis 0 K.</div>
+</div>
+<div class="formula"><div class="title">Entropie à partir de la capacité thermique</div>
+\[dQ = C_p(T')\,dT'\quad\Longrightarrow\quad S(T) = \int_0^T\frac{C_p(T')}{T'}\,dT'\]
+<div class="cond">Pour que l'intégrale converge (entropie finie), il faut que \(C_p \to 0\) quand \(T \to 0\) : c'est bien ce que montrent les mesures (graphes de \(C_p/R\) de la diapo 19). Conséquences pratiques : à très basse température, une variation infime de \(T\) fait beaucoup varier \(C_p/T\), et une petite quantité de chaleur fait beaucoup varier \(T\) : travailler près de 0 K est difficile (problème de bruit).</div>
+</div>
+<div class="box method"><span class="label">Méthode : chaleur d'une réaction chimique (diapo 21, chap. 8 ex. 45-46)</span>
+<ol class="steps">
+  <li>Calculer l'entropie de chaque substance à la température de la réaction : \(S_A(T) = \int_0^T \frac{C_A}{T'}dT'\) (par exemple avec \(C_A = a\sqrt T\) : \(S_A = 2a\sqrt T\)).</li>
+  <li>Faire le bilan \(\Delta S = S_{final} - S_{initial} = S_C - (S_A + S_B)\), en comptant les moles de chaque espèce.</li>
+  <li>Convertir en chaleur à température constante : \(\Delta Q = T\,\Delta S\). \(\Delta Q \lt 0\) : la réaction dégage de la chaleur (exothermique).</li>
+</ol>
+</div>
+
+<h2>5. À retenir</h2>
+<ul class="summary-list">
+  <li>\(\Omega_0 = \Omega_1\Omega_2\) est maximal pour \(E_1^* = \frac{n_1}{n_1+n_2}E_0\) ; le pic est d'autant plus étroit que les systèmes sont grands.</li>
+  <li>\(S = k\ln\Omega\) ; \(S_0 = S_1 + S_2\) ; 2<sup>e</sup> principe : \(\Delta S_0 \ge 0\), maximum à l'équilibre.</li>
+  <li>\(\left(\partial S/\partial E\right)_{V,N} = 1/T\), \(\left(\partial S/\partial V\right)_{E,N} = p/T\), \(\left(\partial S/\partial N\right)_{E,V} = -\mu/T\) ; \(dQ = T\,dS\).</li>
+  <li>Équilibre thermique \(\Leftrightarrow T_1 = T_2\) ; équipartition \(E_{therm}/(N\nu) = kT/2\) ; gaz parfait \(pV = NkT = nRT\).</li>
+  <li>\(\Delta S = k\ln(\Omega_f/\Omega_i)\), \(\Omega_f/\Omega_i = e^{\Delta Q/kT}\) ; \(C_y = (dQ/dT)_y\) ; \(\Delta S = mc\ln(T_f/T_i)\).</li>
+  <li>Gaz parfait : \(C_V = \frac{\nu}{2}R\), \(C_p = C_V + R\), \(\gamma = (\nu+2)/\nu\).</li>
+  <li>3<sup>e</sup> principe : \(S(0) = 0\), \(S(T) = \int_0^T C_p\,dT'/T'\), \(C_p \to 0\) quand \(T\to0\).</li>
+</ul>
+
+<!-- ===================================================== QUIZ ===================================================== -->
+<section class="quiz" data-quiz-id="c3" id="quiz-c3">
+<h2>Quiz rapide - Cours 3</h2>
+<p class="small">Une seule bonne réponse par question. Cliquez pour vérifier immédiatement.</p>
+
+<div class="q" data-answer="2">
+  <p class="q-text">Deux systèmes isolés du reste de l'univers échangent de l'énergie. Vers quelle répartition \((E_1, E_2)\) évoluent-ils ?</p>
+  <ul class="choices"><li>Celle qui minimise \(E_1\)</li><li>Celle qui égalise \(E_1\) et \(E_2\)</li><li>Celle qui maximise \(\Omega_0 = \Omega_1\Omega_2\)</li><li>Celle qui maximise \(\Omega_1\) seul</li></ul>
+  <div class="explain">Tous les états accessibles sont équiprobables, donc la répartition qui correspond au plus grand nombre d'états du système combiné est la plus probable. Elle donne \(E_1/E_2 = n_1/n_2\), pas \(E_1 = E_2\).</div>
+</div>
+<div class="q" data-answer="1">
+  <p class="q-text">Système 1 : 6 ddl, système 2 : 10 ddl, \(E_0 = 8\) eV. Répartition la plus probable ?</p>
+  <ul class="choices"><li>\(E_1 = 4\) eV, \(E_2 = 4\) eV</li><li>\(E_1 = 3\) eV, \(E_2 = 5\) eV</li><li>\(E_1 = 5\) eV, \(E_2 = 3\) eV</li><li>\(E_1 = 0\), \(E_2 = 8\) eV</li></ul>
+  <div class="explain">\(E_1^* = \frac{n_1}{n_1+n_2}E_0 = \frac{6}{16}\times8 = 3\) eV : au prorata des degrés de liberté.</div>
+</div>
+<div class="q" data-answer="0">
+  <p class="q-text">Quand le nombre de particules des deux systèmes augmente, le pic de \(\Omega_0(E_1)\) :</p>
+  <ul class="choices"><li>devient plus étroit (fluctuations relatives plus petites)</li><li>devient plus large</li><li>ne change pas de largeur</li><li>disparaît</li></ul>
+  <div class="explain">La largeur relative décroît comme \(1/\sqrt{\text{ddl}}\) : passer de 16 à 160 ddl fait tomber \(\sigma\) de 0,86 à 0,27 eV (diapo 5). Pour \(10^{24}\) ddl, tout écart est inobservable.</div>
+</div>
+<div class="q" data-answer="1">
+  <p class="q-text">Définition de l'entropie dans ce cours :</p>
+  <ul class="choices"><li>\(S = k\,\Omega\)</li><li>\(S = k\ln\Omega\)</li><li>\(S = \ln\Omega/k\)</li><li>\(S = kT\ln\Omega\)</li></ul>
+  <div class="explain">\(S = k\ln\Omega\) avec \(k\) la constante de Boltzmann. Le logarithme rend l'entropie additive : \(S_0 = S_1+S_2\) puisque \(\Omega_0 = \Omega_1\Omega_2\).</div>
+</div>
+<div class="q" data-answer="2">
+  <p class="q-text">Un verre d'eau contient \(10^{24}\) molécules ayant chacune 10 états accessibles. Son entropie vaut environ :</p>
+  <ul class="choices"><li>\(10^{24}\) J/K</li><li>\(1{,}4\times10^{-23}\) J/K</li><li>32 J/K</li><li>3,2 J/K</li></ul>
+  <div class="explain">\(\Omega = 10^{10^{24}}\), \(S = k\times10^{24}\times\ln 10 = 1{,}38\times10^{-23}\times2{,}3\times10^{24} \approx 32\) J/K.</div>
+</div>
+<div class="q" data-answer="0">
+  <p class="q-text">Le deuxième principe affirme que pour un système isolé :</p>
+  <ul class="choices"><li>\(\Delta S_0 \ge 0\), avec un maximum à l'équilibre</li><li>\(\Delta S_0 \le 0\)</li><li>\(S_0\) est constante</li><li>\(S_0 = 0\) à l'équilibre</li></ul>
+  <div class="explain">Le nombre d'états accessibles, donc l'entropie, ne peut qu'augmenter à l'approche de l'équilibre, où il est maximal et où les variations deviennent nulles.</div>
+</div>
+<div class="q" data-answer="1">
+  <p class="q-text">Définition de la température :</p>
+  <ul class="choices"><li>\(T = \partial E/\partial S\) à \(p\) constant</li><li>\(1/T = (\partial S/\partial E)_{V,N}\)</li><li>\(T = kS\)</li><li>\(T = E/(Nk)\)</li></ul>
+  <div class="explain">\((\partial S/\partial E)_{V,N} = 1/T\) : la température est l'inverse de la pente de l'entropie en fonction de l'énergie, à volume et nombre de particules constants.</div>
+</div>
+<div class="q" data-answer="2">
+  <p class="q-text">Deux systèmes à \(V\) et \(N\) constants sont mis en contact thermique. À l'équilibre :</p>
+  <ul class="choices"><li>\(E_1 = E_2\)</li><li>\(S_1 = S_2\)</li><li>\(T_1 = T_2\)</li><li>\(\Omega_1 = \Omega_2\)</li></ul>
+  <div class="explain">\(dS_0 = (1/T_1 - 1/T_2)dE_1 = 0\) impose \(T_1 = T_2\). Les énergies et entropies peuvent être très différentes.</div>
+</div>
+<div class="q" data-answer="0">
+  <p class="q-text">On ajoute 1 J de chaleur à un système à 295 K. Le nombre d'états accessibles est multiplié par :</p>
+  <ul class="choices"><li>\(e^{\Delta Q/kT}\approx10^{10^{20}}\)</li><li>\(e^{1}\approx2{,}7\)</li><li>\(1 + 1/295\)</li><li>\(10^{20}\)</li></ul>
+  <div class="explain">\(\Omega_f/\Omega_i = e^{\Delta S/k} = e^{\Delta Q/kT}\) avec \(\Delta Q/kT = 1/(1{,}38\times10^{-23}\times295) = 2{,}45\times10^{20}\), soit \(10^{1{,}07\times10^{20}}\).</div>
+</div>
+<div class="q" data-answer="1">
+  <p class="q-text">Quelle grandeur mesure la chaleur nécessaire pour élever la température d'un kilogramme de substance de 1 K ?</p>
+  <ul class="choices"><li>La capacité thermique \(C_y\) (J/K)</li><li>La chaleur spécifique \(c\) (J/(kg K))</li><li>La capacité thermique molaire (J/(mol K))</li><li>L'entropie (J/K)</li></ul>
+  <div class="explain">\(C_y = (dQ/dT)_y\) est pour le système entier ; divisée par la masse elle devient la chaleur spécifique, divisée par le nombre de moles la capacité molaire.</div>
+</div>
+<div class="q" data-answer="2">
+  <p class="q-text">On chauffe 100 g d'eau (\(c = 4{,}19\) kJ/(kg K)) de 283 K à 368 K. La variation d'entropie vaut :</p>
+  <ul class="choices"><li>\(mc\,(T_f - T_i) = 35{,}6\) kJ/K</li><li>\(mc\,(T_f - T_i)/T_f = 97\) J/K</li><li>\(mc\ln(T_f/T_i) = 110\) J/K</li><li>0, car la pression est constante</li></ul>
+  <div class="explain">\(\Delta S = \int dQ/T = mc\ln(T_f/T_i) = 0{,}1\times4190\times\ln(368/283) = 110\) J/K (exercice 16 du chapitre 8).</div>
+</div>
+<div class="q" data-answer="0">
+  <p class="q-text">Pour un gaz parfait, la capacité thermique molaire à volume constant vaut :</p>
+  <ul class="choices"><li>\(C_V = \frac{\nu}{2}R\)</li><li>\(C_V = \frac{\nu+2}{2}R\)</li><li>\(C_V = R\)</li><li>\(C_V = \nu R\)</li></ul>
+  <div class="explain">\(E = \frac{\nu}{2}nRT\) et à volume constant \(dQ = dE\), donc \(C_V = \frac{\nu}{2}R\) par mole ; \(C_p = C_V + R\) car le gaz fournit le travail \(p\,dV = nR\,dT\).</div>
+</div>
+<div class="q" data-answer="3">
+  <p class="q-text">Le troisième principe affirme que :</p>
+  <ul class="choices"><li>\(S\) diverge quand \(T\to0\)</li><li>\(C_p\) est constante jusqu'à 0 K</li><li>\(S(T)\) est indépendante de \(T\)</li><li>\(S(T = 0\ \text{K}) = 0\) pour tout système</li></ul>
+  <div class="explain">À 0 K il ne reste qu'un seul état accessible (\(\Omega = 1\)), donc \(S = k\ln 1 = 0\). Pour que \(S(T) = \int_0^T C_p\,dT'/T'\) reste finie, \(C_p\) doit tendre vers 0 avec \(T\).</div>
+</div>
+<div class="q" data-answer="1">
+  <p class="q-text">La capacité thermique molaire d'une substance vaut \(C = a\sqrt T\). Son entropie à la température \(T\) est :</p>
+  <ul class="choices"><li>\(a\sqrt T\)</li><li>\(2a\sqrt T\)</li><li>\(a T^{3/2}\)</li><li>\(a\ln T\)</li></ul>
+  <div class="explain">\(S(T) = \int_0^T \frac{a\sqrt{T'}}{T'}dT' = a\int_0^T T'^{-1/2}dT' = 2a\sqrt T\).</div>
+</div>
+<div class="q" data-answer="2">
+  <p class="q-text">Pourquoi la chaleur va-t-elle spontanément du corps chaud vers le corps froid ?</p>
+  <ul class="choices"><li>Parce que l'énergie du corps chaud est plus grande</li><li>Parce que le corps froid a plus d'états accessibles</li><li>Parce que ce transfert augmente l'entropie totale (\(1/T_{froid} \gt 1/T_{chaud}\))</li><li>Parce que \(C_p\) est plus grand pour le corps froid</li></ul>
+  <div class="explain">\(dS_0 = dE\,(1/T_{froid} - 1/T_{chaud}) \gt 0\) quand l'énergie \(dE\) va vers le corps froid : le gain d'états du froid dépasse la perte d'états du chaud.</div>
+</div>
+<div class="quiz-footer"></div>
+</section>
+
+<!-- ===================================================== EXERCICES À DÉVELOPPEMENT ===================================================== -->
+<h2 id="dev-c3">Exercices à développement (à faire sur papier)</h2>
+<p>Exemples des diapos et exercices résolus en classe (17 septembre). Gardez les logarithmes pour les grands nombres et donnez les unités.</p>
+<div class="exo-tools" data-scope="dev-c3-list">
+  <button class="btn secondary" type="button" data-action="open-all">Tout ouvrir</button>
+  <button class="btn secondary" type="button" data-action="close-all">Tout fermer</button>
+  <div class="progress-bar"><span></span></div><span class="progress-label small"></span>
+</div>
+<div id="dev-c3-list">
+
+<article class="exo" data-exo-id="c3-d1">
+  <header><span class="tag">Diapo 3 - Ex 1</span><span class="tag theme">Interaction entre systèmes</span><h4>D1. Six et dix degrés de liberté</h4></header>
+  <div class="enonce"><p>Le système 1 possède 6 degrés de liberté et le système 2 en possède 10. La somme des énergies vaut 5 eV, quantifiée par pas de 1 eV. Construire le tableau des nombres d'états \(\Omega_1\), \(\Omega_2\), \(\Omega_0\) et déterminer la distribution d'énergie la plus probable et sa probabilité.</p></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>\(\Omega\propto E^{N\nu/2}\) : \(\Omega_1\propto E_1^{3}\), \(\Omega_2\propto E_2^{5}\). Les constantes de proportionnalité disparaissent dans les probabilités.</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>Pour \(E_1 = 0, 1, 2, 3, 4, 5\) eV : \(\Omega_1 \propto 0, 1, 8, 27, 64, 125\) ; \(E_2 = 5 - E_1\) donne \(\Omega_2\propto 3125, 1024, 243, 32, 1, 0\).</li>
+      <li>\(\Omega_0 = \Omega_1\Omega_2 \propto 0,\ 1024,\ 1944,\ 864,\ 64,\ 0\) ; total \(3896\).</li>
+      <li>Maximum pour \(E_1 = 2\) eV, \(E_2 = 3\) eV, soit exactement \(E_1^* = \frac{6}{16}\times5 = 1{,}9\) eV arrondi au pas de 1 eV ; probabilité \(1944/3896 = 0{,}50\).</li>
+    </ol>
+    <p class="answer">(E₁, E₂) = (2 eV, 3 eV) avec P ≈ 50 %</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c3-d2">
+  <header><span class="tag">Diapo 4 - Ex 2</span><span class="tag theme">Interaction entre systèmes</span><h4>D2. Soixante et cent degrés de liberté</h4></header>
+  <div class="enonce"><p>Mêmes énergies qu'en D1, mais le système 1 possède 60 degrés de liberté et le système 2 en possède 100. Quelle est la distribution la plus probable et quelle fraction des états représente-t-elle ? Comparer à D1.</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>\(\Omega_1\propto E_1^{30}\), \(\Omega_2\propto E_2^{50}\). \(E_1 = 1\) : \(1\times4^{50} = 1{,}27\times10^{30}\) ; \(E_1 = 2\) : \(2^{30}\times3^{50} = 1{,}07\times10^{9}\times7{,}18\times10^{23} = 7{,}71\times10^{32}\) ; \(E_1 = 3\) : \(3^{30}\times2^{50} = 2{,}06\times10^{14}\times1{,}13\times10^{15} = 2{,}32\times10^{29}\) ; \(E_1 = 4\) : \(4^{30} = 1{,}15\times10^{18}\).</li>
+      <li>Total \(\approx 7{,}72\times10^{32}\) ; la répartition (2 eV, 3 eV) représente \(7{,}71/7{,}72 = 99{,}9\ \%\) des états.</li>
+    </ol>
+    <p class="answer">(2 eV, 3 eV) avec P ≈ 99,9 % (contre 50 % avec 10 fois moins de ddl)</p>
+    <p class="small">Avec \(10^{24}\) degrés de liberté, la probabilité de toute autre répartition est nulle à toutes fins pratiques : c'est ce qui fait de l'équilibre thermique un état parfaitement déterminé.</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c3-d3">
+  <header><span class="tag">Diapo 6</span><span class="tag theme">Entropie</span><h4>D3. Entropie d'un verre d'eau</h4></header>
+  <div class="enonce"><p>Un verre d'eau contient \(10^{24}\) molécules. Chaque molécule peut avoir 10 états. Quelle est l'entropie du verre d'eau ? (Rappel : \(k = 1{,}38\times10^{-23}\) J/K, \(\ln 10 = 2{,}3\).)</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    \[\Omega = 10^{N} = 10^{10^{24}}\qquad S = k\ln\Omega = k\,N\ln 10 = 1{,}38\times10^{-23}\times10^{24}\times2{,}3 = 31{,}8\ \text{J/K}\]
+    <p class="answer">S ≈ 32 J/K</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c3-d4">
+  <header><span class="tag">Diapo 12 - Ex 3</span><span class="tag theme">Chaleur et nombre d'états</span><h4>D4. Un joule à 295 K</h4></header>
+  <div class="enonce"><p>De combien de fois augmente-t-on le nombre d'états accessibles lorsqu'on ajoute 1 joule de chaleur à un système à 295 K ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    \[\frac{\Omega_f}{\Omega_i} = e^{\Delta S/k} = e^{\Delta Q/kT} = \exp\!\left(\frac{1}{1{,}381\times10^{-23}\times295}\right) = e^{2{,}45\times10^{20}} = 10^{0{,}4343\times2{,}45\times10^{20}} = 10^{1{,}07\times10^{20}}\]
+    <p class="answer">Ω_f/Ω_i = 10^(1,07 × 10²⁰)</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c3-d5">
+  <header><span class="tag">Diapo 21 - Ex 4</span><span class="tag theme">3e principe</span><h4>D5. Chaleur d'une réaction A + B → C</h4></header>
+  <div class="enonce"><p>Une réaction A + B → C se produit à 300 K. Les capacités thermiques molaires valent \(C_A = 5\sqrt T\), \(C_B = 8\sqrt T\) et \(C_C = 12\sqrt T\) (en J/(mol K) avec \(T\) en K). Combien de chaleur est évacuée ou absorbée par la réaction, par mole de C formée ?</p></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>\(S(T) = \int_0^T C\,dT'/T'\) avec \(S(0) = 0\) (3<sup>e</sup> principe) ; puis \(\Delta S = S_C - (S_A + S_B)\) et \(\Delta Q = T\Delta S\).</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>\(S(T) = \int_0^T \dfrac{a\sqrt{T'}}{T'}dT' = a\int_0^T T'^{-1/2}dT' = 2a\sqrt T\). À 300 K, \(\sqrt{300} = 17{,}32\) : \(S_A = 2\times5\times17{,}32 = 173{,}2\) J/K, \(S_B = 2\times8\times17{,}32 = 277{,}1\) J/K, \(S_C = 2\times12\times17{,}32 = 415{,}7\) J/K.</li>
+      <li>\(\Delta S = S_C - (S_A + S_B) = 415{,}7 - 450{,}3 = -34{,}6\) J/K.</li>
+      <li>\(\Delta Q = T\Delta S = 300\times(-34{,}6) = -1{,}04\times10^4\) J.</li>
+    </ol>
+    <p class="answer">ΔQ ≈ −10,4 kJ par mole de C : la réaction évacue de la chaleur (exothermique)</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c3-d6">
+  <header><span class="tag">Diapo 22 - Ex 5 = chap. 8, ex. 3</span><span class="tag theme">Équilibre et température</span><h4>D6. Deux petits systèmes à l'équilibre</h4></header>
+  <div class="enonce"><p>Deux systèmes \(A_1\) et \(A_2\) sont à l'équilibre thermique. Leurs nombres d'états sont \(\Omega_1 = (E_1/C)^{10}\) et \(\Omega_2 = (E_2/C)^{8}\), avec \(C = 10^{-23}\) J et \(E_0 = E_1 + E_2 = 10^{-18}\) J. (a) Combien de degrés de liberté a chaque système ? (b) Valeurs de \(E_1\) et \(E_2\) à l'équilibre ? (c) Entropie du système combiné à l'équilibre ? (d) Température du système combiné ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(\Omega\propto E^{N\nu/2}\) : \(N_1\nu_1/2 = 10\) → 20 ddl ; \(N_2\nu_2/2 = 8\) → 16 ddl.</li>
+      <li>(b) \(\partial\Omega_0/\partial E_1 = 0\) donne \(\dfrac{10}{E_1} = \dfrac{8}{E_0 - E_1}\), soit \(E_1 = \dfrac{10}{18}E_0 = 5{,}56\times10^{-19}\) J et \(E_2 = 4{,}44\times10^{-19}\) J.</li>
+      <li>(c) \(S_0 = k\ln(\Omega_1\Omega_2) = k\left[10\ln\dfrac{5{,}56\times10^{-19}}{10^{-23}} + 8\ln\dfrac{4{,}44\times10^{-19}}{10^{-23}}\right] = k\,[10\times10{,}93 + 8\times10{,}70] = 194{,}9\,k = 2{,}7\times10^{-21}\) J/K.</li>
+      <li>(d) \(\dfrac1T = \dfrac{\partial S_1}{\partial E_1} = \dfrac{10k}{E_1}\) → \(T = \dfrac{E_1}{10k} = \dfrac{5{,}56\times10^{-19}}{1{,}381\times10^{-22}} = 4{,}0\times10^3\) K (on vérifie que \(E_2/(8k)\) donne la même valeur).</li>
+    </ol>
+    <p class="answer">(a) 20 et 16 ddl | (b) 5,56 × 10⁻¹⁹ J et 4,44 × 10⁻¹⁹ J | (c) 2,7 × 10⁻²¹ J/K | (d) ≈ 4020 K</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c3-d7">
+  <header><span class="tag">Classe - chap. 8, ex. 8</span><span class="tag theme">Chaleur et nombre d'états</span><h4>D7. L'océan Pacifique et le verre d'eau</h4></header>
+  <div class="enonce"><p>(a) Quelle énergie thermique (en J) faut-il fournir à l'océan Pacifique (\(T = 4\) °C, \(V = 0{,}7\times10^9\) km³) pour doubler son nombre d'états accessibles ? (b) La réponse serait-elle différente pour un verre d'eau (20 cL) à 4 °C ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) On veut \(\Omega_f/\Omega_i = e^{\Delta Q/kT} = 2\), donc \(\Delta Q = kT\ln 2 = 1{,}381\times10^{-23}\times277\times0{,}693 = 2{,}65\times10^{-21}\) J.</li>
+      <li>(b) La réponse est la même : le volume (et le nombre de molécules) n'intervient pas dans \(\Delta Q = kT\ln 2\). Doubler \(\Omega\) ne demande qu'une énergie de l'ordre de \(kT\), quelle que soit la taille du système.</li>
+    </ol>
+    <p class="answer">(a) 2,65 × 10⁻²¹ J | (b) identique</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c3-d8">
+  <header><span class="tag">Classe - chap. 8, ex. 20</span><span class="tag theme">Travail et entropie</span><h4>D8. Dilatation d'un millimètre cube à énergie constante</h4></header>
+  <div class="enonce"><p>Un système de volume 1 m³ possède \(10^{25}\) degrés de liberté. Sa température est fixée à 17 °C et son énergie interne \(E\) est constante ; la pression vaut \(10^5\) N/m². Le volume augmente de 1 mm³. (a) Le nombre d'états accessibles augmente-t-il ou diminue-t-il ? (b) Calculer cette variation.</p></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>Premier principe avec \(\Delta E = 0\) : la chaleur reçue compense le travail fourni \(p\Delta V\). Puis \(\Delta S = \Delta Q/T\).</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(\Delta E = \Delta Q - \Delta W = 0\) et le système fournit \(\Delta W = p\Delta V = 10^5\times10^{-9} = 10^{-4}\) J ; il doit donc recevoir \(\Delta Q = 10^{-4}\) J pour garder son énergie. \(\Delta S = \Delta Q/T \gt 0\) : le nombre d'états augmente.</li>
+      <li>(b) \(\Delta S = \dfrac{10^{-4}}{290} = 3{,}45\times10^{-7}\) J/K ; \(\dfrac{\Omega_f}{\Omega_i} = e^{\Delta S/k} = e^{2{,}5\times10^{16}} = 10^{1{,}1\times10^{16}}\).</li>
+    </ol>
+    <p class="answer">(a) il augmente | (b) Ω_f/Ω_i = 10^(1,1 × 10¹⁶)</p>
+    <p class="small">Le nombre de degrés de liberté n'est pas nécessaire avec cette méthode : c'est la relation \(\Omega_f/\Omega_i = e^{\Delta Q/kT}\) qui fait tout le travail.</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c3-d9">
+  <header><span class="tag">Classe - chap. 8, ex. 41</span><span class="tag theme">Capacités thermiques</span><h4>D9. \(C_V\) et \(C_p\) d'un gaz parfait</h4></header>
+  <div class="enonce"><p>Un gaz parfait contient un nombre fixe \(N\) de molécules ; son énergie interne vaut \(E = \frac{\nu}{2}NkT\). En utilisant le premier principe et la loi des gaz parfaits, montrer que les capacités thermiques molaires sont (a) \(C_V = \frac{\nu}{2}R\) ; (b) \(C_p = C_V + R\), où \(R = kN_A\).</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>Premier principe pour \(N\) fixe : \(dQ = dE + p\,dV\) avec \(dE = \frac{\nu}{2}Nk\,dT\).</li>
+      <li>(a) À volume constant \(dV = 0\) : \(C_V = (dQ/dT)_V = \frac{\nu}{2}Nk\). Pour une mole \(N = N_A\) : \(C_V = \frac{\nu}{2}N_Ak = \frac{\nu}{2}R\).</li>
+      <li>(b) À pression constante, \(pV = NkT\) donne \(p\,dV = Nk\,dT\), donc \(dQ = \frac{\nu}{2}Nk\,dT + Nk\,dT\) et \(C_p = C_V + Nk\) ; par mole \(C_p = C_V + R = \frac{\nu+2}{2}R\).</li>
+    </ol>
+    <p class="answer">C_V = (ν/2)R ; C_p = C_V + R ; γ = C_p/C_V = (ν+2)/ν</p>
+  </div></details>
+</article>
+
+</div>
+
+<!-- ===================================================== EXERCICES SUGGÉRÉS ===================================================== -->
+<h2 id="sugg-c3">Exercices suggérés du manuel (liste officielle du cours)</h2>
+<p>Énoncés paraphrasés en français d'après Stowe (chapitres 7 et 8). Les réponses des exercices impairs sont au dos du manuel (p. 540-541), celles des pairs viennent des corrigés du professeur.</p>
+<div class="exo-tools" data-scope="sugg-c3-list">
+  <button class="btn secondary" type="button" data-action="open-all">Tout ouvrir</button>
+  <button class="btn secondary" type="button" data-action="close-all">Tout fermer</button>
+  <div class="progress-bar"><span></span></div><span class="progress-label small"></span>
+</div>
+<div id="sugg-c3-list">
+<h3>Chapitre 7 - Entropie et deuxième principe</h3>
+
+<article class="exo" data-exo-id="c3-s7-3">
+  <header><span class="tag">Chap. 7, ex. 3, p. 130</span><span class="tag theme">Maximisation du nombre d'états</span><h4>Trois et quatre degrés de liberté</h4></header>
+  <div class="enonce"><p>Un système \(A_0\) est composé de \(A_1\) (3 ddl) et \(A_2\) (4 ddl). L'énergie vient par unités de 1 et l'énergie totale vaut 4. (a) Construire le tableau de \(\Omega_1\), \(\Omega_2\), \(\Omega_0\) pour les répartitions possibles. (b) Probabilité que \(E_1 = 3\), \(E_2 = 1\) ? (c) Répartition la plus probable et sa probabilité ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p>\(\Omega_1\propto E_1^{3/2}\), \(\Omega_2\propto E_2^{2}\) :</p>
+    <table>
+      <tr><th>\(E_1\)</th><th>\(E_2\)</th><th>\(\Omega_1\)</th><th>\(\Omega_2\)</th><th>\(\Omega_0\)</th></tr>
+      <tr><td>0</td><td>4</td><td>0</td><td>16</td><td>0</td></tr>
+      <tr><td>1</td><td>3</td><td>1</td><td>9</td><td>9</td></tr>
+      <tr><td>2</td><td>2</td><td>2,83</td><td>4</td><td>11,3</td></tr>
+      <tr><td>3</td><td>1</td><td>5,20</td><td>1</td><td>5,20</td></tr>
+      <tr><td>4</td><td>0</td><td>8</td><td>0</td><td>0</td></tr>
+    </table>
+    <p>Total 25,5. (b) \(P(3,1) = 5{,}20/25{,}5 = 0{,}20\). (c) \((2,2)\) avec \(11{,}3/25{,}5 = 0{,}44\).</p>
+    <p class="answer">(b) 0,20 | (c) (2, 2), P = 0,44</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c3-s7-7">
+  <header><span class="tag">Chap. 7, ex. 7, p. 131</span><span class="tag theme">Maximisation du nombre d'états</span><h4>Trois sous-systèmes</h4></header>
+  <div class="enonce"><p>\(A_0\) est composé de trois sous-systèmes de 4, 5 et 6 ddl. L'énergie vient par unités de 1 et \(E_0 = E_1 + E_2 + E_3 = 4\). Avec \(\Omega = E^{N\nu/2}\) : (a) dresser le tableau de \(\Omega_1, \Omega_2, \Omega_3, \Omega_0\) pour les 15 répartitions ; (b) trouver la plus probable et sa probabilité.</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p>\(\Omega_1 = E_1^{2}\), \(\Omega_2 = E_2^{5/2}\), \(\Omega_3 = E_3^{3}\). Toute répartition où l'un des \(E_i\) est nul donne \(\Omega_0 = 0\) ; il ne reste que trois répartitions non nulles : \((1,1,2)\) : \(1\times1\times8 = 8\) ; \((1,2,1)\) : \(1\times5{,}66\times1 = 5{,}66\) ; \((2,1,1)\) : \(4\times1\times1 = 4\). Total \(17{,}7\).</p>
+    <p class="answer">(1, 1, 2) avec P = 8/17,7 = 0,45 : le système qui a le plus de ddl reçoit le plus d'énergie</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c3-s7-18">
+  <header><span class="tag">Chap. 7, ex. 18, p. 132</span><span class="tag theme">Équipartition à l'équilibre</span><h4>Répartition d'équilibre</h4></header>
+  <div class="enonce"><p>Avec \(\Omega_0 = \Omega_1\Omega_2 = E_1^{m_1/2}(E_0 - E_1)^{m_2/2}\), où \(m = N\nu\) est le nombre de ddl, utiliser \(d\Omega_0/dE_1 = 0\) au maximum pour montrer qu'à l'équilibre \(E_1 = \dfrac{m_1}{m_1+m_2}E_0\). En quoi est-ce cohérent avec l'équipartition ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    \[\frac{d\Omega_0}{dE_1} = E_1^{m_1/2-1}(E_0-E_1)^{m_2/2-1}\left[\frac{m_1}{2}(E_0 - E_1) - \frac{m_2}{2}E_1\right] = 0\]
+    <p>Les solutions \(E_1 = 0\) et \(E_1 = E_0\) sont des minima ; le maximum annule le crochet : \(m_1(E_0 - E_1) = m_2E_1\), soit \(E_1 = \dfrac{m_1}{m_1+m_2}E_0\) et \(E_2 = \dfrac{m_2}{m_1+m_2}E_0\). Chaque système reçoit une fraction de l'énergie proportionnelle à son nombre de degrés de liberté : \(E_1/m_1 = E_2/m_2 = E_0/(m_1+m_2)\), la même énergie par degré de liberté (\(kT/2\)) dans les deux systèmes.</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c3-s7-22">
+  <header><span class="tag">Chap. 7, ex. 22, p. 132</span><span class="tag theme">Lier ddl, énergie et fluctuations</span><h4>Détecter des fluctuations d'énergie</h4></header>
+  <div class="enonce"><p>Un détecteur mesure les fluctuations d'énergie thermique d'un système à une partie par milliard près. (a) Combien de degrés de liberté aurait un système dont on pourrait tout juste détecter une fluctuation d'un écart type ? (b) Si c'est un solide à 6 ddl par atome, avec des atomes espacés de \(10^{-10}\) m, quel est son volume ? (c) Côté du cube correspondant, comparé au diamètre d'un cheveu (50 µm) ? (d) À 295 K, énergie thermique totale et plus petite fluctuation détectable (en J) ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) Fluctuation relative \(\sigma/\bar E \approx 1/\sqrt{N\nu}\) (cours 1) : \(10^{-9} = 1/\sqrt{N\nu}\) → \(N\nu \approx 10^{18}\) ddl.</li>
+      <li>(b) \(N = 10^{18}/6\) atomes occupant chacun \((10^{-10})^3 = 10^{-30}\) m³ : \(V = 1{,}7\times10^{-13}\) m³.</li>
+      <li>(c) \(V^{1/3} = 5{,}5\times10^{-5}\) m = 55 µm : la taille d'un cheveu.</li>
+      <li>(d) \(E = N\nu\,kT/2 = 10^{18}\times1{,}381\times10^{-23}\times295/2 = 2{,}0\times10^{-3}\) J ; fluctuation détectable \(10^{-9}E = 2\times10^{-12}\) J.</li>
+    </ol>
+    <p class="answer">(a) ~10¹⁸ ddl | (b) 1,7 × 10⁻¹³ m³ | (c) ≈ 55 µm | (d) 2 × 10⁻³ J et 2 × 10⁻¹² J</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c3-s7-29">
+  <header><span class="tag">Chap. 7, ex. 29, p. 133</span><span class="tag theme">Calcul de l'entropie</span><h4>Deux petits systèmes</h4></header>
+  <div class="enonce"><p>Deux petits systèmes en interaction ont \(\Omega_1 = 2\) et \(\Omega_2 = 4\). Calculer (a) \(\Omega_0\) ; (b) \(S_1\) et \(S_2\) ; (c) \(S_0\).</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p>(a) \(\Omega_0 = 8\). (b) \(S_1 = k\ln 2 = 0{,}96\times10^{-23}\) J/K, \(S_2 = k\ln 4 = 1{,}91\times10^{-23}\) J/K. (c) \(S_0 = k\ln 8 = 2{,}87\times10^{-23}\) J/K \(= S_1 + S_2\).</p>
+    <p class="answer">8 | 0,96 × 10⁻²³ et 1,91 × 10⁻²³ J/K | 2,87 × 10⁻²³ J/K</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c3-s7-32">
+  <header><span class="tag">Chap. 7, ex. 32, p. 134</span><span class="tag theme">Calcul de l'entropie</span><h4>Cinq petits systèmes</h4></header>
+  <div class="enonce"><p>Cinq petits systèmes en interaction ont \(\Omega_1 = 1\), \(\Omega_2 = 2\), \(\Omega_3 = 3\), \(\Omega_4 = 4\), \(\Omega_5 = 5\). (a) Nombre d'états du système combiné ? (b) \(S_1\) à \(S_5\) en unités de \(k\) ? (c) Calculer \(S_0\) de deux façons.</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p>(a) \(\Omega_0 = 1\times2\times3\times4\times5 = 120\). (b) \(S_i = k\ln i\) : \(0,\ 0{,}693k,\ 1{,}099k,\ 1{,}386k,\ 1{,}609k\). (c) \(S_0 = k\ln 120 = 4{,}79k = 6{,}6\times10^{-23}\) J/K ; la somme \(\sum k\ln i = k\ln(1\cdot2\cdot3\cdot4\cdot5)\) donne la même chose.</p>
+    <p class="answer">(a) 120 | (c) S₀ = 4,79 k = 6,6 × 10⁻²³ J/K</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c3-s7-33">
+  <header><span class="tag">Chap. 7, ex. 33, p. 134</span><span class="tag theme">Calcul de l'entropie</span><h4>Énergie augmentée de 1 %</h4></header>
+  <div class="enonce"><p>Un système possède \(6\times10^{24}\) degrés de liberté et son énergie interne augmente de 1 %. (a) De quel facteur le nombre d'états accessibles augmente-t-il ? (b) Quelle est l'augmentation d'entropie ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p>(a) \(\Omega\propto E^{N\nu/2}\) : \(\dfrac{\Omega_f}{\Omega_i} = (1{,}01)^{3\times10^{24}} = 10^{3\times10^{24}\times\log_{10}1{,}01} = 10^{1{,}3\times10^{22}}\). (b) \(\Delta S = k\ln(\Omega_f/\Omega_i) = k\times3\times10^{24}\times\ln(1{,}01) = 1{,}381\times10^{-23}\times2{,}985\times10^{22} = 0{,}41\) J/K.</p>
+    <p class="answer">(a) 10^(1,3 × 10²²) | (b) 0,41 J/K</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c3-s7-34">
+  <header><span class="tag">Chap. 7, ex. 34, p. 134</span><span class="tag theme">Calcul de l'entropie</span><h4>De l'entropie au nombre d'états</h4></header>
+  <div class="enonce"><p>Combien d'états quantiques sont accessibles à un système dont l'entropie vaut (a) 1 J/K ; (b) 42 J/K ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p>\(\Omega = e^{S/k}\). (a) \(e^{1/1{,}381\times10^{-23}} = e^{7{,}24\times10^{22}} = 10^{3{,}1\times10^{22}}\). (b) \(e^{42/1{,}381\times10^{-23}} = e^{3{,}04\times10^{24}} = 10^{1{,}3\times10^{24}}\).</p>
+    <p class="answer">(a) 10^(3,1 × 10²²) | (b) 10^(1,3 × 10²⁴)</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c3-s7-35">
+  <header><span class="tag">Chap. 7, ex. 35, p. 134</span><span class="tag theme">Équilibre et calcul de l'entropie</span><h4>Deux systèmes macroscopiques</h4></header>
+  <div class="enonce"><p>Deux systèmes en interaction ont une énergie totale \(E_0 = E_1 + E_2 = 64\) J. Le système 1 a \(2\times10^{24}\) ddl et le système 2 \(6\times10^{24}\). Leurs nombres d'états sont \(\Omega = (E/C)^{n/2}\) avec \(C = 10^{-35}\) J et \(n = N\nu\). (a) Valeur de \(E_1\) à l'équilibre ? (b) Entropies des systèmes individuels et du système combiné à l'équilibre ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(E_1 = \dfrac{n_1}{n_1+n_2}E_0 = \dfrac{2}{8}\times64 = 16\) J, \(E_2 = 48\) J.</li>
+      <li>(b) \(S_1 = k\dfrac{n_1}{2}\ln\dfrac{E_1}{C} = 1{,}381\times10^{-23}\times10^{24}\times\ln(1{,}6\times10^{36}) = 13{,}81\times83{,}4 = 1151\) J/K ; \(S_2 = 1{,}381\times10^{-23}\times3\times10^{24}\times\ln(4{,}8\times10^{36}) = 41{,}43\times84{,}5 = 3499\) J/K ; \(S_0 = S_1 + S_2 = 4650\) J/K.</li>
+    </ol>
+    <p class="answer">(a) 16 J | (b) 1151 J/K, 3499 J/K, 4650 J/K</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c3-s7-37">
+  <header><span class="tag">Chap. 7, ex. 37, p. 134</span><span class="tag theme">Calcul de l'entropie</span><h4>Un gaz monoatomique chauffé de 1 °C</h4></header>
+  <div class="enonce"><p>Gaz parfait monoatomique de \(10^{26}\) atomes. (a) Énergie interne à 27 °C ? (b) Si la température augmente de 1 °C, de quel facteur le nombre d'états augmente-t-il ? (c) Augmentation d'entropie ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(E = \frac32NkT = 1{,}5\times10^{26}\times1{,}381\times10^{-23}\times300 = 6{,}2\times10^5\) J.</li>
+      <li>(b) \(\Omega\propto E^{3N/2}\) : \(\left(\frac{301}{300}\right)^{1{,}5\times10^{26}} = 10^{1{,}5\times10^{26}\times1{,}446\times10^{-3}} = 10^{2{,}2\times10^{23}}\).</li>
+      <li>(c) \(\Delta S = k\times1{,}5\times10^{26}\times\ln(301/300) = 6{,}9\) J/K ; vérification : \(\Delta S \approx \Delta Q/T = \frac32Nk\times1/300 = 6{,}9\) J/K.</li>
+    </ol>
+    <p class="answer">(a) 6,2 × 10⁵ J | (b) 10^(2,2 × 10²³) | (c) 6,9 J/K</p>
+  </div></details>
+</article>
+
+<h3>Chapitre 8 - Entropie et interactions thermiques</h3>
+
+<article class="exo" data-exo-id="c3-s8-3">
+  <header><span class="tag">Chap. 8, ex. 3, p. 146</span><span class="tag theme">Calcul d'énergies à l'équilibre</span><h4>Deux petits systèmes</h4></header>
+  <div class="enonce"><p>Voir l'exercice à développement <a href="#dev-c3">D6</a> (résolu en classe).</p></div>
+</article>
+
+<article class="exo" data-exo-id="c3-s8-7">
+  <header><span class="tag">Chap. 8, ex. 7, p. 147</span><span class="tag theme">Entropie et chaleur</span><h4>Vingt joules à −20 °C</h4></header>
+  <div class="enonce"><p>(a) On ajoute 20 J de chaleur à un système à −20 °C : variation d'entropie ? (b) De quel facteur le nombre d'états accessibles augmente-t-il ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p>(a) \(\Delta S = \Delta Q/T = 20/253 = 0{,}079\) J/K. (b) \(\Omega_f/\Omega_i = e^{\Delta S/k} = e^{5{,}72\times10^{21}} = 10^{2{,}5\times10^{21}}\).</p>
+    <p class="answer">(a) 0,079 J/K | (b) 10^(2,5 × 10²¹)</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c3-s8-8">
+  <header><span class="tag">Chap. 8, ex. 8, p. 147</span><span class="tag theme">Entropie et chaleur</span><h4>L'océan Pacifique</h4></header>
+  <div class="enonce"><p>Voir l'exercice à développement <a href="#dev-c3">D7</a> (résolu en classe).</p></div>
+</article>
+
+<article class="exo" data-exo-id="c3-s8-10">
+  <header><span class="tag">Chap. 8, ex. 10, p. 147</span><span class="tag theme">Entropie, chaleur et changement d'état</span><h4>Un glaçon fond dans l'Atlantique</h4></header>
+  <div class="enonce"><p>Un glaçon de \(10^{-2}\) kg à 0 °C fond dans l'Atlantique (eau à 10 °C), puis l'eau de fonte se réchauffe jusqu'à 10 °C. Chaleur latente de fusion 333 J/g, chaleur spécifique 4,18 J/(g K). Variation d'entropie (a) de l'eau du glaçon ; (b) de l'océan ; (c) facteur de variation du nombre d'états du système combiné ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) Deux contributions : la fusion à 273 K puis le réchauffement de 273 à 283 K. \(\Delta S_{glace} = \dfrac{333\times10}{273} + 10\times4{,}18\,\ln\dfrac{283}{273} = 12{,}20 + 1{,}50 = 13{,}7\) J/K.</li>
+      <li>(b) L'océan cède \(Q = 3330 + 10\times4{,}18\times10 = 3748\) J à 283 K : \(\Delta S_{océan} = -3748/283 = -13{,}2\) J/K.</li>
+      <li>(c) \(\Delta S_{total} = +0{,}5\) J/K \(\gt 0\) (processus irréversible) ; \(\Omega_f/\Omega_i = e^{0{,}5/k} = e^{3{,}3\times10^{22}} = 10^{1{,}5\times10^{22}}\).</li>
+    </ol>
+    <p class="answer">(a) +13,7 J/K | (b) −13,2 J/K | (c) ≈ 10^(1,5 × 10²²)</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c3-s8-16">
+  <header><span class="tag">Chap. 8, ex. 16, p. 148</span><span class="tag theme">Chaleur spécifique</span><h4>Cent grammes d'eau</h4></header>
+  <div class="enonce"><p>100 g d'eau sont chauffés de 10 °C à 95 °C. Avec \(c = 4{,}19\) J/(g K), quelle est l'augmentation d'entropie de l'eau ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    \[\Delta S = \int_{283}^{368}\frac{mc\,dT}{T} = mc\ln\frac{368}{283} = 100\times4{,}19\times0{,}2627 = 110\ \text{J/K}\]
+    <p class="answer">ΔS = 110 J/K</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c3-s8-20">
+  <header><span class="tag">Chap. 8, ex. 20, p. 148</span><span class="tag theme">Travail et entropie</span><h4>Dilatation d'un millimètre cube</h4></header>
+  <div class="enonce"><p>Voir l'exercice à développement <a href="#dev-c3">D8</a> (résolu en classe).</p></div>
+</article>
+
+<article class="exo" data-exo-id="c3-s8-32">
+  <header><span class="tag">Chap. 8, ex. 32, p. 150</span><span class="tag theme">Travail et entropie</span><h4>De la vapeur à 600 °C</h4></header>
+  <div class="enonce"><p>1 m³ de vapeur est maintenu à 600 °C et 50 atm. De combien son volume doit-il augmenter pour que le nombre d'états accessibles soit multiplié par un milliard ?</p></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>À température (donc énergie interne) constante, la chaleur reçue égale le travail fourni \(p\Delta V\). Reliez \(\Delta S = k\ln 10^9\) à \(\Delta Q = T\Delta S\).</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>\(\Delta S = k\ln(10^9) = 1{,}381\times10^{-23}\times20{,}7 = 2{,}86\times10^{-22}\) J/K.</li>
+      <li>\(\Delta Q = T\Delta S = 873\times2{,}86\times10^{-22} = 2{,}5\times10^{-19}\) J.</li>
+      <li>\(\Delta E = 0\) → \(p\Delta V = \Delta Q\) → \(\Delta V = \dfrac{2{,}5\times10^{-19}}{50\times1{,}013\times10^5} = 4{,}9\times10^{-26}\) m³.</li>
+    </ol>
+    <p class="answer">ΔV ≈ 4,9 × 10⁻²⁶ m³ (le corrigé manuscrit du cours donne 2,47 × 10⁻²⁴ m³, ce qui correspond à une pression de 1 atm au lieu de 50 atm)</p>
+    <p class="small">Un milliard paraît énorme, mais c'est un facteur dérisoire pour un système macroscopique : il suffit d'une variation de volume de l'ordre du volume d'une molécule.</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c3-s8-37">
+  <header><span class="tag">Chap. 8, ex. 37, p. 151</span><span class="tag theme">Capacité thermique</span><h4>Chauffer 0,24 kg de 295 K à 296 K</h4></header>
+  <div class="enonce"><p>Calculer la variation d'entropie de 0,24 kg de chacune des substances suivantes chauffées de 295 K à 296 K (table 8.1) : (a) eau ; (b) or ; (c) marbre ; (d) bois.</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p>\(\Delta S = mc\ln(296/295) = 0{,}24\times c\times3{,}38\times10^{-3}\) :</p>
+    <table><tr><th>Substance</th><th>\(c\) (J/(kg K))</th><th>\(\Delta S\) (J/K)</th></tr><tr><td>Eau</td><td>4190</td><td>3,4</td></tr><tr><td>Or</td><td>126</td><td>0,10</td></tr><tr><td>Marbre</td><td>880</td><td>0,71</td></tr><tr><td>Bois</td><td>1800</td><td>1,5</td></tr></table>
+    <p class="answer">3,4 ; 0,10 ; 0,71 ; 1,5 J/K (le manuel arrondit le bois à 1,4 J/K)</p>
+    <p class="small">L'eau est le meilleur réservoir d'énergie : c'est pourquoi les variations de température journalières et saisonnières sont plus grandes à l'intérieur des terres que sur les côtes (exercice 38).</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c3-s8-46">
+  <header><span class="tag">Chap. 8, ex. 46, p. 152</span><span class="tag theme">Chaleur d'une réaction</span><h4>Réaction 2A + 2B → C + D</h4></header>
+  <div class="enonce"><p>On produit 1 mole de C à 300 K et pression atmosphérique par la réaction 2A + 2B → C + D. Les capacités thermiques molaires (J/(mol K)) valent \(C_A = 18{,}6\,(T/200)^{1/3}\), \(C_B = 15{,}7\,(T/200)^{1/3}\), \(C_C = 23{,}4\,(T/200)^{1/3}\), \(C_D = 39{,}7\,(T/200)^{1/3}\). Quelle chaleur est libérée ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>Pour \(C = a\,(T/200)^{1/3}\) : \(S(T) = \int_0^T\frac{C}{T'}dT' = \frac{a}{200^{1/3}}\int_0^T T'^{-2/3}dT' = 3a\left(\frac{T}{200}\right)^{1/3}\). À 300 K : \((300/200)^{1/3} = 1{,}145\), donc \(S = 3{,}434\,a\).</li>
+      <li>Bilan (2 moles de A et de B disparaissent, 1 mole de C et de D apparaissent) : \(\Delta S = 3{,}434\,(23{,}4 + 39{,}7 - 2\times18{,}6 - 2\times15{,}7) = 3{,}434\times(-5{,}5) = -18{,}9\) J/K.</li>
+      <li>\(\Delta Q = T\Delta S = 300\times(-18{,}9) = -5{,}67\times10^3\) J.</li>
+    </ol>
+    <p class="answer">ΔQ ≈ −5,7 kJ : réaction exothermique</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c3-s8-48">
+  <header><span class="tag">Chap. 8, ex. 48, p. 152</span><span class="tag theme">Entropie et changement d'état</span><h4>Sublimation de la glace sèche</h4></header>
+  <div class="enonce"><p>Le CO<sub>2</sub> (masse molaire 44 g) a une chaleur latente de sublimation de 25 200 J/mol à 194,6 K. Dans le solide, chaque molécule a 6 ddl ; dans la vapeur, 5. Le travail moyen fourni par molécule pendant la sublimation est \(p\upsilon = kT\). (a) Variation du niveau de référence \(u_0\) du solide au gaz ? (b) Variation d'entropie par gramme ?</p></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>Bilan d'énergie par mole : \(L = \Delta E + W\) avec \(E = N(u_0 + \nu kT/2)\) et \(W = N_AkT\) (le gaz repousse l'atmosphère). Dans le gaz, \(u_0 = 0\).</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(L = N_A\left[(0 + \tfrac52kT) - (u_{0,s} + 3kT)\right] + N_AkT\) → \(-u_{0,s} = \dfrac{L}{N_A} + \tfrac12kT - kT = 4{,}18\times10^{-20} - 1{,}34\times10^{-21} = 4{,}05\times10^{-20}\) J. \(\Delta u_0 = +0{,}25\) eV (de \(-0{,}25\) eV dans le solide à 0 dans le gaz).</li>
+      <li>(b) \(\Delta S = \dfrac{L}{T} = \dfrac{25200}{194{,}6} = 129{,}5\) J/(mol K), soit \(129{,}5/44 = 2{,}9\) J/(g K).</li>
+    </ol>
+    <p class="answer">(a) Δu₀ ≈ +0,25 eV | (b) 2,9 J/(g K)</p>
+    <p class="small">Même méthode que l'exercice 47 (fer), dont le manuel donne \(\Delta u_0 = +0{,}376\) eV et \(\Delta S = 0{,}136\) J/(g K).</p>
+  </div></details>
+</article>
+
+</div>
+
+</article>
+</main>
+<footer class="footer">ELE2307 - site d'étude personnel généré à partir des diapos du cours, des corrigés du professeur et du manuel de Stowe. Vérifiez toujours avec les documents officiels sur Moodle.</footer>
+<script defer src="assets/katex/katex.min.js"></script>
+<script defer src="assets/katex/contrib/auto-render.min.js"></script>
+<script defer src="assets/app.js?v=4"></script>
+<script defer src="assets/widgets.js?v=4"></script>
+<script defer src="assets/widgets2.js?v=4"></script>
+</body>
+</html>

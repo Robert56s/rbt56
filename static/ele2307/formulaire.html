@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Formulaire | ELE2307</title>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<link rel="stylesheet" href="assets/style.css?v=8">
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="index.html">ELE2307 <small>Thermodynamique statistique et semiconducteurs</small></a>
+  <nav>
+    <a href="index.html">Accueil</a>
+    <a href="cours1.html">Cours 1</a>
+    <a href="cours2.html">Cours 2</a>
+    <a href="cours3.html">Cours 3</a>
+    <a href="cours4.html">Cours 4</a>
+    <a href="cours5.html">Cours 5</a>
+    <a href="cours6.html">Cours 6</a>
+    <a href="formulaire.html">Formulaire</a>
+    <a href="errata.html">Errata</a>
+    <button class="theme-btn" type="button">Thème</button>
+  </nav>
+</header>
+
+<main class="layout">
+<aside class="toc"></aside>
+<article class="content">
+
+<div class="course-hero">
+  <div class="kicker">Formulaire ELE2307 - version commentée</div>
+  <h1>Formulaire par cours</h1>
+  <p class="meta">Même structure que le formulaire officiel distribué avec le cours (Notion → Formule → Condition d’emploi), enrichi des formules intermédiaires utiles en examen. Une section par cours, du cours 1 au cours 6.</p>
+  <p class="small">Astuce : <strong>Ctrl+P</strong> imprime cette page sans l’entête ni le sommaire. Pensez à vérifier que le formulaire officiel autorisé à l’examen contient bien ce que vous utilisez.</p>
+</div>
+
+<section class="form-section">
+<h2>Constantes physiques et formules utiles</h2>
+<table class="formulaire">
+  <tr><th class="notion">Nombre d’Avogadro \(N_A\)</th><td class="f">\(6{,}022\times10^{23}\) particules/mol</td><td class="rem">\(N = n\,N_A\) (\(n\) en moles)</td></tr>
+  <tr><th class="notion">Constante de Boltzmann \(k\)</th><td class="f">\(1{,}381\times10^{-23}\) J/K</td><td class="rem">\(R = N_Ak = 8{,}314\) J/(mol K)</td></tr>
+  <tr><th class="notion">Constante de Planck \(h\)</th><td class="f">\(6{,}626\times10^{-34}\) J s</td><td class="rem">\(\hbar = h/2\pi = 1{,}055\times10^{-34}\) J s</td></tr>
+  <tr><th class="notion">Charge élémentaire \(e\)</th><td class="f">\(1{,}602\times10^{-19}\) C</td><td class="rem">\(1\ \text{eV} = 1{,}602\times10^{-19}\) J</td></tr>
+  <tr><th class="notion">Températures et pressions</th><td class="f">\(0\ ^\circ\text{C} = 273\ \text{K}\)  ;  \(1\ \text{atm} = 101\,325\ \text{Pa}\)</td><td class="rem">Toujours des kelvins dans les formules</td></tr>
+  <tr><th class="notion">Exponentielle → puissance de 10</th><td class="f">\(e^{x} = 10^{\,0{,}4343\,x}\)  ;  \(\ln(1+\epsilon)\approx\epsilon\) pour \(\epsilon\) petit</td><td class="rem">Pour les très grands nombres : travailler avec \(\ln\) ou \(\log_{10}\) puis écrire \(10^{(\ldots)}\)</td></tr>
+</table>
+</section>
+
+<section class="form-section">
+<h2>Cours 1 - Statistique des systèmes</h2>
+<table class="formulaire">
+  <tr><th class="notion">Moyenne</th>
+    <td class="f"><p>\(\displaystyle\bar f = \sum_{i=1}^{n} p_i f_i\)</p>
+      <p>\(\overline{f+g} = \bar f + \bar g\)  ;  \(\overline{(cf)} = c\bar f\) pour \(c\in\mathbb R\)</p>
+      <p>\(\overline{fg} = \bar f\cdot\bar g\)</p>
+      <p>\(\bar n = pN\)</p></td>
+    <td class="rem"><p>\(p_i\) : probabilité de l’état \(i\), \(\sum p_i = 1\)</p><p>toujours vrai (linéarité)</p><p>pour des variables <em>indépendantes</em></p><p>nombre moyen d’éléments satisfaisant le critère, grand \(N\)</p></td></tr>
+  <tr><th class="notion">Critère unique</th>
+    <td class="f"><p>\(p + q = 1\)</p><p>Critères indépendants : \(P = P_1\,P_2\)</p></td>
+    <td class="rem">\(p\) : critère satisfait, \(q\) : non satisfait. Penser au complémentaire \(1-P\).</td></tr>
+  <tr><th class="notion">Dénombrement</th>
+    <td class="f"><p>\(\displaystyle C_N^n = \binom{N}{n} = \frac{N!}{n!\,(N-n)!}\)</p><p>\(\displaystyle A_N^n = \frac{N!}{(N-n)!} = N(N-1)\cdots(N-n+1)\)</p><p>\(N!\) permutations de \(N\) éléments distincts</p></td>
+    <td class="rem"><p>tirage <em>simultané</em> (l’ordre ne compte pas)</p><p>tirage <em>successif</em>, ordre compté (\(= n!\,C_N^n\))</p><p>\(0! = 1! = 1\)</p></td></tr>
+  <tr><th class="notion">Loi binomiale</th>
+    <td class="f">\(\displaystyle P_N(n) = \frac{N!}{n!\,(N-n)!}\,p^{\,n}q^{\,N-n}\)</td>
+    <td class="rem">exactement \(n\) éléments sur \(N\) satisfont le critère ; éléments indépendants</td></tr>
+  <tr><th class="notion">Critères multiples</th>
+    <td class="f">\(\displaystyle P_N(n_1,n_2,\ldots,n_m) = \frac{N!}{n_1!\,n_2!\cdots n_m!}\,p_1^{\,n_1}p_2^{\,n_2}\cdots p_m^{\,n_m}\)</td>
+    <td class="rem">critères mutuellement exclusifs ; \(n_1+\cdots+n_m = N\) et \(p_1+\cdots+p_m = 1\)</td></tr>
+  <tr><th class="notion">Formule de Stirling</th>
+    <td class="f"><p>\(\displaystyle m! \approx \sqrt{2\pi m}\left(\frac{m}{e}\right)^{m}\)</p><p>\(\ln(m!) \approx m\ln m - m + \tfrac12\ln(2\pi m)\)</p><p>\(m! \approx 10^{\,0{,}4343\,(m\ln m - m + \frac12\ln 2\pi m)}\)</p></td>
+    <td class="rem"><p>grands \(m\) (erreur &lt; 1 % dès \(m\ge10\))</p><p>forme simplifiée pour \(m\) énorme : \(\ln m!\approx m\ln m - m\), soit \(m!\approx(m/e)^m\)</p></td></tr>
+  <tr><th class="notion">Écart type</th>
+    <td class="f"><p>\(\displaystyle\sigma = \sqrt{\overline{(f-\bar f)^2}}\)  ;  \(\text{Variance} = \sigma^2 = \overline{f^2}-\bar f^{\,2}\)</p>
+      <p>\(\text{Variance}(f+g) = \text{Variance}(f)+\text{Variance}(g)\)</p>
+      <p>\(\sigma = \sqrt{Npq}\)  ;  \(\displaystyle\frac{\sigma}{\bar n} = \sqrt{\frac{q}{pN}}\propto\frac{1}{\sqrt N}\)</p></td>
+    <td class="rem"><p>définition générale</p><p>variables indépendantes (les variances s’additionnent, pas les \(\sigma\))</p><p>pour le critère unique ; fluctuation relative</p></td></tr>
+  <tr><th class="notion">Loi gaussienne</th>
+    <td class="f"><p>\(\displaystyle P_N(n) = \frac{1}{\sqrt{2\pi}\,\sigma}\,e^{-\frac{(n-\bar n)^2}{2\sigma^2}} = A\,e^{-B(n-\bar n)^2}\)</p><p>\(\displaystyle A = \frac{1}{\sqrt{2\pi}\sigma} = P_N(\bar n)\), &nbsp; \(\displaystyle B = \frac{1}{2\sigma^2}\)</p><p>\(p_\sigma\approx0{,}68\), \(p_{2\sigma}\approx0{,}95\), \(p_{3\sigma}\approx0{,}997\)</p></td>
+    <td class="rem"><p>approximation de la binomiale pour un très grand nombre d’éléments, avec \(\bar n = pN\), \(\sigma = \sqrt{Npq}\) ; aire totale = 1</p><p>probabilité d’être à moins de \(\sigma\), \(2\sigma\), \(3\sigma\) de la moyenne</p></td></tr>
+  <tr><th class="notion">Marche aléatoire</th>
+    <td class="f"><p>\(\overline{S_n} = n\,\bar s\) &nbsp;et&nbsp; \(\sigma_n = \sigma\sqrt n\)</p><p>\(\displaystyle p_n(L) = C_n^{\,k}\,p_d^{\,k}p_g^{\,n-k}\), \(k = \frac{L+n}{2}\)</p><p>Pas 3D de longueur \(a\), direction aléatoire : \(\bar s_z = 0\), \(\sigma_z = a/\sqrt3\)</p></td>
+    <td class="rem"><p>\(\bar s\), \(\sigma\) : moyenne et écart type d’<em>une seule</em> étape ; \(n\) étapes</p><p>pas de même longueur, \(L\) et \(n\) de même parité</p><p>projection sur un axe : \(\overline{\cos^2\theta} = 1/3\)</p></td></tr>
+</table>
+</section>
+
+<section class="form-section">
+<h2>Cours 2 - Énergie interne et états accessibles</h2>
+<table class="formulaire">
+  <tr><th class="notion">Formes d’énergie</th>
+    <td class="f"><p>\(u(x) = u_0 + \tfrac12\kappa x^2\)</p><p>\(\displaystyle\varepsilon_c = \frac{p^2}{2m} = \frac{p_x^2+p_y^2+p_z^2}{2m}\)  ;  \(\displaystyle\varepsilon_{r,i} = \frac{L_i^2}{2I_i}\)</p><p>\(\displaystyle\varepsilon = u_0 + \sum_{\text{ddl}}\beta\xi^2\), &nbsp; \(\displaystyle\varepsilon_{therm} = \sum_{\text{ddl}}\beta\xi^2\)</p></td>
+    <td class="rem"><p>potentielle près de l’équilibre (\(u_0\lt0\) si liée)</p><p>cinétique ; rotation (\(L\) moment cinétique, \(I\) moment d’inertie)</p><p>chaque terme \(\beta\xi^2\) = un degré de liberté</p></td></tr>
+  <tr><th class="notion">Degrés de liberté \(\nu\)</th>
+    <td class="f"><p>Gaz monoatomique : \(\nu = 3\) (translations)</p><p>Gaz diatomique : \(\nu = 5\) (3 translations + 2 rotations)</p><p>Solide : \(\nu = 6\) (3 cinétiques + 3 potentiels)</p></td>
+    <td class="rem">\(\nu = 3\) à très basse \(T\) et \(\nu = 7\) à très haute \(T\) (vibration) pour un gaz diatomique ; ddl gelés si \(kT\ll\) énergie du 1<sup>er</sup> état excité</td></tr>
+  <tr><th class="notion">Équipartition</th>
+    <td class="f"><p>\(\overline{\varepsilon_{\text{ddl}}} = \tfrac12kT\)  ;  \(\displaystyle\varepsilon_{therm} = \frac{\nu}{2}kT\)</p><p>\(\displaystyle E_{therm} = \frac{N\nu}{2}kT\)  ;  \(\displaystyle E = Nu_0 + \frac{N\nu}{2}kT\)</p><p>\(\displaystyle \frac{\overline{p^2}}{2m} = \frac32kT\ \Rightarrow\ p_{rms} = \sqrt{3mkT},\ v_{rms} = \sqrt{\frac{3kT}{m}}\)</p></td>
+    <td class="rem"><p>par ddl ; par particule</p><p>pour le système ; énergie interne totale</p><p>3 ddl de translation (estimation \(p_0\approx2p_{rms}\) dans les exercices)</p></td></tr>
+  <tr><th class="notion">Travail</th>
+    <td class="f"><p>\(\Delta W = F\Delta x\)  ;  \(\Delta W = p\Delta V\) &nbsp;(\(\displaystyle\Delta W = \int p\,dV\))</p><p>\(\Delta W = -\vec B\cdot\Delta\vec\mu\)  ;  \(\Delta W = -\vec E\cdot\Delta\vec p\)</p></td>
+    <td class="rem">travail fourni <em>par</em> le système ; \(\mu\) moment magnétique, \(p\) moment dipolaire électrique</td></tr>
+  <tr><th class="notion">1<sup>re</sup> loi de la thermodynamique</th>
+    <td class="f"><p>\(\Delta E = \Delta Q - \Delta W + \mu\Delta N\)</p><p>\(\Delta E_1 = \mu_1\Delta N\), \(\Delta E_2 = -\mu_2\Delta N\)</p></td>
+    <td class="rem">\(\Delta Q\) reçue, \(\Delta W\) fournie par le système, \(\Delta N\) reçues ; \(\mu\) potentiel chimique. Chaleur : conduction, radiation, convection</td></tr>
+  <tr><th class="notion">Nombre d’états</th>
+    <td class="f"><p>\(\Omega = \omega\times\omega\times\cdots = \omega^N\)</p><p>\(\displaystyle\Omega = \frac{\omega^N}{N!}\approx\left(\frac{e\omega}{N}\right)^N = \omega_c^{\,N}\), &nbsp; \(\displaystyle\omega_c = \frac{e\omega}{N}\)</p><p>\(\Omega(E,\Delta E) = g(E)\,\Delta E\)  ;  \(\Omega_{A+B} = \Omega_A\Omega_B\)</p></td>
+    <td class="rem"><p>particules distinctes</p><p>particules identiques (Stirling : \(N!\approx(N/e)^N\))</p><p>densité d’états \(g(E) = d\Omega/dE\) ; systèmes combinés</p></td></tr>
+  <tr><th class="notion">Équiprobabilité</th>
+    <td class="f">\(\displaystyle p_{\text{un état}} = \frac{1}{\Omega}\)  ;  \(\displaystyle P_i = \frac{\Omega_i}{\Omega}\)</td>
+    <td class="rem">à l’équilibre, tous les états accessibles sont équiprobables</td></tr>
+  <tr><th class="notion">Discrétisation (Heisenberg)</th>
+    <td class="f"><p>\(\Delta x\,\Delta p_x\ge h\)</p><p>\(\displaystyle\omega = \frac{[x][p_x]}{h}\) (1D)  ;  \(\displaystyle\omega = \frac{V_rV_p}{h^3}\) (3D)</p><p>\(\displaystyle\omega = \frac{V}{h^3}\iiint dp^3 = \frac{4\pi V}{3h^3}\left(p_2^3 - p_1^3\right)\)</p></td>
+    <td class="rem"><p>un état occupe au minimum \(h\) (1D) ou \(h^3\) (3D)</p><p>\(V_p = \tfrac43\pi p_0^3\) pour \(0\le p\le p_0\)</p></td></tr>
+  <tr><th class="notion">Nombre d’états accessibles</th>
+    <td class="f"><p>Gaz : \(\displaystyle\omega_c\propto\frac{V}{N}\left(\frac{E_{therm}}{N\nu}\right)^{\nu/2}\), &nbsp; \(\displaystyle\Omega = \omega_c^N\propto\left(\frac{V}{N}\right)^N\left(\frac{E_{therm}}{N\nu}\right)^{N\nu/2}\)</p><p>Solide : \(\displaystyle\omega_c\propto\left(\frac{E_{therm}}{N\nu}\right)^{\nu/2}\), &nbsp; \(\displaystyle\Omega = \omega_c^N\propto\left(\frac{E_{therm}}{N\nu}\right)^{N\nu/2}\)</p><p>\(g(E)\propto\) mêmes expressions ; avec \(E_{therm} = N\nu kT/2\) : \(g\propto(V/N)^N(kT/2)^{N\nu/2}\) (gaz)</p></td>
+    <td class="rem"><p>correction \(e/N\) seulement pour les gaz</p><p>solide : particules localisées, pas de facteur \(V\)</p></td></tr>
+  <tr><th class="notion">Comparer deux états du système</th>
+    <td class="f">\(\displaystyle\log_{10}\frac{\Omega_f}{\Omega_i} = \frac{N\nu}{2}\log_{10}\frac{E_f}{E_i} + N\log_{10}\frac{V_f}{V_i}\)</td>
+    <td class="rem">\(E_f/E_i = T_f/T_i\) si \(u_0\) constant ; réponse sous la forme \(10^{(\ldots)}\)</td></tr>
+</table>
+</section>
+
+<section class="form-section">
+<h2>Cours 3 - Entropie et interaction thermique</h2>
+<table class="formulaire">
+  <tr><th class="notion">Interaction entre systèmes</th>
+    <td class="f"><p>\(E_1 + E_2 = E_0\) ; \(\Omega_0 = \Omega_1\Omega_2 \propto E_1^{n_1/2}(E_0 - E_1)^{n_2/2}\)</p><p>\(\displaystyle E_1^* = \frac{n_1}{n_1+n_2}E_0\)</p></td>
+    <td class="rem">\(n = N\nu\) : ddl de chaque système ; répartition la plus probable (maximum de \(\Omega_0\)), pic de largeur relative \(\propto 1/\sqrt{n_1+n_2}\)</td></tr>
+  <tr><th class="notion">Entropie</th>
+    <td class="f"><p>\(S = k\ln\Omega\) ; \(S_0 = S_1 + S_2\)</p><p>\(\displaystyle\left(\frac{\partial S}{\partial V}\right)_{E,N} = \frac{p}{T}\) ; \(\displaystyle\left(\frac{\partial S}{\partial N}\right)_{E,V} = -\frac{\mu}{T}\) ; \(dQ = T\,dS\)</p></td>
+    <td class="rem">additive car \(\Omega_0 = \Omega_1\Omega_2\) ; dérivées issues de \(dS = dE/T + (p/T)dV - (\mu/T)dN\) ; \(dQ = TdS\) à \(V\), \(N\) constants</td></tr>
+  <tr><th class="notion">2<sup>e</sup> loi de la thermodynamique</th>
+    <td class="f">\(\Delta\Omega \ge 0\) ; \(\Delta S_0 \ge 0\)</td>
+    <td class="rem">système isolé ; maximum à l'équilibre, variations nulles</td></tr>
+  <tr><th class="notion">Définition de la température</th>
+    <td class="f">\(\displaystyle\left(\frac{\partial S}{\partial E}\right)_{V,N} = \frac{1}{T}\)</td>
+    <td class="rem">équilibre thermique \(dS_0 = 0 \Leftrightarrow T_1 = T_2\) ; la chaleur va du chaud vers le froid</td></tr>
+  <tr><th class="notion">Énergie thermique (équipartition)</th>
+    <td class="f">\(\displaystyle\frac{E_{therm}}{N\nu} = \frac12kT\) ; \(\displaystyle E_{therm} = \frac{N\nu}{2}kT\)</td>
+    <td class="rem">démontré avec \(1/T = dS/dE\) sur \(\Omega\propto E_{therm}^{N\nu/2}\)</td></tr>
+  <tr><th class="notion">Nombre d'états et chaleur ou entropie</th>
+    <td class="f"><p>\(\displaystyle\Delta S = S_f - S_i = k\ln\Omega_f - k\ln\Omega_i = k\ln\frac{\Omega_f}{\Omega_i}\)</p><p>\(\displaystyle\frac{\Omega_f}{\Omega_i} = e^{\Delta S/k} = e^{\Delta Q/kT}\)</p></td>
+    <td class="rem">\(T\) constante pendant l'échange ; \(e^x = 10^{0{,}4343x}\)</td></tr>
+  <tr><th class="notion">Capacité thermique</th>
+    <td class="f"><p>\(\displaystyle C_y = \left(\frac{dQ}{dT}\right)_y\) ; molaire \(C = C_y/n\) ; chaleur spécifique \(c = C_y/m\)</p><p>\(\displaystyle\Delta S = \int\frac{C\,dT}{T} = m\,c\ln\frac{T_f}{T_i}\) ; \(\displaystyle\Delta S_{phase} = \frac{Q_{latente}}{T_{phase}}\)</p></td>
+    <td class="rem">\(y = p\) (pression constante) ou \(V\) ; \(c\) supposée constante ; table 8.1 (eau 4,19 kJ/(kg K))</td></tr>
+  <tr><th class="notion">Loi des gaz parfaits</th>
+    <td class="f">\(pV = NkT\) ; \(pV = nRT\) (forme molaire)</td>
+    <td class="rem">\(R = N_Ak = 8{,}314\) J/(mol K) ; obtenue de \((\partial S/\partial V)_{E,N} = p/T\)</td></tr>
+  <tr><th class="notion">Capacités d'un gaz parfait</th>
+    <td class="f">\(\displaystyle C_V = \frac{\nu}{2}R\) ; \(C_p = C_V + R\) ; \(\displaystyle\gamma = \frac{C_p}{C_V} = \frac{\nu+2}{\nu}\)</td>
+    <td class="rem">par mole ; chap. 8, ex. 41</td></tr>
+  <tr><th class="notion">3<sup>e</sup> loi de la thermodynamique</th>
+    <td class="f"><p>\(S(T = 0\ \text{K}) = 0\) J/K</p><p>\(\displaystyle S(T) = \int_0^T\frac{dQ}{T'} = \int_0^T\frac{C_p(T')\,dT'}{T'}\)</p></td>
+    <td class="rem">\(\Omega = 1\) à 0 K ; \(C_p \to 0\) quand \(T\to0\) ; ex. \(C = a\sqrt T \Rightarrow S = 2a\sqrt T\)</td></tr>
+  <tr><th class="notion">Chaleur d'une réaction</th>
+    <td class="f">\(\Delta S = S_{produits} - S_{réactifs}\) ; \(\Delta Q = T\,\Delta S\)</td>
+    <td class="rem">à \(T\) constante ; \(\Delta Q \lt 0\) : exothermique</td></tr>
+</table>
+</section>
+
+<section class="form-section">
+<h2>Cours 4 - Les processus thermodynamiques</h2>
+<table class="formulaire">
+  <tr><th class="notion">Coefficients</th>
+    <td class="f">\(\displaystyle\kappa = -\frac1V\left(\frac{\partial V}{\partial p}\right)_T\) (compressibilité isotherme) ; \(\displaystyle\beta = \frac1V\left(\frac{\partial V}{\partial T}\right)_p\) (expansion thermique)</td>
+    <td class="rem">gaz parfait : \(\beta = 1/T\), \(\kappa = 1/p\)</td></tr>
+  <tr><th class="notion">Dérivées partielles (processus non diffusifs)</th>
+    <td class="f">
+      <p>\(\displaystyle\left(\frac{\partial S}{\partial T}\right)_p = \frac{C_p}{T}\) ; \(\displaystyle\left(\frac{\partial S}{\partial V}\right)_T = \frac{\beta}{\kappa}\) ; \(\displaystyle\left(\frac{\partial T}{\partial V}\right)_S = -\frac{T\beta}{C_V\kappa}\)</p>
+      <p>\(\displaystyle\left(\frac{\partial S}{\partial T}\right)_V = \frac{C_V}{T}\) ; \(\displaystyle\left(\frac{\partial S}{\partial V}\right)_p = \frac{C_p}{TV\beta}\) ; \(\displaystyle\left(\frac{\partial T}{\partial V}\right)_p = \frac{1}{V\beta}\)</p>
+      <p>\(\displaystyle\left(\frac{\partial S}{\partial p}\right)_T = -V\beta\) ; \(\displaystyle\left(\frac{\partial T}{\partial p}\right)_S = \frac{TV\beta}{C_p}\) ; \(\displaystyle\left(\frac{\partial p}{\partial V}\right)_S = -\frac{C_p}{VC_V\kappa}\)</p>
+      <p>\(\displaystyle\left(\frac{\partial S}{\partial p}\right)_V = \frac{C_V\kappa}{T\beta}\) ; \(\displaystyle\left(\frac{\partial T}{\partial p}\right)_V = \frac{\kappa}{\beta}\) ; \(\displaystyle\left(\frac{\partial p}{\partial V}\right)_T = -\frac{1}{V\kappa}\)</p>
+    </td>
+    <td class="rem">table 11.1 du manuel ; \(C_p\), \(C_V\) du système entier ; choisir la dérivée dont la variable fixée est celle du processus</td></tr>
+  <tr><th class="notion">Processus isobares</th>
+    <td class="f"><p>\(dE = (C_p - pV\beta)\,dT\)</p><p>gaz parfait : \(W = p\Delta V = nR\Delta T\) ; \(Q = nC_p\Delta T\) ; \(\Delta E = nC_V\Delta T\) ; \(\displaystyle\Delta S = nC_p\ln\frac{T_f}{T_i}\) ; \(\displaystyle\frac{T_f}{T_i} = \frac{V_f}{V_i}\)</p></td>
+    <td class="rem">\(dp = 0\), \(dN = 0\)</td></tr>
+  <tr><th class="notion">Processus isothermes</th>
+    <td class="f"><p>\(\displaystyle dE = \left(\frac{T\beta}{\kappa} - p\right)dV\) ; \(\displaystyle dE = \left(T - \frac{p\kappa}{\beta}\right)dS\)</p><p>gaz parfait : \(\Delta E = 0\) ; \(\displaystyle Q = W = nRT\ln\frac{V_f}{V_i}\) ; \(\displaystyle\Delta S = nR\ln\frac{V_f}{V_i}\) ; \(\displaystyle\frac{V_f}{V_i} = \frac{p_i}{p_f}\)</p></td>
+    <td class="rem">\(dT = 0\), \(dN = 0\)</td></tr>
+  <tr><th class="notion">Processus isochores</th>
+    <td class="f">\(W = 0\) ; \(Q = \Delta E = nC_V\Delta T\) ; \(\displaystyle\Delta S = nC_V\ln\frac{T_f}{T_i}\) ; \(\displaystyle\frac{T_f}{T_i} = \frac{p_f}{p_i}\)</td>
+    <td class="rem">\(dV = 0\) ; gaz parfait</td></tr>
+  <tr><th class="notion">Processus adiabatiques</th>
+    <td class="f"><p>\(\displaystyle\frac{dT}{T} = \frac{V\beta}{C_p}dp\) ; \(\displaystyle\frac{dT}{T} = -\frac{\beta}{\kappa C_V}dV\) ; \(\displaystyle\frac{dV}{V} = -\frac{\kappa C_V}{C_p}dp\)</p><p>\(pV^\gamma = \) cste où \(\displaystyle\gamma = \frac{\nu+2}{\nu}\) ; \(TV^{\gamma-1} = \) cste ; \(T\,p^{1/\gamma-1} = \) cste</p><p>\(Q = 0\) ; \(\Delta S = 0\) ; \(\displaystyle W = -\Delta E = \frac{p_iV_i - p_fV_f}{\gamma-1} = nC_V(T_i - T_f)\)</p></td>
+    <td class="rem">\(dQ = 0\) donc \(dS = 0\) ; \(T\uparrow \Rightarrow p\uparrow\), \(T\uparrow \Rightarrow V\downarrow\), \(V\uparrow \Rightarrow p\downarrow\) ; gaz parfait pour les formules en \(\gamma\)</td></tr>
+  <tr><th class="notion">Détente libre</th>
+    <td class="f">\(\displaystyle\Delta T = \left(\frac{p\kappa - T\beta}{\kappa C_V}\right)\Delta V\)</td>
+    <td class="rem">\(\Delta E = 0\), \(\Delta W = 0\) ; \(= 0\) pour un gaz parfait, refroidit un gaz réel ; \(\Delta S \gt 0\)</td></tr>
+  <tr><th class="notion">Conduction thermique</th>
+    <td class="f"><p>\(\displaystyle\frac{\Delta Q}{\Delta t} = -kA\frac{\Delta T}{\Delta x}\) ; \(\displaystyle j_Q = -k\frac{\Delta T}{\Delta x}\)</p><p>Résistance thermique \(\displaystyle R = \frac{\Delta x}{kA}\) ; \(\displaystyle\dot Q = \frac{\Delta T}{R}\) ; série \(R = \sum R_i\) ; parallèle \(\displaystyle\frac1R = \sum\frac1{R_i}\)</p></td>
+    <td class="rem">\(k\) en W/(m K) (table 12.1 : cuivre 380, verre 0,95, air 0,023) ; \(R\) en K/W</td></tr>
+  <tr><th class="notion">Équation de la chaleur</th>
+    <td class="f"><p>\(\displaystyle\frac{\partial E}{\partial t} = -A\frac{\partial j_Q}{\partial x}\Delta x\) ou \(\displaystyle\frac{\partial\rho_E}{\partial t} = -\frac{\partial j_Q}{\partial x}\)</p><p>\(\displaystyle\frac{\partial^2T}{\partial x^2} = \frac1K\frac{\partial T}{\partial t}\) où \(\displaystyle K = \frac{k}{\rho_m c}\)</p></td>
+    <td class="rem">\(d\rho_E = \rho_m c\,dT\) ; \(K\) : diffusivité (m²/s) ; étalement \(\sim\sqrt{Kt}\), temps \(\sim L^2/K\)</td></tr>
+</table>
+</section>
+
+<section class="form-section">
+<h2>Cours 5 - Les machines thermiques</h2>
+<table class="formulaire">
+  <tr><th class="notion">Bilan d'un cycle</th>
+    <td class="f">\(Q_h = W + Q_c\) ; \(\displaystyle W = \oint p\,dV\) ; \(\displaystyle Q = \oint T\,dS\) ; \(Q_{net} = W_{net}\)</td>
+    <td class="rem">aires intérieures des diagrammes p-V et T-S ; \(\Sigma\Delta E = 0\), \(\Sigma\Delta S = 0\) sur un cycle</td></tr>
+  <tr><th class="notion">Rendement d'un moteur</th>
+    <td class="f">\(\displaystyle e = \frac{W}{Q_h} = \frac{Q_h - Q_c}{Q_h}\)</td>
+    <td class="rem">réfrigérateur : \(e = Q_c/W\) ; pompe à chaleur : \(Q_h/W\)</td></tr>
+  <tr><th class="notion">Table 13.1 (gaz parfait, \(n\) moles)</th>
+    <td class="f">
+      <table>
+        <tr><th></th><th>Isobare</th><th>Isochore</th><th>Adiabatique</th><th>Isotherme</th></tr>
+        <tr><td>\(\Delta E\)</td><td>\(nC_V\Delta T\)</td><td>\(nC_V\Delta T\)</td><td>\(nC_V\Delta T\)</td><td>0</td></tr>
+        <tr><td>\(W\)</td><td>\(nR\Delta T\)</td><td>0</td><td>\(-nC_V\Delta T\)</td><td>\(nRT\ln(V_f/V_i)\)</td></tr>
+        <tr><td>\(Q\)</td><td>\(nC_p\Delta T\)</td><td>\(nC_V\Delta T\)</td><td>0</td><td>\(nRT\ln(V_f/V_i)\)</td></tr>
+        <tr><td>\(\Delta S\)</td><td>\(nC_p\ln(T_f/T_i)\)</td><td>\(nC_V\ln(T_f/T_i)\)</td><td>0</td><td>\(nR\ln(V_f/V_i)\)</td></tr>
+      </table>
+    </td>
+    <td class="rem">\(pV = nRT\), \(C_V = \frac{\nu}{2}R\), \(C_p = C_V + R\), \(\gamma = (\nu+2)/\nu\) ; adiabatique \(W = (p_iV_i - p_fV_f)/(\gamma-1)\)</td></tr>
+  <tr><th class="notion">Rendement de Carnot</th>
+    <td class="f"><p>\(\displaystyle e_{Carnot} = \frac{Q_h - Q_c}{Q_h} = 1 - \frac{Q_c}{Q_h} = 1 - \frac{T_c}{T_h}\)</p><p>Pour un cycle de Carnot \(\displaystyle\frac{Q_h}{T_h} = \frac{Q_c}{T_c}\)</p></td>
+    <td class="rem">isotherme \(T_h\), adiabatique, isotherme \(T_c\), adiabatique ; réversible (\(\Delta S = 0\)) ; limite supérieure de tout moteur</td></tr>
+  <tr><th class="notion">Rendement de Otto</th>
+    <td class="f">\(\displaystyle e_{essence} = 1 - \frac{T_c}{T_h} = 1 - \frac{1}{(V_{max}/V_{min})^{\gamma-1}}\)</td>
+    <td class="rem">\(TV^{\gamma-1} = \) cste sur les adiabatiques ; \(V_{max}/V_{min} = 8\), \(\gamma = 1{,}4\) : 0,56 théorique, 0,15 à 0,20 réel</td></tr>
+  <tr><th class="notion">Travail de deux isothermes</th>
+    <td class="f">\(\displaystyle W = nR\,(T_h - T_c)\ln\frac{V_{max}}{V_{min}}\)</td>
+    <td class="rem">linéaire en \(\Delta T\), logarithmique en rapport de volumes</td></tr>
+</table>
+</section>
+
+<section class="form-section">
+<h2>Cours 6 - Gestion de la chaleur dans les systèmes électroniques</h2>
+<table class="formulaire">
+  <tr><th class="notion">Loi de Fourier</th>
+    <td class="f">\(\displaystyle\dot Q_{cond} = kA\frac{T_H - T_B}{L} = \frac{T_H - T_B}{R_{cond}}\) où \(\displaystyle R_{cond} = \frac{L}{kA}\)</td>
+    <td class="rem">1D, régime permanent, \(k\) constante, sans source ; \(k\) en W/(m K)</td></tr>
+  <tr><th class="notion">Loi de Newton</th>
+    <td class="f">\(\displaystyle\dot Q_{conv} = hA(T_H - T_B) = \frac{T_H - T_B}{1/(hA)} = \frac{T_H - T_B}{R_{conv}}\) où \(\displaystyle R_{conv} = \frac{1}{hA}\)</td>
+    <td class="rem">\(h\) en W/(m² K), dépend du fluide, de la géométrie et de l'écoulement (ordre de 10)</td></tr>
+  <tr><th class="notion">Transfert thermique par rayonnement</th>
+    <td class="f">\(\dot Q_{rad} = \varepsilon\,\sigma\,A\,(T_H^4 - T_B^4)\)</td>
+    <td class="rem">\(\sigma = 5{,}67\times10^{-8}\) W/(m² K⁴) ; \(0 \le \varepsilon \le 1\) ; \(T\) en K ; négligeable en électronique</td></tr>
+  <tr><th class="notion">Réseaux de résistances</th>
+    <td class="f"><p>Série : \(R_{total} = R_{conv,1} + R_{cond,1} + \cdots + R_{conv,2}\)</p><p>Parallèle : \(\displaystyle\frac{1}{R_{total}} = \frac{1}{R_1} + \frac{1}{R_2}\)</p><p>\(\displaystyle\dot Q = \frac{T_i - T_j}{R_{total,\,i-j}}\)</p></td>
+    <td class="rem">même flux en série, même \(\Delta T\) en parallèle ; composite = groupes série et parallèle</td></tr>
+  <tr><th class="notion">Pour une convection naturelle</th>
+    <td class="f">
+      <table>
+        <tr><th>Écoulement</th><th>Air</th><th>Eau</th></tr>
+        <tr><td>Laminaire</td><td>\(\displaystyle h = 1{,}4\left(\frac{T_s - T_\infty}{L}\right)^{1/4}\)</td><td>\(\displaystyle h = 43{,}7\left(\frac{T_s - T_\infty}{L}\right)^{1/4}\)</td></tr>
+        <tr><td>Turbulent</td><td>\(h = 1{,}1\,(T_s - T_\infty)^{1/3}\)</td><td>\(h = 51{,}6\,(T_s - T_\infty)^{1/3}\)</td></tr>
+      </table>
+    </td>
+    <td class="rem">plaque de longueur \(L\) à \(T_s\) dans un fluide au repos à \(T_\infty\) ; poussée d'Archimède</td></tr>
+  <tr><th class="notion">Pour une convection forcée</th>
+    <td class="f">
+      <table>
+        <tr><th>Écoulement</th><th>Air</th></tr>
+        <tr><td>Laminaire</td><td>\(\displaystyle h = 3{,}9\left(\frac{V_\infty}{L}\right)^{1/2}\)</td></tr>
+        <tr><td>Turbulent</td><td>\(\displaystyle h = 5{,}5\left(\frac{V_\infty^4}{L}\right)^{1/5}\)</td></tr>
+      </table>
+    </td>
+    <td class="rem">air de vitesse \(V_\infty\) ; identifier le régime avant de calculer \(h\)</td></tr>
+  <tr><th class="notion">Nombre de Reynolds</th>
+    <td class="f">\(\displaystyle Re = \frac{VL}{\nu}\)</td>
+    <td class="rem">\(\nu\) : viscosité cinématique ; \(Re \lt 100\) laminaire, \(Re \gt 2000\) turbulent (cours)</td></tr>
+  <tr><th class="notion">Refroidir</th>
+    <td class="f">\(\dot Q_{conv} = hA(T_H - T_B)\) : augmenter \(A\), diminuer \(T_B\), augmenter \(h\)</td>
+    <td class="rem">dissipateur (ailettes), fluide froid, ventilateur / turbulence</td></tr>
+</table>
+</section>
+
+</article>
+</main>
+<footer class="footer">ELE2307 - formulaire commenté. Reportez-vous au formulaire officiel pour ce qui est autorisé en examen.</footer>
+<script defer src="assets/katex/katex.min.js"></script>
+<script defer src="assets/katex/contrib/auto-render.min.js"></script>
+<script defer src="assets/app.js?v=4"></script>
+</body>
+</html>

@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cours 1 - Statistique des systèmes | ELE2307</title>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<link rel="stylesheet" href="assets/style.css?v=8">
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="index.html">ELE2307 <small>Thermodynamique statistique et semiconducteurs</small></a>
+  <nav>
+    <a href="index.html">Accueil</a>
+    <a href="cours1.html">Cours 1</a>
+    <a href="cours2.html">Cours 2</a>
+    <a href="cours3.html">Cours 3</a>
+    <a href="cours4.html">Cours 4</a>
+    <a href="cours5.html">Cours 5</a>
+    <a href="cours6.html">Cours 6</a>
+    <a href="formulaire.html">Formulaire</a>
+    <a href="errata.html">Errata</a>
+    <button class="theme-btn" type="button">Thème</button>
+  </nav>
+</header>
+
+<main class="layout">
+<aside class="toc"></aside>
+<article class="content">
+
+<div class="course-hero">
+  <div class="kicker">Cours 1 - Chapitre 1 du cours</div>
+  <h1>La statistique des systèmes à petit et grand nombre d’éléments</h1>
+  <p class="meta">Manuel (Stowe, <em>TSM</em>) : chapitres 2 et 3 | Diapos « Cours 1 » (50 pages) | Classe d’exercices du 3 septembre</p>
+  <p><span class="pill accent">Moyenne</span><span class="pill accent">Loi binomiale</span><span class="pill accent">Critères multiples</span><span class="pill accent">Écart type</span><span class="pill accent">Marche aléatoire</span><span class="pill accent">Stirling</span><span class="pill accent">Gaussienne</span></p>
+  <p class="small">Parcours conseillé : lire la théorie en jouant avec les démonstrations interactives → faire le quiz → résoudre les exercices à développement <strong>sur papier</strong> avant d’ouvrir les corrigés → attaquer les exercices suggérés du manuel.</p>
+</div>
+
+<h2>0. Pourquoi de la statistique en thermodynamique ?</h2>
+<p>Un verre d’eau contient environ \(10^{24}\) molécules ; une salle, \(10^{28}\) molécules d’air. Suivre chaque molécule est impossible, mais ce n’est pas nécessaire : <strong>le comportement du groupe est beaucoup plus prévisible que celui d’un individu</strong>, exactement comme la trajectoire d’un banc de poissons est plus facile à prévoir que celle d’un seul poisson.</p>
+<p>Ce premier cours construit les outils qui servent dans tout le reste du cours : la <strong>valeur moyenne</strong>, la <strong>probabilité</strong> qu’un certain nombre d’éléments satisfassent un critère (<strong>loi binomiale</strong>, <strong>critères multiples</strong>), puis le passage aux <strong>grands systèmes</strong> (moyenne \(\bar n = pN\), écart type \(\sigma=\sqrt{Npq}\), <strong>marche aléatoire</strong>, <strong>formule de Stirling</strong> et <strong>distribution gaussienne</strong>). Les chapitres suivants (énergie interne, nombre d’états, entropie) reposent entièrement sur ces idées.</p>
+
+<h2>1. États d’un système et univers</h2>
+<div class="box def"><span class="label">Définitions</span>
+<ul>
+  <li>Un <strong>système</strong> est un ensemble d’<strong>éléments</strong> (pièces, dés, molécules, spins...).</li>
+  <li>Chaque élément est caractérisé par son <strong>état</strong> : la seule information pertinente pour le problème (pile ou face ; le nombre de points ; « dans le tiers gauche de la salle » ou non...). Les autres caractéristiques (couleur de la pièce, etc.) sont ignorées.</li>
+  <li>L’<strong>état du système</strong> est déterminé par l’état de chacun de ses éléments.</li>
+  <li>L’ensemble de tous les états possibles s’appelle l’<strong>univers</strong>, noté \(\Omega\). Pour une variable aléatoire, l’univers est l’ensemble des résultats possibles.</li>
+</ul>
+</div>
+<div class="box ex"><span class="label">Exemple</span>
+<p>On joue à pile ou face avec trois pièces. L’état de chaque pièce est P ou F ; l’état du système est PPP, PPF, PFP, FPP, PFF, FPF, FFP ou FFF : l’univers compte \(2^3 = 8\) états. Cette idée « nombre d’états du système = produit des nombres d’états des éléments » reviendra au cours 2 (\(\Omega=\omega^N\)).</p>
+</div>
+
+<h2>2. Valeur moyenne</h2>
+<div class="formula"><div class="title">Définition de la moyenne (espérance)</div>
+\[\bar f = \sum_{i=1}^{n} p_i\, f_i\]
+<div class="cond">Si \(f\) possède \(n\) états de valeurs \(f_i\), chacun de probabilité \(p_i\) (avec \(\sum_i p_i = 1\)). En théorie des jeux on parle d’<em>espérance</em>, notée \(E(f)\) : « combien puis-je espérer gagner en moyenne ? »</div>
+</div>
+<div class="box ex"><span class="label">Exemples (diapos 6-7)</span>
+<p><strong>Pile ou face</strong> avec \(f_P = 1\) et \(f_F = 0\), pièce parfaite (\(p_P=p_F=\tfrac12\)) : \(\bar f = \tfrac12\times 1 + \tfrac12 \times 0 = \tfrac12\).</p>
+<p><strong>Dé parfait</strong>, \(f\) = nombre de points : \(\bar f = \sum_{i=1}^{6}\tfrac16\, i = \tfrac{21}{6} = 3{,}5\). Remarquez que la moyenne n’est pas une valeur atteignable : c’est une valeur <em>moyenne sur un grand nombre de lancers</em>.</p>
+</div>
+<div class="formula"><div class="title">Propriétés de la moyenne</div>
+\[\overline{f+g} = \bar f + \bar g \qquad\qquad \overline{(cf)} = c\,\bar f \quad (c\in\mathbb R)\]
+\[\overline{fg} = \bar f \cdot \bar g \quad \text{seulement si } f \text{ et } g \text{ sont statistiquement indépendantes}\]
+<div class="cond">La première propriété est toujours vraie (linéarité). La troisième se démontre en écrivant \(\overline{fg}=\sum_{i,j} P_i W_j f_i g_j = \big(\sum_i P_i f_i\big)\big(\sum_j W_j g_j\big)\), ce qui suppose que la probabilité combinée est le produit \(P_iW_j\).</div>
+</div>
+<div class="box ex"><span class="label">Exemple</span>
+<p>Deux dés indépendants : moyenne du produit des points \(\overline{n_1 n_2} = \bar n_1\,\bar n_2 = 3{,}5\times 3{,}5 = 12{,}25\). Moyenne de la somme : \(\overline{n_1+n_2} = 7\). (Exercices 31 et 32 du chapitre 2 vérifient ces résultats « à la main » sur les 36 configurations.)</p>
+</div>
+<div class="widget" data-widget="mean-die"></div>
+
+<h2>3. Détermination de la probabilité : cas du critère unique</h2>
+<h3>3.1 Un critère, deux issues : \(p + q = 1\)</h3>
+<div class="formula"><div class="title">Critère unique</div>
+\[p + q = 1\]
+<div class="cond">\(p\) : probabilité que le critère soit <em>satisfait</em> ; \(q = 1-p\) : probabilité qu’il ne le soit <em>pas</em>. Le système satisfait ou ne satisfait pas le critère, il n’y a pas de troisième possibilité.</div>
+</div>
+<div class="box ex"><span class="label">Exemples (diapos 9-10)</span>
+<ul>
+  <li>Obtenir face : \(p = \tfrac12\), \(q = \tfrac12\). Obtenir un six : \(p = \tfrac16\), \(q=\tfrac56\).</li>
+  <li>Deux dés : probabilité d’obtenir deux six \(= p_1p_2 = \tfrac1{36}\) (dés indépendants → on multiplie) ; de n’obtenir aucun six \(= q_1 q_2 = \tfrac{25}{36}\) ; d’obtenir <em>exactement</em> un six \(= 1 - \tfrac1{36} - \tfrac{25}{36} = \tfrac{10}{36}\) (le complémentaire des deux autres cas).</li>
+</ul>
+</div>
+<div class="box tip"><span class="label">Conseil du cours pour les problèmes de probabilités</span>
+<p>Les problèmes de statistique sont généralement simples <em>si on formalise bien le problème</em>. Avant de calculer, prenez le temps d’identifier : la <strong>dépendance</strong> des variables, le <strong>nombre de variables</strong>, s’il s’agit d’un <strong>critère unique</strong>, et si la réponse n’est pas plus simple en passant par le <strong>complémentaire</strong> (\(q = 1-p\)) d’un cas simple.</p>
+</div>
+
+<h3>3.2 Compter les combinaisons : le coefficient binomial</h3>
+<p>Pile ou face avec trois pièces : quelle est la probabilité d’obtenir deux faces et un pile ? Chaque configuration précise (FFP, FPF ou PFF) a la probabilité \(p^2 q = \tfrac18\), et il y a <strong>trois</strong> façons d’obtenir la combinaison demandée : \(P = 3p^2q = \tfrac38\). Il faut donc savoir compter : dans un ensemble de \(N\) éléments, combien de combinaisons de \(n \le N\) éléments existe-t-il ?</p>
+<div class="formula"><div class="title">Coefficient binomial (tirage simultané, l’ordre ne compte pas)</div>
+\[C_N^n = \binom{N}{n} = \frac{N!}{n!\,(N-n)!}\qquad \text{où } N! = N\times(N-1)\times\cdots\times 2\times 1,\quad 0! = 1! = 1\]
+<div class="cond">\(C_N^n\) est le nombre de façons de choisir \(n\) éléments parmi \(N\) ; c’est aussi le nombre de combinaisons où exactement \(n\) éléments satisfont le critère.</div>
+</div>
+<div class="box warn"><span class="label">Attention : tirage simultané ≠ tirage successif</span>
+<p>10 jetons différents dans un chapeau. On en tire 3 <strong>simultanément</strong> : \(C_{10}^3 = \dfrac{10!}{3!\,7!} = 120\) combinaisons. On les tire <strong>l’un après l’autre</strong> en tenant compte de l’ordre : \(10\times 9\times 8 = \dfrac{10!}{7!} = 720\) arrangements, soit \(3! = 6\) fois plus (les \(3!\) ordres possibles d’un même trio).</p>
+</div>
+
+<h3>3.3 La loi binomiale</h3>
+<div class="formula"><div class="title">Loi binomiale</div>
+\[P_N(n) = \frac{N!}{n!\,(N-n)!}\; p^{\,n}\, q^{\,N-n}\]
+<div class="cond">Probabilité d’obtenir <em>exactement</em> \(n\) éléments qui satisfont le critère (probabilité \(p\)) parmi \(N\) éléments indépendants. Lecture : (nombre de combinaisons) × (probabilité d’une combinaison précise : \(n\) éléments satisfont le critère, \(N-n\) ne le satisfont pas).</div>
+</div>
+<div class="box method"><span class="label">Méthode en trois étapes (diapos 19-21)</span>
+<ol class="steps">
+  <li><strong>Compter les combinaisons</strong> : nombre de façons de choisir les \(n\) éléments qui satisfont le critère : \(C_N^n\).</li>
+  <li><strong>Déterminer \(p\) et \(q\)</strong> pour <em>un</em> élément.</li>
+  <li><strong>Multiplier</strong> : \(P_N(n) = C_N^n\, p^n q^{N-n}\).</li>
+</ol>
+</div>
+<div class="box ex"><span class="label">Exemple : trois ampoules (diapos 17-18)</span>
+<p>Chaque ampoule est allumée avec \(p = \tfrac14\) (éteinte : \(q = \tfrac34\)). Chaque configuration précise avec 2 allumées (●○○, ○●○, ○○●) a la probabilité \(p^2 q = \tfrac{3}{64}\) ; il y a \(C_3^2 = 3\) configurations, donc \(P_3(2) = 3\times\tfrac{3}{64} = \tfrac{9}{64} \approx 0{,}14\).</p>
+</div>
+<div class="box ex"><span class="label">Exemple 5 : molécules dans une salle (diapos 19-21)</span>
+<p>Une salle contient 5 molécules d’oxygène ; les trois tiers ont le même volume. Probabilité de trouver exactement 2 molécules dans le tiers gauche ?</p>
+<p>1) \(C_5^2 = \dfrac{5!}{2!\,3!} = 10\) (on peut aussi les énumérer : \(m_1m_2, m_1m_3, \ldots, m_4m_5\)). 2) \(p = \tfrac13\) (dans le tiers gauche), \(q=\tfrac23\) (ailleurs). 3) \(P_5(2) = 10\,p^2q^3 = 10\times\tfrac19\times\tfrac{8}{27} = \tfrac{80}{243}\approx 0{,}33\).</p>
+</div>
+
+<h2>4. Cas des critères multiples (loi multinomiale)</h2>
+<div class="formula"><div class="title">Critères multiples</div>
+\[P_N(n_1, n_2, \ldots, n_m) = \frac{N!}{n_1!\,n_2!\cdots n_m!}\; p_1^{\,n_1}\, p_2^{\,n_2}\cdots p_m^{\,n_m}\]
+<div class="cond"><strong>Conditions</strong> : les \(m\) critères sont <em>mutuellement exclusifs</em> (un élément satisfait exactement un critère) et <em>couvrent tous les cas</em> : \(n_1+n_2+\cdots+n_m = N\) et \(p_1+p_2+\cdots+p_m = 1\). Pour \(m=2\) on retrouve la loi binomiale (\(p_2 = q\), \(n_2 = N-n\)).</div>
+</div>
+<div class="box warn"><span class="label">Ce n’est PAS un cas de critères multiples (diapos 23-24)</span>
+<p>Une molécule dans une salle : probabilité d’être <em>dans le tiers gauche</em> (\(p_1 = \tfrac13\)) <em>et dans la moitié haute</em> (\(p_2 = \tfrac12\)) ? Ici \(p_1 + p_2 \ne 1\) et une molécule peut satisfaire les deux critères à la fois : ce sont deux critères <strong>indépendants</strong>, pas mutuellement exclusifs. On multiplie simplement : \(P = p_1 p_2 = \tfrac16\). Pour \(N\) molécules on applique une loi binomiale <em>par critère</em> et on multiplie les résultats (exercice 30 du chapitre 2).</p>
+</div>
+<div class="box ex"><span class="label">Exemples (diapos 25-27)</span>
+<p><strong>5 molécules</strong>, exactement 2 dans le tiers gauche <em>et</em> 1 dans le tiers droit (donc 2 au centre) : trois critères exclusifs avec \(p_g = p_c = p_d = \tfrac13\) :
+\(P_5(2,2,1) = \dfrac{5!}{2!\,2!\,1!}\left(\tfrac13\right)^5 = 30\times\dfrac{1}{243}\approx 0{,}12\).</p>
+<p><strong>30 jetons</strong> (10 noirs, 10 blancs, 10 rouges), on en tire 5 : exactement 2 noirs, 1 blanc et 2 rouges. Les trois couleurs sont des critères mutuellement exclusifs couvrant tous les cas (\(p_n + p_b + p_r = 1\)), avec \(p_n=p_b=p_r = \tfrac13\) : \(P = \dfrac{5!}{2!\,1!\,2!}\left(\tfrac13\right)^2\left(\tfrac13\right)^1\left(\tfrac13\right)^2 \approx 0{,}12\). Le facteur \(\frac{5!}{2!1!2!} = 30\) compte les ordres possibles d’un même tirage (NNBRR, NBNRR, ...), et \(p_n^2 p_b p_r^2\) est la probabilité d’un tirage précis.</p>
+</div>
+
+<h2>5. Statistique dépendante et indépendante</h2>
+<p>Jusqu’ici, les éléments avaient un comportement <strong>indépendant</strong> les uns des autres. Ce n’est pas toujours le cas.</p>
+<div class="box ex"><span class="label">Exemple : tirage sans remise (diapo 28)</span>
+<p>Probabilité de tirer 2 as d’un jeu de 52 cartes : 1<sup>er</sup> tirage \(p = \tfrac{4}{52}\) ; 2<sup>e</sup> tirage \(p = \tfrac{3}{51}\) (si le premier était un as) ou \(\tfrac{4}{51}\) (sinon). Le résultat du second tirage <em>dépend</em> du premier : \(P(\text{2 as}) = \tfrac{4}{52}\times\tfrac{3}{51}\approx 0{,}0045\). Si on remet la carte dans le paquet, les tirages redeviennent indépendants.</p>
+</div>
+<div class="formula"><div class="title">Résultat important de la statistique indépendante</div>
+\[\overline{fg} = \bar f\cdot\bar g \qquad \text{où } \bar f = \sum_i f_i P_i,\quad \bar g = \sum_j g_j W_j\]
+<div class="cond">\(i,j\) : états des fonctions \(f\) et \(g\) ; \(P_i, W_j\) : probabilités de ces états. Et pour deux comportements indépendants, la probabilité que les deux critères soient satisfaits est le <strong>produit</strong> des probabilités.</div>
+</div>
+
+<h2>6. Systèmes à grand nombre d’éléments</h2>
+<h3>6.1 Moyenne</h3>
+<div class="formula"><div class="title">Nombre moyen d’éléments satisfaisant le critère</div>
+\[\bar n = pN\]
+<div class="cond">Pour \(N\) éléments ayant chacun la probabilité \(p\) de satisfaire le critère, après observation de plusieurs séries de \(N\) éléments. Exemple : 1000 lancers de pièce → en moyenne \(\bar n = \tfrac12\times 1000 = 500\) faces.</div>
+</div>
+
+<h3>6.2 Écart type</h3>
+<p>Comment évaluer la <em>précision</em> d’un tirage, c’est-à-dire l’amplitude des variations autour de la moyenne ? (Deux joueurs de fléchettes peuvent avoir la même position moyenne mais des scores très différents : c’est la <strong>dispersion</strong> qui compte.) La moyenne des écarts \(f-\bar f\) est nulle (autant de variations au-dessus qu’en dessous) ; on prend donc la moyenne des écarts <em>au carré</em>, puis la racine.</p>
+<div class="formula"><div class="title">Écart type et variance</div>
+\[\sigma = \sqrt{\overline{\left(f-\bar f\right)^2}}\qquad\qquad \text{Variance} = \sigma^2 = \overline{f^2} - \bar f^{\,2}\]
+\[\text{Variance}(f+g) = \text{Variance}(f) + \text{Variance}(g)\quad\text{pour des variables indépendantes}\]
+<div class="cond">Démonstration de la forme pratique : \(\sigma^2 = \sum_i p_i\,(f_i-\bar f)^2 = \sum_i p_i\,(f_i^2 - 2 f_i \bar f + \bar f^2) = \overline{f^2} - 2\bar f^{\,2} + \bar f^{\,2} = \overline{f^2}-\bar f^{\,2}\). L’additivité des variances est la clé de la marche aléatoire (section 7).</div>
+</div>
+<div class="formula"><div class="title">Critère unique : écart type sur le nombre \(n\)</div>
+\[\sigma = \sqrt{\overline{n^2}-\bar n^{\,2}} = \sqrt{Npq}\qquad\qquad \frac{\sigma}{\bar n} = \sqrt{\frac{q}{pN}} \propto \frac{1}{\sqrt N}\]
+<div class="cond">Démonstration en page 42 du manuel (avec un erratum corrigé par le professeur : \(n^2 p^n = p^2\frac{\partial^2}{\partial p^2}(p^n) + p\frac{\partial}{\partial p}(p^n)\), puis on utilise \(\sum_n \frac{N!}{n!(N-n)!}p^nq^{N-n} = (p+q)^N\) et \(p+q=1\), ce qui donne \(\overline{n^2} = N(N-1)p^2 + Np = \bar n^2 + Npq\)). La <strong>fluctuation relative</strong> \(\sigma/\bar n\) décroît comme \(1/\sqrt N\) : plus le système est grand, plus son comportement est prévisible.</div>
+</div>
+<div class="box ex"><span class="label">Exemples (diapos 36-38)</span>
+<ul>
+  <li>1000 lancers de pièce : \(\sigma = \sqrt{1000\times\tfrac12\times\tfrac12} = 15{,}8\). On obtient typiquement \(500 \pm 16\) faces.</li>
+  <li>100 molécules d’oxygène, tiers gauche : \(\bar n = \tfrac13\times 100 = 33{,}3\), \(\sigma = \sqrt{100\times\tfrac13\times\tfrac23} = 4{,}7\) (fluctuation relative 14 %).</li>
+  <li>\(10^{28}\) molécules : \(\bar n = 3{,}3\times 10^{27}\), \(\sigma = \sqrt{10^{28}\times\tfrac29} = 4{,}7\times 10^{13}\). L’écart type est énorme en valeur absolue mais la fluctuation relative vaut \(1{,}4\times 10^{-14}\) : la densité de l’air est, en pratique, parfaitement uniforme.</li>
+</ul>
+</div>
+<div class="box ex"><span class="label">Application : bruit d’un signal électrique</span>
+<p>L’écart type mesure le niveau de bruit d’un signal. Un échantillon qui sort de la bande \(\pm 3\sigma\) autour de la moyenne n’est pas attribué au bruit (probabilité &lt; 1 % pour une gaussienne, voir section 9) : c’est le critère de détection utilisé en instrumentation.</p>
+</div>
+
+<h2>7. Marche aléatoire</h2>
+<p>Un objet sur une droite se déplace, à chaque intervalle de temps \(T\), de \(+d_d\) vers la droite (probabilité \(p_d\)) ou de \(-d_g\) vers la gauche (probabilité \(p_g\)). Où est-il après \(n\) intervalles ? C’est une <strong>situation fondamentale de la physique</strong> (1D, 2D ou 3D) : diffusion de la matière, mouvement brownien d’une molécule bousculée par ses voisines, conduction des électrons dans un métal. Souvent \(d_g = d_d\) et \(p_g = p_d\), mais pas toujours : <em>bien lire les énoncés</em>.</p>
+<h3>7.1 Lien avec la loi binomiale</h3>
+<p>Avec \(d_g = d_d\), un trajet de \(n\) pas comportant \(k\) pas à droite et \(n-k\) pas à gauche aboutit à \(L = k-(n-k) = 2k-n\) ; donc \(k = (L+n)/2\) (\(L\) et \(n\) ont la même parité). C’est un critère unique (« le pas est vers la droite ») :</p>
+<div class="formula">
+\[p_n(L) = C_n^{\,k}\; p_d^{\,k}\, p_g^{\,n-k}\qquad k = \frac{L+n}{2}\]
+<div class="cond">Les \(C_n^k\) trajets possibles se lisent sur le <strong>triangle de Pascal</strong> (chaque case est la somme des deux cases du dessus : \(C_n^k = C_{n-1}^{k-1}+C_{n-1}^{k}\)).</div>
+</div>
+<h3>7.2 Moyenne et écart type après \(n\) pas</h3>
+<p>On peut voir la marche comme une succession de \(n\) tests indépendants dont \(L\) est la somme : la distance moyenne est la somme des moyennes, et la variance totale est la somme des variances.</p>
+<div class="formula"><div class="title">Marche aléatoire à \(n\) étapes</div>
+\[\overline{S_n} = n\,\bar s\qquad\qquad \sigma_n = \sigma\sqrt n\]
+<div class="cond">\(\bar s\) et \(\sigma\) : moyenne et écart type <em>pour une seule étape</em>. La dérive croît comme \(n\), l’étalement comme \(\sqrt n\) : après beaucoup de pas, le déplacement devient prévisible même si chaque pas ne l’est pas (section C.4 du manuel : conduction dans un métal).</div>
+</div>
+<div class="box ex"><span class="label">Pas de direction aléatoire en 3D (exercices 29, 30, 34 du chapitre 3)</span>
+<p>Si chaque pas a une longueur \(a\) dans une direction quelconque, la composante selon \(z\) est \(a\cos\theta\). En moyennant sur toutes les directions (\(\bar f = \frac{1}{4\pi}\int f \sin\theta\, d\theta\, d\varphi\)) : \(\bar s_z = 0\) (symétrie) et \(\overline{s_z^2} = a^2\,\overline{\cos^2\theta} = \dfrac{a^2}{3}\), d’où \(\sigma_z = \dfrac{a}{\sqrt 3}\) pour un pas et \(\sigma_{z,n} = \dfrac{a}{\sqrt3}\sqrt n\) après \(n\) pas.</p>
+</div>
+<div class="widget" data-widget="random-walk"></div>
+
+<h2>8. Formule de Stirling</h2>
+<p>La loi binomiale exige des factorielles : essayez \(99!\), \(100!\) et \(101!\) sur votre calculatrice... (elle déborde vers \(70!\)). Pour les grands nombres, on utilise l’approximation de Stirling.</p>
+<div class="formula"><div class="title">Formule de Stirling</div>
+\[m! \approx \sqrt{2\pi m}\left(\frac{m}{e}\right)^{m}\qquad\Longleftrightarrow\qquad \ln(m!) \approx m\ln m - m + \tfrac12\ln(2\pi m)\]
+\[e^{x} = 10^{0{,}4343\,x}\qquad\Longrightarrow\qquad m! \approx 10^{\,0{,}4343\,\left(m\ln m - m + \frac12\ln(2\pi m)\right)}\]
+<div class="cond">Précision : 4 % pour \(m=2\), 1,7 % pour \(m=5\), 0,8 % pour \(m=10\), 0,4 % pour \(m=20\) (exercice 20 du chapitre 2) - excellente dès que \(m\) dépasse quelques dizaines. Pour les très grands \(m\) on néglige souvent \(\tfrac12\ln(2\pi m)\) devant \(m\ln m - m\) (\(N!\approx (N/e)^N\), utilisé au cours 2).</div>
+</div>
+<div class="widget" data-widget="stirling"></div>
+
+<h2>9. Distribution gaussienne</h2>
+<p>La loi binomiale est pratique pour un nombre limité d’éléments. Pour un très grand nombre (\(10^{24}\) molécules !), on démontre (TSM p. 46-47, à l’aide de Stirling et d’un développement de Taylor de \(\ln P_N(n)\) autour de \(\bar n\) - c’est l’exercice 12 du chapitre 3) que la loi binomiale est très bien approchée par une <strong>gaussienne</strong> (loi normale) :</p>
+<div class="formula"><div class="title">Loi gaussienne</div>
+\[P_N(n) \approx \frac{1}{\sqrt{2\pi}\,\sigma}\; e^{-\dfrac{(n-\bar n)^2}{2\sigma^2}}\qquad \bar n = pN,\quad \sigma = \sqrt{Npq}\]
+<div class="cond">Souvent écrite \(P_N(n) = A\,e^{-B(n-\bar n)^2}\) avec \(A = \dfrac{1}{\sqrt{2\pi}\sigma}\) (valeur au sommet, \(P_N(\bar n)\)) et \(B = \dfrac{1}{2\sigma^2}\). <strong>Attention</strong> : la formule du manuel contient une erreur ; utilisez celle-ci (PDF correctif sur Moodle).</div>
+</div>
+<div class="two-col">
+<div class="box def"><span class="label">Propriétés</span>
+<ul>
+  <li>Aire sous la courbe \(= 1\) (la somme des probabilités vaut 1).</li>
+  <li>Symétrique autour de \(\bar n\) ; \(\sigma\) règle la largeur : plus \(\sigma\) est petit, plus le pic est haut et étroit.</li>
+  <li>Probabilité d’être à moins de \(\sigma\) de la moyenne : \(p_\sigma = \int_{\bar n-\sigma}^{\bar n+\sigma} P_N(x)\,dx \approx 0{,}68\) ; \(p_{2\sigma}\approx 0{,}95\) ; \(p_{3\sigma}\approx 0{,}99\) (plus précisément 0,997).</li>
+</ul>
+</div>
+<div class="box method"><span class="label">Quel outil selon le nombre d’éléments ?</span>
+<table>
+  <tr><th>Nombre d’éléments</th><th>Outil</th></tr>
+  <tr><td>Faible</td><td>Compter les états (ex. 32 chap. 2)</td></tr>
+  <tr><td>Grand</td><td>Loi binomiale \(P_N(n) = \frac{N!}{n!(N-n)!}p^nq^{N-n}\)</td></tr>
+  <tr><td>Très grand</td><td>Loi gaussienne \(P_N(n) = \frac{1}{\sqrt{2\pi}\sigma}e^{-(n-\bar n)^2/2\sigma^2}\)</td></tr>
+</table>
+</div>
+</div>
+<div class="widget" data-widget="binomial"></div>
+
+<h2>10. À retenir</h2>
+<ul class="summary-list">
+  <li><strong>Moyenne</strong> : \(\bar f = \sum p_i f_i\) ; linéaire ; \(\overline{fg}=\bar f\bar g\) si indépendance.</li>
+  <li><strong>Critère unique</strong> : \(p+q=1\) ; \(P_N(n) = C_N^n p^n q^{N-n}\) avec \(C_N^n = \frac{N!}{n!(N-n)!}\) (simultané) ; arrangements \(\frac{N!}{(N-n)!}\) (successif, ordre compté).</li>
+  <li><strong>Critères multiples</strong> (exclusifs, \(\sum p_i = 1\)) : \(P_N(n_1,\ldots,n_m) = \frac{N!}{n_1!\cdots n_m!}p_1^{n_1}\cdots p_m^{n_m}\). Critères <em>indépendants</em> : produit des probabilités.</li>
+  <li><strong>Grands systèmes</strong> : \(\bar n = pN\), \(\sigma = \sqrt{Npq}\), \(\sigma/\bar n \propto 1/\sqrt N\).</li>
+  <li><strong>Marche aléatoire</strong> : \(\overline{S_n} = n\bar s\), \(\sigma_n = \sigma\sqrt n\) ; pas 3D de longueur \(a\) → \(\sigma_z = a/\sqrt3\).</li>
+  <li><strong>Stirling</strong> : \(\ln m! \approx m\ln m - m + \frac12\ln 2\pi m\) ; \(e^x = 10^{0{,}4343x}\).</li>
+  <li><strong>Gaussienne</strong> : \(P_N(n) = \frac{1}{\sqrt{2\pi}\sigma}e^{-(n-\bar n)^2/2\sigma^2}\) ; 68 % / 95 % / 99,7 % dans \(\pm\sigma\) / \(\pm2\sigma\) / \(\pm3\sigma\).</li>
+  <li><strong>Unités et rigueur</strong> : aux examens, une réponse numérique sans unité ou sans justification est comptée fausse (plan de cours).</li>
+</ul>
+
+<!-- ===================================================== QUIZ ===================================================== -->
+<section class="quiz" data-quiz-id="c1" id="quiz-c1">
+<h2>Quiz rapide - Cours 1</h2>
+<p class="small">Une seule bonne réponse par question. Cliquez sur une réponse pour vérifier immédiatement ; votre meilleur score est conservé dans ce navigateur.</p>
+
+<div class="q" data-answer="1">
+  <p class="q-text">On lance un dé parfait un grand nombre de fois. Quelle est la valeur moyenne du nombre de points ?</p>
+  <ul class="choices"><li>3</li><li>3,5</li><li>4</li><li>21</li></ul>
+  <div class="explain">\(\bar f = \sum_{i=1}^6 \tfrac16 i = \tfrac{21}{6} = 3{,}5\). La moyenne n’a pas besoin d’être une valeur possible du dé.</div>
+</div>
+<div class="q" data-answer="0">
+  <p class="q-text">\(f\) et \(g\) sont statistiquement indépendantes. Laquelle de ces égalités est vraie ?</p>
+  <ul class="choices"><li>\(\overline{fg} = \bar f\,\bar g\)</li><li>\(\overline{f+g} = \bar f\,\bar g\)</li><li>\(\overline{fg} = \bar f + \bar g\)</li><li>\(\overline{f^2} = \bar f^{\,2}\)</li></ul>
+  <div class="explain">La moyenne du produit est le produit des moyennes <em>si</em> les comportements sont indépendants (la probabilité combinée est \(P_iW_j\)). \(\overline{f+g} = \bar f+\bar g\) est toujours vraie ; \(\overline{f^2}-\bar f^2\) est la variance, en général non nulle.</div>
+</div>
+<div class="q" data-answer="1">
+  <p class="q-text">10 jetons différents dans un chapeau ; on en tire 3 simultanément. Combien de combinaisons possibles ?</p>
+  <ul class="choices"><li>30</li><li>120</li><li>720</li><li>1000</li></ul>
+  <div class="explain">Tirage simultané → l’ordre ne compte pas : \(C_{10}^3 = \frac{10!}{3!\,7!} = 120\).</div>
+</div>
+<div class="q" data-answer="2">
+  <p class="q-text">Mêmes 10 jetons, mais on les tire l’un après l’autre en notant l’ordre. Combien de résultats possibles ?</p>
+  <ul class="choices"><li>30</li><li>120</li><li>720</li><li>1000</li></ul>
+  <div class="explain">\(10\times 9\times 8 = \frac{10!}{7!} = 720\) : chaque trio peut apparaître dans \(3! = 6\) ordres, donc \(6\times 120\).</div>
+</div>
+<div class="q" data-answer="0">
+  <p class="q-text">Dans la loi binomiale \(P_N(n) = \frac{N!}{n!(N-n)!}p^nq^{N-n}\), que représente \(n\) ?</p>
+  <ul class="choices"><li>Le nombre d’éléments qui satisfont le critère</li><li>Le nombre total d’éléments</li><li>La probabilité du critère</li><li>Le nombre de combinaisons</li></ul>
+  <div class="explain">\(N\) est le nombre total d’éléments, \(n\) ceux qui satisfont le critère (\(p^n\)), \(N-n\) ceux qui ne le satisfont pas (\(q^{N-n}\)), et \(\frac{N!}{n!(N-n)!}\) est le nombre de combinaisons.</div>
+</div>
+<div class="q" data-answer="0">
+  <p class="q-text">Quelle condition est nécessaire pour utiliser la formule des critères multiples \(P_N(n_1,\ldots,n_m)\) ?</p>
+  <ul class="choices"><li>Critères mutuellement exclusifs avec \(p_1+\cdots+p_m = 1\)</li><li>Toutes les probabilités \(p_i\) égales</li><li>\(N\) petit</li><li>Critères indépendants pouvant être satisfaits simultanément</li></ul>
+  <div class="explain">Chaque élément doit satisfaire exactement un des critères, et les critères doivent couvrir tous les cas. « Tiers gauche » et « moitié haute » ne sont pas exclusifs : on multiplie alors les probabilités (critères indépendants).</div>
+</div>
+<div class="q" data-answer="1">
+  <p class="q-text">Probabilité de tirer deux as de suite, sans remise, dans un jeu de 52 cartes ?</p>
+  <ul class="choices"><li>\(\left(\frac{4}{52}\right)^2\)</li><li>\(\frac{4}{52}\times\frac{3}{51}\)</li><li>\(\frac{4}{52}+\frac{3}{51}\)</li><li>\(\frac{2}{52}\)</li></ul>
+  <div class="explain">Statistique dépendante : après un premier as, il reste 3 as parmi 51 cartes.</div>
+</div>
+<div class="q" data-answer="1">
+  <p class="q-text">Pour un critère unique appliqué à \(N\) éléments, l’écart type du nombre d’éléments satisfaisant le critère est :</p>
+  <ul class="choices"><li>\(Npq\)</li><li>\(\sqrt{Npq}\)</li><li>\(\sqrt{Np}\)</li><li>\(pN\)</li></ul>
+  <div class="explain">\(\sigma = \sqrt{Npq}\) ; \(Npq\) est la variance et \(pN\) la moyenne.</div>
+</div>
+<div class="q" data-answer="2">
+  <p class="q-text">On multiplie le nombre d’éléments \(N\) par 100. La fluctuation relative \(\sigma/\bar n\) est :</p>
+  <ul class="choices"><li>multipliée par 100</li><li>multipliée par 10</li><li>divisée par 10</li><li>divisée par 100</li></ul>
+  <div class="explain">\(\sigma/\bar n = \sqrt{q/(pN)} \propto 1/\sqrt N\) : \(\sqrt{100} = 10\). Les grands systèmes sont plus prévisibles.</div>
+</div>
+<div class="q" data-answer="1">
+  <p class="q-text">Marche aléatoire : une étape a une moyenne \(\bar s\) et un écart type \(\sigma\). Après \(n\) étapes, l’écart type de la position est :</p>
+  <ul class="choices"><li>\(n\sigma\)</li><li>\(\sigma\sqrt n\)</li><li>\(\sigma/\sqrt n\)</li><li>\(\sigma\)</li></ul>
+  <div class="explain">Les variances s’additionnent (\(n\sigma^2\)), donc \(\sigma_n = \sigma\sqrt n\). La moyenne, elle, vaut \(n\bar s\).</div>
+</div>
+<div class="q" data-answer="2">
+  <p class="q-text">Pour une distribution gaussienne, la probabilité d’être à moins de \(2\sigma\) de la moyenne vaut environ :</p>
+  <ul class="choices"><li>0,50</li><li>0,68</li><li>0,95</li><li>0,99</li></ul>
+  <div class="explain">\(p_\sigma \approx 0{,}68\), \(p_{2\sigma}\approx 0{,}95\), \(p_{3\sigma}\approx 0{,}99\) (0,997).</div>
+</div>
+<div class="q" data-answer="1">
+  <p class="q-text">La formule de Stirling donne :</p>
+  <ul class="choices"><li>\(\ln(m!) \approx m\ln m\)</li><li>\(\ln(m!) \approx m\ln m - m + \tfrac12\ln(2\pi m)\)</li><li>\(\ln(m!) \approx m^2\)</li><li>\(\ln(m!) \approx \ln m - m\)</li></ul>
+  <div class="explain">Forme logarithmique de \(m! \approx \sqrt{2\pi m}\,(m/e)^m\). On convertit ensuite avec \(e^x = 10^{0{,}4343x}\).</div>
+</div>
+<div class="q" data-answer="0">
+  <p class="q-text">Quand utilise-t-on la loi gaussienne dans ce cours ?</p>
+  <ul class="choices"><li>Comme approximation de la loi binomiale pour un très grand nombre d’éléments</li><li>Pour \(N\) inférieur à 10</li><li>Uniquement quand \(p = 1\)</li><li>Uniquement pour des dés</li></ul>
+  <div class="explain">Faible \(N\) : on compte les états ; grand : binomiale ; très grand : gaussienne avec \(\bar n = pN\) et \(\sigma=\sqrt{Npq}\).</div>
+</div>
+<div class="q" data-answer="0">
+  <p class="q-text">Pour deux variables indépendantes, la variance de leur somme est :</p>
+  <ul class="choices"><li>la somme des variances</li><li>le produit des variances</li><li>la somme des écarts types</li><li>nulle</li></ul>
+  <div class="explain">\(\text{Var}(f+g) = \text{Var}(f)+\text{Var}(g)\). Ce sont les variances qui s’additionnent, pas les écarts types - d’où le \(\sqrt n\) de la marche aléatoire.</div>
+</div>
+<div class="q" data-answer="0">
+  <p class="q-text">Une salle contient \(10^{28}\) molécules. Nombre moyen de molécules dans le tiers gauche et écart type ?</p>
+  <ul class="choices"><li>\(3{,}3\times10^{27}\) et \(4{,}7\times10^{13}\)</li><li>\(3{,}3\times10^{27}\) et \(4{,}7\times10^{27}\)</li><li>\(5\times10^{27}\) et \(10^{14}\)</li><li>\(10^{28}\) et 0</li></ul>
+  <div class="explain">\(\bar n = pN = 10^{28}/3\) ; \(\sigma = \sqrt{10^{28}\cdot\frac13\cdot\frac23} = 4{,}7\times10^{13}\). Fluctuation relative \(1{,}4\times10^{-14}\).</div>
+</div>
+<div class="quiz-footer"></div>
+</section>
+
+<!-- ===================================================== EXERCICES À DÉVELOPPEMENT ===================================================== -->
+<h2 id="dev-c1">Exercices à développement (à faire sur papier)</h2>
+<p>Ce sont les exemples des diapos et les exercices résolus en classe. Résolvez-les <strong>entièrement sur papier</strong> (démarche, calcul, unité) avant de dérouler le corrigé : à l’examen, une réponse sans explication ou sans unité vaut zéro.</p>
+<div class="exo-tools" data-scope="dev-c1-list">
+  <button class="btn secondary" type="button" data-action="open-all">Tout ouvrir</button>
+  <button class="btn secondary" type="button" data-action="close-all">Tout fermer</button>
+  <div class="progress-bar"><span></span></div><span class="progress-label small"></span>
+</div>
+<div id="dev-c1-list">
+
+<article class="exo" data-exo-id="c1-d1">
+  <header><span class="tag">Diapo 10</span><span class="tag theme">Critère unique</span><h4>D1. Deux dés : exactement un six</h4></header>
+  <div class="enonce"><p>On lance deux dés à six faces. Calculer la probabilité d’obtenir deux six, celle de n’obtenir aucun six, puis celle d’obtenir <em>exactement</em> un six, de deux façons différentes.</p></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>Les dés sont indépendants : les probabilités se multiplient. « Exactement un six » est le complémentaire de « deux six » et « aucun six »... ou bien une loi binomiale avec \(N=2\), \(n=1\).</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>Deux six : \(p_1p_2 = \tfrac16\times\tfrac16 = \tfrac1{36}\).</li>
+      <li>Aucun six : \(q_1q_2 = \tfrac56\times\tfrac56 = \tfrac{25}{36}\).</li>
+      <li>Exactement un six, par le complémentaire : \(1 - \tfrac1{36} - \tfrac{25}{36} = \tfrac{10}{36}\).</li>
+      <li>Par la loi binomiale (\(N=2,\ n=1,\ p=\tfrac16\)) : \(P_2(1) = \dfrac{2!}{1!\,1!}\,\tfrac16\cdot\tfrac56 = 2\times\tfrac{5}{36} = \tfrac{10}{36}\).</li>
+    </ol>
+    <p class="answer">P(exactement un six) = 10/36 ≈ 0,28</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c1-d2">
+  <header><span class="tag">Diapos 17-18</span><span class="tag theme">Loi binomiale</span><h4>D2. Trois ampoules</h4></header>
+  <div class="enonce"><p>Trois ampoules sont allumées chacune avec la probabilité \(p = 1/4\), indépendamment. Quelle est la probabilité d’avoir exactement deux ampoules allumées ? Détailler le rôle du coefficient binomial.</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>Une configuration précise avec 2 allumées et 1 éteinte (par exemple ●●○) a la probabilité \(p\cdot p\cdot q = \tfrac14\cdot\tfrac14\cdot\tfrac34 = \tfrac{3}{64}\).</li>
+      <li>Il y a \(C_3^2 = \dfrac{3!}{2!\,1!} = 3\) configurations (●●○, ●○●, ○●●).</li>
+      <li>\(P_3(2) = 3\times\tfrac{3}{64} = \tfrac{9}{64}\).</li>
+    </ol>
+    <p class="answer">P = 9/64 ≈ 0,14</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c1-d3">
+  <header><span class="tag">Diapos 19-21</span><span class="tag theme">Loi binomiale</span><h4>D3. Cinq molécules, deux dans le tiers gauche</h4></header>
+  <div class="enonce"><p>Une salle contient 5 molécules d’oxygène ; les trois tiers de la salle ont le même volume. Probabilité de trouver exactement 2 molécules dans le tiers gauche ? Suivre la méthode en trois étapes.</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>Nombre de combinaisons : \(C_5^2 = \dfrac{5!}{2!\,3!} = 10\) (on peut aussi les énumérer : \(m_1m_2,\ m_1m_3,\ \ldots,\ m_4m_5\)).</li>
+      <li>Probabilités pour une molécule : \(p = \tfrac13\) (tiers gauche), \(q = \tfrac23\) (reste de la salle).</li>
+      <li>\(P_5(2) = 10\,p^2q^3 = 10\times\tfrac19\times\tfrac{8}{27} = \tfrac{80}{243}\).</li>
+    </ol>
+    <p class="answer">P ≈ 0,33</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c1-d4">
+  <header><span class="tag">Diapo 25</span><span class="tag theme">Critères multiples</span><h4>D4. Cinq molécules : deux à gauche, une à droite</h4></header>
+  <div class="enonce"><p>Même salle (trois tiers égaux), 5 molécules. Probabilité de trouver <em>exactement</em> 2 molécules dans le tiers gauche et 1 dans le tiers droit ?</p></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>Trois critères mutuellement exclusifs (gauche, centre, droite) couvrant tous les cas : \(p_g+p_c+p_d = 1\). Combien de molécules au centre ?</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p>Il y a nécessairement \(5-2-1 = 2\) molécules au centre. Formule des critères multiples avec \(N=5\), \((n_g,n_c,n_d) = (2,2,1)\), \(p_g=p_c=p_d = \tfrac13\) :</p>
+    \[P = \frac{5!}{2!\,2!\,1!}\left(\tfrac13\right)^2\left(\tfrac13\right)^2\left(\tfrac13\right)^1 = 30\times\frac{1}{243} = 0{,}123\]
+    <p class="answer">P ≈ 0,12</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c1-d5">
+  <header><span class="tag">Diapos 26-27</span><span class="tag theme">Critères multiples</span><h4>D5. Trente jetons de trois couleurs</h4></header>
+  <div class="enonce"><p>Un chapeau contient 30 jetons : 10 noirs, 10 blancs, 10 rouges. On en tire 5 simultanément. Probabilité de tirer exactement 2 noirs, 1 blanc et 2 rouges ? Expliquer pourquoi la formule des critères multiples s’applique et ce que représente chacun de ses facteurs.</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>Les critères « noir », « blanc », « rouge » sont mutuellement exclusifs et couvrent tous les cas : \(p_n+p_b+p_r = 1\) avec \(p_n=p_b=p_r=\tfrac13\) (une chance sur trois par tirage).</li>
+      <li>\(P = \dfrac{5!}{2!\,1!\,2!}\,p_n^2\,p_b\,p_r^2 = 30\times\left(\tfrac13\right)^5 = \dfrac{30}{243}\).</li>
+      <li>Le facteur \(30\) est le nombre d’ordres possibles d’un tirage à 2 noirs, 1 blanc, 2 rouges (NNBRR, NBNRR, ...) ; \(p_n^2p_bp_r^2\) est la probabilité d’un ordre précis.</li>
+    </ol>
+    <p class="answer">P ≈ 0,12</p>
+    <p class="small">Remarque : la formule suppose que \(p\) reste \(\tfrac13\) à chaque tirage (comme un tirage avec remise). Le calcul exact sans remise (loi hypergéométrique, \(\frac{C_{10}^2C_{10}^1C_{10}^2}{C_{30}^5}\approx 0{,}14\)) n’est pas au programme : le cours utilise l’approximation ci-dessus.</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c1-d6">
+  <header><span class="tag">Classe - Chap. 2, ex. 22</span><span class="tag theme">Indépendance</span><h4>D6. Trois dés et trois pièces</h4></header>
+  <div class="enonce"><p>On lance trois dés et trois pièces. Probabilité d’obtenir exactement : (a) un six et une face ; (b) aucun six et aucune face ; (c) deux six et deux faces.</p></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>Les dés ne savent rien des pièces : \(P = P_{\text{dés}}\times P_{\text{pièces}}\), chacune par une loi binomiale (\(p_{\text{dé}} = \tfrac16\), \(p_{\text{pièce}}=\tfrac12\)).</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p>Critères indépendants : on multiplie. Pour les dés, « afficher un six » (\(p=\tfrac16, q=\tfrac56\)) ; pour les pièces, « obtenir face » (\(p=q=\tfrac12\)).</p>
+    <ol class="steps">
+      <li>(a) \(P = \dfrac{3!}{1!\,2!}\tfrac16\left(\tfrac56\right)^2\times\dfrac{3!}{1!\,2!}\tfrac12\left(\tfrac12\right)^2 = \tfrac{75}{216}\times\tfrac38 = 0{,}130\).</li>
+      <li>(b) \(P = \left(\tfrac56\right)^3\times\left(\tfrac12\right)^3 = 0{,}579\times 0{,}125 = 0{,}072\).</li>
+      <li>(c) \(P = \dfrac{3!}{2!\,1!}\left(\tfrac16\right)^2\tfrac56\times\dfrac{3!}{2!\,1!}\left(\tfrac12\right)^2\tfrac12 = \tfrac{15}{216}\times\tfrac38 = 0{,}026\).</li>
+    </ol>
+    <p class="answer">(a) 0,130 | (b) 0,072 | (c) 0,026</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c1-d7">
+  <header><span class="tag">Classe - Chap. 2, ex. 26 et 28</span><span class="tag theme">Dépendance</span><h4>D7. Cartes : critères dépendants ou indépendants ?</h4></header>
+  <div class="enonce">
+    <p><strong>Ex. 26.</strong> On distribue deux cartes d’un jeu de 52 cartes bien mélangé. Critère 1 : la première carte est un trèfle ; critère 2 : la deuxième carte est un trèfle. (a) Ces critères sont-ils indépendants ? (b) Et si on remet la première carte dans le paquet (et on remélange) avant de tirer la deuxième ?</p>
+    <p><strong>Ex. 28.</strong> On a deux paquets complets ; on tire une carte de chaque. (a) Probabilité que la première soit un as ; (b) que la seconde soit un trèfle ; (c) ces critères sont-ils indépendants ? (d) probabilité d’un as <em>et</em> d’un trèfle.</p>
+  </div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p><strong>Ex. 26.</strong> (a) Non : le premier tirage modifie le paquet (si la première carte est un trèfle, il reste 12 trèfles sur 51 cartes au lieu de 13 sur 51). (b) Oui : remettre la carte réinitialise l’expérience.</p>
+    <p><strong>Ex. 28.</strong> (a) 4 as sur 52 : \(p_1 = \tfrac{4}{52} = \tfrac1{13}\). (b) 13 trèfles sur 52 : \(p_2 = \tfrac{13}{52} = \tfrac14\). (c) Indépendants : deux paquets différents, aucun tirage n’influence l’autre. (d) \(P = p_1p_2 = \tfrac1{13}\times\tfrac14 = \tfrac1{52}\).</p>
+    <p class="answer">26 : (a) non (b) oui | 28 : 1/13 ; 1/4 ; oui ; 1/52</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c1-d8">
+  <header><span class="tag">Diapos 30, 36-38</span><span class="tag theme">Moyenne et écart type</span><h4>D8. Pile ou face mille fois ; molécules dans une salle</h4></header>
+  <div class="enonce">
+    <p>(a) On tire à pile ou face 1000 fois et on répète cette séquence plusieurs fois : nombre moyen de faces et écart type ?</p>
+    <p>(b) Une salle vide contient 100 molécules d’oxygène : nombre moyen de molécules dans le tiers gauche, écart type et fluctuation relative \(\sigma/\bar n\) ? (c) Même question avec \(10^{28}\) molécules. Commenter.</p>
+  </div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(p = \tfrac12\) : \(\bar n = pN = 500\) ; \(\sigma = \sqrt{Npq} = \sqrt{1000\times\tfrac12\times\tfrac12} = 15{,}8\).</li>
+      <li>(b) \(p=\tfrac13\) : \(\bar n = \tfrac13\times100 = 33{,}3\) ; \(\sigma = \sqrt{100\times\tfrac13\times\tfrac23} = 4{,}7\) ; \(\sigma/\bar n = 0{,}14\).</li>
+      <li>(c) \(\bar n = \tfrac13\times10^{28} = 3{,}3\times10^{27}\) ; \(\sigma = \sqrt{10^{28}\times\tfrac29} = 4{,}7\times10^{13}\) ; \(\sigma/\bar n = 1{,}4\times10^{-14}\).</li>
+    </ol>
+    <p>Commentaire : l’écart type absolu augmente comme \(\sqrt N\) mais la fluctuation relative diminue comme \(1/\sqrt N\). Pour une salle réelle, on ne verra jamais la densité fluctuer de façon mesurable : c’est ce qui rend la thermodynamique possible.</p>
+    <p class="answer">(a) 500 ± 15,8 | (b) 33,3 ± 4,7 (14 %) | (c) 3,3 × 10²⁷ ± 4,7 × 10¹³ (1,4 × 10⁻¹⁴)</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c1-d9">
+  <header><span class="tag">Classe - Chap. 3, ex. 10</span><span class="tag theme">Gaussienne</span><h4>D9. Six cents dés</h4></header>
+  <div class="enonce"><p>On lance 600 dés (systèmes préparés identiquement). Critère : « le dé affiche un 6 ». (a) Nombre moyen de six ; (b) écart type \(\sigma\) ; (c) les constantes \(A\) et \(B\) si \(P_{600}(n) = A\,e^{-B(n-\bar n)^2}\) ; (d) \(P_{600}(100)\) ; (e) \(P_{600}(93)\).</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(\bar n = pN = \tfrac16\times600 = 100\).</li>
+      <li>(b) \(\sigma = \sqrt{Npq} = \sqrt{600\times\tfrac16\times\tfrac56} = \sqrt{83{,}3} = 9{,}13\).</li>
+      <li>(c) \(A = \dfrac{1}{\sqrt{2\pi}\,\sigma} = \dfrac{1}{2{,}507\times9{,}13} = 0{,}044\) ; \(B = \dfrac{1}{2\sigma^2} = \dfrac{1}{166{,}7} = 0{,}0060\).</li>
+      <li>(d) \(P(100) = P(\bar n) = A = 0{,}044\).</li>
+      <li>(e) \(P(93) = A\,e^{-B(93-100)^2} = 0{,}044\times e^{-0{,}006\times49} = 0{,}044\times0{,}745 = 0{,}033\).</li>
+    </ol>
+    <p class="answer">(a) 100 | (b) 9,13 | (c) A = 0,044, B = 0,006 | (d) 0,044 | (e) 0,033</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c1-d10">
+  <header><span class="tag">Classe - Chap. 3, ex. 22</span><span class="tag theme">Gaussienne vs binomiale</span><h4>D10. Soixante dés : précision de l’approximation gaussienne</h4></header>
+  <div class="enonce"><p>On lance 60 dés. Comparer la prédiction gaussienne au résultat binomial exact pour : (a) 10 six ; (b) 8 six ; (c) 15 six ; (d) 0 six.</p></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>\(\bar n = 10\), \(\sigma = \sqrt{60\cdot\frac16\cdot\frac56} = 2{,}887\). Pour la binomiale, passez par les logarithmes (ou la formule de Stirling) : \(\ln P = \ln C_{60}^n + n\ln\tfrac16 + (60-n)\ln\tfrac56\).</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p>Gaussienne : \(A = \dfrac{1}{\sqrt{2\pi}\times2{,}887} = 0{,}138\), \(B = \dfrac{1}{2\times8{,}33} = 0{,}06\). Binomiale : \(P_{60}(n) = C_{60}^n\left(\tfrac16\right)^n\left(\tfrac56\right)^{60-n}\).</p>
+    <table>
+      <tr><th>Nombre de six</th><th>Gaussienne</th><th>Binomiale</th></tr>
+      <tr><td>10</td><td>0,138</td><td>0,137</td></tr>
+      <tr><td>8</td><td>0,109</td><td>0,116</td></tr>
+      <tr><td>15</td><td>0,031</td><td>0,031</td></tr>
+      <tr><td>0</td><td>\(3\times10^{-4}\)</td><td>\(1{,}8\times10^{-5}\)</td></tr>
+    </table>
+    <p>L’accord est excellent près de la moyenne et se dégrade dans les queues (\(n=0\) est à \(3{,}5\sigma\) de la moyenne) : la gaussienne est une approximation <em>au voisinage de \(\bar n\)</em>, d’autant meilleure que \(N\) est grand. Vérifiez avec l’explorateur binomial ↔ gaussien ci-dessus (préréglage « 60 dés »).</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c1-d11">
+  <header><span class="tag">Classe - Chap. 3, ex. 28</span><span class="tag theme">Marche aléatoire</span><h4>D11. Marcheurs numériques</h4></header>
+  <div class="enonce"><p>Des marcheurs font des pas de 0, ±1 ou ±2 m avec \(P(-2) = 0{,}1\), \(P(-1) = 0{,}1\), \(P(0) = 0{,}3\), \(P(+1) = 0{,}3\), \(P(+2) = 0{,}2\). Distance moyenne parcourue et écart type pour (a) un pas ; (b) 400 pas ; (c) rapport \(\sigma/\bar s\) pour 1 et 400 pas.</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(\bar s = \sum p_i s_i = 0{,}1(-2)+0{,}1(-1)+0{,}3(0)+0{,}3(1)+0{,}2(2) = 0{,}4\) m. \(\overline{s^2} = 0{,}1(4)+0{,}1(1)+0+0{,}3(1)+0{,}2(4) = 1{,}6\) m². \(\sigma = \sqrt{\overline{s^2}-\bar s^2} = \sqrt{1{,}6-0{,}16} = 1{,}2\) m.</li>
+      <li>(b) \(\overline{S_{400}} = 400\times0{,}4 = 160\) m ; \(\sigma_{400} = 1{,}2\times\sqrt{400} = 24\) m.</li>
+      <li>(c) \(\sigma/\bar s = 1{,}2/0{,}4 = 3\) pour un pas ; \(24/160 = 0{,}15\) pour 400 pas : la dérive l’emporte sur l’étalement quand \(n\) grandit (\(\propto 1/\sqrt n\)).</li>
+    </ol>
+    <p class="answer">(a) 0,4 m ; 1,2 m | (b) 160 m ; 24 m | (c) 3 ; 0,15</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c1-d12">
+  <header><span class="tag">Classe - Chap. 3, ex. 30</span><span class="tag theme">Marche aléatoire 3D</span><h4>D12. Diffusion d’une goutte d’encre</h4></header>
+  <div class="enonce"><p>Une goutte de colorant est déposée dans une eau immobile. Les molécules parcourent environ \(10^{-11}\) m entre deux collisions et subissent \(4\times10^{13}\) collisions par seconde ; la direction de chaque pas est totalement aléatoire. Pour le mouvement selon une direction donnée, calculer la distance moyenne parcourue et l’écart type après (a) un pas ; (b) une minute ; (c) un an (\(3{,}17\times10^7\) s).</p></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>Composante selon \(z\) d’un pas de longueur \(a\) : \(a\cos\theta\). Moyenne sur la sphère : \(\bar f = \frac{1}{4\pi}\int_0^{2\pi}\!\int_0^{\pi} f\,\sin\theta\,d\theta\,d\varphi\).</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) Moyenne : \(\bar s_z = \dfrac{a}{4\pi}\int_0^{2\pi}\!\!\int_0^\pi\cos\theta\sin\theta\,d\theta\,d\varphi = \dfrac{a}{4\pi}\left[\dfrac{-\cos 2\theta}{4}\right]_0^\pi 2\pi = 0\) (symétrie). Écart type : \(\overline{s_z^2} = \dfrac{a^2}{4\pi}\int\cos^2\theta\sin\theta\,d\theta\,d\varphi = \dfrac{a^2}{4\pi}\left[\dfrac{-\cos^3\theta}{3}\right]_0^\pi 2\pi = \dfrac{a^2}{3}\), donc \(\sigma = \dfrac{a}{\sqrt3} = 5{,}77\times10^{-12}\) m.</li>
+      <li>(b) \(n = 4\times10^{13}\times 60 = 2{,}4\times10^{15}\) pas : \(\overline{S_n} = 0\) ; \(\sigma_n = \sigma\sqrt n = 5{,}77\times10^{-12}\times4{,}9\times10^7 = 2{,}8\times10^{-4}\) m.</li>
+      <li>(c) \(n = 4\times10^{13}\times3{,}17\times10^7 = 1{,}27\times10^{21}\) : \(\sigma_n = 5{,}77\times10^{-12}\times3{,}56\times10^{10} = 0{,}21\) m.</li>
+    </ol>
+    <p class="answer">(a) 0 ; 5,8 × 10⁻¹² m | (b) 0 ; 2,8 × 10⁻⁴ m | (c) 0 ; 0,21 m</p>
+    <p class="small">La diffusion est lente : \(\sigma_n \propto \sqrt t\). Doubler la distance diffusée demande quatre fois plus de temps.</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c1-d13">
+  <header><span class="tag">Diapos 44-45</span><span class="tag theme">Stirling</span><h4>D13. Calculer 99!, 100! et 101!</h4></header>
+  <div class="enonce"><p>Votre calculatrice refuse. Estimer \(99!\), \(100!\) et \(101!\) avec la formule de Stirling, en puissances de 10.</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p>\(\ln(m!) \approx m\ln m - m + \tfrac12\ln(2\pi m)\), puis \(m! = e^{\ln m!} = 10^{0{,}4343\,\ln m!}\).</p>
+    <table>
+      <tr><th>\(m\)</th><th>\(m\ln m - m + \frac12\ln 2\pi m\)</th><th>\(\log_{10} m! = 0{,}4343\ln m!\)</th><th>\(m!\)</th></tr>
+      <tr><td>99</td><td>\(454{,}92 - 99 + 3{,}22 = 359{,}13\)</td><td>155,97</td><td>\(9{,}3\times10^{155}\)</td></tr>
+      <tr><td>100</td><td>\(460{,}52 - 100 + 3{,}22 = 363{,}74\)</td><td>157,97</td><td>\(9{,}3\times10^{157}\)</td></tr>
+      <tr><td>101</td><td>\(466{,}13 - 101 + 3{,}23 = 368{,}35\)</td><td>159,97</td><td>\(9{,}4\times10^{159}\)</td></tr>
+    </table>
+    <p>Vérification : \(101! = 101\times100!\) → le logarithme augmente de \(\log_{10}101 = 2{,}004\). Les valeurs exactes sont \(9{,}33\times10^{155}\), \(9{,}33\times10^{157}\) et \(9{,}43\times10^{159}\) : l’erreur de Stirling est inférieure à 0,1 %.</p>
+  </div></details>
+</article>
+
+</div>
+
+<!-- ===================================================== EXERCICES SUGGÉRÉS ===================================================== -->
+<h2 id="sugg-c1">Exercices suggérés du manuel (liste officielle du cours)</h2>
+<p>Énoncés paraphrasés en français d’après Stowe (chapitres 2 et 3) ; les réponses des exercices impairs sont au dos du manuel (p. 538), celles des pairs viennent des corrigés du professeur. Les exercices marqués <span class="tag hard">***</span> dépassent le cadre du cours.</p>
+<div class="exo-tools" data-scope="sugg-c1-list">
+  <button class="btn secondary" type="button" data-action="open-all">Tout ouvrir</button>
+  <button class="btn secondary" type="button" data-action="close-all">Tout fermer</button>
+  <div class="progress-bar"><span></span></div><span class="progress-label small"></span>
+</div>
+<div id="sugg-c1-list">
+<h3>Chapitre 2 - Statistique des petits systèmes</h3>
+
+<article class="exo" data-exo-id="c1-s2-3">
+  <header><span class="tag">Chap. 2, ex. 3, p. 35</span><span class="tag theme">La moyenne</span><h4>Moyenne d’une fonction du dé</h4></header>
+  <div class="enonce"><p>\(n\) est le nombre de points d’un dé parfait et \(f(n)\) une fonction de \(n\). Sur un grand nombre de lancers, quelle est la valeur moyenne de \(f\) pour (a) \(f = (n+2)^2\) ; (b) \(f = (n-2)^2\) ; (c) \(f = n^2 - 5n + 1\) ; (d) \(f = n^3 - 10\) ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p>\(\bar f = \tfrac16\sum_{n=1}^6 f(n)\). Utile : \(\bar n = 3{,}5\), \(\overline{n^2} = \tfrac{91}{6} = 15{,}17\), \(\overline{n^3} = \tfrac{441}{6} = 73{,}5\).</p>
+    <ol class="steps">
+      <li>(a) \(\tfrac16(9+16+25+36+49+64) = \tfrac{199}{6} = 33{,}17\).</li>
+      <li>(b) \(\tfrac16(1+0+1+4+9+16) = \tfrac{31}{6} = 5{,}17\).</li>
+      <li>(c) \(\overline{n^2} - 5\bar n + 1 = 15{,}17 - 17{,}5 + 1 = -1{,}33\) (linéarité de la moyenne).</li>
+      <li>(d) \(\overline{n^3} - 10 = 73{,}5 - 10 = 63{,}5\).</li>
+    </ol>
+    <p class="answer">33,17 ; 5,17 ; −1,33 ; 63,5</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c1-s2-5">
+  <header><span class="tag">Chap. 2, ex. 5, p. 35</span><span class="tag theme">La moyenne (pondération)</span><h4>Dé pipé</h4></header>
+  <div class="enonce"><p>Un dé est pipé : la probabilité d’un six est \(3/8\) et celle de chacune des cinq autres faces \(1/8\). Pour \(f(n) = (n-2)^2\), quelle est la valeur moyenne de \(f\) par lancer ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    \[\bar f = \tfrac18\left[(1-2)^2+(2-2)^2+(3-2)^2+(4-2)^2+(5-2)^2\right] + \tfrac38(6-2)^2 = \tfrac{15}{8} + 6 = 7{,}875\]
+    <p class="answer">7,875 = 7 7/8</p>
+    <p class="small">Testez-le avec le widget « Moyenne d’un dé pipé » (préréglage ex. 5).</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c1-s2-6">
+  <header><span class="tag">Chap. 2, ex. 6, p. 36</span><span class="tag theme">Critère unique</span><h4>Énergie moyenne d’un spin 1/2</h4></header>
+  <div class="enonce"><p>Une particule de spin 1/2 et de moment magnétique \(\mu\) dans un champ \(B\) a l’énergie \(E = -\mu B\) (spin vers le haut) ou \(E = +\mu B\) (spin vers le bas). Le niveau bas a la probabilité \(3/4\), le niveau haut \(1/4\). Énergie moyenne, en fonction de \(\mu B\) ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    \[\bar E = \tfrac34(-\mu B) + \tfrac14(+\mu B) = -\tfrac12\mu B\]
+    <p class="answer">Ē = −μB/2</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c1-s2-14">
+  <header><span class="tag">Chap. 2, ex. 14, p. 36</span><span class="tag theme">Critère unique</span><h4>Cinq molécules, trois dans le tiers avant</h4></header>
+  <div class="enonce"><p>Cinq molécules d’air dans une salle vide. Probabilité qu’à un instant donné exactement trois soient dans le tiers avant de la salle (les deux autres dans les deux tiers arrière) ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p>Critère « être dans le tiers avant » : \(p = \tfrac13\), \(q = \tfrac23\), \(N=5\), \(n=3\) :</p>
+    \[P_5(3) = \frac{5!}{3!\,2!}\left(\tfrac13\right)^3\left(\tfrac23\right)^2 = 10\times\frac{1}{27}\times\frac{4}{9} = 0{,}165\]
+    <p class="answer">P = 0,165</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c1-s2-18">
+  <header><span class="tag">Chap. 2, ex. 18, p. 36</span><span class="tag theme">Loi binomiale</span><h4>Cent pièces, 42 faces</h4></header>
+  <div class="enonce"><p>On lance 100 pièces. Probabilité d’obtenir exactement 42 faces ?</p></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>Loi binomiale avec \(p=q=\tfrac12\). Les factorielles sont grandes : utilisez Stirling (ou les logarithmes). Vous pouvez aussi vérifier avec la gaussienne (\(\bar n = 50\), \(\sigma = 5\)).</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    \[P = \frac{100!}{42!\,58!}\left(\tfrac12\right)^{42}\left(\tfrac12\right)^{58} = \frac{100!}{42!\,58!}\,2^{-100}\]
+    <p>Avec Stirling : \(\ln 100! = 363{,}74\), \(\ln 42! = 117{,}77\), \(\ln 58! = 180{,}45\), donc \(\ln C_{100}^{42} = 65{,}52\) et \(\ln P = 65{,}52 - 100\ln2 = 65{,}52 - 69{,}31 = -3{,}80\), \(P = e^{-3{,}80} = 0{,}022\).</p>
+    <p>Vérification gaussienne : \(\frac{1}{\sqrt{2\pi}\cdot5}e^{-(42-50)^2/50} = 0{,}0798\times e^{-1{,}28} = 0{,}022\).</p>
+    <p class="answer">P ≈ 0,022</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c1-s2-19">
+  <header><span class="tag">Chap. 2, ex. 19, p. 37</span><span class="tag theme">Loi de Stirling</span><h4>Cinq cents dés</h4></header>
+  <div class="enonce"><p>On lance 500 dés. À l’aide de la formule de Stirling, calculer la probabilité d’obtenir exactement (a) 50 six ; (b) 80 six ; (c) 200 six.</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p>\(\ln P_{500}(n) = \ln 500! - \ln n! - \ln(500-n)! + n\ln\tfrac16 + (500-n)\ln\tfrac56\), avec \(\ln m! \approx m\ln m - m + \tfrac12\ln 2\pi m\). On a \(\ln 500! = 2611{,}33\), \(\ln\tfrac16 = -1{,}7918\), \(\ln\tfrac56 = -0{,}1823\).</p>
+    <table>
+      <tr><th>\(n\)</th><th>\(\ln n!\)</th><th>\(\ln(500-n)!\)</th><th>\(\ln P\)</th><th>\(P\)</th></tr>
+      <tr><td>50</td><td>148,48</td><td>2303,13</td><td>\(2611{,}33-148{,}48-2303{,}13-89{,}59-82{,}04 = -11{,}91\)</td><td>\(6{,}7\times10^{-6}\)</td></tr>
+      <tr><td>80</td><td>273,67</td><td>2120,85</td><td>\(-3{,}10\)</td><td>\(4{,}5\times10^{-2}\)</td></tr>
+      <tr><td>200</td><td>863,23</td><td>1414,90</td><td>\(-79{,}85\)</td><td>\(2{,}1\times10^{-35}\)</td></tr>
+    </table>
+    <p>La moyenne est \(\bar n = 83{,}3\) et \(\sigma = 8{,}3\) : 80 est près du sommet, 50 est à \(4\sigma\), 200 à \(14\sigma\).</p>
+    <p class="answer">(a) 6,7 × 10⁻⁶ | (b) 0,045 | (c) 2,1 × 10⁻³⁵</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c1-s2-24">
+  <header><span class="tag">Chap. 2, ex. 24, p. 37</span><span class="tag theme">Critère multiple</span><h4>Deux critères mutuellement exclusifs</h4></header>
+  <div class="enonce"><p>Il y a \(r\) issues équiprobables, donc \(p = 1/r\) pour le premier critère. Une fois exclus les éléments satisfaisant le premier critère, il reste \(r-1\) possibilités, donc la probabilité du second critère devient \(1/(r-1)\). Quelle est la probabilité \(P_N(n,m)\) que \(n\) éléments parmi \(N\) satisfassent le premier critère et \(m\) des \(N-n\) restants le second ? (Avec l’exercice 25, cela démontre la formule des critères multiples.)</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p>On applique deux fois la loi binomiale : \(P_N(n,m) = P_N(n)\times P_{N-n}(m)\).</p>
+    \[P_N(n,m) = \frac{N!}{n!\,(N-n)!}\left(\tfrac1r\right)^n\left(\tfrac{r-1}{r}\right)^{N-n}\times\frac{(N-n)!}{m!\,(N-n-m)!}\left(\tfrac{1}{r-1}\right)^m\left(\tfrac{r-2}{r-1}\right)^{N-n-m}\]
+    \[= \frac{N!}{n!\,m!\,(N-n-m)!}\left(\tfrac1r\right)^n\left(\tfrac1r\right)^m\left(\tfrac{r-2}{r}\right)^{N-n-m}\]
+    <p>C’est exactement la formule des critères multiples avec \(p_1 = p_2 = \tfrac1r\) et \(p_3 = \tfrac{r-2}{r}\) (« ni l’un ni l’autre »), \(p_1+p_2+p_3 = 1\). En répétant le découpage on obtient la formule générale.</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c1-s2-26">
+  <header><span class="tag">Chap. 2, ex. 26, p. 38</span><span class="tag theme">Critères indépendants</span><h4>Deux trèfles de suite</h4></header>
+  <div class="enonce"><p>Voir l’exercice à développement <a href="#dev-c1">D7</a> (résolu en classe).</p></div>
+</article>
+
+<article class="exo" data-exo-id="c1-s2-29">
+  <header><span class="tag">Chap. 2, ex. 29, p. 38</span><span class="tag theme">Espérance de gain</span><h4>Un jeu de cartes payant</h4></header>
+  <div class="enonce"><p>Deux cartes sont tirées de deux paquets différents (comme à l’exercice 28). Le croupier vous paie 3 $ si la deuxième carte est un trèfle (quelle que soit la première) ; vous lui payez 1 $ si la deuxième carte n’est pas un trèfle <em>et</em> que la première n’est pas un as (sinon rien ne change de main). Gain moyen par partie ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p>États du gain \(f\) : \(+3\) avec \(p = \tfrac14\) (trèfle) ; \(-1\) avec \(p = \tfrac34\times\tfrac{48}{52} = \tfrac34\times\tfrac{12}{13} = \tfrac{9}{13}\) (pas trèfle ET pas as, critères indépendants) ; \(0\) sinon.</p>
+    \[\bar f = 3\times\tfrac14 - 1\times\tfrac{9}{13} = 0{,}750 - 0{,}692 = 0{,}058\ \$\]
+    <p class="answer">≈ +5,8 cents par partie</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c1-s2-30">
+  <header><span class="tag">Chap. 2, ex. 30, p. 38</span><span class="tag theme">Critères indépendants vs critère unique</span><h4>Dix molécules, tiers avant et moitié haute</h4></header>
+  <div class="enonce"><p>Dix molécules d’air dans une salle vide. Probabilité que (a) exactement quatre soient dans le tiers avant <em>et</em> exactement six dans la moitié haute ; (b) exactement trois soient à la fois dans le tiers avant et dans la moitié haute (les mêmes molécules satisfont les deux critères).</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) Deux critères indépendants, une loi binomiale chacun, puis produit : \(P = \dfrac{10!}{4!\,6!}\left(\tfrac13\right)^4\left(\tfrac23\right)^6\times\dfrac{10!}{6!\,4!}\left(\tfrac12\right)^{10} = 0{,}228\times0{,}205 = 0{,}047\).</li>
+      <li>(b) Un seul critère « être dans le tiers avant ET la moitié haute », \(p = \tfrac13\times\tfrac12 = \tfrac16\) : \(P = \dfrac{10!}{3!\,7!}\left(\tfrac16\right)^3\left(\tfrac56\right)^7 = 120\times0{,}00463\times0{,}279 = 0{,}155\).</li>
+    </ol>
+    <p class="answer">(a) 0,047 | (b) 0,155</p>
+  </div></details>
+</article>
+
+<h3>Chapitre 3 - Systèmes à grand nombre d’éléments</h3>
+
+<article class="exo" data-exo-id="c1-s3-2">
+  <header><span class="tag">Chap. 3, ex. 2, p. 55</span><span class="tag theme">Moyenne et écart type</span><h4>Cent millions de dés</h4></header>
+  <div class="enonce"><p>Des systèmes de \(10^8\) dés chacun. Pour le nombre de six par système : (a) moyenne ; (b) écart type ; (c) fluctuation relative.</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(\bar n = pN = 10^8/6 = 1{,}67\times10^7\).</li>
+      <li>(b) \(\sigma = \sqrt{Npq} = \sqrt{10^8\times\tfrac16\times\tfrac56} = \sqrt{1{,}39\times10^7} = 3{,}73\times10^3\).</li>
+      <li>(c) \(\sigma/\bar n = 3{,}73\times10^3/1{,}67\times10^7 = 2{,}24\times10^{-4}\) (comparer à 0,22 pour 100 dés, exercice 1).</li>
+    </ol>
+    <p class="answer">1,67 × 10⁷ ; 3,73 × 10³ ; 2,24 × 10⁻⁴</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c1-s3-6">
+  <header><span class="tag">Chap. 3, ex. 6, p. 55</span><span class="tag theme">Moyenne et écart type</span><h4>3 × 10²⁷ molécules dans le tiers avant</h4></header>
+  <div class="enonce"><p>\(3\times10^{27}\) molécules d’air dans une salle vide. (a) Nombre moyen dans le tiers avant ; (b) écart type ; (c) fluctuation relative.</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p>\(\bar n = \tfrac13\times3\times10^{27} = 10^{27}\) ; \(\sigma = \sqrt{3\times10^{27}\times\tfrac13\times\tfrac23} = \sqrt{6{,}7\times10^{26}} = 2{,}6\times10^{13}\) ; \(\sigma/\bar n = 2{,}6\times10^{-14}\).</p>
+    <p class="answer">10²⁷ ; 2,6 × 10¹³ ; 2,6 × 10⁻¹⁴</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c1-s3-10">
+  <header><span class="tag">Chap. 3, ex. 10, p. 56</span><span class="tag theme">Gaussienne</span><h4>Six cents dés</h4></header>
+  <div class="enonce"><p>Voir l’exercice à développement <a href="#dev-c1">D9</a> (résolu en classe).</p></div>
+</article>
+
+<article class="exo" data-exo-id="c1-s3-17">
+  <header><span class="tag">Chap. 3, ex. 17, p. 57</span><span class="tag theme">Gaussienne</span><h4>360 dés</h4></header>
+  <div class="enonce"><p>On lance 360 dés un grand nombre de fois. (a) Nombre moyen de six ; (b) écart type ; (c) probabilité d’exactement 60 six ; (d) d’exactement 74 six.</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(\bar n = 360/6 = 60\). (b) \(\sigma = \sqrt{360\times\tfrac16\times\tfrac56} = \sqrt{50} = 7{,}07\).</li>
+      <li>(c) \(P(60) = \dfrac{1}{\sqrt{2\pi}\times7{,}07} = 0{,}0564\).</li>
+      <li>(d) \(P(74) = 0{,}0564\times e^{-(14)^2/(2\times50)} = 0{,}0564\times e^{-1{,}96} = 0{,}0564\times0{,}141 = 7{,}9\times10^{-3}\).</li>
+    </ol>
+    <p class="answer">60 ; 7,07 ; 0,0564 ; 7,9 × 10⁻³</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c1-s3-19">
+  <header><span class="tag">Chap. 3, ex. 19, p. 57</span><span class="tag theme">Gaussienne</span><h4>Dix mille atomes excités</h4></header>
+  <div class="enonce"><p>10 000 atomes ont chacun la probabilité 0,1 d’être dans un état excité. En supposant une distribution gaussienne, probabilité que le nombre d’atomes excités soit (a) 1000 ; (b) 100 ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p>\(\bar n = 0{,}1\times10^4 = 1000\) ; \(\sigma = \sqrt{10^4\times0{,}1\times0{,}9} = 30\).</p>
+    <ol class="steps">
+      <li>(a) \(P(1000) = \dfrac{1}{\sqrt{2\pi}\times30} = 0{,}0133\).</li>
+      <li>(b) \(P(100) = 0{,}0133\times e^{-900^2/(2\times900)} = 0{,}0133\times e^{-450} = 0{,}0133\times10^{-195{,}4} = 5\times10^{-198}\) : à \(30\sigma\) de la moyenne, c’est « impossible ».</li>
+    </ol>
+    <p class="answer">(a) 0,0133 | (b) 5 × 10⁻¹⁹⁸</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c1-s3-22">
+  <header><span class="tag">Chap. 3, ex. 22, p. 58</span><span class="tag theme">Gaussienne et loi binomiale</span><h4>Soixante dés</h4></header>
+  <div class="enonce"><p>Voir l’exercice à développement <a href="#dev-c1">D10</a> (résolu en classe).</p></div>
+</article>
+
+<article class="exo" data-exo-id="c1-s3-28">
+  <header><span class="tag">Chap. 3, ex. 28, p. 59</span><span class="tag theme">Marche aléatoire discrète</span><h4>Marcheurs numériques</h4></header>
+  <div class="enonce"><p>Voir l’exercice à développement <a href="#dev-c1">D11</a> (résolu en classe).</p></div>
+</article>
+
+<article class="exo" data-exo-id="c1-s3-29">
+  <header><span class="tag">Chap. 3, ex. 29, p. 59</span><span class="tag theme">Marche aléatoire continue</span><span class="tag hard">plus difficile</span><h4>Une bouteille d’ammoniac s’ouvre</h4></header>
+  <div class="enonce"><p>Une bouteille d’ammoniac est ouverte brièvement au centre d’une grande pièce. Les molécules parcourent en moyenne \(10^{-5}\) m entre collisions et subissent \(10^7\) collisions par seconde ; après chaque collision, toutes les directions sont équiprobables. (a) Déplacement moyen selon \(z\) pour un pas ? (b) Carré de l’écart type pour un pas ? (c) Déplacement moyen selon \(z\) après 2 s ? (d) Écart type correspondant ? (e) Vous êtes sur l’axe \(z\), à 6 m de la bouteille : au bout de combien de temps plus de 32 % des molécules seront-elles plus loin que vous (selon \(z\)) ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(\bar s_z = \overline{a\cos\theta} = 0\) par symétrie.</li>
+      <li>(b) \(\sigma^2 = \overline{s_z^2} - \bar s_z^2 = \dfrac{a^2}{3} = \dfrac{10^{-10}}{3} = 3{,}3\times10^{-11}\) m².</li>
+      <li>(c) \(\overline{S_n} = n\bar s_z = 0\).</li>
+      <li>(d) \(n = 2\times10^7\) : \(\sigma_n = \sigma\sqrt n = 5{,}77\times10^{-6}\times\sqrt{2\times10^7} = 0{,}026\) m.</li>
+      <li>(e) 32 % des molécules sont en dehors de \(\pm\sigma_n\) : il faut \(\sigma_n = 6\) m, soit \(n = (6/5{,}77\times10^{-6})^2 = 1{,}08\times10^{12}\) pas, donc \(t = n/10^7 = 1{,}08\times10^5\) s ≈ 30 h. (En réalité la convection mélange l’air bien plus vite.)</li>
+    </ol>
+    <p class="answer">0 ; 3,3 × 10⁻¹¹ m² ; 0 ; 0,026 m ; ≈ 1,1 × 10⁵ s (30 h)</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c1-s3-32">
+  <header><span class="tag">Chap. 3, ex. 32, p. 60</span><span class="tag theme">Écart type et déplacement</span><h4>Électrons dans un semiconducteur sous champ</h4></header>
+  <div class="enonce"><p>Entre deux collisions, un électron avance en moyenne de \(10^{-16}\) m dans la direction favorisée par le champ, avec un écart type de \(10^{-9}\) m ; il subit \(10^{14}\) collisions par seconde. Distance moyenne parcourue et écart type après (a) 1 s ; (b) 5 min. (c) Si la distribution d’un pas est \(P(x)dx = A\,e^{-B(x-x_0)^2}dx\), que valent \(A\), \(B\) et \(x_0\) (avec unités) ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(n = 10^{14}\) : \(\overline{S_n} = n\bar s = 10^{-2}\) m ; \(\sigma_n = \sigma\sqrt n = 10^{-9}\times10^7 = 10^{-2}\) m.</li>
+      <li>(b) \(n = 3\times10^{16}\) : \(\overline{S_n} = 3\) m ; \(\sigma_n = 10^{-9}\times1{,}73\times10^8 = 0{,}17\) m. Après 5 minutes la dérive (3 m) domine largement l’étalement.</li>
+      <li>(c) \(A = \dfrac{1}{\sqrt{2\pi}\sigma} = 3{,}99\times10^8\ \text{m}^{-1}\) ; \(B = \dfrac{1}{2\sigma^2} = 5\times10^{17}\ \text{m}^{-2}\) ; \(x_0 = \bar s = 10^{-16}\) m.</li>
+    </ol>
+    <p class="answer">(a) 10⁻² m ; 10⁻² m | (b) 3 m ; 0,17 m | (c) 3,99 × 10⁸ m⁻¹ ; 5 × 10¹⁷ m⁻² ; 10⁻¹⁶ m</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c1-s3-34">
+  <header><span class="tag">Chap. 3, ex. 34, p. 60</span><span class="tag theme">Écart type et déplacement</span><h4>Un photon s’échappe du Soleil</h4></header>
+  <div class="enonce"><p>Un photon produit au centre du Soleil parcourt environ 1 cm entre deux collisions et subit \(10^8\) collisions par seconde (mouvement à une dimension). (a) Distance moyenne par pas selon une dimension ? (b) Écart type correspondant ? (c) Le rayon du Soleil vaut \(7{,}0\times10^8\) m : combien de pas avant que le photon ait 32 % de chances d’être sorti du Soleil selon cette dimension ? (d) À combien d’années cela correspond-il (1 an = \(3{,}17\times10^7\) s) ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) 0 (directions équiprobables).</li>
+      <li>(b) \(\sigma = a/\sqrt3 = 1\ \text{cm}/\sqrt3 = 5{,}77\) mm.</li>
+      <li>(c) 32 % de chances d’être au-delà de \(\pm\sigma_n\) : \(\sigma_n = R_\odot\), donc \(n = (R_\odot/\sigma)^2 = \left(\dfrac{7{,}0\times10^8}{5{,}77\times10^{-3}}\right)^2 = 1{,}47\times10^{22}\) pas.</li>
+      <li>(d) \(t = n/10^8 = 1{,}47\times10^{14}\) s \(= 4{,}6\times10^6\) ans. La lumière que vous voyez a mis des millions d’années à sortir du Soleil (puis 8 minutes pour venir jusqu’à vous).</li>
+    </ol>
+    <p class="answer">0 ; 5,8 mm ; 1,5 × 10²² pas ; ≈ 4,6 millions d’années</p>
+  </div></details>
+</article>
+
+</div>
+
+<p class="small">Pour aller plus loin : la section C.4 du chapitre 3 (conduction dans les métaux) applique la marche aléatoire aux électrons : \(s = 10^{-15}\) m, \(\sigma = 10^{-8}\) m, \(10^{12}\) collisions/s → après 10 min, \(\overline{S_n} = 0{,}6\) m et \(\sigma_n = 0{,}2\) m.</p>
+
+</article>
+</main>
+<footer class="footer">ELE2307 - site d’étude personnel généré à partir des diapos du cours, des corrigés du professeur et du manuel de Stowe. Vérifiez toujours avec les documents officiels sur Moodle.</footer>
+<script defer src="assets/katex/katex.min.js"></script>
+<script defer src="assets/katex/contrib/auto-render.min.js"></script>
+<script defer src="assets/app.js?v=4"></script>
+<script defer src="assets/widgets.js?v=4"></script>
+</body>
+</html>

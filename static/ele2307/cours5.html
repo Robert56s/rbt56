@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cours 5 - Les machines thermiques | ELE2307</title>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<link rel="stylesheet" href="assets/style.css?v=8">
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="index.html">ELE2307 <small>Thermodynamique statistique et semiconducteurs</small></a>
+  <nav>
+    <a href="index.html">Accueil</a>
+    <a href="cours1.html">Cours 1</a>
+    <a href="cours2.html">Cours 2</a>
+    <a href="cours3.html">Cours 3</a>
+    <a href="cours4.html">Cours 4</a>
+    <a href="cours5.html">Cours 5</a>
+    <a href="cours6.html">Cours 6</a>
+    <a href="formulaire.html">Formulaire</a>
+    <a href="errata.html">Errata</a>
+    <button class="theme-btn" type="button">Thème</button>
+  </nav>
+</header>
+
+<main class="layout">
+<aside class="toc"></aside>
+<article class="content">
+
+<div class="course-hero">
+  <div class="kicker">Cours 5 - Chapitre 5 du cours</div>
+  <h1>Les machines thermiques</h1>
+  <p class="meta">Manuel (Stowe, <em>TSM</em>) : chapitre 13 | Diapos « Cours 5 » (22 pages) | Classe d'exercices du 1er octobre</p>
+  <p><span class="pill accent">Rendement</span><span class="pill accent">Diagrammes p-V et T-S</span><span class="pill accent">Moteur à piston</span><span class="pill accent">Turbine</span><span class="pill accent">Réfrigérateur</span><span class="pill accent">Cycle de Carnot</span><span class="pill accent">Cycle d'Otto</span><span class="pill accent">Cycle de Rankine</span></p>
+  <p class="small">Fil conducteur : une machine thermique est un cycle de processus (cours 4) qui prélève de la chaleur \(Q_h\) à une source chaude, en rejette \(Q_c\) à une source froide et convertit la différence en travail. Les diagrammes p-V et T-S rendent ce bilan visible, et le cycle de Carnot fixe la limite \(e \le 1 - T_c/T_h\).</p>
+</div>
+
+<h2>1. Concept général</h2>
+<p>La thermodynamique est la science des mouvements (<em>dynamique</em>) causés par la chaleur (<em>thermo</em>). Elle a été développée pour comprendre les machines à vapeur, dont la première application à moteur rotatif remonte à James Watt (1781). La chaleur venant d'un réservoir chaud est transformée en travail mécanique et un surplus est évacué à plus basse température :</p>
+<div class="formula"><div class="title">Bilan et rendement d'un moteur</div>
+\[Q_h = W + Q_c\qquad\qquad e = \frac{W}{Q_h} = \frac{Q_h - Q_c}{Q_h}\]
+<div class="cond">\(Q_h\) : chaleur fournie par la source chaude, \(Q_c\) : chaleur rejetée à la source froide, \(W\) : travail net par cycle (toutes positives). \(e = 1\) si toute la chaleur devenait travail ; en pratique la friction, les pertes par conduction et la combustion incomplète limitent le rendement à environ 0,2 pour les meilleurs moteurs à essence et 0,35 à 0,40 pour les diesels.</div>
+</div>
+<div class="formula"><div class="title">Système de réfrigération</div>
+\[e_{frigo} = \frac{Q_c}{W}\qquad\qquad(\text{pompe à chaleur : } \frac{Q_h}{W} = \frac{Q_c + W}{W})\]
+<div class="cond">On fournit du travail pour extraire \(Q_c\) du réservoir froid ; ce « coefficient de performance » dépasse souvent 1.</div>
+</div>
+<div class="box def"><span class="label">Les quatre étapes d'un cycle moteur</span>
+<ol>
+  <li>On introduit de la chaleur dans le système.</li>
+  <li>On laisse le système se dilater, fournissant ainsi un travail.</li>
+  <li>On extrait de la chaleur du système.</li>
+  <li>On comprime le système (retour à l'état de départ).</li>
+</ol>
+</div>
+
+<h2>2. Le moteur à piston et les diagrammes p-V et T-S</h2>
+<p>Le cycle à quatre phases (1 chauffage, 2 dilatation, 3 refroidissement, 4 compression) se lit sur deux diagrammes :</p>
+<div class="formula">
+\[W = \oint p\,dV\ \ (\text{aire intérieure du diagramme } p\text{-}V)\qquad\qquad Q = \oint T\,dS\ \ (\text{aire intérieure du diagramme } T\text{-}S)\]
+\[\text{Sur un cycle complet : } \Delta E = 0 = \Delta Q - \Delta W\quad\Longrightarrow\quad Q_{net} = W_{net}\]
+<div class="cond">Dans le p-V, le travail net est l'aire sous la courbe de dilatation (2) moins l'aire sous la courbe de compression (4) ; dans le T-S, la chaleur nette est l'aire sous (1) moins l'aire sous (3). Le cycle tourne dans le sens horaire pour un moteur. Le système revient à son état initial : \(E\) et \(S\) sont des fonctions d'état, donc \(\Sigma\Delta E = 0\) et \(\Sigma\Delta S = 0\).</div>
+</div>
+<div class="box ex"><span class="label">Question de la diapo 7</span>
+<p>Quel processus d'un gaz parfait vérifie \(\Delta Q = \Delta W\) (et donc \(\Delta E = 0\)) en une seule phase ? L'<strong>isotherme</strong> : \(E\) ne dépend que de \(T\). Sur le p-V, l'isotherme est une hyperbole moins pentue que l'adiabatique ; sur le T-S, l'isotherme est horizontale, l'adiabatique verticale, et l'isobare monte moins vite que l'isochore (il faut plus de chaleur pour élever \(T\) à pression constante).</p>
+</div>
+<div class="formula"><div class="title">Table 13.1 : bilan d'une mole de gaz parfait (\(\Delta E = Q - W\))</div>
+<table>
+  <tr><th></th><th>Isobare</th><th>Isochore</th><th>Adiabatique</th><th>Isotherme</th></tr>
+  <tr><td>\(\Delta E\)</td><td>\(nC_V\Delta T\)</td><td>\(nC_V\Delta T\)</td><td>\(nC_V\Delta T\)</td><td>0</td></tr>
+  <tr><td>\(W\)</td><td>\(nR\,\Delta T = p\Delta V\)</td><td>0</td><td>\(-nC_V\Delta T = \dfrac{p_iV_i - p_fV_f}{\gamma-1}\)</td><td>\(nRT\ln\dfrac{V_f}{V_i}\)</td></tr>
+  <tr><td>\(Q\)</td><td>\(nC_p\Delta T\)</td><td>\(nC_V\Delta T\)</td><td>0</td><td>\(nRT\ln\dfrac{V_f}{V_i}\)</td></tr>
+  <tr><td>\(\Delta S\)</td><td>\(nC_p\ln\dfrac{T_f}{T_i}\)</td><td>\(nC_V\ln\dfrac{T_f}{T_i}\)</td><td>0</td><td>\(nR\ln\dfrac{V_f}{V_i}\)</td></tr>
+  <tr><td>Relation</td><td>\(\dfrac{T_f}{T_i} = \dfrac{V_f}{V_i}\)</td><td>\(\dfrac{T_f}{T_i} = \dfrac{p_f}{p_i}\)</td><td>\(pV^\gamma = \) cste, \(TV^{\gamma-1} = \) cste</td><td>\(\dfrac{V_f}{V_i} = \dfrac{p_i}{p_f}\)</td></tr>
+</table>
+<div class="cond">\(C_V = \frac{\nu}{2}R\), \(C_p = C_V + R\), \(\gamma = C_p/C_V = (\nu+2)/\nu\), \(pV = nRT\). Cette table (page 263 du manuel) est l'outil de tous les exercices de cycles.</div>
+</div>
+<div class="widget" data-widget="engine-cycle"></div>
+
+<h2>3. La turbine à gaz</h2>
+<p>L'air comprimé par le compresseur (4) reçoit la chaleur de la combustion à pression constante (1), se détend dans la turbine en fournissant du travail (2), puis est refroidi à pression constante (3) : (1) chauffage isobare, (2) dilatation adiabatique, (3) refroidissement isobare, (4) compression adiabatique. Le cycle a la même forme que celui du piston, les isochores étant remplacées par des isobares, parce que le fluide circule en continu dans un tube ouvert où la pression est la même d'un bout à l'autre (chap. 13, ex. 47).</p>
+
+<h2>4. Le réfrigérateur</h2>
+<p>Dans un cycle de réfrigération, du travail mécanique est fourni pour <em>absorber</em> de la chaleur : c'est un moteur fonctionnant à l'envers (cycle parcouru dans le sens antihoraire). (1) Compression adiabatique du fluide frigorigène, (2) évacuation de la chaleur \(Q_h\) via le condenseur (serpentin arrière), (3) dilatation adiabatique via le détendeur, (4) absorption de la chaleur \(Q_c\) et évaporation dans le compartiment froid. Coefficient de performance \(Q_c/W\).</p>
+
+<h2>5. L'échangeur thermique : la pompe à chaleur</h2>
+<p>Un réfrigérateur réversible utilisé pour chauffer : (1) l'air ambiant est poussé à travers un serpentin pour évaporer à basse température un liquide réfrigérant (entrée \(Q_c\)), (2) la vapeur est comprimée pour augmenter sa température, (3) la vapeur chaude réchauffe l'eau qui alimente le système de chauffage (sortie \(Q_h\)), (4) la vapeur se condense et retourne à l'état liquide basse pression. On livre \(Q_h = Q_c + W\) : plus que le travail électrique fourni (chap. 13, ex. 40).</p>
+
+<h2>6. Le cycle de Carnot</h2>
+<p>Nicolas Sadi Carnot (1796-1832) a imaginé le cycle <strong>réversible</strong> le plus efficace pour produire du travail entre deux sources de chaleur. C'est un cycle théorique, parfait, qui maximise le rendement :</p>
+<div class="box def"><span class="label">Les quatre étapes</span>
+<ol>
+  <li>Dilatation isotherme à \(T_h\) (le gaz reçoit \(Q_h\)).</li>
+  <li>Dilatation adiabatique de \(T_h\) à \(T_c\).</li>
+  <li>Compression isotherme à \(T_c\) (le gaz cède \(Q_c\)).</li>
+  <li>Compression adiabatique de \(T_c\) à \(T_h\).</li>
+</ol>
+<p>Sur le T-S, c'est un rectangle : deux horizontales (isothermes) et deux verticales (adiabatiques).</p>
+</div>
+<div class="formula"><div class="title">Rendement de Carnot</div>
+\[\Delta S_{cycle} = 0 = \frac{Q_h}{T_h} - \frac{Q_c}{T_c}\quad\Longrightarrow\quad \frac{Q_h}{T_h} = \frac{Q_c}{T_c}\qquad\qquad e_{Carnot} = \frac{Q_h - Q_c}{Q_h} = 1 - \frac{Q_c}{Q_h} = 1 - \frac{T_c}{T_h}\]
+<div class="cond">Seules les isothermes échangent de la chaleur ; les adiabatiques ne changent pas l'entropie. Le rendement de cette machine idéale est la <strong>limite supérieure</strong> de toute machine thermique fonctionnant entre \(T_c\) et \(T_h\) : une machine réelle, irréversible, crée de l'entropie et rejette plus de chaleur. Pour améliorer un moteur, on augmente \(T_h\) (combustion plus chaude) ou on abaisse \(T_c\) (rejet à l'ambiante).</div>
+</div>
+
+<h2>7. Le moteur à essence (cycle d'Otto)</h2>
+<p>Représentation simplifiée par le cycle d'Otto : admission du mélange à pression constante (flèche verte, hors cycle), compression adiabatique (4), combustion quasi instantanée à volume constant (1, \(Q_h\)), dilatation adiabatique qui pousse le piston (2), échappement modélisé par un refroidissement isochore (3, \(Q_c\)), puis purge et admission.</p>
+<div class="formula"><div class="title">Rendement du cycle d'Otto</div>
+\[TV^{\gamma-1} = \text{cste (phases 2 et 4 adiabatiques)}\qquad\Longrightarrow\qquad e_{essence} = 1 - \frac{T_c}{T_h} = 1 - \frac{1}{\left(V_{max}/V_{min}\right)^{\gamma-1}}\]
+<div class="cond">\(V_{max}/V_{min}\) est le <strong>taux de compression</strong>, typiquement 8. Avec \(\gamma = 1{,}4\) : \(e = 1 - 8^{-0{,}4} = 0{,}56\), rendement théorique jamais atteint (frottement, pertes de chaleur, combustion incomplète) ; réel : 15 à 20 %, diesel (taux de compression plus élevé) : 35 à 40 %. Ici \(T_c/T_h\) est le rapport des températures aux extrémités d'une adiabatique, pas celui des sources.</div>
+</div>
+<div class="widget" data-widget="efficiency"></div>
+
+<h2>8. Le cycle de Rankine</h2>
+<p>Semblable à celui des turbines, ce cycle modélise les machines dont le fluide change de phase (eau-vapeur) : (1) évaporation isobare irréversible dans la bouilloire (\(Q_h\)), (2) détente adiabatique réversible dans la turbine (\(W_{out}\)), (3) condensation isobare irréversible dans le condenseur (\(Q_c\)), (4) compression adiabatique réversible par la pompe (\(W_{in}\)). Contrairement au cycle de Carnot, il est physiquement réalisable, avec des étapes proches de celles de Carnot. Intérêt de la phase liquide : une pompe est plus simple et moins coûteuse en énergie qu'un compresseur, parce qu'un liquide est presque incompressible. Sur le p-V et le T-S, le cycle traverse la zone de mélange liquide + vapeur (plateau de changement de phase).</p>
+
+<h2>9. Travail de sortie : température ou volume ?</h2>
+<div class="box ex"><span class="label">Diapo 20</span>
+<p>Pour une machine à deux isothermes \(T_h\) et \(T_c\) entre \(V_{min}\) et \(V_{max}\) (reliées par deux isochores), le travail net vaut \(W = nR\,(T_h - T_c)\ln(V_{max}/V_{min})\). Il croît <em>linéairement</em> avec l'écart de température mais seulement <em>logarithmiquement</em> avec le rapport des volumes : doubler \(\Delta T\) double \(W\), alors que doubler \(V_{max}/V_{min}\) (de 2 à 4) n'augmente \(W\) que de 100 % à 200 %... puis de moins en moins. Il est plus efficace d'augmenter la différence de température.</p>
+</div>
+
+<h2>10. À retenir</h2>
+<ul class="summary-list">
+  <li>\(Q_h = W + Q_c\) ; \(e = W/Q_h = 1 - Q_c/Q_h\) ; réfrigérateur \(Q_c/W\), pompe à chaleur \(Q_h/W\).</li>
+  <li>\(W = \oint p\,dV\) (aire du p-V), \(Q = \oint T\,dS\) (aire du T-S), \(Q_{net} = W_{net}\) sur un cycle.</li>
+  <li>Table 13.1 : isobare \(W = nR\Delta T\), \(Q = nC_p\Delta T\) ; isochore \(W = 0\), \(Q = nC_V\Delta T\) ; adiabatique \(Q = 0\), \(W = -nC_V\Delta T\) ; isotherme \(Q = W = nRT\ln(V_f/V_i)\).</li>
+  <li>Carnot (isotherme, adiabatique, isotherme, adiabatique) : \(Q_h/T_h = Q_c/T_c\), \(e = 1 - T_c/T_h\), limite supérieure.</li>
+  <li>Otto : \(e = 1 - (V_{max}/V_{min})^{1-\gamma}\) ; piston : chaleur isochore ; turbine : chaleur isobare ; Rankine : changement de phase, pompe sur le liquide.</li>
+</ul>
+
+<!-- ===================================================== QUIZ ===================================================== -->
+<section class="quiz" data-quiz-id="c5" id="quiz-c5">
+<h2>Quiz rapide - Cours 5</h2>
+<p class="small">Une seule bonne réponse par question. Cliquez pour vérifier immédiatement.</p>
+
+<div class="q" data-answer="1">
+  <p class="q-text">Un moteur reçoit \(Q_h = 500\) J et rejette \(Q_c = 350\) J par cycle. Son rendement est :</p>
+  <ul class="choices"><li>0,70</li><li>0,30</li><li>0,43</li><li>1,43</li></ul>
+  <div class="explain">\(W = Q_h - Q_c = 150\) J et \(e = W/Q_h = 150/500 = 0{,}30\).</div>
+</div>
+<div class="q" data-answer="2">
+  <p class="q-text">Sur un diagramme p-V, le travail net fourni par un cycle moteur est :</p>
+  <ul class="choices"><li>l'aire sous la courbe de compression</li><li>la pente de la courbe de dilatation</li><li>l'aire intérieure du cycle</li><li>la hauteur du cycle</li></ul>
+  <div class="explain">\(W = \oint p\,dV\) = aire sous la dilatation moins aire sous la compression = aire enfermée. De même \(Q_{net} = \oint T\,dS\) sur le T-S.</div>
+</div>
+<div class="q" data-answer="0">
+  <p class="q-text">Sur un cycle complet, \(\Delta E\) et \(\Delta S\) du fluide de travail valent :</p>
+  <ul class="choices"><li>0 et 0</li><li>\(Q_{net}\) et \(Q_{net}/T\)</li><li>\(W_{net}\) et 0</li><li>0 et \(Q_h/T_h\)</li></ul>
+  <div class="explain">\(E\) et \(S\) sont des fonctions d'état : revenir au point de départ les ramène à leur valeur initiale, d'où \(Q_{net} = W_{net}\).</div>
+</div>
+<div class="q" data-answer="3">
+  <p class="q-text">Pour un gaz parfait, quel processus donne \(\Delta Q = \Delta W\) à lui seul ?</p>
+  <ul class="choices"><li>Isobare</li><li>Isochore</li><li>Adiabatique</li><li>Isotherme</li></ul>
+  <div class="explain">\(\Delta E = 0\) sur une isotherme (l'énergie interne ne dépend que de \(T\)). Sur l'adiabatique \(\Delta Q = 0\) ; sur l'isochore \(\Delta W = 0\).</div>
+</div>
+<div class="q" data-answer="1">
+  <p class="q-text">Sur un diagramme T-S, une adiabatique réversible est :</p>
+  <ul class="choices"><li>horizontale</li><li>verticale</li><li>une hyperbole</li><li>une droite inclinée à 45°</li></ul>
+  <div class="explain">\(dQ = 0\) donc \(dS = 0\) : \(S\) constant, \(T\) varie → verticale. L'isotherme est horizontale.</div>
+</div>
+<div class="q" data-answer="0">
+  <p class="q-text">Le cycle de Carnot est formé de :</p>
+  <ul class="choices"><li>deux isothermes et deux adiabatiques</li><li>deux isobares et deux isochores</li><li>deux isobares et deux adiabatiques</li><li>deux isochores et deux adiabatiques</li></ul>
+  <div class="explain">Dilatation isotherme à \(T_h\), dilatation adiabatique, compression isotherme à \(T_c\), compression adiabatique : un rectangle dans le plan T-S.</div>
+</div>
+<div class="q" data-answer="2">
+  <p class="q-text">Une machine de Carnot fonctionne entre 800 K et 400 K. Son rendement est :</p>
+  <ul class="choices"><li>1</li><li>0,25</li><li>0,5</li><li>2</li></ul>
+  <div class="explain">\(e = 1 - T_c/T_h = 1 - 400/800 = 0{,}5\).</div>
+</div>
+<div class="q" data-answer="1">
+  <p class="q-text">Pourquoi le cycle de Carnot a-t-il le rendement maximal ?</p>
+  <ul class="choices"><li>Parce qu'il utilise un gaz parfait</li><li>Parce qu'il est réversible : \(\Delta S = 0\), donc \(Q_h/T_h = Q_c/T_c\) et \(Q_c\) est minimal</li><li>Parce que ses adiabatiques sont rapides</li><li>Parce que \(Q_c = 0\)</li></ul>
+  <div class="explain">Toute irréversibilité crée de l'entropie qu'il faut évacuer sous forme de chaleur supplémentaire \(Q_c\) à la source froide ; le cycle réversible rejette le minimum \(Q_c = Q_hT_c/T_h\).</div>
+</div>
+<div class="q" data-answer="0">
+  <p class="q-text">Le rendement théorique du cycle d'Otto dépend :</p>
+  <ul class="choices"><li>du taux de compression \(V_{max}/V_{min}\) et de \(\gamma\)</li><li>de la chaleur fournie \(Q_h\) seulement</li><li>du nombre de cylindres</li><li>de la pression d'admission seulement</li></ul>
+  <div class="explain">\(e = 1 - (V_{max}/V_{min})^{1-\gamma}\) : pour \(r = 8\) et \(\gamma = 1{,}4\), \(e = 0{,}56\).</div>
+</div>
+<div class="q" data-answer="2">
+  <p class="q-text">Un moteur à essence réel a un rendement d'environ :</p>
+  <ul class="choices"><li>56 %</li><li>80 %</li><li>15 à 20 %</li><li>2 %</li></ul>
+  <div class="explain">Le 56 % est le rendement théorique d'Otto ; frottement, pertes de chaleur et combustion incomplète ramènent le réel à 15-20 % (diesel : 35-40 %).</div>
+</div>
+<div class="q" data-answer="1">
+  <p class="q-text">Dans un réfrigérateur, le travail fourni sert à :</p>
+  <ul class="choices"><li>produire de la chaleur dans le compartiment froid</li><li>transférer de la chaleur du réservoir froid vers le réservoir chaud (moteur à l'envers)</li><li>annuler l'entropie du fluide</li><li>comprimer le liquide dans l'évaporateur</li></ul>
+  <div class="explain">Le cycle est parcouru en sens inverse : on absorbe \(Q_c\) à basse température et on rejette \(Q_h = Q_c + W\) à haute température. Coefficient de performance \(Q_c/W\).</div>
+</div>
+<div class="q" data-answer="0">
+  <p class="q-text">Pourquoi la chaleur est-elle ajoutée de façon isochore dans un moteur à pistons et isobare dans une turbine ?</p>
+  <ul class="choices"><li>L'essence brûle si vite que le piston n'a pas le temps de bouger ; dans la turbine la combustion a lieu dans un tube ouvert à pression uniforme</li><li>Parce que les turbines n'ont pas de chambre de combustion</li><li>Parce que le volume d'une turbine est constant</li><li>Par convention des ingénieurs</li></ul>
+  <div class="explain">Réponse de l'exercice 47 du chapitre 13.</div>
+</div>
+<div class="q" data-answer="2">
+  <p class="q-text">Dans le cycle de Rankine, pourquoi utilise-t-on une pompe plutôt qu'un compresseur ?</p>
+  <ul class="choices"><li>Parce que la vapeur est trop chaude</li><li>Parce que la turbine fournit déjà la compression</li><li>Parce que le fluide est liquide à cette étape : presque incompressible, il demande très peu de travail</li><li>Parce qu'une pompe produit plus de pression</li></ul>
+  <div class="explain">Après le condenseur, l'eau liquide est pompée vers la bouilloire : simple et peu coûteux en énergie, alors que comprimer un gaz coûte cher.</div>
+</div>
+<div class="q" data-answer="1">
+  <p class="q-text">Pour augmenter le travail de sortie d'une machine à deux isothermes, il est plus efficace :</p>
+  <ul class="choices"><li>d'augmenter le rapport des volumes (effet logarithmique)</li><li>d'augmenter la différence de température (effet linéaire)</li><li>les deux sont équivalents</li><li>de diminuer la pression</li></ul>
+  <div class="explain">\(W = nR(T_h - T_c)\ln(V_{max}/V_{min})\) : linéaire en \(\Delta T\), logarithmique en rapport de volumes.</div>
+</div>
+<div class="q" data-answer="3">
+  <p class="q-text">Au cours d'une étape adiabatique d'un cycle, le travail fourni par le gaz vaut :</p>
+  <ul class="choices"><li>\(nRT\ln(V_f/V_i)\)</li><li>\(nC_p\Delta T\)</li><li>0</li><li>\(-nC_V\Delta T = (p_iV_i - p_fV_f)/(\gamma-1)\)</li></ul>
+  <div class="explain">\(Q = 0\) donc \(W = -\Delta E = -nC_V\Delta T\) : le gaz fournit du travail en se refroidissant (table 13.1).</div>
+</div>
+<div class="quiz-footer"></div>
+</section>
+
+<!-- ===================================================== EXERCICES À DÉVELOPPEMENT ===================================================== -->
+<h2 id="dev-c5">Exercices à développement (à faire sur papier)</h2>
+<p>Exemples des diapos et exercices résolus en classe (1er octobre). Utilisez la table 13.1 et dessinez systématiquement les diagrammes p-V et T-S.</p>
+<div class="exo-tools" data-scope="dev-c5-list">
+  <button class="btn secondary" type="button" data-action="open-all">Tout ouvrir</button>
+  <button class="btn secondary" type="button" data-action="close-all">Tout fermer</button>
+  <div class="progress-bar"><span></span></div><span class="progress-label small"></span>
+</div>
+<div id="dev-c5-list">
+
+<article class="exo" data-exo-id="c5-d1">
+  <header><span class="tag">Diapo 20</span><span class="tag theme">Travail de sortie</span><h4>D1. Température ou volume ?</h4></header>
+  <div class="enonce"><p>Une machine thermique possède deux phases isothermes (\(T_h\) puis \(T_c\)) entre \(V_{min}\) et \(V_{max}\), reliées par deux isochores. Montrer qu'il est plus efficace d'augmenter le travail de sortie en augmentant la différence de température entre les isothermes qu'en augmentant la différence de volume.</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>Les isochores ne fournissent aucun travail. Dilatation isotherme à \(T_h\) : \(W_1 = nRT_h\ln(V_{max}/V_{min})\) ; compression isotherme à \(T_c\) : \(W_3 = -nRT_c\ln(V_{max}/V_{min})\).</li>
+      <li>\(W_{net} = nR\,(T_h - T_c)\ln\dfrac{V_{max}}{V_{min}}\).</li>
+      <li>\(W\) est <em>proportionnel</em> à \(T_h - T_c\) : doubler l'écart double le travail. Il ne croît que comme le <em>logarithme</em> du rapport des volumes : passer de \(V_{max}/V_{min} = 2\) à 4 ne fait que doubler \(\ln\), de 4 à 8 n'ajoute plus que 50 %, etc. (et les volumes sont limités mécaniquement).</li>
+    </ol>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c5-d2">
+  <header><span class="tag">Diapo 21 - chap. 13, ex. 10</span><span class="tag theme">Bilan sur un cycle</span><h4>D2. Compléter le tableau du cycle moteur</h4></header>
+  <div class="enonce"><p>Cycle du moteur à piston des figures 13.2 et 13.3 : (1) chauffage isochore, (2) dilatation adiabatique, (3) refroidissement isochore, (4) compression adiabatique. On donne \(\Delta Q_1 = 5\) J, \(\Delta W_2 = 4\) J, \(\Delta Q_3 = -2\) J. Compléter le tableau (\(\Delta Q\), \(\Delta W\), \(\Delta E\) pour chaque étape) et calculer le rendement.</p></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>Isochore : \(\Delta W = 0\). Adiabatique : \(\Delta Q = 0\). Toujours \(\Delta E = \Delta Q - \Delta W\), et la somme des \(\Delta E\) sur le cycle vaut 0.</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <table>
+      <tr><th>Étape</th><th>\(\Delta Q\) (J)</th><th>\(\Delta W\) (J)</th><th>\(\Delta E\) (J)</th></tr>
+      <tr><td>1 chauffage isochore</td><td>5</td><td>0</td><td>5</td></tr>
+      <tr><td>2 dilatation adiabatique</td><td>0</td><td>4</td><td>−4</td></tr>
+      <tr><td>3 refroidissement isochore</td><td>−2</td><td>0</td><td>−2</td></tr>
+      <tr><td>4 compression adiabatique</td><td>0</td><td>−1</td><td>+1</td></tr>
+      <tr><td>Somme</td><td>3</td><td>3</td><td>0</td></tr>
+    </table>
+    <p>\(\Delta E_4 = +1\) J pour que \(\Sigma\Delta E = 0\), d'où \(\Delta W_4 = -1\) J. Rendement : \(e = \dfrac{Q_h - Q_c}{Q_h} = \dfrac{5 - 2}{5} = 0{,}60\) ; vérification \(W_{net} = 4 - 1 = 3\) J \(= Q_{net}\).</p>
+    <p class="answer">e = 60 %</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c5-d3">
+  <header><span class="tag">Diapo 22 - chap. 13, ex. 34</span><span class="tag theme">Énergies sur un cycle</span><h4>D3. Un cycle à quatre étapes</h4></header>
+  <div class="enonce"><p>Un moteur contient une mole de gaz parfait à 5 ddl. Le cycle commence à \(T_1\), se détend isobariquement jusqu'à \(T_2 \gt T_1\), se détend adiabatiquement jusqu'à \(T_3\) (\(T_1 \lt T_3 \lt T_2\)), subit un refroidissement isochore jusqu'à \(T_1\), puis une compression isotherme jusqu'au point de départ. (a) Calculer \(\Delta Q\) ajoutée et \(\Delta W\) fourni pour chaque étape en fonction de \(T_1\), \(T_2\), \(T_3\). (b) Dessiner le diagramme p-V. (c) Dessiner le diagramme T-S.</p></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>\(C_V = \frac52R\), \(C_p = \frac72R\), \(\gamma = 1{,}4\). Pour l'isotherme il faut le rapport \(V_1/V_3\) : combinez \(V_2/V_1 = T_2/T_1\) (isobare) et \(T_2V_2^{\gamma-1} = T_3V_3^{\gamma-1}\) (adiabatique).</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>Étape 1, isobare de \(T_1\) à \(T_2\) : \(\Delta W_1 = p\Delta V = R(T_2 - T_1)\) ; \(\Delta E_1 = \frac52R(T_2 - T_1)\) ; \(\Delta Q_1 = \Delta E_1 + \Delta W_1 = \frac72R(T_2 - T_1)\).</li>
+      <li>Étape 2, adiabatique de \(T_2\) à \(T_3\) : \(\Delta Q_2 = 0\) ; \(\Delta W_2 = -\Delta E_2 = \frac52R(T_2 - T_3)\).</li>
+      <li>Étape 3, isochore de \(T_3\) à \(T_1\) : \(\Delta W_3 = 0\) ; \(\Delta Q_3 = \Delta E_3 = \frac52R(T_1 - T_3) \lt 0\).</li>
+      <li>Étape 4, isotherme à \(T_1\) de \(V_3\) à \(V_1\) : \(\Delta Q_4 = \Delta W_4 = RT_1\ln(V_1/V_3)\). Or \(V_2/V_1 = T_2/T_1\) et \(V_3/V_2 = (T_2/T_3)^{1/(\gamma-1)} = (T_2/T_3)^{5/2}\), donc \(\dfrac{V_1}{V_3} = \dfrac{T_1}{T_2}\left(\dfrac{T_3}{T_2}\right)^{5/2}\) et \(\Delta Q_4 = \Delta W_4 = RT_1\left[\ln\dfrac{T_1}{T_2} + \dfrac52\ln\dfrac{T_3}{T_2}\right] \lt 0\).</li>
+      <li>(b) p-V : horizontale vers la droite (1), courbe descendante \(pV^{1{,}4}\) (2), verticale vers le bas (3), hyperbole \(pV = RT_1\) remontant vers la gauche (4). (c) T-S : courbe montante concave (isobare, 1), verticale descendante (2), courbe descendante (isochore, 3, plus raide que l'isobare), horizontale vers la gauche à \(T_1\) (4).</li>
+    </ol>
+    <p class="small">Le simulateur de cycle (préréglage « ex. 34 ») trace les deux diagrammes et vérifie \(\Sigma\Delta E = 0\).</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c5-d4">
+  <header><span class="tag">Classe - chap. 13, ex. 28</span><span class="tag theme">Équation d'état quelconque</span><h4>D4. Expansion isobare d'un matériau exotique</h4></header>
+  <div class="enonce"><p>Un système a pour équation d'état \(p^6T^{-1}e^{aV} = b\) (\(a\), \(b\) constantes). Il subit une expansion isobare à la pression \(p\) de \(V_1\) à \(V_2\). Exprimer \(\Delta W\), \(\Delta Q\), \(\Delta S\) et \(\Delta E\) en fonction de \(p\), \(C_p\), \(a\), \(b\), \(V_1\), \(V_2\).</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>À \(p\) constante, \(T = \dfrac{p^6e^{aV}}{b}\), donc \(dT = \dfrac{ap^6e^{aV}}{b}dV = aT\,dV\).</li>
+      <li>\(\Delta W = \displaystyle\int_{V_1}^{V_2}p\,dV = p\,(V_2 - V_1)\).</li>
+      <li>\(\Delta Q = \displaystyle\int C_p\,dT = C_p\int_{V_1}^{V_2}\frac{ap^6e^{aV}}{b}dV = \frac{C_pp^6}{b}\left(e^{aV_2} - e^{aV_1}\right)\).</li>
+      <li>\(\Delta S = \displaystyle\int\frac{C_p\,dT}{T} = C_p\int_{V_1}^{V_2}a\,dV = C_p\,a\,(V_2 - V_1)\).</li>
+      <li>\(\Delta E = \Delta Q - \Delta W = \dfrac{C_pp^6}{b}\left(e^{aV_2} - e^{aV_1}\right) - p\,(V_2 - V_1)\).</li>
+    </ol>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c5-d5">
+  <header><span class="tag">Classe - chap. 13, ex. 38</span><span class="tag theme">Cycle de Carnot</span><h4>D5. Tableau d'un cycle de Carnot entre 800 K et 400 K</h4></header>
+  <div class="enonce"><p>Cycle de Carnot (figure 13.11) entre des réservoirs à 800 K et 400 K, gaz parfait. On donne \(\Delta Q_1 = 4\) J, \(\Delta W_2 = 1\) J, \(\Delta W_3 = -1\) J, \(\Delta W_4 = -1\) J. Compléter le tableau et calculer le rendement.</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p>Étape 1, isotherme à \(T_h\) : \(\Delta E = 0\), \(\Delta W_1 = \Delta Q_1 = 4\) J. Étape 2, adiabatique : \(\Delta Q = 0\), \(\Delta E = -1\) J. Étape 3, isotherme à \(T_c\) : \(\Delta E = 0\), \(\Delta Q_3 = \Delta W_3\). Étape 4, adiabatique : \(\Delta Q = 0\), \(\Delta E = +1\) J (compensant l'étape 2).</p>
+    <p>Mais pour un cycle de Carnot, \(Q_c/T_c = Q_h/T_h\) impose \(|Q_c| = 4\times400/800 = 2\) J, donc \(\Delta Q_3 = \Delta W_3 = -2\) J et non −1 J : l'énoncé est incohérent (remarque du corrigé du professeur). Avec \(\Delta W_3 = -2\) J :</p>
+    <table>
+      <tr><th>Étape</th><th>\(\Delta Q\) (J)</th><th>\(\Delta W\) (J)</th><th>\(\Delta E\) (J)</th></tr>
+      <tr><td>1 isotherme \(T_h\)</td><td>4</td><td>4</td><td>0</td></tr>
+      <tr><td>2 adiabatique</td><td>0</td><td>1</td><td>−1</td></tr>
+      <tr><td>3 isotherme \(T_c\)</td><td>−2</td><td>−2</td><td>0</td></tr>
+      <tr><td>4 adiabatique</td><td>0</td><td>−1</td><td>+1</td></tr>
+    </table>
+    <p>\(e = (Q_h - Q_c)/Q_h = 2/4 = 0{,}5 = 1 - T_c/T_h\). (Avec la valeur −1 J de l'énoncé on trouverait \(e = 3/4\), impossible pour ces températures.)</p>
+    <p class="answer">e = 0,5 ; Q_c = 2 J</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c5-d6">
+  <header><span class="tag">Classe - chap. 13, ex. 44</span><span class="tag theme">Rendement réel</span><h4>D6. Moteur de moto</h4></header>
+  <div class="enonce"><p>Un moteur fournit 6 kW en consommant 1 L d'essence toutes les 20 minutes. (a) Nombre de molécules d'essence dans 1 L (masse d'une molécule 114 u, 1 u = \(1{,}66\times10^{-27}\) kg, 1 L pèse 0,7 kg) ? (b) L'oxydation d'une molécule libère 57 eV : énergie fournie par la combustion de 1 L ? (c) Travail fourni par le moteur pendant qu'il brûle 1 L ? (d) Rendement ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(m_{mol} = 114\times1{,}66\times10^{-27} = 1{,}89\times10^{-25}\) kg ; \(N = 0{,}7/1{,}89\times10^{-25} = 3{,}7\times10^{24}\) molécules.</li>
+      <li>(b) \(Q = 3{,}7\times10^{24}\times57\ \text{eV} = 2{,}1\times10^{26}\ \text{eV} = 2{,}1\times10^{26}\times1{,}6\times10^{-19} = 3{,}4\times10^7\) J.</li>
+      <li>(c) \(W = P\,t = 6000\times1200 = 7{,}2\times10^6\) J.</li>
+      <li>(d) \(e = W/Q = 7{,}2\times10^6/3{,}4\times10^7 = 0{,}21\).</li>
+    </ol>
+    <p class="answer">(a) 3,7 × 10²⁴ | (b) 3,4 × 10⁷ J | (c) 7,2 × 10⁶ J | (d) 0,21</p>
+    <p class="small">Exercice 45 : avec allumage à 1100 K et échappement à 570 K, le rendement de Carnot vaut \(1 - 570/1100 = 0{,}48\) ; le « coefficient d'utilité » \(e/e_{Carnot} = 0{,}44\).</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c5-d7">
+  <header><span class="tag">Classe - chap. 13, ex. 47</span><span class="tag theme">Processus spéciaux et moteurs</span><h4>D7. Isochore ou isobare ?</h4></header>
+  <div class="enonce"><p>Pourquoi le transfert de chaleur est-il modélisé comme isochore dans un moteur à pistons et isobare dans une turbine ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p>L'essence brûle très vite : pendant la combustion le piston n'a pratiquement pas le temps de bouger, le volume ne change pas (isochore). Dans une turbine, la chaleur est ajoutée pendant que le fluide traverse un tube ouvert (chambre de combustion) : la pression est la même d'un bout à l'autre du tube, le gaz se dilate librement en avançant (isobare). Le diesel, qui brûle plus lentement, est modélisé par une combustion isobare.</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c5-d8">
+  <header><span class="tag">Chap. 13, ex. 6 (corrigé du cours)</span><span class="tag theme">Cycle d'Otto complet</span><h4>D8. Un cylindre d'automobile</h4></header>
+  <div class="enonce"><p>Le cylindre d'un moteur a un rayon de 5 cm. Le piston commence sa compression à 23 cm du fond et parcourt 18 cm. Gaz parfait à 5 ddl, 310 K et 1 atm au début (piston en bas). (a) Nombre de moles ? (b) Température et pression à la fin de la compression adiabatique ? (c) Travail fourni au gaz par le piston pendant la compression ? (d) La combustion élève la température de 800 K de plus : nouvelle température ? (e) Chaleur ajoutée ? (f) Travail fourni par le gaz en se détendant adiabatiquement jusqu'au volume initial ? (g) Rendement du moteur ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(V_i = \pi(0{,}05)^2\times0{,}23 = 1{,}81\times10^{-3}\) m³ ; \(n = \dfrac{p_iV_i}{RT_i} = \dfrac{1{,}013\times10^5\times1{,}81\times10^{-3}}{8{,}314\times310} = 0{,}071\) mol.</li>
+      <li>(b) \(V_f = \pi(0{,}05)^2\times0{,}05 = 3{,}93\times10^{-4}\) m³, rapport \(V_i/V_f = 4{,}6\). \(p_f = p_i(4{,}6)^{1{,}4} = 8{,}6\times10^5\) Pa ; \(T_f = T_i(4{,}6)^{0{,}4} = 310\times1{,}84 = 571\) K.</li>
+      <li>(c) \(W_{sur\ le\ gaz} = nC_V\Delta T = 0{,}071\times20{,}8\times(571 - 310) = 385\) J (ou \((p_fV_f - p_iV_i)/(\gamma-1) = (337 - 183)/0{,}4 = 385\) J).</li>
+      <li>(d) \(T_3 = 571 + 800 = 1371\) K.</li>
+      <li>(e) Combustion isochore : \(Q_h = nC_V\times800 = 0{,}071\times20{,}8\times800 = 1{,}18\times10^3\) J.</li>
+      <li>(f) Détente adiabatique à \(V_i\) : \(T_4 = 1371/1{,}84 = 745\) K ; \(W_{out} = nC_V(T_3 - T_4) = 0{,}071\times20{,}8\times626 = 924\) J.</li>
+      <li>(g) \(e = \dfrac{W_{out} - W_{in}}{Q_h} = \dfrac{924 - 385}{1180} = 0{,}46\) ; vérification : Otto \(1 - 4{,}6^{-0{,}4} = 0{,}46\).</li>
+    </ol>
+    <p class="answer">(a) 0,071 mol | (b) 571 K, 8,6 × 10⁵ Pa | (c) 385 J | (d) 1371 K | (e) 1180 J | (f) 924 J | (g) 0,46</p>
+    <p class="small">Le corrigé manuscrit du cours indique « 840 J » pour (c), probablement une erreur de calcul : \(nC_V\Delta T\) et \((p_fV_f - p_iV_i)/(\gamma - 1)\) donnent tous deux 385 J.</p>
+  </div></details>
+</article>
+
+</div>
+
+<!-- ===================================================== EXERCICES SUGGÉRÉS ===================================================== -->
+<h2 id="sugg-c5">Exercices suggérés du manuel (liste officielle du cours)</h2>
+<p>Énoncés paraphrasés en français d'après Stowe (chapitre 13). Réponses impaires au dos du manuel (p. 545-546), paires d'après le corrigé du professeur.</p>
+<div class="exo-tools" data-scope="sugg-c5-list">
+  <button class="btn secondary" type="button" data-action="open-all">Tout ouvrir</button>
+  <button class="btn secondary" type="button" data-action="close-all">Tout fermer</button>
+  <div class="progress-bar"><span></span></div><span class="progress-label small"></span>
+</div>
+<div id="sugg-c5-list">
+<h3>Chapitre 13 - Les moteurs</h3>
+
+<article class="exo" data-exo-id="c5-s13-1">
+  <header><span class="tag">Chap. 13, ex. 1, p. 276</span><span class="tag theme">Généralités : chaleur et travail</span><h4>Détente de n moles selon trois processus</h4></header>
+  <div class="enonce"><p>\(n\) moles d'un gaz parfait (\(\nu\) ddl), initialement à \(T_i\), se détendent de \(V_i\) à \(V_f\). Calculer la chaleur ajoutée \(Q\) et le travail fourni \(W\) en fonction de \(n\), \(\nu\), \(T_i\), \(V_i\), \(V_f\) si la détente est (a) isobare ; (b) isotherme ; (c) adiabatique.</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) Isobare : \(p = nRT_i/V_i\), \(W = p(V_f - V_i) = \dfrac{nRT_i}{V_i}(V_f - V_i)\) ; \(T_f = T_iV_f/V_i\) ; \(Q = nC_p\Delta T = \dfrac{\nu+2}{2}\dfrac{nRT_i}{V_i}(V_f - V_i)\).</li>
+      <li>(b) Isotherme : \(Q = W = nRT_i\ln(V_f/V_i)\).</li>
+      <li>(c) Adiabatique : \(Q = 0\) ; \(W = -nC_V(T_f - T_i) = \dfrac{\nu}{2}nRT_i\left[1 - \left(\dfrac{V_i}{V_f}\right)^{2/\nu}\right]\) car \(\gamma - 1 = 2/\nu\).</li>
+    </ol>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c5-s13-2">
+  <header><span class="tag">Chap. 13, ex. 2, p. 276</span><span class="tag theme">Travail adiabatique</span><h4>Formule du travail adiabatique</h4></header>
+  <div class="enonce"><p>Montrer que pour un processus adiabatique d'un gaz parfait, le travail fourni vaut \(W = \dfrac{p_iV_i - p_fV_f}{\gamma - 1}\).</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    \[p = \frac{p_iV_i^\gamma}{V^\gamma}\ \Longrightarrow\ W = \int_{V_i}^{V_f}p\,dV = p_iV_i^\gamma\frac{V_f^{1-\gamma} - V_i^{1-\gamma}}{1-\gamma} = \frac{p_iV_i^\gamma V_i^{1-\gamma} - p_iV_i^\gamma V_f^{1-\gamma}}{\gamma-1} = \frac{p_iV_i - p_fV_f}{\gamma-1}\]
+    <p>en utilisant \(p_iV_i^\gamma = p_fV_f^\gamma\). Équivalent à \(W = -nC_V\Delta T\) puisque \(pV = nRT\) et \(R/(\gamma-1) = C_V\).</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c5-s13-7">
+  <header><span class="tag">Chap. 13, ex. 7, p. 277</span><span class="tag theme">Cycle isochore-adiabatique</span><h4>Moteur à piston en symboles</h4></header>
+  <div class="enonce"><p>Le moteur à piston des figures 13.2 et 13.3 part de \((p_1, V_1)\), est chauffé isochoriquement jusqu'à \(p_2\), se détend adiabatiquement jusqu'à \(V_3\), puis refroidissement isochore et compression adiabatique ferment le cycle. En fonction de \(\gamma\), \(p_1\), \(V_1\), \(p_2\), \(V_3\), trouver (a) \(p\) et \(V\) à la fin de chaque étape ; (b) \(Q\) et \(W\) de chaque étape. (Indice : \(Q = nC_V\Delta T\) pour une isochore, \(C_V = \frac{\nu}{2}R\), \(\frac{\nu}{2} = \frac{1}{\gamma-1}\), \(pV = nRT\).)</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) Fin 1 : \((p_2, V_1)\). Fin 2 : \(V_3\), \(p = p_2(V_1/V_3)^\gamma\). Fin 3 : \(V_3\), \(p = p_1(V_1/V_3)^\gamma\) (sur l'adiabatique passant par \((p_1, V_1)\)). Fin 4 : \((p_1, V_1)\).</li>
+      <li>(b) \(nC_V\Delta T = \dfrac{\Delta(pV)}{\gamma-1}\) : étape 1 : \(Q_1 = \dfrac{(p_2 - p_1)V_1}{\gamma-1}\), \(W_1 = 0\). Étape 2 : \(Q_2 = 0\), \(W_2 = \dfrac{p_2V_1}{\gamma-1}\left[1 - \left(\dfrac{V_1}{V_3}\right)^{\gamma-1}\right]\). Étape 3 : \(Q_3 = \dfrac{(p_1 - p_2)(V_1/V_3)^\gamma V_3}{\gamma-1}\), \(W_3 = 0\). Étape 4 : \(Q_4 = 0\), \(W_4 = \dfrac{p_1V_1}{\gamma-1}\left[\left(\dfrac{V_1}{V_3}\right)^{\gamma-1} - 1\right]\).</li>
+    </ol>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c5-s13-10">
+  <header><span class="tag">Chap. 13, ex. 10, p. 277</span><span class="tag theme">Bilan des énergies</span><h4>Tableau du cycle moteur</h4></header>
+  <div class="enonce"><p>Voir l'exercice à développement <a href="#dev-c5">D2</a>.</p></div>
+</article>
+
+<article class="exo" data-exo-id="c5-s13-11">
+  <header><span class="tag">Chap. 13, ex. 11, p. 277</span><span class="tag theme">Tracer les diagrammes</span><h4>Cycle isobare, isotherme, isochore, adiabatique</h4></header>
+  <div class="enonce"><p>Cycle à quatre étapes : expansion isobare, expansion isotherme, retrait de chaleur isochore, compression adiabatique. (a) Esquisser le p-V ; (b) le T-S ; (c) dresser le tableau des signes (+, −, 0) de \(Q\), \(W\), \(\Delta E\) pour chaque étape.</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p>(a) p-V : horizontale vers la droite, hyperbole descendante, verticale vers le bas, courbe adiabatique remontant vers la gauche (plus raide que l'isotherme ; les deux sont concaves vers le haut). (b) T-S : courbe montante (isobare), horizontale vers la droite (isotherme), courbe descendante (isochore, plus raide que l'isobare), verticale montante (adiabatique).</p>
+    <table><tr><th>Étape</th><th>\(Q\)</th><th>\(W\)</th><th>\(\Delta E\)</th></tr><tr><td>1 isobare (expansion)</td><td>+</td><td>+</td><td>+</td></tr><tr><td>2 isotherme (expansion)</td><td>+</td><td>+</td><td>0</td></tr><tr><td>3 isochore (refroidissement)</td><td>−</td><td>0</td><td>−</td></tr><tr><td>4 adiabatique (compression)</td><td>0</td><td>−</td><td>+</td></tr></table>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c5-s13-19">
+  <header><span class="tag">Chap. 13, ex. 19, p. 279</span><span class="tag theme">Relations p et V : pentes sur le T-S</span><h4>Pentes des courbes dans le plan T-S</h4></header>
+  <div class="enonce"><p>Une mole de gaz parfait (\(\nu\) ddl) à la température \(T\). Pente \(dT/dS\) sur un diagramme T-S pour (a) une addition de chaleur isochore ; (b) isobare ; (c) isotherme. (d) Ces courbes ont-elles une courbure, et dans quel sens ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p>\(dS = dQ/T\) : (a) isochore \(dQ = C_V\,dT\) → \(\dfrac{dT}{dS} = \dfrac{T}{C_V} = \dfrac{2T}{\nu R}\) ; (b) isobare \(\dfrac{dT}{dS} = \dfrac{T}{C_p} = \dfrac{2T}{(\nu+2)R}\) ; (c) isotherme : pente 0. (d) Les pentes (a) et (b) croissent avec \(T\) : courbes concaves vers le haut ; l'isochore est plus raide que l'isobare (\(C_V \lt C_p\)).</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c5-s13-24">
+  <header><span class="tag">Chap. 13, ex. 24, p. 279</span><span class="tag theme">Relations p et V : expansion adiabatique</span><h4>Détente adiabatique d'un gaz à 5 ddl</h4></header>
+  <div class="enonce"><p>Un gaz parfait dont les molécules ont 5 ddl part de \((p_i, V_i)\) et se détend adiabatiquement jusqu'à \(V_f\). En fonction de \(p_i\), \(V_i\), \(V_f\) : (a) travail fourni ; (b) pression finale.</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p>\(\gamma = 7/5\). (b) \(p_f = p_i(V_i/V_f)^{7/5}\). (a) \(W = \dfrac{p_iV_i - p_fV_f}{\gamma-1} = \dfrac52p_iV_i\left[1 - \left(\dfrac{V_i}{V_f}\right)^{2/5}\right]\).</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c5-s13-28">
+  <header><span class="tag">Chap. 13, ex. 28, p. 280</span><span class="tag theme">Énergies sur un cycle</span><h4>Expansion isobare d'un système exotique</h4></header>
+  <div class="enonce"><p>Voir l'exercice à développement <a href="#dev-c5">D4</a>.</p></div>
+</article>
+
+<article class="exo" data-exo-id="c5-s13-34">
+  <header><span class="tag">Chap. 13, ex. 34, p. 281</span><span class="tag theme">Énergies sur un cycle complet</span><h4>Cycle à quatre étapes</h4></header>
+  <div class="enonce"><p>Voir l'exercice à développement <a href="#dev-c5">D3</a>.</p></div>
+</article>
+
+<article class="exo" data-exo-id="c5-s13-39">
+  <header><span class="tag">Chap. 13, ex. 39, p. 282</span><span class="tag theme">Cycle de Carnot</span><h4>Cycle de Carnot numérique</h4></header>
+  <div class="enonce"><p>Cycle de Carnot avec un gaz parfait à 5 ddl (\(\gamma = 1{,}4\)). Au début de l'étape 1 : \(p_1 = 4\times10^5\) Pa, \(V_1 = 10^{-3}\) m³, \(T_1 = 600\) K. Dilatation isotherme jusqu'à \(2V_1\) (étape 1), puis adiabatique jusqu'à \(3V_1\) (étape 2). (a) Tableau de \(p\), \(V\), \(T\) à la fin de chaque étape ; (b) tableau de \(Q\), \(W\), \(\Delta E\) (en J) ; (c) rendement.</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>\(nR = p_1V_1/T_1 = 400/600 = 0{,}667\) J/K ; \(nC_V = \frac52nR = 1{,}667\) J/K.</li>
+      <li>(a) Fin 1 : \(V = 2\times10^{-3}\), \(T = 600\), \(p = 2\times10^5\) Pa. Fin 2 : \(V = 3\times10^{-3}\), \(T = 600\,(2/3)^{0{,}4} = 510\) K, \(p = nRT/V = 1{,}13\times10^5\) Pa. Fin 3 (isotherme à 510 K jusqu'à \(V_4\) tel que l'adiabatique 4 ramène à \(V_1\), 600 K) : \(V_4 = V_1(600/510)^{2{,}5} = 1{,}5\times10^{-3}\) m³, \(p = 2{,}27\times10^5\) Pa. Fin 4 : retour à \((4\times10^5, 10^{-3}, 600)\).</li>
+      <li>(b) Étape 1 : \(Q = W = nRT_1\ln 2 = 400\times0{,}693 = 277\) J, \(\Delta E = 0\). Étape 2 : \(Q = 0\), \(W = nC_V(600 - 510) = 150\) J, \(\Delta E = -150\) J. Étape 3 : \(Q = W = nRT_c\ln(1{,}5/3) = 340\times(-0{,}693) = -236\) J, \(\Delta E = 0\). Étape 4 : \(Q = 0\), \(W = -150\) J, \(\Delta E = +150\) J.</li>
+      <li>(c) \(e = (277 - 236)/277 = 0{,}15 = 1 - 510/600\).</li>
+    </ol>
+    <p class="answer">e = 0,15 (réponses du manuel : 277, 150, −236, −150 J)</p>
+    <p class="small">Le simulateur de cycle (Carnot, \(T_h = 600\) K, \(T_c = 510\) K, \(V_1 = 1\) L, \(V_2/V_1 = 2\)) reproduit ces valeurs.</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c5-s13-47">
+  <header><span class="tag">Chap. 13, ex. 47, p. 284</span><span class="tag theme">Moteur et processus spéciaux</span><h4>Isochore ou isobare ?</h4></header>
+  <div class="enonce"><p>Voir l'exercice à développement <a href="#dev-c5">D7</a>.</p></div>
+</article>
+
+</div>
+
+</article>
+</main>
+<footer class="footer">ELE2307 - site d'étude personnel généré à partir des diapos du cours, des corrigés du professeur et du manuel de Stowe. Vérifiez toujours avec les documents officiels sur Moodle.</footer>
+<script defer src="assets/katex/katex.min.js"></script>
+<script defer src="assets/katex/contrib/auto-render.min.js"></script>
+<script defer src="assets/app.js?v=4"></script>
+<script defer src="assets/widgets.js?v=4"></script>
+<script defer src="assets/widgets2.js?v=4"></script>
+</body>
+</html>

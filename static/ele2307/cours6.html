@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cours 6 - Gestion de la chaleur dans les systèmes électroniques | ELE2307</title>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<link rel="stylesheet" href="assets/style.css?v=8">
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="index.html">ELE2307 <small>Thermodynamique statistique et semiconducteurs</small></a>
+  <nav>
+    <a href="index.html">Accueil</a>
+    <a href="cours1.html">Cours 1</a>
+    <a href="cours2.html">Cours 2</a>
+    <a href="cours3.html">Cours 3</a>
+    <a href="cours4.html">Cours 4</a>
+    <a href="cours5.html">Cours 5</a>
+    <a href="cours6.html">Cours 6</a>
+    <a href="formulaire.html">Formulaire</a>
+    <a href="errata.html">Errata</a>
+    <button class="theme-btn" type="button">Thème</button>
+  </nav>
+</header>
+
+<main class="layout">
+<aside class="toc"></aside>
+<article class="content">
+
+<div class="course-hero">
+  <div class="kicker">Cours 6 - Chapitre 6 du cours</div>
+  <h1>Gestion de la chaleur dans les systèmes électroniques</h1>
+  <p class="meta">Notes de cours « Transfert de chaleur en électronique » (16 pages, pas dans le manuel) | Diapos « Cours 6 » (21 pages) | Classe d'exercices du 8 octobre</p>
+  <p><span class="pill accent">Loi de Fourier</span><span class="pill accent">Loi de Newton</span><span class="pill accent">Loi de Stefan</span><span class="pill accent">Résistances thermiques</span><span class="pill accent">Série et parallèle</span><span class="pill accent">Convection naturelle et forcée</span><span class="pill accent">Laminaire et turbulent</span></p>
+  <p class="small">Fil conducteur : les trois modes de transfert (conduction, convection, rayonnement) s'écrivent tous sous la forme \(\dot Q = \Delta T/R\). On résout les problèmes de refroidissement comme des circuits électriques : réseau de résistances thermiques, flux de chaleur, températures aux nœuds.</p>
+</div>
+
+<h2>0. D'où vient ce cours</h2>
+<p>En thermodynamique, le transfert de chaleur est l'énergie échangée entre deux corps de températures différentes. Ce mécanisme dépend de la matière située entre les deux corps et de sa mobilité. Ce chapitre étudie les trois modes de transfert, conduction, convection et rayonnement, ainsi que les technologies de refroidissement les plus courantes en électronique. Toutes les formules sont valables en régime permanent, à une dimension.</p>
+
+<h2>1. Transfert de chaleur par conduction</h2>
+<p>La conduction est le transfert de chaleur entre deux corps, ou à l'intérieur d'un corps, <em>sans fluide en mouvement</em>. Elle résulte d'un échange d'énergie des particules les plus énergétiques vers les particules adjacentes les moins énergétiques.</p>
+<ul>
+  <li><strong>Dans un fluide au repos</strong> (gaz ou liquide), les molécules bougent au hasard et entrent constamment en collision : celles du côté chaud, plus énergétiques, cèdent de l'énergie à celles du côté froid. C'est la <em>diffusion de l'énergie</em>.</li>
+  <li><strong>Dans un solide</strong>, les molécules ne se déplacent pas : la conduction se fait par les vibrations du réseau (matériau isolant électrique) et, dans un conducteur, aussi par le déplacement des électrons libres (d'où l'excellente conductivité des métaux).</li>
+</ul>
+<div class="formula"><div class="title">Loi de Fourier (régime permanent, 1D, conductivité constante, sans génération de chaleur)</div>
+\[\dot Q_{cond} = k\,A\,\frac{T_H - T_B}{L}\]
+<div class="cond">\(\dot Q\) : flux de chaleur (W) ; \(A\) : surface traversée (m²) ; \(T_H\), \(T_B\) : températures haute et basse (K ou °C, seule la différence compte) ; \(L\) : longueur traversée (m) ; \(k\) : conductivité thermique du matériau (W/(m K)), qui indique à quel point un matériau conduit la chaleur. Le flux va toujours dans le sens de la température décroissante.</div>
+</div>
+
+<h2>2. Transfert de chaleur par convection</h2>
+<p>La convection apparaît lorsqu'une surface solide est en contact avec un <em>fluide en mouvement</em> de température différente. Elle superpose deux mécanismes :</p>
+<ul>
+  <li>la <strong>diffusion</strong> (mouvement aléatoire des molécules), dominante là où le fluide est lent : à la surface du solide la vitesse est nulle et seul ce mécanisme agit ;</li>
+  <li>l'<strong>advection</strong> (déplacement en bloc du fluide) : plus la vitesse est grande, plus de molécules sont déplacées et plus le transfert est important. Dans la convection naturelle, le fluide chauffé se dilate, devient moins dense et est poussé vers le haut.</li>
+</ul>
+<p>Il se forme une <strong>couche limite</strong> au-dessus de la surface, dans laquelle la vitesse passe de 0 à \(V_\infty\) et la température de \(T_s\) à \(T_\infty\).</p>
+<div class="formula"><div class="title">Loi du refroidissement de Newton</div>
+\[\dot Q_{conv} = h\,A\,(T_H - T_B)\]
+<div class="cond">\(A\) : surface d'échange solide-fluide ; \(h\) : coefficient de convection (W/(m² K)), typiquement de l'ordre de 10 W/(m² K). Contrairement à \(k\), \(h\) <em>n'est pas une propriété du matériau</em> : il dépend de la géométrie, de la nature de l'écoulement (vitesse, laminaire ou turbulent) et des propriétés du fluide. L'étude d'un problème de convection se ramène généralement à celle de son coefficient \(h\). L'ouragan est le phénomène de convection le plus puissant sur la planète.</div>
+</div>
+
+<h2>3. Transfert de chaleur par rayonnement</h2>
+<p>Tout objet dont la température dépasse le zéro absolu (−273,15 °C) émet un rayonnement électromagnétique (photons). Il y a donc toujours transfert par rayonnement entre deux corps, pourvu que le milieu ne soit pas opaque ; c'est le seul mode possible dans le vide (espace).</p>
+<div class="formula"><div class="title">Loi de Stefan</div>
+\[\dot Q_{rad} = \varepsilon\,\sigma\,A\,\left(T_H^4 - T_B^4\right)\]
+<div class="cond">\(\sigma = 5{,}67\times10^{-8}\) W/(m² K⁴) : constante de Stefan-Boltzmann ; \(\varepsilon\) : émissivité de la surface, entre 0 et 1 ; \(T\) obligatoirement en <strong>kelvins</strong> (puissance 4). Dans les circuits électroniques, conduction et convection dominent largement : le rayonnement est généralement négligé.</div>
+</div>
+
+<h2>4. Résistances thermiques : méthode de résolution</h2>
+<h3>4.1 Analogie avec la loi d'Ohm</h3>
+<p>Une différence de potentiel aux bornes d'une résistance crée un courant \(I = (V_1 - V_2)/R\). De la même façon, une différence de température crée un flux de chaleur. En réécrivant la loi de Fourier et la loi de Newton :</p>
+<div class="formula">
+\[\dot Q_{cond} = kA\frac{T_H - T_B}{L} = \frac{T_H - T_B}{L/(kA)} = \frac{T_H - T_B}{R_{cond}}\qquad\qquad R_{cond} = \frac{L}{kA}\ \ (\text{K/W})\]
+\[\dot Q_{conv} = hA(T_H - T_B) = \frac{T_H - T_B}{1/(hA)} = \frac{T_H - T_B}{R_{conv}}\qquad\qquad R_{conv} = \frac{1}{hA}\ \ (\text{K/W})\]
+<div class="cond">Trois similitudes : la différence de température joue le rôle de la tension ; le flux va toujours du chaud vers le froid comme le courant du haut vers le bas potentiel ; \(L/(kA)\) et \(1/(hA)\) jouent le rôle de \(R\). La résistance de conduction croît avec l'épaisseur et décroît avec \(k\) et \(A\) ; la résistance de convection décroît avec \(h\) et \(A\). On les dessine comme des résistances électriques.</div>
+</div>
+
+<h3>4.2 Couches en série</h3>
+<p>Un matériau composite de trois couches (épaisseurs \(L_i\), conductivités \(k_i\)) est exposé à gauche à un fluide chaud (\(T_{\infty,1}\), \(h_1\)) et à droite à un fluide froid (\(T_{\infty,2}\), \(h_2\)). Les couches sont isolées en haut et en bas (problème 1D) et sans source interne : le flux qui entre dans chaque couche est le même que celui qui en sort.</p>
+<div class="formula">
+\[\dot Q = \frac{T_{\infty,1} - T_1}{R_{conv,1}} = \frac{T_1 - T_2}{R_{cond,1}} = \frac{T_2 - T_3}{R_{cond,2}} = \frac{T_3 - T_4}{R_{cond,3}} = \frac{T_4 - T_{\infty,2}}{R_{conv,2}}\]
+\[\dot Q = \frac{T_{\infty,1} - T_{\infty,2}}{R_{conv,1} + R_{cond,1} + R_{cond,2} + R_{cond,3} + R_{conv,2}} = \frac{T_{\infty,1} - T_{\infty,2}}{R_{total}}\qquad\qquad \dot Q = \frac{T_i - T_j}{R_{total,\,i-j}}\]
+<div class="cond">Les couches juxtaposées dans la direction du flux agissent comme des résistances <strong>en série</strong> : \(R_{total} = \sum R\). La dernière formule, valable entre deux points quelconques du réseau, sert à remonter aux températures intermédiaires une fois \(\dot Q\) connu (identité : si \(a/b = c/d = \cdots\), alors \((a + c + \cdots)/(b + d + \cdots)\) a la même valeur).</div>
+</div>
+
+<h3>4.3 Couches en parallèle</h3>
+<p>Deux couches côte à côte (aires \(A_1\), \(A_2\), même longueur \(L\)) entre deux faces à \(T_1\) et \(T_2\), isolées en haut et en bas : chacune est traversée par son propre flux soumis au même \(\Delta T\).</p>
+<div class="formula">
+\[\dot Q = \dot Q_1 + \dot Q_2 = \frac{T_1 - T_2}{R_1} + \frac{T_1 - T_2}{R_2} = \frac{T_1 - T_2}{R_{total}}\qquad\qquad \frac{1}{R_{total}} = \frac{1}{R_1} + \frac{1}{R_2},\quad R_1 = \frac{L}{k_1A_1},\ R_2 = \frac{L}{k_2A_2}\]
+<div class="cond">Un transfert perpendiculaire aux couches = résistances <strong>en parallèle</strong>. Pour un composite plus complexe, on le divise en ensembles de couches en série et en parallèle : par exemple les couches 1 et 2 (parallèles, \(1/R_{12} = 1/R_1 + 1/R_2\)) en série avec la couche 3 de section \(A_1 + A_2\) : \(R_{total} = R_{12} + R_3\).</div>
+</div>
+<div class="widget" data-widget="thermal-resistance" data-preset="maison"></div>
+
+<h2>5. Mécanismes de refroidissement</h2>
+<p>Refroidir un système électronique consiste à augmenter le transfert par convection \(\dot Q_{conv} = hA(T_H - T_B)\), de trois façons :</p>
+<ul>
+  <li>en <strong>maximisant la surface de contact \(A\)</strong> : dissipateur de chaleur à ailettes ;</li>
+  <li>en <strong>minimisant la température du fluide \(T_B\)</strong> : air frais, liquide de refroidissement ;</li>
+  <li>en <strong>maximisant le coefficient de convection \(h\)</strong> : ventilateur, pompe (convection forcée), régime turbulent.</li>
+</ul>
+<p>Le coefficient \(h\) dépend des propriétés intrinsèques du fluide, de la longueur de l'écoulement \(L\), des températures du fluide et du solide, de la vitesse du fluide et de la nature de l'écoulement.</p>
+<div class="box def"><span class="label">Deux régimes d'écoulement</span>
+<ul>
+  <li><strong>Laminaire</strong> : le fluide s'écoule majoritairement dans la même direction, en couches ordonnées ; prédictible et facile à modéliser (microfluidique), mais mélange peu.</li>
+  <li><strong>Turbulent</strong> : création de tourbillons qui perturbent la trajectoire ; flux aléatoire, meilleur mélange et meilleur transfert de chaleur (coefficient \(h\) plus élevé).</li>
+</ul>
+<p>Le paramètre qui tranche est le <strong>nombre de Reynolds</strong>, rapport des forces d'inertie aux forces visqueuses : \(Re = \dfrac{V L}{\nu}\), avec \(V\) la vitesse du fluide, \(L\) la dimension caractéristique et \(\nu\) la viscosité cinématique. Selon le cours : \(Re \lt 100\) laminaire, \(Re \gt 2000\) turbulent (la fumée d'une bougie est laminaire en bas puis turbulente en haut).</p>
+</div>
+<div class="formula"><div class="title">Convection naturelle (plaque de longueur \(L\) à \(T_s\) dans un fluide à \(T_\infty\))</div>
+<table>
+  <tr><th>Écoulement</th><th>Air</th><th>Eau</th></tr>
+  <tr><td>Laminaire</td><td>\(h = 1{,}4\left(\dfrac{T_s - T_\infty}{L}\right)^{1/4}\)</td><td>\(h = 43{,}7\left(\dfrac{T_s - T_\infty}{L}\right)^{1/4}\)</td></tr>
+  <tr><td>Turbulent</td><td>\(h = 1{,}1\,(T_s - T_\infty)^{1/3}\)</td><td>\(h = 51{,}6\,(T_s - T_\infty)^{1/3}\)</td></tr>
+</table>
+<div class="cond">\(h\) en W/(m² K), températures en °C ou K (seule la différence intervient), \(L\) en m. La convection naturelle est induite par la poussée d'Archimède : l'air en contact avec un composant chaud se dilate, monte et est remplacé par de l'air plus froid (téléphones, tablettes, téléviseurs, routeurs).</div>
+</div>
+<div class="formula"><div class="title">Convection forcée (air de vitesse \(V_\infty\) sur une plaque de longueur \(L\))</div>
+<table>
+  <tr><th>Écoulement</th><th>Air</th></tr>
+  <tr><td>Laminaire</td><td>\(h = 3{,}9\left(\dfrac{V_\infty}{L}\right)^{1/2}\)</td></tr>
+  <tr><td>Turbulent</td><td>\(h = 5{,}5\left(\dfrac{V_\infty^4}{L}\right)^{1/5}\)</td></tr>
+</table>
+<div class="cond">Écoulement induit par une cause extérieure : ventilateur, pompe, vent (processeurs, consoles, alimentations, serveurs, routeurs). Méthode : d'abord identifier le régime hydrodynamique, puis calculer \(h\) et la résistance thermique correspondante.</div>
+</div>
+<div class="widget" data-widget="convection"></div>
+<div class="widget" data-widget="pcb-network"></div>
+
+<h2>6. À retenir</h2>
+<ul class="summary-list">
+  <li>Conduction (Fourier) : \(\dot Q = kA(T_H - T_B)/L\), \(R_{cond} = L/(kA)\). Convection (Newton) : \(\dot Q = hA(T_H - T_B)\), \(R_{conv} = 1/(hA)\). Rayonnement (Stefan) : \(\dot Q = \varepsilon\sigma A(T_H^4 - T_B^4)\), \(T\) en K.</li>
+  <li>Réseau de résistances : série \(R = \sum R_i\) (même flux), parallèle \(1/R = \sum 1/R_i\) (même \(\Delta T\)) ; \(\dot Q = (T_i - T_j)/R_{total,i-j}\) entre deux nœuds quelconques.</li>
+  <li>Refroidir = augmenter \(A\) (dissipateur), baisser \(T_B\), augmenter \(h\) (convection forcée, turbulence).</li>
+  <li>\(h\) dépend du fluide, de \(L\), des températures, de la vitesse et du régime ; \(Re = VL/\nu\) : \(\lt 100\) laminaire, \(\gt 2000\) turbulent (cours).</li>
+  <li>Corrélations : naturelle air \(1{,}4(\Delta T/L)^{1/4}\) ou \(1{,}1\Delta T^{1/3}\) ; forcée air \(3{,}9(V/L)^{1/2}\) ou \(5{,}5(V^4/L)^{1/5}\).</li>
+</ul>
+
+<!-- ===================================================== QUIZ ===================================================== -->
+<section class="quiz" data-quiz-id="c6" id="quiz-c6">
+<h2>Quiz rapide - Cours 6</h2>
+<p class="small">Une seule bonne réponse par question. Cliquez pour vérifier immédiatement.</p>
+
+<div class="q" data-answer="2">
+  <p class="q-text">Quel mode de transfert de chaleur n'implique aucun fluide en mouvement ?</p>
+  <ul class="choices"><li>La convection</li><li>L'advection</li><li>La conduction</li><li>Aucun : la chaleur a toujours besoin d'un fluide</li></ul>
+  <div class="explain">La conduction se fait par collisions moléculaires (fluide au repos), vibrations du réseau et électrons libres (solide).</div>
+</div>
+<div class="q" data-answer="1">
+  <p class="q-text">Dans un métal, la conduction thermique est assurée par :</p>
+  <ul class="choices"><li>le déplacement des atomes</li><li>les vibrations du réseau et les électrons libres</li><li>le rayonnement interne</li><li>la convection des atomes</li></ul>
+  <div class="explain">Les atomes sont fixes ; les vibrations interatomiques transportent l'énergie, et dans un conducteur les électrons libres s'ajoutent, d'où \(k\) élevé.</div>
+</div>
+<div class="q" data-answer="0">
+  <p class="q-text">La loi de Fourier s'écrit :</p>
+  <ul class="choices"><li>\(\dot Q = kA(T_H - T_B)/L\)</li><li>\(\dot Q = hA(T_H - T_B)\)</li><li>\(\dot Q = \varepsilon\sigma A(T_H^4 - T_B^4)\)</li><li>\(\dot Q = kL(T_H - T_B)/A\)</li></ul>
+  <div class="explain">Proportionnel à la conductivité, à la surface et au gradient \((T_H - T_B)/L\).</div>
+</div>
+<div class="q" data-answer="1">
+  <p class="q-text">Le coefficient de convection \(h\) :</p>
+  <ul class="choices"><li>est une propriété du matériau solide, comme \(k\)</li><li>dépend de la géométrie, du fluide et de son écoulement</li><li>vaut toujours 10 W/(m² K)</li><li>ne dépend que de la température</li></ul>
+  <div class="explain">\(h\) n'est pas une propriété matérielle : il dépend de la nature du fluide, de la vitesse, du régime (laminaire ou turbulent), de \(L\) et des températures.</div>
+</div>
+<div class="q" data-answer="2">
+  <p class="q-text">La convection combine deux mécanismes :</p>
+  <ul class="choices"><li>conduction et rayonnement</li><li>diffusion et rayonnement</li><li>diffusion (mouvement aléatoire) et advection (mouvement du fluide)</li><li>advection et émission de photons</li></ul>
+  <div class="explain">À la surface du solide la vitesse est nulle et seule la diffusion agit ; l'advection prend le relais dans la couche limite.</div>
+</div>
+<div class="q" data-answer="3">
+  <p class="q-text">Dans la loi de Stefan \(\dot Q = \varepsilon\sigma A(T_H^4 - T_B^4)\), les températures doivent être :</p>
+  <ul class="choices"><li>en °C</li><li>en °C ou en K indifféremment</li><li>en °F</li><li>en kelvins</li></ul>
+  <div class="explain">À cause de la puissance 4, seule l'échelle absolue convient. Pour Fourier et Newton, °C ou K sont équivalents car seule la différence intervient.</div>
+</div>
+<div class="q" data-answer="0">
+  <p class="q-text">Dans les circuits électroniques, le rayonnement est :</p>
+  <ul class="choices"><li>généralement négligé devant conduction et convection</li><li>le mode dominant</li><li>le seul mode possible</li><li>interdit par le deuxième principe</li></ul>
+  <div class="explain">Le rayonnement domine seulement dans le vide ; sur une carte, conduction et convection l'emportent largement.</div>
+</div>
+<div class="q" data-answer="1">
+  <p class="q-text">Résistances thermiques de conduction et de convection :</p>
+  <ul class="choices"><li>\(R_{cond} = kA/L\), \(R_{conv} = hA\)</li><li>\(R_{cond} = L/(kA)\), \(R_{conv} = 1/(hA)\)</li><li>\(R_{cond} = L/k\), \(R_{conv} = 1/h\)</li><li>\(R_{cond} = kL/A\), \(R_{conv} = A/h\)</li></ul>
+  <div class="explain">Pour que \(\dot Q = \Delta T/R\) : \(R_{cond} = L/(kA)\) et \(R_{conv} = 1/(hA)\), en K/W.</div>
+</div>
+<div class="q" data-answer="0">
+  <p class="q-text">Trois couches traversées successivement par le flux, entre deux fluides. La résistance totale est :</p>
+  <ul class="choices"><li>\(R_{conv,1} + R_1 + R_2 + R_3 + R_{conv,2}\)</li><li>\((1/R_1 + 1/R_2 + 1/R_3)^{-1}\)</li><li>\(R_1R_2R_3\)</li><li>la plus grande des cinq</li></ul>
+  <div class="explain">Même flux dans chaque élément, chutes de température additives : série.</div>
+</div>
+<div class="q" data-answer="2">
+  <p class="q-text">Deux couches côte à côte, perpendiculaires au flux, soumises au même \(\Delta T\), se combinent :</p>
+  <ul class="choices"><li>en série</li><li>en moyenne arithmétique</li><li>en parallèle : \(1/R = 1/R_1 + 1/R_2\)</li><li>en ne gardant que la plus petite</li></ul>
+  <div class="explain">Les flux s'additionnent sous le même \(\Delta T\) : parallèle.</div>
+</div>
+<div class="q" data-answer="1">
+  <p class="q-text">Pour augmenter le refroidissement par convection d'un composant, on peut :</p>
+  <ul class="choices"><li>réduire la surface d'échange</li><li>augmenter \(A\) (ailettes), baisser \(T_B\) ou augmenter \(h\) (ventilateur)</li><li>augmenter la température du fluide</li><li>remplacer l'air par le vide</li></ul>
+  <div class="explain">\(\dot Q_{conv} = hA(T_H - T_B)\) : trois leviers. Le vide supprimerait conduction et convection.</div>
+</div>
+<div class="q" data-answer="0">
+  <p class="q-text">Un écoulement turbulent, comparé à un écoulement laminaire :</p>
+  <ul class="choices"><li>mélange mieux et transfère mieux la chaleur (\(h\) plus grand)</li><li>transfère moins de chaleur</li><li>est plus facile à modéliser</li><li>n'existe qu'en convection naturelle</li></ul>
+  <div class="explain">Les tourbillons renouvellent le fluide près de la surface ; le laminaire est prédictible (microfluidique) mais mélange peu.</div>
+</div>
+<div class="q" data-answer="2">
+  <p class="q-text">Le nombre de Reynolds \(Re = VL/\nu\) est le rapport :</p>
+  <ul class="choices"><li>des forces de gravité aux forces de pression</li><li>de la conduction à la convection</li><li>des forces d'inertie aux forces visqueuses</li><li>de la chaleur au travail</li></ul>
+  <div class="explain">Selon le cours : \(Re \lt 100\) laminaire, \(Re \gt 2000\) turbulent.</div>
+</div>
+<div class="q" data-answer="1">
+  <p class="q-text">Puce de 10 cm, air à 10 m/s en régime laminaire forcé. Le coefficient \(h\) vaut :</p>
+  <ul class="choices"><li>\(1{,}4\,(20/0{,}1)^{1/4} = 5{,}3\) W/(m² K)</li><li>\(3{,}9\sqrt{10/0{,}1} = 39\) W/(m² K)</li><li>\(5{,}5\,(10^4/0{,}1)^{1/5} = 55\) W/(m² K)</li><li>\(10\) W/(m² K)</li></ul>
+  <div class="explain">Convection forcée laminaire dans l'air : \(h = 3{,}9(V_\infty/L)^{1/2}\) (exercice 3 du cours 6).</div>
+</div>
+<div class="q" data-answer="3">
+  <p class="q-text">Le transfert de chaleur du Soleil vers la Terre se fait principalement par :</p>
+  <ul class="choices"><li>conduction</li><li>convection</li><li>advection</li><li>rayonnement</li></ul>
+  <div class="explain">Le vide interplanétaire interdit conduction et convection : seuls les photons transportent l'énergie (exercice 1 du cours 6).</div>
+</div>
+<div class="quiz-footer"></div>
+</section>
+
+<!-- ===================================================== EXERCICES À DÉVELOPPEMENT ===================================================== -->
+<h2 id="dev-c6">Exercices à développement (à faire sur papier)</h2>
+<p>Exercices de la fin des notes de cours (section 6.6) et exercice de l'intra 2019 repris en classe le 8 octobre. Dessinez toujours le réseau de résistances avant de calculer.</p>
+<div class="exo-tools" data-scope="dev-c6-list">
+  <button class="btn secondary" type="button" data-action="open-all">Tout ouvrir</button>
+  <button class="btn secondary" type="button" data-action="close-all">Tout fermer</button>
+  <div class="progress-bar"><span></span></div><span class="progress-label small"></span>
+</div>
+<div id="dev-c6-list">
+
+<article class="exo" data-exo-id="c6-d1">
+  <header><span class="tag">Notes - exercice 1</span><span class="tag theme">Modes de transfert</span><h4>D1. Identifier le mode de transfert principal</h4></header>
+  <div class="enonce"><p>Pour chaque cas, identifier le mode de transfert de chaleur principal : (a) du Soleil à la Terre ; (b) du corps humain à son environnement ; (c) d'un composant électronique au circuit imprimé sur lequel il est fixé.</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) Les corps célestes sont séparés par le vide : ni conduction ni convection possibles. Transfert par <strong>rayonnement</strong>.</li>
+      <li>(b) Le corps échange une petite partie de sa chaleur par conduction (contact), mais nous vivons dans un fluide (l'air) et la majeure partie de l'échange se fait par <strong>convection</strong> (exemple : un ventilateur en cas de chaleur). Le rayonnement infrarouge compte aussi, mais le cours retient la convection.</li>
+      <li>(c) Le composant est en contact direct avec le circuit imprimé (solide) : pas de transfert de masse, donc pas de convection ; la majeure partie se fait par <strong>conduction</strong>.</li>
+    </ol>
+    <p class="answer">(a) rayonnement | (b) convection | (c) conduction</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c6-d2">
+  <header><span class="tag">Notes - exercice 2</span><span class="tag theme">Conduction</span><h4>D2. Mur de bois ou de pierre</h4></header>
+  <div class="enonce"><p>Un mur sépare l'intérieur chauffé d'une maison (\(T_1 = 22\) °C) de l'extérieur (\(T_2 = -10\) °C). Épaisseur \(L = 0{,}5\) m, aire \(A = 10\) m². Calculer \(\dot Q_{cond}\) (a) si le mur est en bois (\(k = 0{,}15\) W/(m K)) ; (b) en pierre naturelle (\(k = 3{,}5\) W/(m K)).</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p>Loi de Fourier \(\dot Q = kA(T_1 - T_2)/L\) avec \(T_1 - T_2 = 32\) K : (a) \(0{,}15\times10\times32/0{,}5 = 96\) W ; (b) \(3{,}5\times10\times32/0{,}5 = 2240\) W.</p>
+    <p class="answer">(a) 96 W | (b) 2240 W : pour le même gradient, le bois laisse passer 23 fois moins de chaleur, c'est un bien meilleur isolant</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c6-d3">
+  <header><span class="tag">Notes - exercice 3</span><span class="tag theme">Convection forcée</span><h4>D3. Refroidir une puce avec un ventilateur</h4></header>
+  <div class="enonce"><p>Une puce carrée de côté \(L = 0{,}1\) m, isolée thermiquement sur ses côtés, est à \(T_s = 45\) °C dans de l'air ambiant à \(T_0 = 25\) °C. Un ventilateur propulse l'air à 10 m/s ; l'écoulement est laminaire. (a) Déterminer et calculer le coefficient de convection \(h\). (b) Calculer le flux de chaleur \(\dot Q_{conv}\).</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) Air, convection forcée (ventilateur), laminaire : \(h = 3{,}9\sqrt{V_\infty/L} = 3{,}9\sqrt{10/0{,}1} = 3{,}9\times10 = 39\) W/(m² K).</li>
+      <li>(b) \(A = L^2 = 0{,}01\) m² : \(\dot Q_{conv} = hA(T_s - T_0) = 39\times0{,}01\times20 = 7{,}8\) W.</li>
+    </ol>
+    <p class="answer">(a) h = 39 W/(m² K) | (b) Q̇ = 7,8 W</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c6-d4">
+  <header><span class="tag">Notes - exercice 4</span><span class="tag theme">Réseaux de résistances</span><h4>D4. Schématiser les résistances thermiques</h4></header>
+  <div class="enonce"><p>Schématiser les résistances thermiques pour deux matériaux composites : (a) un bloc où le flux \(\dot Q\) traverse horizontalement une première couche, puis deux couches superposées (l'une au-dessus de l'autre), puis une dernière couche, le tout isolé en haut et en bas ; (b) trois couches empilées verticalement, traversées de bas en haut par le flux, isolées sur les côtés.</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) Il faut tenir compte de la direction du flux. La couche 1 est traversée en premier (série), puis le flux se partage entre les couches 2 (dessus) et 3 (dessous) qui sont soumises au même \(\Delta T\) : elles sont en <strong>parallèle</strong> ; enfin la couche 4 (série). Réseau : \(R_1\) en série avec \((R_2 \parallel R_3)\) en série avec \(R_4\), soit \(R_{total} = R_1 + \dfrac{R_2R_3}{R_2 + R_3} + R_4\), avec \(R_i = L_i/(k_iA_i)\) (les aires de 2 et 3 sont leurs sections respectives). On peut ajouter une résistance de convection \(R_{conv,1}\) avant \(R_1\) et \(R_{conv,2}\) après \(R_4\) pour les échanges avec les fluides aux deux surfaces.</li>
+      <li>(b) Les trois couches sont traversées successivement par le même flux : trois résistances en <strong>série</strong>, \(R_{total} = R_1 + R_2 + R_3\), plus une résistance de convection sur la surface supérieure si elle est au contact d'un fluide.</li>
+    </ol>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c6-d5">
+  <header><span class="tag">Intra 2019 - exercice 3 (repris en classe)</span><span class="tag theme">Réseau complet</span><h4>D5. Circuit imprimé refroidi des deux côtés</h4></header>
+  <div class="enonce"><p>Des circuits intégrés soudés sur une plaquette de 10 cm × 10 cm dissipent 20 W. La plaquette a 2 mm d'épaisseur et trois couches de cuivre de 0,07 mm séparées par du verre d'époxy. L'air circule à 5 m/s sur la face du dessus (turbulent) et à 3 m/s sur la face du dessous (laminaire). \(k_{Cu} = 390\) W/(m K), \(k_{époxy} = 0{,}35\) W/(m K). (a) Dessiner le réseau de résistances vertical formé par la plaquette et l'air. (b) Calculer les résistances qui séparent la face du dessus de l'air ambiant. (c) Si \(T_0 = 25\) °C, températures des faces du dessus et du dessous ?</p></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>Les composants (source de 20 W) sont sur le dessus. De là, la chaleur a deux chemins vers \(T_0\) : directement par convection au-dessus, ou à travers la plaquette puis par convection en dessous. Les deux chemins sont en parallèle. Regroupez les trois couches de cuivre et les trois couches d'époxy (série).</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) Nœud \(T_{dessus}\) (source \(\dot Q\)) ; branche 1 : \(R_{conv,1}\) vers \(T_0\) ; branche 2 : \(R_{3C} + R_{3E}\) (cuivre et époxy en série) jusqu'au nœud \(T_{dessous}\), puis \(R_{conv,2}\) vers \(T_0\). Les deux branches sont en parallèle entre \(T_{dessus}\) et \(T_0\).</li>
+      <li>(b) Dessus, forcé turbulent : \(h_H = 5{,}5(V^4/L)^{1/5} = 5{,}5(625/0{,}1)^{0{,}2} = 31{,}6\) W/(m² K) ; \(R_{conv,1} = 1/(h_HA) = 1/(31{,}6\times0{,}01) = 3{,}16\) K/W. Cuivre : \(R_C = \dfrac{0{,}07\times10^{-3}}{390\times0{,}01} = 1{,}8\times10^{-5}\) K/W, \(R_{3C} = 5{,}4\times10^{-5}\) K/W. Époxy : épaisseur totale \(2 - 3\times0{,}07 = 1{,}79\) mm en trois couches de 0,597 mm : \(R_E = \dfrac{0{,}597\times10^{-3}}{0{,}35\times0{,}01} = 0{,}171\) K/W, \(R_{3E} = 0{,}512\) K/W. Dessous, forcé laminaire : \(h_B = 3{,}9\sqrt{3/0{,}1} = 21{,}4\) W/(m² K), \(R_{conv,2} = 4{,}68\) K/W.</li>
+      <li>(c) Branche 2 : \(R_{3C} + R_{3E} + R_{conv,2} = 5{,}19\) K/W. \(R_{eq} = R_{conv,1}\parallel 5{,}19 = \dfrac{3{,}16\times5{,}19}{3{,}16 + 5{,}19} = 1{,}97\) K/W. \(T_{dessus} = T_0 + \dot QR_{eq} = 25 + 20\times1{,}97 = 64{,}3\) °C (337,4 K). Flux par le dessous : \(\dot Q_2 = (T_{dessus} - T_0)/5{,}19 = 7{,}6\) W ; \(T_{dessous} = T_{dessus} - \dot Q_2(R_{3C} + R_{3E}) = 64{,}3 - 7{,}6\times0{,}512 = 60{,}4\) °C (333,6 K).</li>
+    </ol>
+    <p class="answer">T_dessus ≈ 64 °C (337 K), T_dessous ≈ 60 °C (334 K) ; 12,4 W partent par le dessus, 7,6 W par le dessous</p>
+    <p class="small">Le cuivre est négligeable (\(10^{-5}\) K/W) ; ce sont les films d'air (3 et 5 K/W) qui fixent la température. Le calculateur « Circuit imprimé » reproduit ces valeurs et permet de tester un meilleur ventilateur.</p>
+  </div></details>
+</article>
+
+</div>
+
+<!-- ===================================================== EXERCICES SUGGÉRÉS ===================================================== -->
+<h2 id="sugg-c6">Exercices suggérés</h2>
+<p>La liste officielle indique : « Ce cours n'est pas dans le manuel, à la place, faire les exercices donnés à la fin des pdf du cours », c'est-à-dire les exercices 1 à 4 des notes (D1 à D4 ci-dessus) et l'exercice de l'intra (D5). Les exercices suivants sont des <strong>compléments</strong> dans le même esprit, pour s'entraîner sur chaque formule du formulaire.</p>
+<div class="exo-tools" data-scope="sugg-c6-list">
+  <button class="btn secondary" type="button" data-action="open-all">Tout ouvrir</button>
+  <button class="btn secondary" type="button" data-action="close-all">Tout fermer</button>
+  <div class="progress-bar"><span></span></div><span class="progress-label small"></span>
+</div>
+<div id="sugg-c6-list">
+
+<article class="exo" data-exo-id="c6-s1">
+  <header><span class="tag">Complément 1</span><span class="tag theme">Série avec convection</span><h4>Vitre simple entre deux fluides</h4></header>
+  <div class="enonce"><p>Une vitre de 4 mm (\(k = 0{,}95\) W/(m K)) et de 1 m² sépare une pièce à 21 °C de l'extérieur à −15 °C. Coefficients de convection : \(h_{int} = 8\) W/(m² K) (convection naturelle), \(h_{ext} = 25\) W/(m² K) (vent). (a) Résistance totale et flux de chaleur ? (b) Températures des deux faces du verre ? (c) Que devient le flux si l'on remplace la vitre par un double vitrage avec une lame d'air immobile de 10 mm (\(k = 0{,}023\)) ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(R_{conv,int} = 1/8 = 0{,}125\) ; \(R_{verre} = 0{,}004/0{,}95 = 0{,}0042\) ; \(R_{conv,ext} = 1/25 = 0{,}040\) K/W. \(R_{total} = 0{,}169\) K/W ; \(\dot Q = 36/0{,}169 = 213\) W.</li>
+      <li>(b) \(T_{face\ int} = 21 - 213\times0{,}125 = -5{,}6\) °C ; \(T_{face\ ext} = -5{,}6 - 213\times0{,}0042 = -6{,}5\) °C. Le verre est presque isotherme : la quasi-totalité de la chute se fait dans les films d'air.</li>
+      <li>(c) \(R_{air} = 0{,}010/0{,}023 = 0{,}435\) K/W et une deuxième vitre \(0{,}0042\) : \(R_{total} = 0{,}608\) K/W, \(\dot Q = 59\) W, soit 3,6 fois moins.</li>
+    </ol>
+    <p class="answer">(a) 0,169 K/W, 213 W | (b) −5,6 °C et −6,5 °C | (c) 59 W</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c6-s2">
+  <header><span class="tag">Complément 2</span><span class="tag theme">Convection naturelle vs forcée</span><h4>Un processeur sans ventilateur</h4></header>
+  <div class="enonce"><p>Un composant carré de 5 cm de côté est à 70 °C dans de l'air à 25 °C. (a) Coefficient \(h\) et flux évacué en convection naturelle laminaire. (b) Même question si un ventilateur souffle à 4 m/s (laminaire). (c) À 4 m/s, quelle serait la température du composant s'il dissipe 5 W ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(h = 1{,}4\left(\dfrac{45}{0{,}05}\right)^{1/4} = 1{,}4\times(900)^{0{,}25} = 1{,}4\times5{,}48 = 7{,}7\) W/(m² K) ; \(\dot Q = 7{,}7\times0{,}0025\times45 = 0{,}86\) W.</li>
+      <li>(b) \(h = 3{,}9\sqrt{4/0{,}05} = 3{,}9\times8{,}94 = 34{,}9\) W/(m² K) ; \(\dot Q = 34{,}9\times0{,}0025\times45 = 3{,}9\) W : 4,5 fois plus.</li>
+      <li>(c) \(T_s = T_\infty + \dot Q/(hA) = 25 + 5/(34{,}9\times0{,}0025) = 25 + 57 = 82\) °C.</li>
+    </ol>
+    <p class="answer">(a) 7,7 W/(m² K), 0,86 W | (b) 35 W/(m² K), 3,9 W | (c) 82 °C</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c6-s3">
+  <header><span class="tag">Complément 3</span><span class="tag theme">Rayonnement</span><h4>Rayonnement d'un dissipateur</h4></header>
+  <div class="enonce"><p>Un dissipateur noir anodisé (\(\varepsilon = 0{,}9\)) de surface 0,02 m² est à 80 °C dans une pièce à 20 °C. (a) Puissance rayonnée nette ? (b) La comparer au flux de convection naturelle turbulente (\(h = 1{,}1\,\Delta T^{1/3}\)). (c) Que devient le rayonnement si le dissipateur est en aluminium poli (\(\varepsilon = 0{,}05\)) ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(T_H = 353\) K, \(T_B = 293\) K : \(T_H^4 - T_B^4 = 1{,}553\times10^{10} - 7{,}370\times10^{9} = 8{,}16\times10^{9}\) K⁴ ; \(\dot Q_{rad} = 0{,}9\times5{,}67\times10^{-8}\times0{,}02\times8{,}16\times10^9 = 8{,}3\) W.</li>
+      <li>(b) \(h = 1{,}1\times60^{1/3} = 1{,}1\times3{,}91 = 4{,}3\) W/(m² K) ; \(\dot Q_{conv} = 4{,}3\times0{,}02\times60 = 5{,}2\) W. Sans ventilateur, le rayonnement est du même ordre que la convection naturelle, voire supérieur.</li>
+      <li>(c) \(\dot Q_{rad} = 8{,}3\times0{,}05/0{,}9 = 0{,}46\) W : une surface brillante rayonne 18 fois moins ; c'est pourquoi les dissipateurs sont anodisés noirs.</li>
+    </ol>
+    <p class="answer">(a) 8,3 W | (b) 5,2 W | (c) 0,46 W</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c6-s4">
+  <header><span class="tag">Complément 4</span><span class="tag theme">Régime d'écoulement</span><h4>Laminaire ou turbulent ?</h4></header>
+  <div class="enonce"><p>De l'air (\(\nu = 1{,}5\times10^{-5}\) m²/s) s'écoule sur une carte de 15 cm. Calculer le nombre de Reynolds et qualifier le régime selon le cours pour (a) 0,005 m/s (convection naturelle très douce) ; (b) 0,3 m/s ; (c) 5 m/s. (d) Pourquoi préfère-t-on le régime turbulent pour refroidir, mais le régime laminaire en microfluidique ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(Re = 0{,}005\times0{,}15/1{,}5\times10^{-5} = 50\) : laminaire. (b) \(Re = 3000\) : turbulent. (c) \(Re = 5\times10^4\) : turbulent.</li>
+      <li>(d) Les tourbillons du régime turbulent renouvellent sans cesse le fluide au contact de la surface, ce qui augmente \(h\) et le transfert de chaleur. En microfluidique on veut au contraire des écoulements prédictibles et des flux parallèles qui ne se mélangent pas (contrôle des réactions) : le régime laminaire, quitte à devoir induire des perturbations localement pour mélanger.</li>
+    </ol>
+    <p class="answer">(a) 50, laminaire | (b) 3000, turbulent | (c) 5 × 10⁴, turbulent</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c6-s5">
+  <header><span class="tag">Complément 5</span><span class="tag theme">Série et parallèle</span><h4>Mur avec un pont thermique</h4></header>
+  <div class="enonce"><p>Un mur de 3 m × 3 m et de 20 cm d'épaisseur est fait de styromousse (\(k = 0{,}042\)) sauf une colonne de béton (\(k = 0{,}62\)) de 3 m × 0,3 m qui le traverse de part en part. Faces à 20 °C et −10 °C. (a) Résistances de la mousse et du béton ? (b) Flux total et fraction passant par le béton ? (c) Flux si le mur était entièrement en mousse ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) Deux chemins parallèles de même longueur : \(R_{mousse} = \dfrac{0{,}2}{0{,}042\times(9 - 0{,}9)} = 0{,}588\) K/W ; \(R_{béton} = \dfrac{0{,}2}{0{,}62\times0{,}9} = 0{,}358\) K/W.</li>
+      <li>(b) \(1/R = 1/0{,}588 + 1/0{,}358 = 1{,}70 + 2{,}79 = 4{,}49\) W/K → \(R = 0{,}223\) K/W ; \(\dot Q = 30/0{,}223 = 135\) W, dont \(30/0{,}358 = 84\) W (62 %) par le béton qui n'occupe que 10 % de la surface.</li>
+      <li>(c) \(R = 0{,}2/(0{,}042\times9) = 0{,}529\) K/W → \(\dot Q = 57\) W : le pont thermique multiplie les pertes par 2,4.</li>
+    </ol>
+    <p class="answer">(a) 0,588 et 0,358 K/W | (b) 135 W, 62 % par le béton | (c) 57 W</p>
+  </div></details>
+</article>
+
+</div>
+
+</article>
+</main>
+<footer class="footer">ELE2307 - site d'étude personnel généré à partir des diapos du cours, des notes « Transfert de chaleur en électronique », des corrigés du professeur et du manuel de Stowe. Vérifiez toujours avec les documents officiels sur Moodle.</footer>
+<script defer src="assets/katex/katex.min.js"></script>
+<script defer src="assets/katex/contrib/auto-render.min.js"></script>
+<script defer src="assets/app.js?v=4"></script>
+<script defer src="assets/widgets.js?v=4"></script>
+<script defer src="assets/widgets2.js?v=4"></script>
+</body>
+</html>

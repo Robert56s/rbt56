@@ -68,6 +68,30 @@
 	</section>
 {/if}
 
+<section class="group">
+	<p class="eyebrow">Study notes</p>
+	<p class="blurb">Interactive study notes, in French.</p>
+	<ol class="list">
+		<li>
+			<span class="num">FR</span>
+			<div class="body">
+				<h2>ELE2307 Study Site</h2>
+				<p>
+					Statistical thermodynamics, lectures 1 to 6: the theory with interactive demos, a quiz per
+					lecture, exercises with worked solutions and a commented formula sheet.
+				</p>
+				<ul class="tags">
+					<li>physics</li>
+					<li>thermodynamics</li>
+					<li>exercises</li>
+					<li class="state">live</li>
+				</ul>
+			</div>
+			<a class="btn" href="/ele2307/" rel="external">Open</a>
+		</li>
+	</ol>
+</section>
+
 <p class="note">More to come.</p>
 
 <section class="misc">

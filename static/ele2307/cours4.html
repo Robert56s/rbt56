@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cours 4 - Les processus thermodynamiques | ELE2307</title>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<link rel="stylesheet" href="assets/style.css?v=8">
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="index.html">ELE2307 <small>Thermodynamique statistique et semiconducteurs</small></a>
+  <nav>
+    <a href="index.html">Accueil</a>
+    <a href="cours1.html">Cours 1</a>
+    <a href="cours2.html">Cours 2</a>
+    <a href="cours3.html">Cours 3</a>
+    <a href="cours4.html">Cours 4</a>
+    <a href="cours5.html">Cours 5</a>
+    <a href="cours6.html">Cours 6</a>
+    <a href="formulaire.html">Formulaire</a>
+    <a href="errata.html">Errata</a>
+    <button class="theme-btn" type="button">Thème</button>
+  </nav>
+</header>
+
+<main class="layout">
+<aside class="toc"></aside>
+<article class="content">
+
+<div class="course-hero">
+  <div class="kicker">Cours 4 - Chapitre 4 du cours</div>
+  <h1>Les processus thermodynamiques</h1>
+  <p class="meta">Manuel (Stowe, <em>TSM</em>) : chapitre 12 (et table 11.1) | Diapos « Cours 4 » (17 pages) | Classe d'exercices du 24 septembre</p>
+  <p><span class="pill accent">Dérivées partielles</span><span class="pill accent">Isobare</span><span class="pill accent">Isotherme</span><span class="pill accent">Adiabatique</span><span class="pill accent">pV^γ = cste</span><span class="pill accent">Conduction thermique</span><span class="pill accent">Résistance thermique</span><span class="pill accent">Équation de la chaleur</span></p>
+  <p class="small">Fil conducteur : un processus où l'on fixe une variable (\(p\), \(T\), \(V\) ou \(S\)) ne laisse qu'une seule variable indépendante. Le tableau des dérivées partielles permet alors d'écrire \(dE\), \(dT\), \(dV\) en fonction de grandeurs mesurables (\(C_p\), \(C_V\), \(\beta\), \(\kappa\)). La deuxième moitié du cours traite du transport de la chaleur : loi de Fourier, résistances thermiques et équation de la chaleur.</p>
+</div>
+
+<h2>0. D'où vient ce cours</h2>
+<p>Le premier principe \(dE = T\,dS - p\,dV + \mu\,dN\) relie cinq variables, mais pour un système fermé non diffusif (\(dN = 0\)) seules <strong>deux</strong> sont indépendantes. Imposer une contrainte supplémentaire (pression constante, température constante, pas d'échange de chaleur) réduit le problème à une seule variable, et chaque cas simplifié correspond à une situation physique concrète : chauffage à l'air libre, compression lente dans un bain, détente rapide dans un cylindre. Ces processus sont les briques des cycles moteurs du cours 5.</p>
+
+<h2>1. Variables, dérivées partielles et tableau 11.1</h2>
+<div class="formula"><div class="title">Deux coefficients mesurables</div>
+\[\kappa = -\frac1V\left(\frac{\partial V}{\partial p}\right)_T\ \ (\text{compressibilité isotherme})\qquad\qquad \beta = \frac1V\left(\frac{\partial V}{\partial T}\right)_p\ \ (\text{coefficient d'expansion thermique})\]
+<div class="cond">\(\kappa \gt 0\) toujours (un corps comprimé se contracte). \(\beta\) est généralement positif ; contre-exemple demandé en classe : l'eau entre 0 et 4 °C se <em>contracte</em> quand on la chauffe (\(\beta \lt 0\)), d'où le maximum de densité à 4 °C et la glace qui flotte.</div>
+</div>
+<div class="formula"><div class="title">Tableau des dérivées partielles pour les processus non diffusifs (\(dN = 0\)) - table 11.1 du manuel</div>
+\[\left(\frac{\partial S}{\partial T}\right)_p = \frac{C_p}{T}\qquad \left(\frac{\partial S}{\partial V}\right)_T = \frac{\beta}{\kappa}\qquad \left(\frac{\partial T}{\partial V}\right)_S = -\frac{T\beta}{C_V\kappa}\]
+\[\left(\frac{\partial S}{\partial T}\right)_V = \frac{C_V}{T}\qquad \left(\frac{\partial S}{\partial V}\right)_p = \frac{C_p}{TV\beta}\qquad \left(\frac{\partial T}{\partial V}\right)_p = \frac{1}{V\beta}\]
+\[\left(\frac{\partial S}{\partial p}\right)_T = -V\beta\qquad \left(\frac{\partial T}{\partial p}\right)_S = \frac{TV\beta}{C_p}\qquad \left(\frac{\partial p}{\partial V}\right)_S = -\frac{C_p}{VC_V\kappa}\]
+\[\left(\frac{\partial S}{\partial p}\right)_V = \frac{C_V\kappa}{T\beta}\qquad \left(\frac{\partial T}{\partial p}\right)_V = \frac{\kappa}{\beta}\qquad \left(\frac{\partial p}{\partial V}\right)_T = -\frac{1}{V\kappa}\]
+<div class="cond">\(C_p\) et \(C_V\) sont ici les capacités thermiques du système entier (J/K). Le tableau est fourni au formulaire : il faut savoir <em>le lire</em>, c'est-à-dire choisir la dérivée dont la variable fixée est celle du processus.</div>
+</div>
+<div class="box def"><span class="label">Les types de processus</span>
+<ul>
+  <li><strong>Isobare</strong> : \(p\) fixée (\(dp = 0\)). Exemple : chauffage à l'air libre.</li>
+  <li><strong>Isotherme</strong> : \(T\) fixée (\(dT = 0\)). Exemple : compression lente en contact avec un bain.</li>
+  <li><strong>Isochore</strong> : \(V\) fixé (\(dV = 0\)). Exemple : chauffage dans une enceinte rigide ; aucun travail.</li>
+  <li><strong>Adiabatique</strong> : pas d'échange de chaleur (\(dQ = 0\), donc \(dS = 0\) si le processus est quasi statique). Exemple : compression rapide, détente dans une turbine.</li>
+  <li><strong>Non diffusif</strong> : pas d'échange de molécules (\(dN = 0\)) ; c'est le cas de tous les processus de ce cours.</li>
+</ul>
+</div>
+<div class="box ex"><span class="label">Valeurs pour un gaz parfait (chap. 12, ex. 28)</span>
+<p>De \(V = nRT/p\) : \(\beta = \dfrac1V\left(\dfrac{\partial V}{\partial T}\right)_p = \dfrac{nR}{pV} = \dfrac1T\) et \(\kappa = -\dfrac1V\left(\dfrac{\partial V}{\partial p}\right)_T = \dfrac{nRT}{p^2V} = \dfrac1p\). Ces deux valeurs simplifient toutes les formules ci-dessous.</p>
+</div>
+
+<h2>2. Processus isobare</h2>
+<p>Pression constante, \(dp = 0\), et en général \(dN = 0\). Du premier principe \(dE = T\,dS - p\,dV\). On exprime tout en fonction de la température :</p>
+<div class="formula">
+\[dE = T\left(\frac{\partial S}{\partial T}\right)_p dT - p\left(\frac{\partial V}{\partial T}\right)_p dT\qquad\text{avec}\quad T\left(\frac{\partial S}{\partial T}\right)_p = C_p,\quad \left(\frac{\partial V}{\partial T}\right)_p = \beta V\]
+\[\boxed{dE = \left(C_p - pV\beta\right)dT}\]
+<div class="cond">Lecture : la chaleur reçue \(C_p\,dT\) sert à augmenter l'énergie interne <em>et</em> à fournir le travail de dilatation \(p\,dV = pV\beta\,dT\). Gaz parfait (\(\beta = 1/T\)) : \(pV\beta = nR\), donc \(dE = (C_p - nR)dT = C_V\,dT\), \(\Delta W = p\Delta V = nR\Delta T\), \(\Delta Q = nC_p\Delta T\), \(\Delta S = nC_p\ln(T_f/T_i)\).</div>
+</div>
+
+<h2>3. Processus isotherme</h2>
+<p>Température constante, \(dT = 0\), \(dN = 0\). On exprime \(dE = T\,dS - p\,dV\) en fonction du volume :</p>
+<div class="formula">
+\[dE = T\left(\frac{\partial S}{\partial V}\right)_T dV - p\,dV\qquad\text{avec}\quad \left(\frac{\partial S}{\partial V}\right)_T = \frac{\beta}{\kappa}\]
+\[\boxed{dE = \left(\frac{T\beta}{\kappa} - p\right)dV}\]
+<div class="cond">Gaz parfait : \(T\beta/\kappa = T\cdot(1/T)\cdot p = p\), donc \(dE = 0\) : l'énergie interne d'un gaz parfait ne dépend que de \(T\) (chap. 12, ex. 13). Toute la chaleur reçue ressort en travail : \(\Delta Q = \Delta W = \int p\,dV = nRT\ln(V_f/V_i)\) et \(\Delta S = nR\ln(V_f/V_i)\).</div>
+</div>
+<div class="box ex"><span class="label">Question de la diapo 7 : exprimer \(dE\) en fonction de \(dS\)</span>
+<p>À \(T\) constante, \(dV = \left(\dfrac{\partial V}{\partial S}\right)_T dS = \dfrac{\kappa}{\beta}dS\) (inverse de \(\beta/\kappa\)), donc \(dE = T\,dS - p\dfrac{\kappa}{\beta}dS = \left(T - \dfrac{p\kappa}{\beta}\right)dS\). Pour un gaz parfait le coefficient vaut \(T - T = 0\), cohérent avec \(dE = 0\).</p>
+</div>
+
+<h2>4. Processus adiabatique</h2>
+<p>Pas d'échange de chaleur, \(dQ = 0\), donc \(dS = 0\) : l'entropie reste constante (processus isentropique). Les dérivées partielles à \(S\) constante relient \(T\), \(p\) et \(V\) :</p>
+<div class="formula">
+\[dT = \left(\frac{\partial T}{\partial p}\right)_S dp,\qquad dT = \left(\frac{\partial T}{\partial V}\right)_S dV,\qquad dV = \left(\frac{\partial V}{\partial p}\right)_S dp\]
+\[\boxed{\frac{dT}{T} = \frac{V\beta}{C_p}\,dp}\qquad\boxed{\frac{dT}{T} = -\frac{\beta}{\kappa C_V}\,dV}\qquad\boxed{\frac{dV}{V} = -\frac{\kappa C_V}{C_p}\,dp}\]
+<div class="cond">Conclusions pour un processus adiabatique : une augmentation de \(T\) augmente \(p\) ; une augmentation de \(T\) diminue \(V\) ; une augmentation de \(V\) diminue \(p\). Pour les solides et liquides (coefficients constants), ces relations s'intègrent en \(\ln(T_f/T_i) = (V\beta/C_p)\Delta p\), etc. (chap. 12, ex. 24).</div>
+</div>
+<div class="formula"><div class="title">Gaz parfait : \(pV^\gamma = \) constante</div>
+\[dE = -p\,dV = \frac{N\nu}{2}k\,dT\quad\text{et}\quad p\,dV + V\,dp = Nk\,dT\quad\Longrightarrow\quad \boxed{pV^\gamma = \text{cste}}\quad\text{où}\quad \gamma = \frac{\nu+2}{\nu} = \frac{C_p}{C_V}\]
+\[TV^{\gamma-1} = \text{cste}\qquad T\,p^{\frac1\gamma-1} = \text{cste}\qquad \Delta W = -\Delta E = \frac{p_iV_i - p_fV_f}{\gamma-1} = nC_V(T_i - T_f)\]
+<div class="cond">Démonstration : éliminer \(dT\) entre les deux équations donne \(-p\,dV\cdot\frac{2}{\nu} = p\,dV + V\,dp\), soit \(\frac{dp}{p} = -\frac{\nu+2}{\nu}\frac{dV}{V}\), qui s'intègre en \(pV^\gamma = \) cste. Avec \(pV = NkT\) on obtient les deux autres formes. Une seule mesure de \((p, V)\) permet de prévoir tout le comportement du gaz sans connaître sa température. Air : \(\nu = 5\), \(\gamma = 1{,}4\).</div>
+</div>
+<div class="box ex"><span class="label">Exemple 3 : convection et inversion thermique dans l'atmosphère</span>
+<p>Une parcelle d'air chaud qui monte se détend <em>adiabatiquement</em> (l'air est mauvais conducteur) et se refroidit selon \(T\,p^{1/\gamma - 1} = \) cste. Si elle reste plus chaude (donc moins dense) que l'air ambiant à la même altitude, elle continue de monter : <strong>convection</strong>. Si l'air au sol est plus froid que ne le prévoit ce refroidissement adiabatique (gradient réel plus faible), la parcelle devient plus froide que son environnement et retombe : <strong>inversion thermique</strong>, qui piège le smog près du sol. Calcul complet à l'exercice D8.</p>
+</div>
+<div class="formula"><div class="title">Processus spécial : la détente libre</div>
+\[dE = 0,\ dN = 0,\ \Delta W = 0\quad\Longrightarrow\quad T\,dS = p\,dV\quad\Longrightarrow\quad \Delta T = \left(\frac{p\kappa - T\beta}{\kappa C_V}\right)\Delta V\]
+<div class="cond">Le gaz se détend dans le vide sans fournir de travail. Avec \(dS = \frac{C_V}{T}dT + \frac{\beta}{\kappa}dV\) (table 11.1) on obtient la formule ci-dessus : une détente libre <strong>refroidit</strong> un gaz réel (\(T\beta \gt p\kappa\), effet utilisé en réfrigération), mais \(\Delta T = 0\) pour un gaz parfait puisque \(p\kappa = 1 = T\beta\). Processus irréversible : l'entropie augmente (\(\Delta S = nR\ln(V_f/V_i)\) pour un gaz parfait) bien que \(\Delta Q = 0\).</div>
+</div>
+<div class="widget" data-widget="process-explorer"></div>
+
+<h2>5. Conduction thermique</h2>
+<p>Le deuxième principe impose que la chaleur s'écoule de la partie chaude vers la partie froide. Pour une plaque d'aire \(A\) et d'épaisseur \(\Delta x\) dont les faces sont aux températures \(T_2 \gt T_1\) :</p>
+<div class="formula"><div class="title">Loi de Fourier</div>
+\[\dot Q = \frac{\Delta Q}{\Delta t} = -kA\frac{\Delta T}{\Delta x}\qquad\qquad j_Q = \frac{\dot Q}{A} = -k\frac{\Delta T}{\Delta x}\ \ (\text{densité surfacique de flux, W/m}^2)\]
+<div class="cond">\(k\) : conductivité thermique du matériau (W/(m K)) ; \(\dot Q\) est une puissance (W). Le signe moins traduit que le flux descend le gradient de température. En pratique on écrit \(\dot Q = kA(T_{chaud} - T_{froid})/\Delta x\) en valeur absolue.</div>
+</div>
+<div class="formula"><div class="title">Résistance thermique et analogie électrique</div>
+\[R = \frac{\Delta x}{kA}\qquad\qquad \dot Q = \frac{\Delta T}{R}\quad(\text{comme } I = V/R)\]
+\[R_{série} = R_1 + R_2 + \cdots\qquad\qquad \frac{1}{R_{parallèle}} = \frac{1}{R_1} + \frac{1}{R_2} + \cdots\]
+<div class="cond">En série (couches traversées successivement par le même flux) les chutes de température s'additionnent ; en parallèle (chemins côte à côte soumis au même \(\Delta T\)) les flux s'additionnent (chap. 12, ex. 47).</div>
+</div>
+<table>
+  <tr><th>Matériau</th><th>\(k\) (W/(m K))</th><th>Matériau</th><th>\(k\) (W/(m K))</th></tr>
+  <tr><td>Argent</td><td>410</td><td>Béton (maçonnerie)</td><td>0,62</td></tr>
+  <tr><td>Cuivre</td><td>380</td><td>Eau</td><td>0,56</td></tr>
+  <tr><td>Aluminium</td><td>210</td><td>Plâtre</td><td>0,50</td></tr>
+  <tr><td>Acier</td><td>45</td><td>Bois</td><td>0,10</td></tr>
+  <tr><td>Roche</td><td>2,2</td><td>Styromousse (isolant)</td><td>0,042</td></tr>
+  <tr><td>Verre</td><td>0,95</td><td>Air (immobile)</td><td>0,023</td></tr>
+</table>
+<p class="small">Table 12.1 du manuel. Quatre ordres de grandeur séparent les métaux de l'air : c'est l'air immobile emprisonné (double vitrage, laine, mousse) qui isole.</p>
+<div class="widget" data-widget="thermal-resistance" data-preset="vitrine"></div>
+
+<h2>6. Équation de la chaleur</h2>
+<p>La loi de Fourier suffit quand le gradient de température est uniforme (régime permanent). Si la température varie dans le temps, l'énergie s'accumule dans le matériau : ce qui entre moins ce qui sort fait varier l'énergie interne.</p>
+<div class="formula">
+\[\frac{dE}{dt} = \dot Q_1 - \dot Q_2 = -\frac{\partial\dot Q}{\partial x}\Delta x = -A\frac{\partial j_Q}{\partial x}\Delta x\qquad\Longrightarrow\qquad \boxed{\frac{\partial\rho_E}{\partial t} = -\frac{\partial j_Q}{\partial x}}\]
+<div class="cond">\(\rho_E = E/(A\Delta x)\) est la densité d'énergie (J/m³). C'est l'équation de continuité à une dimension : « taux qui entre moins taux qui sort = taux de variation à l'intérieur », valable pour toute quantité conservée.</div>
+</div>
+<div class="formula"><div class="title">Équation de la chaleur</div>
+\[j_Q = -k\frac{\partial T}{\partial x}\quad\text{et}\quad d\rho_E = \rho_m c\,dT\qquad\Longrightarrow\qquad \frac{\partial\rho_E}{\partial t} = k\frac{\partial^2T}{\partial x^2}\qquad\Longrightarrow\qquad \boxed{\frac{\partial^2T}{\partial x^2} = \frac1K\frac{\partial T}{\partial t}\quad\text{où}\quad K = \frac{k}{\rho_m c}}\]
+<div class="cond">\(\rho_m\) : masse volumique, \(c\) : chaleur spécifique, \(K\) : diffusivité thermique (m²/s). Un profil de température initialement concentré s'étale comme une gaussienne de largeur \(\sqrt{2Kt}\) : le temps pour qu'une perturbation traverse une épaisseur \(L\) est de l'ordre de \(L^2/K\). En régime permanent (\(\partial T/\partial t = 0\)), \(\partial^2T/\partial x^2 = 0\) : le profil est linéaire et l'on retrouve la loi de Fourier.</div>
+</div>
+<div class="widget" data-widget="heat-equation"></div>
+
+<h2>7. À retenir</h2>
+<ul class="summary-list">
+  <li>\(\beta = \frac1V(\partial V/\partial T)_p\), \(\kappa = -\frac1V(\partial V/\partial p)_T\) ; gaz parfait : \(\beta = 1/T\), \(\kappa = 1/p\). Le tableau 11.1 donne toutes les dérivées partielles utiles.</li>
+  <li>Isobare : \(dE = (C_p - pV\beta)dT\). Isotherme : \(dE = (T\beta/\kappa - p)dV\), nul pour un gaz parfait, \(\Delta Q = \Delta W = nRT\ln(V_f/V_i)\).</li>
+  <li>Adiabatique : \(dS = 0\) ; \(dT/T = (V\beta/C_p)dp = -(\beta/\kappa C_V)dV\) ; gaz parfait \(pV^\gamma = \) cste, \(TV^{\gamma-1} = \) cste, \(\gamma = (\nu+2)/\nu = C_p/C_V\), \(\Delta W = (p_iV_i - p_fV_f)/(\gamma-1)\).</li>
+  <li>Détente libre : \(\Delta E = 0\), refroidit un gaz réel mais pas un gaz parfait.</li>
+  <li>Conduction : \(\dot Q = -kA\,\Delta T/\Delta x\), \(R = \Delta x/(kA)\), \(\dot Q = \Delta T/R\), résistances en série et en parallèle.</li>
+  <li>Équation de la chaleur : \(\partial\rho_E/\partial t = -\partial j_Q/\partial x\) et \(\partial^2T/\partial x^2 = (1/K)\,\partial T/\partial t\), \(K = k/(\rho_m c)\).</li>
+</ul>
+
+<!-- ===================================================== QUIZ ===================================================== -->
+<section class="quiz" data-quiz-id="c4" id="quiz-c4">
+<h2>Quiz rapide - Cours 4</h2>
+<p class="small">Une seule bonne réponse par question. Cliquez pour vérifier immédiatement.</p>
+
+<div class="q" data-answer="1">
+  <p class="q-text">Que représente \(\beta = \frac1V\left(\frac{\partial V}{\partial T}\right)_p\) ?</p>
+  <ul class="choices"><li>La compressibilité isotherme</li><li>Le coefficient d'expansion thermique</li><li>La capacité thermique à pression constante</li><li>Le rapport \(C_p/C_V\)</li></ul>
+  <div class="explain">\(\beta\) mesure la dilatation relative par kelvin à pression constante ; \(\kappa = -\frac1V(\partial V/\partial p)_T\) est la compressibilité isotherme.</div>
+</div>
+<div class="q" data-answer="2">
+  <p class="q-text">Pour un gaz parfait, \(\beta\) et \(\kappa\) valent :</p>
+  <ul class="choices"><li>\(\beta = T\), \(\kappa = p\)</li><li>\(\beta = 1/p\), \(\kappa = 1/T\)</li><li>\(\beta = 1/T\), \(\kappa = 1/p\)</li><li>\(\beta = \kappa = 1\)</li></ul>
+  <div class="explain">De \(V = nRT/p\) : \(\frac1V(\partial V/\partial T)_p = 1/T\) et \(-\frac1V(\partial V/\partial p)_T = 1/p\).</div>
+</div>
+<div class="q" data-answer="0">
+  <p class="q-text">Un processus isobare est un processus :</p>
+  <ul class="choices"><li>à pression constante</li><li>à température constante</li><li>à volume constant</li><li>sans échange de chaleur</li></ul>
+  <div class="explain">Isobare : \(dp = 0\) ; isotherme : \(dT = 0\) ; isochore : \(dV = 0\) ; adiabatique : \(dQ = 0\).</div>
+</div>
+<div class="q" data-answer="1">
+  <p class="q-text">Pour un processus isobare non diffusif, \(dE\) s'écrit :</p>
+  <ul class="choices"><li>\(dE = C_p\,dT\)</li><li>\(dE = (C_p - pV\beta)\,dT\)</li><li>\(dE = (T\beta/\kappa - p)\,dV\)</li><li>\(dE = 0\)</li></ul>
+  <div class="explain">\(dE = T\,dS - p\,dV\) avec \(T(\partial S/\partial T)_p = C_p\) et \((\partial V/\partial T)_p = \beta V\). Le terme \(pV\beta\,dT\) est le travail de dilatation.</div>
+</div>
+<div class="q" data-answer="2">
+  <p class="q-text">Un gaz parfait se détend de façon isotherme de \(V_i\) à \(V_f\). Sa variation d'énergie interne et le travail fourni valent :</p>
+  <ul class="choices"><li>\(\Delta E = nC_V\Delta T\), \(W = 0\)</li><li>\(\Delta E = W = nRT\ln(V_f/V_i)\)</li><li>\(\Delta E = 0\), \(W = nRT\ln(V_f/V_i)\)</li><li>\(\Delta E = -W = nRT\ln(V_f/V_i)\)</li></ul>
+  <div class="explain">\(E\) ne dépend que de \(T\) pour un gaz parfait (\(T\beta/\kappa = p\)), donc \(\Delta E = 0\) et \(\Delta Q = W = \int p\,dV = nRT\ln(V_f/V_i)\).</div>
+</div>
+<div class="q" data-answer="0">
+  <p class="q-text">Pendant un processus adiabatique quasi statique :</p>
+  <ul class="choices"><li>\(dQ = 0\) et \(dS = 0\)</li><li>\(dT = 0\)</li><li>\(dE = 0\)</li><li>\(dp = 0\)</li></ul>
+  <div class="explain">Pas d'échange de chaleur, donc \(dS = dQ/T = 0\) : l'entropie est constante. La température, elle, varie (compression adiabatique → échauffement).</div>
+</div>
+<div class="q" data-answer="1">
+  <p class="q-text">Pour l'air (\(\nu = 5\)), la valeur de \(\gamma = (\nu+2)/\nu\) est :</p>
+  <ul class="choices"><li>1,67</li><li>1,4</li><li>2,5</li><li>0,71</li></ul>
+  <div class="explain">\(\gamma = 7/5 = 1{,}4\). Pour un gaz monoatomique (\(\nu = 3\)) : \(5/3 = 1{,}67\).</div>
+</div>
+<div class="q" data-answer="3">
+  <p class="q-text">Laquelle de ces relations est fausse pour un gaz parfait en transformation adiabatique ?</p>
+  <ul class="choices"><li>\(pV^\gamma = \) cste</li><li>\(TV^{\gamma-1} = \) cste</li><li>\(T\,p^{1/\gamma-1} = \) cste</li><li>\(pV = \) cste</li></ul>
+  <div class="explain">\(pV = \) cste caractérise l'<em>isotherme</em>. Les trois autres sont équivalentes grâce à \(pV = NkT\).</div>
+</div>
+<div class="q" data-answer="0">
+  <p class="q-text">Un gaz est comprimé adiabatiquement. Que fait sa température ?</p>
+  <ul class="choices"><li>Elle augmente</li><li>Elle diminue</li><li>Elle reste constante</li><li>Elle devient nulle</li></ul>
+  <div class="explain">\(dT/T = -(\beta/\kappa C_V)\,dV\) : \(dV \lt 0\) donne \(dT \gt 0\). Le travail reçu augmente l'énergie interne (\(dE = -p\,dV \gt 0\)).</div>
+</div>
+<div class="q" data-answer="1">
+  <p class="q-text">Lors d'une détente libre (dans le vide) d'un gaz parfait :</p>
+  <ul class="choices"><li>la température diminue fortement</li><li>la température ne change pas, mais l'entropie augmente</li><li>l'entropie reste constante car \(\Delta Q = 0\)</li><li>le gaz fournit un travail \(p\Delta V\)</li></ul>
+  <div class="explain">\(\Delta W = 0\), \(\Delta Q = 0\) donc \(\Delta E = 0\) et \(\Delta T = 0\) pour un gaz parfait. Le processus est irréversible : \(\Delta S = nR\ln(V_f/V_i) \gt 0\). Un gaz réel, lui, se refroidit.</div>
+</div>
+<div class="q" data-answer="2">
+  <p class="q-text">Le taux de transfert de chaleur par conduction à travers une plaque est :</p>
+  <ul class="choices"><li>\(\dot Q = kA\,\Delta T\,\Delta x\)</li><li>\(\dot Q = k\,\Delta T/(A\Delta x)\)</li><li>\(\dot Q = -kA\,\Delta T/\Delta x\)</li><li>\(\dot Q = kA\,\Delta x/\Delta T\)</li></ul>
+  <div class="explain">Loi de Fourier : proportionnel à l'aire et au gradient, inversement proportionnel à l'épaisseur.</div>
+</div>
+<div class="q" data-answer="0">
+  <p class="q-text">La résistance thermique d'une couche d'épaisseur \(\Delta x\), de conductivité \(k\) et d'aire \(A\) vaut :</p>
+  <ul class="choices"><li>\(\Delta x/(kA)\)</li><li>\(kA/\Delta x\)</li><li>\(k\Delta x/A\)</li><li>\(A/(k\Delta x)\)</li></ul>
+  <div class="explain">\(R = \Delta x/(kA)\) en K/W, pour que \(\dot Q = \Delta T/R\) comme \(I = V/R\).</div>
+</div>
+<div class="q" data-answer="1">
+  <p class="q-text">Deux couches traversées successivement par le même flux de chaleur se combinent :</p>
+  <ul class="choices"><li>en parallèle : \(1/R = 1/R_1 + 1/R_2\)</li><li>en série : \(R = R_1 + R_2\)</li><li>en moyenne : \(R = (R_1+R_2)/2\)</li><li>en produit : \(R = R_1R_2\)</li></ul>
+  <div class="explain">Même flux, chutes de température qui s'additionnent → résistances en série. Deux chemins côte à côte soumis au même \(\Delta T\) sont en parallèle.</div>
+</div>
+<div class="q" data-answer="3">
+  <p class="q-text">Dans l'équation de la chaleur \(\partial T/\partial t = K\,\partial^2T/\partial x^2\), la diffusivité \(K\) vaut :</p>
+  <ul class="choices"><li>\(k\rho_m c\)</li><li>\(\rho_m c/k\)</li><li>\(k/c\)</li><li>\(k/(\rho_m c)\)</li></ul>
+  <div class="explain">\(K = k/(\rho_m c)\) en m²/s : grand pour les métaux (bonne conductivité, faible capacité volumique), petit pour le bois ou l'eau.</div>
+</div>
+<div class="q" data-answer="0">
+  <p class="q-text">Une vitrine est formée de deux vitres de 3 mm séparées par 1 cm d'air immobile. Quelle couche domine la résistance thermique ?</p>
+  <ul class="choices"><li>La lame d'air (\(k = 0{,}023\) W/(m K))</li><li>Les deux vitres (\(k = 0{,}95\) W/(m K))</li><li>Les deux contribuent également</li><li>Aucune : la résistance ne dépend que de l'aire</li></ul>
+  <div class="explain">\(R = \Delta x/(kA)\) : l'air est 40 fois moins conducteur et 3 fois plus épais, sa résistance est \(0{,}01/0{,}023 = 0{,}43\) contre \(2\times0{,}003/0{,}95 = 0{,}006\) (par m²) : plus de 80 % du total.</div>
+</div>
+<div class="quiz-footer"></div>
+</section>
+
+<!-- ===================================================== EXERCICES À DÉVELOPPEMENT ===================================================== -->
+<h2 id="dev-c4">Exercices à développement (à faire sur papier)</h2>
+<p>Exemples des diapos et exercices résolus en classe (24 septembre). Utilisez la table des dérivées partielles du formulaire.</p>
+<div class="exo-tools" data-scope="dev-c4-list">
+  <button class="btn secondary" type="button" data-action="open-all">Tout ouvrir</button>
+  <button class="btn secondary" type="button" data-action="close-all">Tout fermer</button>
+  <div class="progress-bar"><span></span></div><span class="progress-label small"></span>
+</div>
+<div id="dev-c4-list">
+
+<article class="exo" data-exo-id="c4-d1">
+  <header><span class="tag">Diapo 7 - Ex 2 = chap. 12, ex. 16</span><span class="tag theme">Isotherme</span><h4>D1. Détente isotherme d'un gaz parfait</h4></header>
+  <div class="enonce"><p>Un gaz parfait de \(n\) moles subit une détente isotherme de \(V_i\) à \(V_f\) à la température \(T\). (a) Expression du travail effectué par le gaz ? (b) Expression de la chaleur absorbée par le gaz ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(\Delta W = \displaystyle\int_{V_i}^{V_f}p\,dV\) avec \(p = \dfrac{nRT}{V}\) : \(\Delta W = nRT\displaystyle\int_{V_i}^{V_f}\frac{dV}{V} = nRT\ln\frac{V_f}{V_i}\).</li>
+      <li>(b) Isotherme pour un gaz parfait → \(\Delta E = 0\), donc \(\Delta Q = \Delta W = nRT\ln\dfrac{V_f}{V_i}\). Toute la chaleur absorbée ressort en travail ; l'entropie du gaz augmente de \(\Delta Q/T = nR\ln(V_f/V_i)\).</li>
+    </ol>
+    <p class="answer">ΔW = ΔQ = nRT ln(V_f/V_i)</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c4-d2">
+  <header><span class="tag">Diapo 15 - Ex 4 (Moodle)</span><span class="tag theme">Conduction</span><h4>D2. La vitrine</h4></header>
+  <div class="enonce"><p>Une vitrine de 15 m² est composée de deux vitres de 3 mm d'épaisseur séparées d'un espace d'air de 1 cm. Pour le calcul, considérer en plus une couche d'air de 1 mm d'épaisseur à l'extérieur et à l'intérieur. (a) Résistance thermique de la vitrine ? (b) En hiver la différence de température moyenne est de 20 °C : chaleur perdue pendant trois mois (\(7{,}776\times10^6\) s) ? \(k_{verre} = 0{,}95\), \(k_{air} = 0{,}023\) W/(m K). (Note : \(4{,}184\times10^9\) J est l'énergie d'une tonne de TNT.)</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) Couches en série, \(R = \Delta x/(kA)\) avec \(A = 15\) m² : verre \(2\times\dfrac{0{,}003}{0{,}95\times15} = 4{,}2\times10^{-4}\) K/W ; lame d'air \(\dfrac{0{,}01}{0{,}023\times15} = 2{,}90\times10^{-2}\) K/W ; films d'air \(2\times\dfrac{0{,}001}{0{,}023\times15} = 5{,}8\times10^{-3}\) K/W. \(R_{total} = 3{,}52\times10^{-2}\) K/W.</li>
+      <li>(b) \(\dot Q = \Delta T/R = 20/0{,}0352 = 568\) W ; sur trois mois \(Q = 568\times7{,}776\times10^6 = 4{,}4\times10^9\) J.</li>
+    </ol>
+    <p class="answer">(a) R ≈ 0,035 K/W | (b) Q̇ ≈ 570 W, Q ≈ 4,4 × 10⁹ J, soit l'énergie d'une tonne de TNT</p>
+    <p class="small">La lame d'air fournit 82 % de la résistance ; le verre est presque transparent à la chaleur. Vérifiez avec le calculateur de résistances (préréglage « Vitrine »).</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c4-d3">
+  <header><span class="tag">Classe - chap. 12, ex. 48</span><span class="tag theme">Conduction</span><h4>D3. Flux de chaleur venant de l'intérieur de la Terre</h4></header>
+  <div class="enonce"><p>En descendant dans la croûte terrestre, la température augmente d'environ 30 °C par kilomètre. (a) Avec la conductivité de la roche (table 12.1), calculer le flux de chaleur par m² qui atteint la surface depuis l'intérieur. (b) Comparer à l'énergie solaire moyenne reçue par la surface terrestre, 175 W/m².</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p>(a) \(j_Q = k\,\dfrac{\Delta T}{\Delta x} = 2{,}2\times\dfrac{30}{1000} = 0{,}066\) W/m² = 66 mW/m². (b) Le flux solaire est \(175/0{,}066 \approx 2{,}7\times10^3\) fois plus élevé : la chaleur interne de la Terre est négligeable pour le climat de surface.</p>
+    <p class="answer">(a) 66 mW/m² | (b) le Soleil apporte environ 3000 fois plus</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c4-d4">
+  <header><span class="tag">Classe - chap. 12, ex. 18</span><span class="tag theme">Adiabatique</span><h4>D4. Les relations d'un processus adiabatique</h4></header>
+  <div class="enonce"><p>Pour un gaz parfait en transformation adiabatique, montrer que (a) \(pV^\gamma = \) cste (vu en classe) ; (b) \(TV^{\gamma-1} = \) cste ; (c) \(T\,p^{1/\gamma - 1} = \) cste ; (d) \(\gamma = C_p/C_V\).</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(dE = -p\,dV = \frac{N\nu}{2}k\,dT\) et \(p\,dV + V\,dp = Nk\,dT\) → \(\frac{dp}{p} = -\gamma\frac{dV}{V}\) → \(pV^\gamma = \) cste avec \(\gamma = (\nu+2)/\nu\).</li>
+      <li>(b) \(pV = nRT\) → \(p = nRT/V\) : \((nRT/V)V^\gamma = nRT\,V^{\gamma-1} = \) cste → \(TV^{\gamma-1} = \) cste.</li>
+      <li>(c) \(V = nRT/p\) : \(T(nRT/p)^{\gamma-1} = \) cste → \(T^\gamma p^{1-\gamma} = \) cste → \(T\,p^{(1-\gamma)/\gamma} = T\,p^{1/\gamma - 1} = \) cste.</li>
+      <li>(d) Par mole, \(C_V = \frac{\nu}{2}R\) et \(C_p = \frac{\nu}{2}R + p\left(\frac{\partial v}{\partial T}\right)_p = \frac{\nu}{2}R + R = \frac{\nu+2}{2}R\) ; donc \(C_p/C_V = (\nu+2)/\nu = \gamma\).</li>
+    </ol>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c4-d5">
+  <header><span class="tag">Classe - chap. 12, ex. 19</span><span class="tag theme">Adiabatique</span><h4>D5. Combien de degrés de liberté ?</h4></header>
+  <div class="enonce"><p>Un gaz est comprimé adiabatiquement : \(p_i = 1\) atm, \(V_i = 2\) L, \(p_f = 1{,}1\) atm, \(V_f = 1{,}85\) L. Nombre de degrés de liberté par molécule ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    \[p_iV_i^\gamma = p_fV_f^\gamma\ \Longrightarrow\ \gamma = \frac{\ln(p_f/p_i)}{\ln(V_i/V_f)} = \frac{\ln 1{,}1}{\ln(2/1{,}85)} = \frac{0{,}0953}{0{,}0780} = 1{,}22\qquad \nu = \frac{2}{\gamma - 1} = 9\]
+    <p class="answer">ν = 9 degrés de liberté (molécule polyatomique)</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c4-d6">
+  <header><span class="tag">Classe - chap. 12, ex. 22</span><span class="tag theme">Les trois processus</span><h4>D6. Même détente, trois processus</h4></header>
+  <div class="enonce"><p>0,446 mol d'un gaz parfait à 0 °C, 1 atm, \(V_i = 10{,}0\) L, 5 ddl par molécule, se détend jusqu'à 15 L. Nouvelles température et pression si la détente est (a) isobare ; (b) isotherme ; (c) adiabatique ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) Isobare : \(p_f = 1\) atm ; \(V/T = \) cste → \(T_f = T_i\dfrac{V_f}{V_i} = 273\times1{,}5 = 409{,}5\) K.</li>
+      <li>(b) Isotherme : \(T_f = 273\) K ; \(pV = \) cste → \(p_f = 1\ \text{atm}\times\dfrac{10}{15} = 0{,}667\) atm = 67,6 kPa.</li>
+      <li>(c) Adiabatique, \(\gamma = 7/5 = 1{,}4\) : \(p_f = p_i(V_i/V_f)^\gamma = 1\ \text{atm}\times(0{,}667)^{1{,}4} = 0{,}567\) atm = 57,4 kPa ; \(T_f = T_i\dfrac{p_fV_f}{p_iV_i} = 273\times0{,}567\times1{,}5 = 232\) K (ou \(T_f = T_i(V_i/V_f)^{0{,}4}\)).</li>
+    </ol>
+    <p class="answer">(a) 409,5 K, 1 atm | (b) 273 K, 67,6 kPa | (c) 232 K, 57,4 kPa</p>
+    <p class="small">L'exercice 23 demande ensuite \(\Delta W\), \(\Delta Q\), \(\Delta E\) pour chaque cas ; réponses du manuel : \(W = 507,\ 410,\ 379\) J ; \(Q = 1770,\ 410,\ 0\) J ; \(\Delta E = 1260,\ 0,\ -379\) J. L'explorateur de processus (préréglage « ex. 22 ») les reproduit.</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c4-d7">
+  <header><span class="tag">Classe - chap. 12, ex. 28</span><span class="tag theme">Dérivées partielles</span><h4>D7. β et κ d'un gaz parfait</h4></header>
+  <div class="enonce"><p>Pour un gaz parfait, calculer \(\beta\) et \(\kappa\) en fonction de \(p\), \(T\) et \(V\).</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    \[V = \frac{nRT}{p}:\qquad \beta = \frac1V\left(\frac{\partial V}{\partial T}\right)_p = \frac1V\cdot\frac{nR}{p} = \frac{nR}{pV} = \frac1T\qquad\qquad \kappa = -\frac1V\left(\frac{\partial V}{\partial p}\right)_T = \frac1V\cdot\frac{nRT}{p^2} = \frac{nRT}{p^2V} = \frac1p\]
+    <p class="answer">β = 1/T, κ = 1/p</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c4-d8">
+  <header><span class="tag">Diapo 9 - Ex 3 et chap. 12, ex. 26</span><span class="tag theme">Adiabatique</span><h4>D8. Convection ou inversion thermique ?</h4></header>
+  <div class="enonce"><p>La pression décroît avec l'altitude selon \(p = p_0e^{-\alpha y}\), \(\alpha = 0{,}116\) km⁻¹ ; pour l'air \(\gamma = 1{,}4\). (a) Si la température au sol vaut 293 K, quelle serait la température à 1 km d'altitude si elle variait au taux adiabatique ? (b) Si la température réelle à 1 km est de 285 K, y a-t-il convection ascendante ou couche d'inversion ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) Adiabatique : \(T\,p^{1/\gamma - 1} = \) cste → \(T_1 = T_0\left(\dfrac{p_1}{p_0}\right)^{1 - 1/\gamma} = T_0\,e^{-\alpha y(\gamma-1)/\gamma} = 293\,e^{-0{,}116\times0{,}286} = 293\times0{,}967 = 283{,}4\) K.</li>
+      <li>(b) Une parcelle d'air qui monte de 1 km se refroidit à 283,4 K, c'est-à-dire plus que l'air ambiant (285 K) : plus froide donc plus dense, elle redescend. Pas de convection : <strong>inversion thermique</strong>, qui piège les polluants (smog). Il y aurait convection si l'air ambiant était plus froid que 283,4 K.</li>
+    </ol>
+    <p class="answer">(a) 283,4 K | (b) couche d'inversion</p>
+  </div></details>
+</article>
+
+</div>
+
+<!-- ===================================================== EXERCICES SUGGÉRÉS ===================================================== -->
+<h2 id="sugg-c4">Exercices suggérés du manuel (liste officielle du cours)</h2>
+<p>Énoncés paraphrasés en français d'après Stowe (chapitre 12). Réponses impaires au dos du manuel (p. 544), paires d'après le corrigé du professeur.</p>
+<div class="exo-tools" data-scope="sugg-c4-list">
+  <button class="btn secondary" type="button" data-action="open-all">Tout ouvrir</button>
+  <button class="btn secondary" type="button" data-action="close-all">Tout fermer</button>
+  <div class="progress-bar"><span></span></div><span class="progress-label small"></span>
+</div>
+<div id="sugg-c4-list">
+<h3>Chapitre 12 - Processus spéciaux</h3>
+
+<article class="exo" data-exo-id="c4-s12-2">
+  <header><span class="tag">Chap. 12, ex. 2, p. 245</span><span class="tag theme">Processus isobare, expression différentielle</span><h4>dE pour un processus isobare</h4></header>
+  <div class="enonce"><p>Processus isobare non diffusif. À partir du premier principe, trouver les expressions qui relient la variation d'énergie interne (a) à la variation de volume ; (b) à la variation de température. Exprimer les dérivées partielles avec la table 11.1.</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p>\(dE = T\,dS - p\,dV\) avec \(dp = 0\), \(dN = 0\).</p>
+    <ol class="steps">
+      <li>(a) \(dS = \left(\frac{\partial S}{\partial V}\right)_p dV = \frac{C_p}{TV\beta}dV\) → \(dE = \left(\dfrac{C_p}{V\beta} - p\right)dV\).</li>
+      <li>(b) \(dS = \frac{C_p}{T}dT\) et \(dV = \beta V\,dT\) → \(dE = (C_p - pV\beta)\,dT\).</li>
+    </ol>
+    <p class="answer">(a) dE = (C_p/(Vβ) − p) dV | (b) dE = (C_p − pVβ) dT</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c4-s12-7">
+  <header><span class="tag">Chap. 12, ex. 7, p. 245</span><span class="tag theme">Processus isobare, expression différentielle</span><h4>Isobare avec échange de particules</h4></header>
+  <div class="enonce"><p>Processus isobare (\(dp = 0\)), donc deux variables indépendantes. À partir du premier principe, écrire (a) \(dE\) en fonction de \(dV\) et \(dN\) (écrire d'abord \(dS\) en fonction de \(dV\) et \(dN\)) ; (b) \(dE\) en fonction de \(d\mu\) et \(dN\).</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(dS = \left(\frac{\partial S}{\partial V}\right)_{p,N}dV + \left(\frac{\partial S}{\partial N}\right)_{p,V}dN\) avec \(\left(\frac{\partial S}{\partial V}\right)_{p} = \frac{C_p}{TV\beta}\). Dans \(dE = T\,dS - p\,dV + \mu\,dN\) : \(dE = \left(\dfrac{C_p}{V\beta} - p\right)dV + \left[T\left(\dfrac{\partial S}{\partial N}\right)_{p,V} + \mu\right]dN\).</li>
+      <li>(b) En prenant \(\mu\) et \(N\) comme variables : \(dE = \left[T\left(\frac{\partial S}{\partial\mu}\right)_{p,N} - p\left(\frac{\partial V}{\partial\mu}\right)_{p,N}\right]d\mu + \left[T\left(\frac{\partial S}{\partial N}\right)_{p,\mu} - p\left(\frac{\partial V}{\partial N}\right)_{p,\mu} + \mu\right]dN\) (réponse du manuel).</li>
+    </ol>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c4-s12-9">
+  <header><span class="tag">Chap. 12, ex. 9, p. 245</span><span class="tag theme">Processus isotherme, expression différentielle</span><h4>dE pour un processus isotherme</h4></header>
+  <div class="enonce"><p>Processus isotherme non diffusif. À partir du premier principe, relier la variation d'énergie interne (a) à la variation de volume ; (b) à la variation de pression.</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(dS = \left(\frac{\partial S}{\partial V}\right)_T dV = \frac{\beta}{\kappa}dV\) → \(dE = \left(\dfrac{T\beta}{\kappa} - p\right)dV\).</li>
+      <li>(b) \(dS = \left(\frac{\partial S}{\partial p}\right)_T dp = -V\beta\,dp\) et \(dV = \left(\frac{\partial V}{\partial p}\right)_T dp = -V\kappa\,dp\) → \(dE = -TV\beta\,dp + pV\kappa\,dp = (-TV\beta + pV\kappa)\,dp\).</li>
+    </ol>
+    <p class="answer">(a) dE = (Tβ/κ − p) dV | (b) dE = (−TVβ + pVκ) dp ; les deux s'annulent pour un gaz parfait</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c4-s12-16">
+  <header><span class="tag">Chap. 12, ex. 16, p. 246</span><span class="tag theme">Isotherme : travail et chaleur</span><h4>Détente isotherme</h4></header>
+  <div class="enonce"><p>Voir l'exercice à développement <a href="#dev-c4">D1</a>.</p></div>
+</article>
+
+<article class="exo" data-exo-id="c4-s12-18">
+  <header><span class="tag">Chap. 12, ex. 18, p. 246</span><span class="tag theme">Équations d'un processus adiabatique</span><h4>Relations adiabatiques</h4></header>
+  <div class="enonce"><p>Voir l'exercice à développement <a href="#dev-c4">D4</a>.</p></div>
+</article>
+
+<article class="exo" data-exo-id="c4-s12-22">
+  <header><span class="tag">Chap. 12, ex. 22, p. 247</span><span class="tag theme">Expansion : température et pression</span><h4>Même détente, trois processus</h4></header>
+  <div class="enonce"><p>Voir l'exercice à développement <a href="#dev-c4">D6</a>.</p></div>
+</article>
+
+<article class="exo" data-exo-id="c4-s12-26">
+  <header><span class="tag">Chap. 12, ex. 26, p. 247</span><span class="tag theme">Convection, expansion adiabatique</span><h4>Atmosphère</h4></header>
+  <div class="enonce"><p>Voir l'exercice à développement <a href="#dev-c4">D8</a>.</p></div>
+</article>
+
+<article class="exo" data-exo-id="c4-s12-43">
+  <header><span class="tag">Chap. 12, ex. 43, p. 250</span><span class="tag theme">Calculs pour différents types d'expansion</span><h4>Détente libre, adiabatique, isotherme</h4></header>
+  <div class="enonce"><p>Un gaz parfait passe de \(V_i\) à \(V_f\), température initiale \(T_i\). Calculer \(\Delta E\), \(\Delta Q\) et \(\Delta W\) en fonction de \(N\), \(\nu\), \(T_i\), \(V_i\), \(V_f\) pour (a) une détente libre ; (b) une détente adiabatique (\(pV^\gamma = \) cste, avec \(p_iV_i = NkT_i\)) ; (c) une détente isotherme.</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) Détente libre : aucun travail, aucune chaleur : \(\Delta W = \Delta Q = \Delta E = 0\) (et \(\Delta T = 0\) pour un gaz parfait).</li>
+      <li>(b) Adiabatique : \(\Delta Q = 0\) ; \(T_f = T_i(V_i/V_f)^{\gamma-1}\) ; \(\Delta E = \frac{\nu}{2}Nk(T_f - T_i) = -\dfrac{NkT_i}{\gamma-1}\left[1 - \left(\dfrac{V_i}{V_f}\right)^{\gamma-1}\right]\) (car \(\frac{\nu}{2} = \frac{1}{\gamma-1}\)) ; \(\Delta W = -\Delta E\).</li>
+      <li>(c) Isotherme : \(\Delta E = 0\), \(\Delta Q = \Delta W = NkT_i\ln(V_f/V_i)\).</li>
+    </ol>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c4-s12-46">
+  <header><span class="tag">Chap. 12, ex. 46, p. 250</span><span class="tag theme">Nombre d'états et réversibilité</span><h4>Retirer la cloison entre deux gaz</h4></header>
+  <div class="enonce"><p>Un récipient est divisé en deux volumes égaux \(V\) contenant chacun \(N\) particules d'un gaz, avec le même \(\omega_c = c\,(V/N)(E_{therm}/N\nu)^{\nu/2}\). On retire la cloison. Nombre d'états du système combiné (a) avant ; (b) après, si les deux gaz sont différents ; (c) après, si les deux gaz sont identiques. (d) Comment expliquer ce dernier résultat : si le volume par particule double, \(\omega_c\) ne devrait-il pas doubler ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(\Omega_0 = \Omega_1\Omega_2 = \omega_c^N\omega_c^N = \omega_c^{2N}\).</li>
+      <li>(b) Gaz différents : chaque gaz dispose maintenant de \(2V\) avec le même \(N\) : \(\omega_c' = 2\omega_c\), donc \(\Omega_0 = (2\omega_c)^{2N} = 2^{2N}\omega_c^{2N}\). L'entropie augmente de \(2Nk\ln 2\) : le mélange est irréversible.</li>
+      <li>(c) Gaz identiques : un seul système de \(2N\) particules dans \(2V\) avec \(2E_{therm}\) : \(\omega_c = c\,\dfrac{2V}{2N}\left(\dfrac{2E_{therm}}{2N\nu}\right)^{\nu/2}\) inchangé, donc \(\Omega_0 = \omega_c^{2N}\) : pas de changement.</li>
+      <li>(d) Le volume par particule \(V/N\) ne change pas (deux fois plus de volume pour deux fois plus de particules) ; comme les particules sont identiques, les échanger ne crée aucun nouvel état. Rien ne change quand on remet la cloison : le processus est réversible (paradoxe de Gibbs).</li>
+    </ol>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c4-s12-48">
+  <header><span class="tag">Chap. 12, ex. 48, p. 250</span><span class="tag theme">Conduction thermique</span><h4>Chaleur interne de la Terre</h4></header>
+  <div class="enonce"><p>Voir l'exercice à développement <a href="#dev-c4">D3</a>.</p></div>
+</article>
+
+</div>
+
+</article>
+</main>
+<footer class="footer">ELE2307 - site d'étude personnel généré à partir des diapos du cours, des corrigés du professeur et du manuel de Stowe. Vérifiez toujours avec les documents officiels sur Moodle.</footer>
+<script defer src="assets/katex/katex.min.js"></script>
+<script defer src="assets/katex/contrib/auto-render.min.js"></script>
+<script defer src="assets/app.js?v=4"></script>
+<script defer src="assets/widgets.js?v=4"></script>
+<script defer src="assets/widgets2.js?v=4"></script>
+</body>
+</html>
