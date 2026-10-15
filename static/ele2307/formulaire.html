@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Formulaire | ELE2307</title>
 <link rel="stylesheet" href="assets/katex/katex.min.css">
-<link rel="stylesheet" href="assets/style.css?v=9">
+<link rel="stylesheet" href="assets/style.css?v=10">
 </head>
 <body>
 <header class="site-header">
@@ -208,7 +208,7 @@
     <td class="f">\(\displaystyle e = \frac{W}{Q_h} = \frac{Q_h - Q_c}{Q_h}\)</td>
     <td class="rem">réfrigérateur : \(e = Q_c/W\) ; pompe à chaleur : \(Q_h/W\)</td></tr>
   <tr><th class="notion">Table 13.1 (gaz parfait, \(n\) moles)</th>
-    <td class="f">
+    <td class="f" colspan="2">
       <table>
         <tr><th></th><th>Isobare</th><th>Isochore</th><th>Adiabatique</th><th>Isotherme</th></tr>
         <tr><td>\(\Delta E\)</td><td>\(nC_V\Delta T\)</td><td>\(nC_V\Delta T\)</td><td>\(nC_V\Delta T\)</td><td>0</td></tr>
@@ -216,8 +216,8 @@
         <tr><td>\(Q\)</td><td>\(nC_p\Delta T\)</td><td>\(nC_V\Delta T\)</td><td>0</td><td>\(nRT\ln(V_f/V_i)\)</td></tr>
         <tr><td>\(\Delta S\)</td><td>\(nC_p\ln(T_f/T_i)\)</td><td>\(nC_V\ln(T_f/T_i)\)</td><td>0</td><td>\(nR\ln(V_f/V_i)\)</td></tr>
       </table>
-    </td>
-    <td class="rem">\(pV = nRT\), \(C_V = \frac{\nu}{2}R\), \(C_p = C_V + R\), \(\gamma = (\nu+2)/\nu\) ; adiabatique \(W = (p_iV_i - p_fV_f)/(\gamma-1)\)</td></tr>
+      <p class="note">\(pV = nRT\), \(C_V = \frac{\nu}{2}R\), \(C_p = C_V + R\), \(\gamma = (\nu+2)/\nu\) ; adiabatique \(W = (p_iV_i - p_fV_f)/(\gamma-1)\)</p>
+    </td></tr>
   <tr><th class="notion">Rendement de Carnot</th>
     <td class="f"><p>\(\displaystyle e_{Carnot} = \frac{Q_h - Q_c}{Q_h} = 1 - \frac{Q_c}{Q_h} = 1 - \frac{T_c}{T_h}\)</p><p>Pour un cycle de Carnot \(\displaystyle\frac{Q_h}{T_h} = \frac{Q_c}{T_c}\)</p></td>
     <td class="rem">isotherme \(T_h\), adiabatique, isotherme \(T_c\), adiabatique ; réversible (\(\Delta S = 0\)) ; limite supérieure de tout moteur</td></tr>

@@ -264,6 +264,12 @@ details.sol { border-color: color-mix(in srgb, var(--ok) 45%, var(--border)); }
 .formulaire td.rem { width: 26%; color: var(--muted); font-size: .9em; font-style: italic; }
 .formulaire td.f .katex { font-size: 1.02em; }
 .formulaire td.f p { margin: .25em 0; }
+.formulaire td.f table { width: auto; max-width: 100%; font-size: .9em; margin: .2em 0; }
+.formulaire td.f table th, .formulaire td.f table td { padding: .3em .5em; }
+.formulaire td.f .note { color: var(--muted); font-size: .9em; font-style: italic; margin: .5em 0 .1em; }
+@media screen and (max-width: 1040px) {
+  .formulaire td.f table { display: block; overflow-x: auto; }
+}
 .formulaire tr:nth-child(even) td { background: transparent; }
 .form-section h2 { margin-top: 1.6em; }
 @media (max-width: 700px) {
@@ -275,6 +281,7 @@ details.sol { border-color: color-mix(in srgb, var(--ok) 45%, var(--border)); }
   .site-header, .toc, .theme-btn, .btn, .widget { display: none !important; }
   body { background: #fff; color: #000; font-size: 11pt; }
   .single, .layout { padding: 0; max-width: none; }
+  .layout { display: block; }
   h2 { page-break-before: auto; }
   details { display: block; }
   details > *:not(summary) { display: block; }
