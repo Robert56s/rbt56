@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pratique intra - Intra 2021 avec corrigé | ELE2307</title>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<link rel="stylesheet" href="assets/style.css?v=10">
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="index.html">ELE2307 <small>Thermodynamique statistique et semiconducteurs</small></a>
+  <nav>
+    <a href="index.html">Accueil</a>
+    <a href="cours1.html">Cours 1</a>
+    <a href="cours2.html">Cours 2</a>
+    <a href="cours3.html">Cours 3</a>
+    <a href="cours4.html">Cours 4</a>
+    <a href="cours5.html">Cours 5</a>
+    <a href="cours6.html">Cours 6</a>
+    <a href="formulaire.html">Formulaire</a>
+    <a href="intra.html">Intra</a>
+    <a href="errata.html">Errata</a>
+    <button class="theme-btn" type="button">Thème</button>
+  </nav>
+</header>
+
+<main class="layout">
+<aside class="toc"></aside>
+<article class="content">
+
+<div class="course-hero">
+  <div class="kicker">Pratique - examen intra</div>
+  <h1>Intra 2021 avec corrigé</h1>
+  <p class="meta">Sujet remis par le professeur comme pratique pour l'intra (fichier « ELE2307_Intra1_A2025_Q.pdf », dont l'entête indique « Intra 2021 ») | Noté sur 30 points | Matière des cours 1 à 6</p>
+  <p><span class="pill accent">4 exercices à développement (20 points)</span><span class="pill accent">10 QCM (10 points)</span><span class="pill">Corrigé, barème et pièges</span></p>
+  <p class="small">Le corrigé est le mien, pas celui du professeur. Le barème entre parenthèses est celui de l'énoncé. Consignes de l'énoncé : détailler clairement la démarche (des points y sont alloués) et soigner les unités ; une valeur sans unité ou avec une unité fausse est comptée fausse.</p>
+</div>
+
+<h2>Comment s'en servir</h2>
+<ol>
+  <li>Faire l'examen d'un trait, sur papier, avec le formulaire et la calculatrice, en se chronométrant comme le jour J.</li>
+  <li>Corriger ensuite avec les corrigés dépliables et le barème ; noter ce qui a coûté des points (kelvins, unités, \(\ln\) contre \(\log_{10}\), facteur \(\sqrt{n}\) contre \(n\)).</li>
+  <li>Les QCM se répondent directement dans la page et le meilleur score est conservé. Cocher « Fait » sur chaque exercice pour suivre la progression depuis l'accueil.</li>
+</ol>
+
+<div class="box tip"><span class="label">Pièges de ce sujet</span>
+  <ul>
+    <li>Les températures se convertissent en kelvins avant tout calcul : 20 °C = 293 K.</li>
+    <li>Un facteur \(10^{10^{21}}\) ne se tape pas à la calculatrice : passer par \(\ln\) ou \(\log_{10}\) et répondre sous la forme \(10^{(\ldots)}\).</li>
+    <li>Marche aléatoire : la moyenne croît comme \(n\), l'écart type comme \(\sqrt{n}\).</li>
+    <li>Gaz à 5 degrés de liberté : \(\gamma = (\nu+2)/\nu = 7/5\) et \(E = \tfrac{5}{2}pV\).</li>
+    <li>Deux comptages sur la même pièce ne sont pas la même chose qu'un comptage sur une seule section.</li>
+  </ul>
+</div>
+
+<h2 id="dev-intra">Exercices à développement (20 points)</h2>
+<p>Énoncés transcrits du sujet. Les corrigés détaillent la démarche attendue et donnent, quand c'est utile, une vérification par une seconde méthode.</p>
+<div class="exo-tools" data-scope="intra-dev-list">
+  <button class="btn secondary" type="button" data-action="open-all">Tout ouvrir</button>
+  <button class="btn secondary" type="button" data-action="close-all">Tout fermer</button>
+  <div class="progress-bar"><span></span></div><span class="progress-label small"></span>
+</div>
+<div id="intra-dev-list">
+
+<article class="exo" data-exo-id="intra-ex1">
+  <header><span class="tag">Exercice 1 - 6 points</span><span class="tag theme">Entropie et nombre d'états (cours 3)</span><h4>Exercice 1. Chaleur, entropie et états accessibles</h4></header>
+  <div class="enonce">
+    <p><strong>a)</strong> Soit un système maintenu à 20 °C. On lui ajoute 15 J de chaleur. Calculer le facteur d'augmentation du nombre d'états accessibles (1 point pour le raisonnement, 1 point pour la valeur numérique).</p>
+    <p><strong>b)</strong> Soit un système maintenu constamment à une température \(T\). Le nombre d'états augmente d'un facteur \(10^{1024}\) quand on ajoute \(10^{-6}\) J d'énergie. Calculer l'augmentation correspondante d'entropie (1 point pour le raisonnement, 1 point pour la valeur numérique).</p>
+    <p><strong>c)</strong> On chauffe 100 g de bois (chaleur spécifique 1,8 kJ kg⁻¹ K⁻¹) de 20 °C à 80 °C. Calculer la variation d'entropie (1 point pour le raisonnement, 1 point pour la valeur numérique).</p>
+  </div>
+  <details class="hint"><summary>Indice</summary><div class="body">
+    <p>Tout passe par \(S = k\ln\Omega\) et \(dS = dQ/T\). En (a) et (b) la température est fixe ; en (c) elle varie, donc il faut intégrer.</p>
+  </div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p><strong>a) Facteur d'augmentation de \(\Omega\).</strong></p>
+    <ol class="steps">
+      <li>\(T = 20\ ^\circ\text{C} = 293\ \text{K}\). Le système est maintenu à \(T\) : la chaleur reçue à température constante donne \(\Delta S = Q/T = 15/293 = 5{,}12\times10^{-2}\ \text{J/K}\).</li>
+      <li>\(S = k\ln\Omega\), donc \(\Delta S = k\ln(\Omega_f/\Omega_i)\) et \(\ln(\Omega_f/\Omega_i) = \Delta S/k = 5{,}12\times10^{-2}/1{,}381\times10^{-23} = 3{,}71\times10^{21}\).</li>
+      <li>Facteur : \(\Omega_f/\Omega_i = e^{3{,}71\times10^{21}} = 10^{\,0{,}4343\times3{,}71\times10^{21}} = 10^{\,1{,}61\times10^{21}}\).</li>
+    </ol>
+    <p class="small">Même résultat avec la définition de la température du cours 3 : \(1/T = \partial S/\partial E = k\,\partial\ln\Omega/\partial E\), donc \(\Delta\ln\Omega = \Delta E/(kT)\) directement.</p>
+    <p class="answer">a) \(\Omega_f/\Omega_i = 10^{1{,}6\times10^{21}}\) (soit \(e^{3{,}7\times10^{21}}\))</p>
+    <p><strong>b) Augmentation d'entropie.</strong></p>
+    <ol class="steps">
+      <li>\(\Delta S = k\ln(\Omega_f/\Omega_i) = k\ln\!\left(10^{1024}\right) = 1024\,k\ln 10\).</li>
+      <li>\(\Delta S = 1024\times1{,}381\times10^{-23}\times2{,}303 = 3{,}26\times10^{-20}\ \text{J/K}\).</li>
+    </ol>
+    <p class="small">L'énergie ajoutée (\(10^{-6}\) J) ne sert pas pour \(\Delta S\). Elle donnerait \(T = \Delta E/\Delta S \approx 3\times10^{13}\) K : les données sont fictives, ne pas se laisser déstabiliser.</p>
+    <p class="answer">b) \(\Delta S = 3{,}3\times10^{-20}\) J/K</p>
+    <p><strong>c) Chauffage du bois.</strong></p>
+    <ol class="steps">
+      <li>La température varie : \(dS = dQ/T\) avec \(dQ = mc\,dT\), donc \(\Delta S = mc\ln(T_f/T_i)\).</li>
+      <li>\(mc = 0{,}100\times1800 = 180\ \text{J/K}\) ; \(T_i = 293\ \text{K}\), \(T_f = 353\ \text{K}\) ; \(\ln(353/293) = 0{,}186\).</li>
+      <li>\(\Delta S = 180\times0{,}186 = 33{,}5\ \text{J/K}\).</li>
+    </ol>
+    <p class="small">Piège : \(\Delta S = Q/T\) avec une seule température est faux ici puisque \(T\) change (\(Q = mc\,\Delta T = 10{,}8\) kJ). L'intégrale est attendue pour le point de raisonnement.</p>
+    <p class="answer">c) \(\Delta S = 33{,}5\) J/K</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="intra-ex2">
+  <header><span class="tag">Exercice 2 - 5 points</span><span class="tag theme">Marche aléatoire (cours 1)</span><h4>Exercice 2. Diffusion dans un écoulement lent</h4></header>
+  <div class="enonce">
+    <p>Des molécules sont en solution dans l'eau. Cette solution s'écoule dans un tuyau de rayon 1 mm. Le déplacement des molécules est favorisé dans le sens de l'écoulement, mais le flux est très lent ; on ne peut donc pas négliger le mouvement aléatoire dû à la diffusion. On mesure qu'après 4 s les molécules se sont en moyenne déplacées de 1 mm, mais l'écart type de la position des molécules autour de ce point est 100 µm. On suppose que chaque molécule subit \(10^{12}\) collisions par seconde.</p>
+    <p><strong>a)</strong> Calculer le déplacement moyen entre deux collisions (1 point pour l'explication, 1 point pour la réponse numérique).</p>
+    <p><strong>b)</strong> Calculer l'écart type du déplacement des molécules entre deux collisions (1 point pour l'explication, 1 point pour la réponse numérique).</p>
+    <p><strong>c)</strong> Calculer la distance moyenne parcourue après 100 s, et l'écart type autour de cette valeur (0,5 point par réponse numérique).</p>
+  </div>
+  <details class="hint"><summary>Indice</summary><div class="body">
+    <p>Marche aléatoire de \(n\) pas indépendants : \(\overline{S_n} = n\,\bar s\) et \(\sigma_n = \sqrt{n}\,\sigma_s\). Le rayon du tuyau ne sert pas.</p>
+  </div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>Nombre de pas en 4 s : \(n = 10^{12}\ \text{s}^{-1}\times4\ \text{s} = 4\times10^{12}\).</li>
+      <li><strong>a)</strong> Le déplacement moyen total est la somme des déplacements moyens de chaque pas : \(\overline{S_n} = n\,\bar s\), donc \(\bar s = \overline{S_n}/n = 10^{-3}/(4\times10^{12}) = 2{,}5\times10^{-16}\ \text{m}\).</li>
+      <li><strong>b)</strong> Les pas sont indépendants : les variances s'ajoutent, \(\sigma_n^2 = n\,\sigma_s^2\), donc \(\sigma_s = \sigma_n/\sqrt{n} = 10^{-4}/\sqrt{4\times10^{12}} = 10^{-4}/(2\times10^{6}) = 5\times10^{-11}\ \text{m}\).</li>
+      <li><strong>c)</strong> Après 100 s, \(n' = 10^{14}\) pas : distance moyenne \(n'\bar s = 10^{14}\times2{,}5\times10^{-16} = 2{,}5\times10^{-2}\ \text{m} = 25\ \text{mm}\) ; écart type \(\sqrt{n'}\,\sigma_s = 10^{7}\times5\times10^{-11} = 5\times10^{-4}\ \text{m} = 0{,}5\ \text{mm}\).</li>
+    </ol>
+    <p class="small">Vérification sans passer par les pas : le temps est multiplié par 25, donc la moyenne par 25 (1 mm → 25 mm) et l'écart type par \(\sqrt{25} = 5\) (100 µm → 500 µm). Le déplacement moyen par pas (\(2{,}5\times10^{-16}\) m) est minuscule devant son écart type (\(5\times10^{-11}\) m) : la dérive est un tout petit biais répété \(10^{12}\) fois par seconde.</p>
+    <p class="answer">a) \(\bar s = 2{,}5\times10^{-16}\) m | b) \(\sigma_s = 5\times10^{-11}\) m | c) 25 mm et 0,5 mm</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="intra-ex3">
+  <header><span class="tag">Exercice 3 - 5 points</span><span class="tag theme">Processus adiabatique et isotherme (cours 4)</span><h4>Exercice 3. Détente adiabatique puis isotherme</h4></header>
+  <div class="enonce">
+    <p>Considérer un gaz parfait dont les molécules ont 5 degrés de liberté. Ses pression et volume sont initialement \(p_1\) et \(V_1\). Le gaz subit un processus en 2 étapes : <strong>étape 1</strong>, une expansion adiabatique jusqu'à \(V_2\) (il est alors à la pression \(p_2\)) puis <strong>étape 2</strong>, une expansion isotherme jusqu'à \(V_3\) (il est alors à la pression \(p_3\)).</p>
+    <p><strong>a)</strong> Tracer le diagramme p-V de ces transformations. Attention à la pente des courbes décrivant les deux étapes (0,5 point pour l'allure générale, 0,5 point si l'aspect relatif des pentes est correct).</p>
+    <p><strong>b)</strong> Exprimer, en fonction de \(V_1\), \(V_2\), \(V_3\) et \(p_1\) uniquement, le travail généré par le gaz durant la première expansion (1 point pour les équations caractérisant la transformation, 1 point pour l'expression finale).</p>
+    <p><strong>c)</strong> Exprimer, en fonction de \(V_1\), \(V_2\), \(V_3\) et \(p_1\) uniquement, la pression \(p_3\) à la fin de la deuxième expansion (1 point pour les équations, 1 point pour l'expression finale).</p>
+  </div>
+  <details class="hint"><summary>Indice</summary><div class="body">
+    <p>\(\nu = 5\) donne \(\gamma = 7/5\). Adiabatique : \(pV^{\gamma} = \text{cste}\) ; isotherme : \(pV = \text{cste}\). Le travail adiabatique se calcule par \(\int p\,dV\) ou, plus vite, par \(W = -\Delta E\) avec \(E = \tfrac{\nu}{2}pV\).</p>
+  </div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p><strong>a) Diagramme p-V.</strong> Les deux courbes descendent quand \(V\) augmente, mais l'adiabatique est plus raide : pour l'isotherme \(p = C/V\) donne \(dp/dV = -p/V\), pour l'adiabatique \(p = C'/V^{\gamma}\) donne \(dp/dV = -\gamma p/V\), soit une pente \(\gamma = 1{,}4\) fois plus forte au même point. Au point 2 l'adiabatique arrive donc plus « à pic » que l'isotherme qui en repart, et la courbe 1 → 2 reste sous l'isotherme qui passe par 1 (le gaz se refroidit en se détendant sans recevoir de chaleur).</p>
+    <figure>
+      <svg class="pv" viewBox="0 0 440 300" width="440" height="300" role="img" aria-label="Diagramme p-V : adiabatique de 1 à 2 puis isotherme de 2 à 3" style="max-width:100%;height:auto">
+        <style>.pv text{font:13px sans-serif;fill:currentColor} .pv .ax{stroke:currentColor;stroke-width:1.2;fill:none} .pv .ad{stroke:#1f5fbf;stroke-width:2.4;fill:none} .pv .is{stroke:#0d8f7a;stroke-width:2.4;fill:none} .pv .ref{stroke:#1f5fbf;stroke-width:1.2;stroke-dasharray:4 4;fill:none;opacity:.55} .pv .gd{stroke:currentColor;stroke-width:.8;stroke-dasharray:3 3;opacity:.45;fill:none} .pv .pt{fill:currentColor}</style>
+        <path class="ax" d="M56,24 L56,250 L420,250"/>
+        <text x="48" y="28" text-anchor="end">p</text><text x="420" y="268" text-anchor="end">V</text>
+        <path class="ref" d="M92.4,44.5 L94.7,52.0 L97.0,58.9 L99.3,65.3 L101.7,71.3 L104.0,76.9 L106.3,82.2 L108.6,87.1 L111.0,91.7 L113.3,96.0 L115.6,100.1 L118.0,104.0 L120.3,107.6 L122.6,111.0 L124.9,114.3 L127.3,117.4 L129.6,120.3 L131.9,123.1 L134.2,125.7 L136.6,128.2 L138.9,130.6 L141.2,132.9 L143.5,135.1 L145.9,137.2 L148.2,139.2 L150.5,141.1 L152.8,143.0 L155.2,144.7 L157.5,146.4 L159.8,148.1 L162.1,149.6 L164.5,151.1 L166.8,152.6 L169.1,154.0 L171.4,155.3 L173.8,156.6 L176.1,157.9 L178.4,159.1 L180.7,160.3 L183.1,161.4"/>
+        <path class="ad" d="M92.4,44.5 L94.7,54.9 L97.0,64.4 L99.3,73.1 L101.7,81.1 L104.0,88.5 L106.3,95.3 L108.6,101.6 L111.0,107.4 L113.3,112.8 L115.6,117.8 L118.0,122.5 L120.3,126.9 L122.6,131.0 L124.9,134.8 L127.3,138.4 L129.6,141.7 L131.9,144.9 L134.2,147.8 L136.6,150.6 L138.9,153.2 L141.2,155.7 L143.5,158.1 L145.9,160.3 L148.2,162.4 L150.5,164.4 L152.8,166.3 L155.2,168.1 L157.5,169.8 L159.8,171.4 L162.1,173.0 L164.5,174.5 L166.8,175.9 L169.1,177.2 L171.4,178.5 L173.8,179.7 L176.1,180.9 L178.4,182.0 L180.7,183.1 L183.1,184.1"/>
+        <path class="is" d="M183.1,184.1 L187.7,185.7 L192.4,187.2 L197.1,188.6 L201.7,190.0 L206.4,191.3 L211.1,192.6 L215.7,193.8 L220.4,194.9 L225.1,196.0 L229.7,197.0 L234.4,198.0 L239.1,199.0 L243.7,199.9 L248.4,200.8 L253.1,201.6 L257.7,202.4 L262.4,203.2 L267.1,203.9 L271.7,204.6 L276.4,205.3 L281.1,206.0 L285.7,206.6 L290.4,207.2 L295.1,207.8 L299.7,208.4 L304.4,208.9 L309.1,209.4 L313.7,209.9 L318.4,210.4 L323.1,210.9 L327.7,211.4 L332.4,211.8 L337.1,212.2 L341.7,212.6 L346.4,213.0 L351.1,213.4 L355.7,213.8 L360.4,214.2 L365.1,214.5"/>
+        <path class="gd" d="M56,44.5 L92.4,44.5 L92.4,250"/><circle class="pt" cx="92.4" cy="44.5" r="3.5"/><text x="48" y="48.5" text-anchor="end">p1</text><text x="92.4" y="268" text-anchor="middle">V1</text>
+        <path class="gd" d="M56,184.1 L183.1,184.1 L183.1,250"/><circle class="pt" cx="183.1" cy="184.1" r="3.5"/><text x="48" y="188.1" text-anchor="end">p2</text><text x="183.1" y="268" text-anchor="middle">V2</text>
+        <path class="gd" d="M56,214.5 L365.1,214.5 L365.1,250"/><circle class="pt" cx="365.1" cy="214.5" r="3.5"/><text x="48" y="218.5" text-anchor="end">p3</text><text x="365.1" y="268" text-anchor="middle">V3</text>
+        <text x="130" y="86" style="fill:#1f5fbf">1 → 2 adiabatique, pente -γp/V</text>
+        <text x="238" y="178" style="fill:#0d8f7a">2 → 3 isotherme, pente -p/V</text>
+        <text x="150" y="128" style="fill:#1f5fbf;opacity:.7;font-size:11px">isotherme passant par 1 (repère)</text>
+      </svg>
+      <figcaption>Diagramme tracé pour \(\gamma = 1{,}4\), \(V_2 = 2V_1\) et \(V_3 = 4V_1\). La courbe bleue pointillée est l'isotherme qui passerait par le point 1 : l'adiabatique descend plus vite.</figcaption>
+    </figure>
+    <p><strong>b) Travail de la détente adiabatique.</strong></p>
+    <ol class="steps">
+      <li>\(\nu = 5\) : \(\gamma = (\nu+2)/\nu = 7/5\). Adiabatique : \(pV^{\gamma} = p_1V_1^{\gamma}\), donc \(p_2 = p_1(V_1/V_2)^{7/5}\).</li>
+      <li>\(W = \displaystyle\int_{V_1}^{V_2} p\,dV = p_1V_1^{\gamma}\int_{V_1}^{V_2}V^{-\gamma}\,dV = p_1V_1^{\gamma}\left[\frac{V^{1-\gamma}}{1-\gamma}\right]_{V_1}^{V_2} = \frac{p_1V_1 - p_2V_2}{\gamma - 1}\).</li>
+      <li>Avec \(p_2V_2 = p_1V_1(V_1/V_2)^{\gamma-1}\) et \(1/(\gamma-1) = 5/2\) : \(\displaystyle W = \frac{5}{2}\,p_1V_1\left[1 - \left(\frac{V_1}{V_2}\right)^{2/5}\right]\).</li>
+      <li>Vérification par le premier principe : \(Q = 0\) donc \(W = -\Delta E\) avec \(E = \tfrac{\nu}{2}NkT = \tfrac{5}{2}pV\), soit \(W = \tfrac{5}{2}(p_1V_1 - p_2V_2)\), la même expression. \(W \gt 0\) puisque \(V_2 \gt V_1\) : le gaz fournit du travail.</li>
+    </ol>
+    <p class="answer">b) \(W = \tfrac{5}{2}\,p_1V_1\left[1 - (V_1/V_2)^{2/5}\right]\) (\(V_3\) n'intervient pas)</p>
+    <p><strong>c) Pression finale.</strong></p>
+    <ol class="steps">
+      <li>Isotherme : \(pV = \text{cste}\), donc \(p_3V_3 = p_2V_2\).</li>
+      <li>\(p_3 = p_2\dfrac{V_2}{V_3} = p_1\left(\dfrac{V_1}{V_2}\right)^{7/5}\dfrac{V_2}{V_3} = p_1\,\dfrac{V_1^{7/5}}{V_2^{2/5}\,V_3}\).</li>
+      <li>Contrôle des dimensions : \(V^{7/5}/(V^{2/5}\cdot V)\) est sans dimension, \(p_3\) a bien la dimension de \(p_1\). Et si \(V_3 = V_2\) on retrouve \(p_2\).</li>
+    </ol>
+    <p class="answer">c) \(p_3 = p_1\,V_1^{7/5}\,V_2^{-2/5}\,V_3^{-1}\)</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="intra-ex4">
+  <header><span class="tag">Exercice 4 - 4 points</span><span class="tag theme">Binomiale et indépendance (cours 1)</span><h4>Exercice 4. Cent molécules dans une pièce en six sections</h4></header>
+  <div class="enonce">
+    <p>Soit une pièce contenant exactement 100 molécules de gaz. On divise la pièce en trois sections horizontalement et en deux sections verticalement, selon le schéma suivant. Les 6 sections ont le même volume.</p>
+    <figure>
+      <svg viewBox="0 0 400 170" width="400" height="170" role="img" aria-label="Pièce divisée en trois colonnes et deux rangées" style="max-width:100%;height:auto">
+        <style>.grid rect{fill:none;stroke:currentColor;stroke-width:1.5} .grid text{font:12px sans-serif;fill:currentColor;opacity:.75}</style>
+        <g class="grid">
+          <rect x="20" y="20" width="90" height="60"/><rect x="110" y="20" width="90" height="60"/><rect x="200" y="20" width="90" height="60"/>
+          <rect x="20" y="80" width="90" height="60"/><rect x="110" y="80" width="90" height="60"/><rect x="200" y="80" width="90" height="60"/>
+          <rect x="200" y="20" width="90" height="120" style="fill:#1f5fbf;fill-opacity:.10;stroke:none"/>
+          <rect x="20" y="80" width="270" height="60" style="fill:#0d8f7a;fill-opacity:.10;stroke:none"/>
+          <text x="245" y="14" text-anchor="middle" style="fill:#1f5fbf;opacity:1">tiers droit</text>
+          <text x="300" y="114" style="fill:#0d8f7a;opacity:1">moitié</text><text x="300" y="128" style="fill:#0d8f7a;opacity:1">inférieure</text>
+          <text x="245" y="155" text-anchor="middle">section bas-droite : 1/6</text>
+        </g>
+      </svg>
+      <figcaption>Schéma de l'énoncé (sans les couleurs) : trois colonnes, deux rangées, six sections de même volume.</figcaption>
+    </figure>
+    <p>Calculer les probabilités suivantes :</p>
+    <p><strong>a)</strong> 20 molécules sont à la fois dans le tiers droit de la pièce et dans la moitié inférieure de la pièce (1 point pour l'explication, 1 point pour la réponse numérique).</p>
+    <p><strong>b)</strong> 20 molécules sont dans le tiers droit de la pièce et 20 molécules sont dans la moitié inférieure de la pièce (1 point pour l'explication, 1 point pour la réponse numérique).</p>
+  </div>
+  <details class="hint"><summary>Indice</summary><div class="body">
+    <p>(a) parle d'une seule section (probabilité \(1/6\) par molécule). (b) parle de deux comptages différents sur toute la pièce, l'un sur les colonnes (\(p = 1/3\)), l'autre sur les rangées (\(p = 1/2\)) : sont-ils indépendants ?</p>
+  </div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <p><strong>a) Une seule section.</strong></p>
+    <ol class="steps">
+      <li>« À la fois dans le tiers droit et dans la moitié inférieure » désigne la section bas-droite, soit \(1/6\) du volume. Chaque molécule s'y trouve avec la probabilité \(p = 1/6\), indépendamment des autres.</li>
+      <li>Le nombre \(n\) de molécules dans cette section suit la binomiale \(P_N(n) = C_N^n\,p^n q^{N-n}\) avec \(N = 100\), \(p = 1/6\), \(q = 5/6\).</li>
+      <li>\(P_{100}(20) = C_{100}^{20}\,(1/6)^{20}(5/6)^{80}\). Par les logarithmes : \(\log_{10}C_{100}^{20} = \log_{10}100! - \log_{10}20! - \log_{10}80! = 157{,}97 - 18{,}39 - 118{,}86 = 20{,}73\) ; \(20\log_{10}(1/6) = -15{,}56\) ; \(80\log_{10}(5/6) = -6{,}33\). Somme : \(-1{,}17\), donc \(P = 10^{-1{,}17} = 6{,}8\times10^{-2}\).</li>
+      <li>Vérification par l'approximation gaussienne (acceptée pour \(N = 100\)) : \(\bar n = Np = 16{,}7\), \(\sigma = \sqrt{Npq} = 3{,}73\), \(P(20) \approx \dfrac{1}{\sigma\sqrt{2\pi}}e^{-(20-16{,}7)^2/2\sigma^2} = 0{,}107\times0{,}672 = 7{,}2\times10^{-2}\). Même ordre que la valeur exacte.</li>
+    </ol>
+    <p class="answer">a) \(P \approx 0{,}068\) (6,8 %), gaussienne : 0,072</p>
+    <p><strong>b) Deux comptages sur toute la pièce.</strong></p>
+    <ol class="steps">
+      <li>Soit \(X\) le nombre de molécules dans le tiers droit (\(p = 1/3\)) et \(Y\) le nombre dans la moitié inférieure (\(p = 1/2\)). Pour chaque molécule, la colonne (gauche, centre, droite) et la rangée (haut, bas) sont tirées indépendamment puisque les six sections ont le même volume ; \(X\) ne dépend que des colonnes et \(Y\) que des rangées, donc \(X\) et \(Y\) sont indépendants et \(P = P(X = 20)\,P(Y = 20)\).</li>
+      <li>\(P(X = 20) = C_{100}^{20}(1/3)^{20}(2/3)^{80}\) : \(\log_{10} = 20{,}73 - 9{,}54 - 14{,}09 = -2{,}90\), soit \(1{,}26\times10^{-3}\).</li>
+      <li>\(P(Y = 20) = C_{100}^{20}(1/2)^{100}\) : \(\log_{10} = 20{,}73 - 30{,}10 = -9{,}37\), soit \(4{,}2\times10^{-10}\).</li>
+      <li>\(P = 1{,}26\times10^{-3}\times4{,}2\times10^{-10} = 5{,}3\times10^{-13}\).</li>
+      <li>Gaussienne : \(X\) : \(\bar n = 33{,}3\), \(\sigma = 4{,}71\), \(P \approx 1{,}6\times10^{-3}\) ; \(Y\) : \(\bar n = 50\), \(\sigma = 5\), 20 est à \(6\sigma\) : \(P \approx 1{,}2\times10^{-9}\) ; produit \(\approx 1{,}9\times10^{-12}\). Loin dans les queues la gaussienne surestime d'un facteur 3 à 4 : donner l'ordre de grandeur \(10^{-12}\) à \(10^{-13}\) et dire pourquoi.</li>
+    </ol>
+    <p class="small">Différence avec (a) : ici 20 molécules dans le tiers droit peuvent être n'importe où en hauteur, et les 20 de la moitié inférieure n'importe où en largeur ; les deux groupes peuvent se recouvrir partiellement. Il ne s'agit pas de 20 molécules dans la section bas-droite.</p>
+    <p class="answer">b) \(P = P(X{=}20)\,P(Y{=}20) \approx 5\times10^{-13}\) (gaussienne : \(2\times10^{-12}\))</p>
+  </div></details>
+</article>
+
+</div>
+
+<section class="quiz" data-quiz-id="intra2021" id="quiz-intra">
+<h2>Questions à choix multiples (10 points)</h2>
+<p class="small">Une seule bonne réponse par question, 1 point chacune. Dans l'examen, seule la lettre est demandée ; ici l'explication s'affiche après la réponse.</p>
+
+<div class="q" data-answer="1">
+  <p class="q-text">1) Pour une transformation adiabatique, quelle expression est vraie ?</p>
+  <ul class="choices"><li>\(pV^{\gamma-1} = \text{cste}\)</li><li>\(V^{\gamma-1}T = \text{cste}\)</li><li>\(p^{\gamma}T^{\gamma-1} = \text{cste}\)</li><li>\(Tp^{1-1/\gamma} = \text{cste}\)</li></ul>
+  <div class="explain">Les trois formes équivalentes de l'adiabatique d'un gaz parfait sont \(pV^{\gamma} = \text{cste}\), \(TV^{\gamma-1} = \text{cste}\) (en remplaçant \(p = NkT/V\)) et \(T^{\gamma}p^{1-\gamma} = \text{cste}\), soit \(Tp^{1/\gamma - 1} = \text{cste}\). Seule (b) est juste ; (a) a l'exposant de \(pV^{\gamma}\) faux, (c) et (d) ont des exposants de mauvais signe.</div>
+</div>
+
+<div class="q" data-answer="2">
+  <p class="q-text">2) La première étape du cycle de Carnot est</p>
+  <ul class="choices"><li>une expansion adiabatique</li><li>une compression isochore</li><li>une expansion isotherme</li><li>un ajout isochore de chaleur</li></ul>
+  <div class="explain">Cycle de Carnot : expansion isotherme à \(T_h\) (le gaz reçoit \(Q_h\)), expansion adiabatique (il se refroidit jusqu'à \(T_c\)), compression isotherme à \(T_c\) (il rejette \(Q_c\)), compression adiabatique (retour à \(T_h\)). Aucune étape isochore.</div>
+</div>
+
+<div class="q" data-answer="0">
+  <p class="q-text">3) Pour un gaz parfait subissant un processus isotherme, l'expression suivante est vraie, quelles que soient les conditions</p>
+  <ul class="choices"><li>\(\Delta E = 0\) J</li><li>\(\Delta Q = 0\) J</li><li>\(\Delta W = 0\) J</li><li>\(\Delta V = 0\ \text{m}^3\)</li></ul>
+  <div class="explain">L'énergie interne d'un gaz parfait ne dépend que de \(T\) : \(E = \tfrac{\nu}{2}NkT\). À \(T\) constante, \(\Delta E = 0\), donc \(Q = W = NkT\ln(V_f/V_i)\), tous deux non nuls dès que le volume change.</div>
+</div>
+
+<div class="q" data-answer="2">
+  <p class="q-text">4) On jette 5 pièces en l'air. Quelle est la probabilité d'avoir exactement 3 faces ?</p>
+  <ul class="choices"><li>0,36</li><li>0,33</li><li>0,31</li><li>0,30</li></ul>
+  <div class="explain">Binomiale avec \(p = q = 1/2\) : \(P_5(3) = C_5^3/2^5 = 10/32 = 0{,}3125\).</div>
+</div>
+
+<div class="q" data-answer="0">
+  <p class="q-text">5) On a 100 jeux de 52 cartes, on tire une carte par jeu et on compte les as (4 as par jeu). On répète ce test un grand nombre de fois. Quel est l'écart type du nombre d'as ?</p>
+  <ul class="choices"><li>2,7</li><li>3,4</li><li>4,1</li><li>4,5</li></ul>
+  <div class="explain">\(N = 100\) tirages indépendants avec \(p = 4/52 = 1/13\) : \(\sigma = \sqrt{Npq} = \sqrt{100\times\tfrac{1}{13}\times\tfrac{12}{13}} = \sqrt{7{,}10} = 2{,}66\). (La moyenne vaut \(Np = 7{,}7\) as.)</div>
+</div>
+
+<div class="q" data-answer="2">
+  <p class="q-text">6) Un moteur fournit 45 J de travail et émet 65 J de chaleur. Quel est son rendement ?</p>
+  <ul class="choices"><li>0,27</li><li>0,33</li><li>0,41</li><li>0,53</li></ul>
+  <div class="explain">Sur un cycle \(Q_h = W + Q_c = 45 + 65 = 110\) J, donc \(e = W/Q_h = 45/110 = 0{,}41\). Le piège est de diviser par \(Q_c\) (0,69) ou de prendre \(Q_c/Q_h\) (0,59).</div>
+</div>
+
+<div class="q" data-answer="0">
+  <p class="q-text">7) Quels sont les degrés de liberté d'une molécule de gaz diatomique ?</p>
+  <ul class="choices"><li>3 en translation, 2 en rotation</li><li>3 en translation</li><li>3 en translation, 3 en énergie potentielle</li><li>3 en translation, 1 en rotation, 1 en énergie potentielle</li></ul>
+  <div class="explain">À température ordinaire : 3 translations et 2 rotations (la rotation autour de l'axe de la molécule et la vibration sont gelées), d'où \(\nu = 5\) et \(\gamma = 7/5\).</div>
+</div>
+
+<div class="q" data-answer="2">
+  <p class="q-text">8) Soit \(n\) une variable aléatoire donnant les résultats équiprobables 1, 2, ..., 9. Que vaut \(\overline{n^3}\) ?</p>
+  <ul class="choices"><li>5</li><li>125</li><li>225</li><li>202,5</li></ul>
+  <div class="explain">\(\overline{n^3} = \tfrac{1}{9}\sum_{n=1}^{9}n^3 = \tfrac{1}{9}\left(\tfrac{9\times10}{2}\right)^2 = \tfrac{2025}{9} = 225\). Attention : ce n'est pas \((\bar n)^3 = 5^3 = 125\) ; la moyenne d'une fonction n'est pas la fonction de la moyenne.</div>
+</div>
+
+<div class="q" data-answer="0">
+  <p class="q-text">9) Quelle condition est vraie pour tout cycle de moteur ?</p>
+  <ul class="choices"><li>\(\Delta E = 0\) J</li><li>\(\Delta S = 0\ \text{J K}^{-1}\)</li><li>\(pV = \text{cste}\)</li><li>\(QT^{-1} = \text{cste}\)</li></ul>
+  <div class="explain">L'énergie interne est une fonction d'état : après un cycle complet le gaz est revenu à son état initial, donc \(\Delta E = 0\) et \(W = Q_h - Q_c\). C'est la réponse attendue. Nuance : l'entropie du gaz est aussi une fonction d'état (\(\Delta S_{gaz} = 0\) sur un cycle), mais l'entropie totale (gaz + réservoirs) augmente pour tout moteur réel et n'est nulle que pour un cycle réversible ; lue comme un bilan global, (b) n'est pas vraie « pour tout cycle ».</div>
+</div>
+
+<div class="q" data-answer="3">
+  <p class="q-text">10) On installe deux fenêtres dans un mur parfaitement isolant (résistance thermique infinie). La fenêtre 1 a une résistance thermique de 2 K W⁻¹, la fenêtre 2 de 5 K W⁻¹. Quelle est la résistance thermique du mur après les travaux ?</p>
+  <ul class="choices"><li>10 K W⁻¹</li><li>7 K W⁻¹</li><li>2 K W⁻¹</li><li>1,4 K W⁻¹</li></ul>
+  <div class="explain">Les deux fenêtres sont traversées en parallèle par la chaleur (même \(\Delta T\), flux qui s'ajoutent) et le mur ne conduit rien : \(1/R = 1/2 + 1/5 = 0{,}7\ \text{W/K}\), donc \(R = 1{,}43\ \text{K/W}\), plus petite que la plus petite des deux.</div>
+</div>
+</section>
+
+<h2>Autocorrection rapide</h2>
+<p>Pour se noter sur 30 sans ouvrir chaque corrigé.</p>
+<table>
+  <tr><th>Question</th><th>Réponse</th><th>Points</th></tr>
+  <tr><td>1 a)</td><td>\(\Omega_f/\Omega_i = 10^{1{,}6\times10^{21}}\) (raisonnement : \(\Delta S = Q/T\) puis \(\Delta S = k\ln(\Omega_f/\Omega_i)\))</td><td class="num">2</td></tr>
+  <tr><td>1 b)</td><td>\(\Delta S = 1024\,k\ln10 = 3{,}3\times10^{-20}\) J/K</td><td class="num">2</td></tr>
+  <tr><td>1 c)</td><td>\(\Delta S = mc\ln(T_f/T_i) = 33{,}5\) J/K</td><td class="num">2</td></tr>
+  <tr><td>2 a)</td><td>\(\bar s = 2{,}5\times10^{-16}\) m</td><td class="num">2</td></tr>
+  <tr><td>2 b)</td><td>\(\sigma_s = 5\times10^{-11}\) m</td><td class="num">2</td></tr>
+  <tr><td>2 c)</td><td>25 mm et 0,5 mm</td><td class="num">1</td></tr>
+  <tr><td>3 a)</td><td>Adiabatique plus raide que l'isotherme (\(\gamma\) fois au même point)</td><td class="num">1</td></tr>
+  <tr><td>3 b)</td><td>\(W = \tfrac{5}{2}p_1V_1\left[1 - (V_1/V_2)^{2/5}\right]\)</td><td class="num">2</td></tr>
+  <tr><td>3 c)</td><td>\(p_3 = p_1V_1^{7/5}V_2^{-2/5}V_3^{-1}\)</td><td class="num">2</td></tr>
+  <tr><td>4 a)</td><td>\(C_{100}^{20}(1/6)^{20}(5/6)^{80} = 0{,}068\)</td><td class="num">2</td></tr>
+  <tr><td>4 b)</td><td>\(P(X{=}20)\,P(Y{=}20) = 5\times10^{-13}\)</td><td class="num">2</td></tr>
+  <tr><td>QCM 1 à 10</td><td>b, c, a, c, a, c, a, c, a, d</td><td class="num">10</td></tr>
+</table>
+
+</article>
+</main>
+<footer class="footer">ELE2307 - site d'étude personnel. Sujet d'intra transcrit du fichier remis par le professeur ; corrigé et barème commentés de mon cru. Vérifiez toujours avec les documents officiels sur Moodle.</footer>
+<script defer src="assets/katex/katex.min.js"></script>
+<script defer src="assets/katex/contrib/auto-render.min.js"></script>
+<script defer src="assets/app.js?v=4"></script>
+</body>
+</html>
