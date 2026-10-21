@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Préparation à l'intra | INF1010</title>
+<link rel="stylesheet" href="assets/style.css?v=3">
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="index.html">INF1010 <small>Programmation orientée objet</small></a>
+  <nav>
+    <a href="index.html">Accueil</a>
+    <a href="cours1.html" title="Concepts de base, allocation dynamique">M1</a>
+    <a href="cours2.html" title="Méthodes constantes, passage de paramètres, vecteurs">M2</a>
+    <a href="cours3.html" title="Pointeurs intelligents, composition et agrégation">M3</a>
+    <a href="cours4.html" title="Pointeur this, surcharge d'opérateurs, copie et affectation">M4</a>
+    <a href="cours5.html" title="Héritage et polymorphisme">M5</a>
+    <a href="cours6.html" title="Classes abstraites, conversion d'objets">M6</a>
+    <a href="cours7.html" title="Héritage multiple, fonctions et classes génériques">M7</a>
+    <a href="cours8.html" title="STL : conteneurs et itérateurs">M8</a>
+    <a href="cours9.html" title="STL : algorithmes, foncteurs, lambdas">M9</a>
+    <a href="cours10.html" title="Variables statiques, exceptions, Python">M10</a>
+    <span class="sep"></span>
+    <a href="intra.html">Intra</a>
+    <a href="aide-memoire.html">Aide-mémoire</a>
+    <button class="theme-btn" type="button">Thème</button>
+  </nav>
+</header>
+
+<main class="layout">
+<aside class="toc"></aside>
+<article class="content">
+
+<div class="course-hero">
+  <div class="kicker">Contrôle périodique - vendredi 23 octobre 2026, 18h30 à 20h30 (1 h 50)</div>
+  <h1>Préparation à l'intra</h1>
+  <p class="meta">25 % de la note | Sur Moodle Examen | Toute documentation permise, sur papier ou sur clé USB | Matière : modules 1 à 7 (concepts de base jusqu'aux fonctions et classes génériques) | Questions de programmation C++ : analyse du problème, conception, écriture de code</p>
+  <p><span class="pill accent">Stratégie par type de question</span><span class="pill accent">Quiz de révision (31 questions)</span><span class="pill accent">Exercices de synthèse</span><span class="pill accent">Chronomètre</span><span class="pill accent">Liste de vérification</span></p>
+</div>
+
+<h2>1. Préparer sa clé USB et ses feuilles</h2>
+<div class="box tip"><span class="label">Toute documentation est permise : profitez-en</span>
+<ul>
+  <li><strong>Ce site fonctionne hors ligne</strong> : copiez le dossier complet du site sur la clé USB et ouvrez <code>index.html</code> en double-cliquant. Les démos, quiz et solutions fonctionnent sans connexion. Vérifiez sur place que les fichiers s'ouvrent (l'énoncé du plan de cours le rappelle : aucun problème d'accès à vos fichiers ne sera pris en compte).</li>
+  <li>Imprimez l'<a href="aide-memoire.html">aide-mémoire</a> (Ctrl+P) : signatures des opérateurs, règle des trois, ordre de construction, casts, templates, en 4 à 5 pages.</li>
+  <li>Mettez vos TP1, TP2 et TP3 corrigés sur la clé : ce sont des modèles complets de classes, constructeurs de copie, opérateurs, hiérarchie polymorphe et classe générique écrits dans le style attendu.</li>
+  <li>Ajoutez les énoncés de TP (PDF) : ils contiennent les contrats exacts (préconditions, valeurs de retour) que les questions d'examen reprennent souvent.</li>
+</ul></div>
+
+<h2>2. Stratégie par type de question</h2>
+<h3>« Donnez l'affichage du programme »</h3>
+<ol class="steps">
+  <li>Repérez chaque <strong>création</strong> d'objet (déclaration, <code>new</code>, paramètre par valeur, retour par valeur, temporaire) : un constructeur par objet. Lequel ? Par défaut, par paramètres ou par copie.</li>
+  <li>Pour un objet dérivé : base (récursivement), puis attributs dans l'ordre de déclaration, puis corps. Les bases multiples dans l'ordre de la déclaration <code>class D : public B1, public B2</code>. La liste d'initialisation ne change pas l'ordre.</li>
+  <li>Repérez chaque <strong>destruction</strong> : accolade fermante (ordre inverse de déclaration), <code>delete</code>, fin d'expression pour un temporaire, fin de fonction pour un paramètre. Un objet dynamique sans <code>delete</code> n'affiche jamais son destructeur.</li>
+  <li>Pour chaque appel de méthode via pointeur ou référence : virtuelle ? type réel. Non virtuelle ? type déclaré. Objet copié dans une variable de type base : découpage, version de la base.</li>
+  <li><code>a = b</code> entre objets existants : opérateur d'affectation, pas constructeur de copie. <code>T a = b</code> : constructeur de copie.</li>
+  <li>Vérifiez les <code>endl</code> : une ligne ou tout sur une ligne.</li>
+</ol>
+<h3>« Composition ou agrégation ? »</h3>
+<p>Attribut objet → composition. Attribut pointeur avec <code>new</code> dans la classe (ou <code>unique_ptr</code>) → composition par pointeur, la classe fait le <code>delete</code>. Pointeur ou référence reçu de l'extérieur sans <code>new</code> → agrégation, l'extérieur détruit. <code>shared_ptr</code> → partage. Un bon réflexe : écrire une phrase (« la classe possède / utilise ») et le nom de qui appelle <code>delete</code>.</p>
+<h3>« Donnez l'implémentation de la surcharge de l'opérateur ... »</h3>
+<p>Ouvrez le tableau des signatures (aide-mémoire). Déterminez : membre ou libre (opérande gauche) ; type de retour (valeur, <code>T&amp;</code>, <code>bool</code>, <code>ostream&amp;</code>) ; <code>const</code> ou non ; accès privé nécessaire (friend) ou interface publique suffisante. Écrivez la définition avec <code>Classe::</code> si membre, sans si libre. Terminez par <code>return *this;</code> ou <code>return out;</code> quand il le faut.</p>
+<h3>« Quelles fonctions membres manquent ? » / « Faut-il modifier la classe ? »</h3>
+<p>Règle des trois : un pointeur brut possédé (avec <code>delete</code> dans le destructeur) exige constructeur de copie et opérateur d'affectation. Un attribut <code>unique_ptr</code> exige de les écrire pour que la classe soit copiable. Des attributs <code>vector</code>, <code>string</code>, <code>shared_ptr</code>, types simples : la copie par défaut suffit, justifiez-le (« pas de copie profonde nécessaire, l'opérateur de vector copie les éléments »).</p>
+<h3>« Combien de fois ... est appelé ? »</h3>
+<p>Constructeur de copie : <code>T b(a)</code>, <code>T b = a</code>, paramètre par valeur, retour par valeur (sauf élision), <code>new T(a)</code>, <code>push_back(a)</code>. Jamais : passage par référence ou pointeur, affectation. Blocs mémoire : un par objet créé, tableau = n blocs, affectation = 0.</p>
+<h3>« Écrivez la classe / la hiérarchie »</h3>
+<p>Partez de l'énoncé : un nom par substantif, un attribut par donnée, une méthode par verbe. Puis : constructeur avec liste d'initialisation (base d'abord), accesseurs <code>const</code>, mutateurs avec validation (<code>bool</code>), destructeur virtuel si classe de base, méthodes virtuelles pures pour ce qui n'a pas de version commune, <code>override</code> dans les dérivées, <code>std::</code> dans l'en-tête, définitions dans le même ordre.</p>
+
+<h2>3. Quiz de révision (modules 1 à 7)</h2>
+<section class="quiz" data-quiz-id="intra" id="quiz-intra">
+<h2>31 questions, sans ordre de module</h2>
+<p class="small">Comme à l'intra, les vrai/faux demandent une justification : lisez l'explication même quand vous avez juste.</p>
+
+<div class="q" data-answer="1">
+<p class="q-text">La liste d'initialisation d'un constructeur permet d'initialiser les attributs composites et la classe de base.</p>
+<ul class="choices"><li>Faux</li><li>Vrai</li></ul>
+<div class="explain">Vrai (intra H16). C'est même l'unique endroit pour choisir le constructeur de la base et initialiser les attributs constants ou références.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Un attribut privé de la classe de base est accessible aux classes dérivées.</p>
+<ul class="choices"><li>Faux</li><li>Vrai</li></ul>
+<div class="explain">Faux (intra H16). Hérité mais inaccessible ; utiliser protected ou les accesseurs.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Soit la classe AA. Il est possible de surcharger l'opérateur de flux de sortie &lt;&lt; comme une fonction membre de AA.</p>
+<ul class="choices"><li>Faux</li><li>Vrai</li></ul>
+<div class="explain">Faux (intra H16). L'opérande gauche est le flux ; l'opérateur doit être une fonction libre (friend ou non).</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Les surcharges « objet AA + int » et « int + objet AA » sont toutes deux des fonctions membres de AA.</p>
+<ul class="choices"><li>Faux</li><li>Vrai</li></ul>
+<div class="explain">Faux (intra H16). « int + AA » a un int à gauche : fonction libre obligatoirement.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Déclaration d'un tableau de 10 pointeurs vers des objets AA, le tableau étant sur le tas :</p>
+<ul class="choices"><li><code>AA* t = new AA[10];</code></li><li><code>AA t[10];</code></li><li><code>AA** t = new AA*[10];</code></li><li><code>AA& t = new AA[10];</code></li></ul>
+<div class="explain">Intra H16, question 2 (iii). (i) pile : <code>AA t[INTMAX];</code> (ii) tas d'objets : <code>AA* t = new AA[INTMAX];</code></div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Lorsqu'un paramètre porte le même nom qu'un attribut, peut-on accéder à l'attribut dans la méthode ?</p>
+<ul class="choices"><li>Non, l'attribut est masqué définitivement</li><li>Oui, avec <code>this-&gt;attribut</code></li><li>Oui, avec <code>Classe.attribut</code></li><li>Oui, avec <code>::attribut</code></li></ul>
+<div class="explain">Intra H15 : le pointeur this désigne l'objet courant.</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Pour surcharger &lt;&lt;, on retourne une référence. Vers quel objet, et pourquoi ?</p>
+<ul class="choices"><li>Vers l'objet affiché, pour le modifier</li><li>Vers une copie du flux</li><li>Vers this</li><li>Vers l'objet ostream reçu, pour permettre les appels en cascade</li></ul>
+<div class="explain">Intra H15 : <code>cout &lt;&lt; a &lt;&lt; b</code> réutilise le flux retourné.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Si l'on doit choisir entre héritage et composition entre A et B, quelle est la stratégie ?</p>
+<ul class="choices"><li>Héritage si « A est un B », composition si « A a un B »</li><li>Toujours l'héritage, plus puissant</li><li>Toujours la composition, plus simple</li><li>Héritage si B est abstraite</li></ul>
+<div class="explain">Intra H15, question 7.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Quel est l'affichage ?</p>
+<script type="text/cpp">
+class A { public: A() { cout << "A"; } ~A() { cout << "a"; } };
+class B : public A { public: B() { cout << "B"; } ~B() { cout << "b"; } private: A x_; };
+int main() { B objet; return 0; }
+</script>
+<ul class="choices"><li>ABab</li><li>AABbaa</li><li>AABbaa avec l'ordre : A A B b a a</li><li>BAab</li></ul>
+<div class="explain">Base A (« A »), attribut x_ (« A »), corps (« B ») ; destruction : corps (« b »), attribut (« a »), base (« a »). Les réponses b et c sont identiques : AABbaa.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Combien d'appels au constructeur de copie ? <code>void f(const T&amp;); T g(T x) { return x; }  T a; T b = a; f(b); T c = g(a);</code></p>
+<ul class="choices"><li>1</li><li>3</li><li>2</li><li>4</li></ul>
+<div class="explain"><code>T b = a</code> (1) ; <code>g(a)</code> : paramètre par valeur (2), <code>return x</code> copie du paramètre dans la valeur de retour (3), qui devient c sans copie supplémentaire (élision). f par référence : 0.</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Laquelle de ces méthodes doit être const ?</p>
+<ul class="choices"><li><code>void setCharge(double)</code></li><li><code>Robot&amp; operator+=(...)</code></li><li><code>void recharger(double)</code></li><li><code>double getConsommationW()</code></li></ul>
+<div class="explain">Les accesseurs et calculs ne modifient pas l'objet : const, sinon inutilisables sur une référence constante.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Qu'est-ce qui ne va pas ?</p>
+<script type="text/cpp">
+Batterie* b = new Batterie("b", 3, 12, 100, 10);
+Robot r1("r1"), r2("r2");
+r1.installerBatterie(b);
+r2.installerBatterie(b);
+</script>
+<ul class="choices"><li>Deux robots possèdent la même batterie : double delete à leur destruction</li><li>Rien : la batterie est partagée</li><li>Erreur de compilation</li><li>Fuite de mémoire</li></ul>
+<div class="explain">installerBatterie transfère la propriété (composition). Avec des shared_ptr, le partage serait correct ; avec des pointeurs bruts, c'est un plantage.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Que vaut <code>b</code> après <code>auto a = make_unique&lt;X&gt;(); auto b = std::move(a);</code> ?</p>
+<ul class="choices"><li>nullptr</li><li>Une copie de l'objet</li><li>Le propriétaire de l'objet ; a est nul</li><li>Erreur de compilation</li></ul>
+<div class="explain">Transfert de propriété exclusive.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Quel attribut traduit une relation d'agrégation ?</p>
+<ul class="choices"><li><code>Moteur moteur_;</code></li><li><code>Moteur* moteur_;</code> reçu par le constructeur sans new</li><li><code>unique_ptr&lt;Moteur&gt; moteur_;</code></li><li><code>Moteur* moteur_ = new Moteur(...);</code></li></ul>
+<div class="explain">Les trois autres sont des compositions (objet, propriété exclusive, new dans la classe).</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Signature correcte du constructeur de copie de Robot :</p>
+<ul class="choices"><li><code>Robot(Robot autre);</code></li><li><code>Robot(Robot* autre);</code></li><li><code>Robot&amp; Robot(const Robot&amp; autre);</code></li><li><code>Robot(const Robot&amp; autre);</code></li></ul>
+<div class="explain">Par valeur, il s'appellerait lui-même à l'infini ; un constructeur n'a pas de type de retour.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Dans <code>operator=</code>, que se passe-t-il sans le test <code>this != &amp;autre</code> pour <code>t = t;</code> (classe avec int* possédé) ?</p>
+<ul class="choices"><li>On libère nos données puis on les copie depuis une mémoire libérée : comportement indéfini</li><li>Rien, l'affectation est ignorée</li><li>Erreur de compilation</li><li>Les données sont dupliquées</li></ul>
+<div class="explain">D'où le test d'auto-affectation, ou l'idiome copie-et-échange qui l'évite naturellement.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Type de retour de l'opérateur ++ préfixe et de l'opérateur ++ suffixe, respectivement :</p>
+<ul class="choices"><li>valeur, valeur</li><li>référence, référence</li><li>référence, valeur</li><li>void, int</li></ul>
+<div class="explain">Le préfixe retourne l'objet incrémenté (<code>*this</code>) ; le suffixe retourne une copie de l'ancienne valeur, et prend un paramètre int fictif.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Qu'affiche <code>p-&gt;f()</code> si <code>f</code> est virtuelle dans Base, redéfinie dans Derivee, et <code>Base* p = new Derivee;</code> ?</p>
+<ul class="choices"><li>La version de Base</li><li>La version de Derivee</li><li>Les deux</li><li>Erreur de compilation</li></ul>
+<div class="explain">Liaison dynamique : type réel.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Même question si <code>f</code> n'est pas virtuelle.</p>
+<ul class="choices"><li>La version de Base</li><li>La version de Derivee</li><li>Comportement indéfini</li><li>Erreur de compilation</li></ul>
+<div class="explain">Liaison statique : type déclaré du pointeur.</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Pourquoi le destructeur de Composante doit-il être virtuel ?</p>
+<ul class="choices"><li>Pour pouvoir dériver de Composante</li><li>Pour que Composante soit abstraite</li><li>Pour empêcher le découpage</li><li>Pour que <code>delete</code> (ou un pointeur intelligent) via un <code>Composante*</code> détruise aussi la partie dérivée</li></ul>
+<div class="explain">Sans lui, détruire un Moteur à travers un Composante* est un comportement indéfini.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Une classe avec <code>virtual double aire() const = 0;</code> :</p>
+<ul class="choices"><li>Ne peut pas avoir de constructeur</li><li>Ne peut pas avoir d'attributs</li><li>Ne peut pas être instanciée, mais peut servir de type de pointeur ou de référence</li><li>Doit être déclarée avec le mot-clé abstract</li></ul>
+<div class="explain">Classe abstraite. Les dérivées concrètes définissent aire().</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Que fait <code>dynamic_cast&lt;Chien*&gt;(animalPtr)</code> si l'objet pointé n'est pas un Chien ?</p>
+<ul class="choices"><li>Comportement indéfini</li><li>Retourne nullptr</li><li>Lance bad_cast</li><li>Erreur de compilation</li></ul>
+<div class="explain">Avec un pointeur : nullptr. Avec une référence : exception bad_cast. static_cast : comportement indéfini.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text"><code>Chien c; Animal a = c; a.parler();</code> avec parler virtuelle redéfinie dans Chien. Quelle version ?</p>
+<ul class="choices"><li>Celle d'Animal : a est une copie découpée</li><li>Celle de Chien : a vient d'un Chien</li><li>Erreur de compilation</li><li>Aucune : a est vide</li></ul>
+<div class="explain">Le polymorphisme exige un pointeur ou une référence ; une copie par valeur perd la partie dérivée.</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Conversion ascendante (dérivée → base) :</p>
+<ul class="choices"><li>Exige dynamic_cast</li><li>Exige static_cast</li><li>Est interdite</li><li>Est implicite et toujours valide</li></ul>
+<div class="explain">Un Moteur est une Composante : <code>Composante* p = &amp;moteur;</code> compile sans cast.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Où écrit-on la définition d'une méthode de <code>Liste&lt;T&gt;</code> ?</p>
+<ul class="choices"><li>Dans Liste.cpp</li><li>Dans main.cpp</li><li>Dans Liste.h (dans ou hors de la classe, avec <code>template &lt;typename T&gt;</code>)</li><li>N'importe où</li></ul>
+<div class="explain">Le compilateur a besoin du code pour instancier chaque Liste&lt;Type&gt;.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Avec <code>template &lt;typename T&gt; T max(const T&amp;, const T&amp;)</code>, l'appel <code>max(1, 2.0)</code> :</p>
+<ul class="choices"><li>Retourne 2.0</li><li>Ne compile pas (déduction contradictoire)</li><li>Retourne 2</li><li>Retourne 1</li></ul>
+<div class="explain">Préciser <code>max&lt;double&gt;(1, 2.0)</code>.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Dans <code>class C : public A, public B</code>, un membre <code>x</code> présent dans A et dans B :</p>
+<ul class="choices"><li>Doit être qualifié (<code>A::x</code>) dans C, sinon l'accès est ambigu</li><li>Est celui de A par défaut</li><li>Est celui de B par défaut</li><li>Est fusionné en un seul</li></ul>
+<div class="explain">Sauf héritage virtuel d'une base commune, où le sous-objet est unique.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Que fait <code>v.erase(v.begin() + 1)</code> sur <code>vector&lt;int&gt; v = {5, 6, 7}</code> ?</p>
+<ul class="choices"><li>Retire 5</li><li>Retire 7</li><li>Retire 6 ; v devient {5, 7}</li><li>Retire les deux premiers</li></ul>
+<div class="explain">L'itérateur begin() + i désigne l'indice i ; l'ordre des autres est conservé.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Paramètre recommandé pour un <code>vector&lt;Robot&gt;</code> qu'on lit seulement :</p>
+<ul class="choices"><li><code>vector&lt;Robot&gt; v</code></li><li><code>const vector&lt;Robot&gt;&amp; v</code></li><li><code>vector&lt;Robot&gt;* v</code></li><li><code>const vector&lt;Robot&gt; v</code></li></ul>
+<div class="explain">Pas de copie du vecteur et de tous ses robots, pas de modification.</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Que vaut <code>p.use_count()</code> après <code>auto p = make_shared&lt;X&gt;(); { auto q = p; auto r = p; } </code> ?</p>
+<ul class="choices"><li>3</li><li>0</li><li>2</li><li>1</li></ul>
+<div class="explain">q et r sont détruits à la fin du bloc : le compteur redescend à 1, l'objet survit.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Une méthode <code>const</code> peut :</p>
+<ul class="choices"><li>Modifier ses variables locales et ses paramètres, pas les attributs de l'objet</li><li>Modifier les attributs si elle les remet ensuite</li><li>Appeler n'importe quelle méthode de l'objet</li><li>Retourner une référence non constante vers un attribut</li></ul>
+<div class="explain">La constance porte sur *this uniquement.</div>
+</div>
+</section>
+
+<h2 id="dev-intra">4. Exercices de synthèse (format examen)</h2>
+<p class="small">Chaque exercice mélange plusieurs modules, comme une question longue d'intra. Écrivez le code en entier avant de regarder la solution.</p>
+<div class="exo-tools" data-scope="dev-intra-list">
+  <div class="progress-bar"><span></span></div><span class="progress-label small"></span>
+  <button class="btn secondary small" type="button" data-action="open-all">Déplier les solutions</button>
+  <button class="btn secondary small" type="button" data-action="close-all">Tout replier</button>
+</div>
+<div id="dev-intra-list">
+
+<article class="exo" data-exo-id="intra-s1">
+<header><span class="tag exam">Synthèse</span><span class="tag theme">M1 + M2 + M4</span><h4>Classe Inventaire avec tableau dynamique</h4></header>
+<div class="enonce">
+<p>Un Inventaire conserve des quantités (<code>int</code>) dans un tableau alloué dynamiquement de capacité fixée au constructeur, et un nombre d'éléments utilisés. Écrivez la classe avec : constructeur <code>Inventaire(int capacite)</code>, destructeur, constructeur de copie, opérateur d'affectation, <code>bool ajouter(int quantite)</code> (faux si plein), <code>int operator[](int i) const</code> (0 si indice invalide), <code>Inventaire&amp; operator+=(int quantite)</code> (comme ajouter, avec chaînage), <code>int total() const</code>, et <code>operator&lt;&lt;</code> ami qui affiche les quantités séparées par des espaces. Expliquez en une phrase pourquoi la règle des trois s'applique.</p>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/cpp">
+class Inventaire {
+public:
+    Inventaire(int capacite) : capacite_(capacite), taille_(0), quantites_(new int[capacite]) {}
+    ~Inventaire() { delete[] quantites_; }
+
+    Inventaire(const Inventaire& autre)
+        : capacite_(autre.capacite_), taille_(autre.taille_), quantites_(new int[autre.capacite_]) {
+        for (int i = 0; i < taille_; ++i) quantites_[i] = autre.quantites_[i];
+    }
+    Inventaire& operator=(const Inventaire& autre) {
+        if (this != &autre) {
+            delete[] quantites_;
+            capacite_ = autre.capacite_;
+            taille_ = autre.taille_;
+            quantites_ = new int[capacite_];
+            for (int i = 0; i < taille_; ++i) quantites_[i] = autre.quantites_[i];
+        }
+        return *this;
+    }
+
+    bool ajouter(int quantite) {
+        if (taille_ >= capacite_) return false;
+        quantites_[taille_++] = quantite;
+        return true;
+    }
+    Inventaire& operator+=(int quantite) { ajouter(quantite); return *this; }
+    int operator[](int i) const { return (i >= 0 && i < taille_) ? quantites_[i] : 0; }
+    int total() const { int s = 0; for (int i = 0; i < taille_; ++i) s += quantites_[i]; return s; }
+
+    friend std::ostream& operator<<(std::ostream& out, const Inventaire& inv) {
+        for (int i = 0; i < inv.taille_; ++i) out << inv.quantites_[i] << " ";
+        return out;
+    }
+private:
+    int capacite_;
+    int taille_;
+    int* quantites_;
+};
+</script>
+<p>Règle des trois : la classe possède un bloc alloué avec <code>new[]</code> (composition par pointeur brut) ; la copie par défaut copierait l'adresse, d'où double libération et partage involontaire. Ordre des attributs dans la liste : capacité, taille, puis le tableau (qui utilise <code>capacite</code>, le paramètre, pour ne pas dépendre de l'ordre).</p>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="intra-s2">
+<header><span class="tag exam">Synthèse</span><span class="tag theme">M3 + M5 + M6</span><h4>Hiérarchie de véhicules et flotte polymorphe</h4></header>
+<div class="enonce">
+<p>Un Vehicule (abstrait) a une immatriculation et une masse ; il sait calculer sa <code>taxe()</code> (virtuelle pure) et s'afficher (virtuelle, affiche immatriculation et masse). Une Voiture ajoute un nombre de places : taxe = masse × 0,1. Un Camion ajoute une charge maximale : taxe = (masse + charge) × 0,2. Une Flotte possède ses véhicules (ils sont créés pour elle et détruits avec elle) dans un seul conteneur, calcule la taxe totale et affiche chaque véhicule selon son type. Écrivez les classes, puis une fonction <code>int nombreDeCamions(const Flotte&amp;)</code> (la Flotte expose <code>const vector&lt;unique_ptr&lt;Vehicule&gt;&gt;&amp; getVehicules() const</code>). Quel type de pointeur choisir dans Flotte et pourquoi ? Faut-il un destructeur virtuel ?</p>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/cpp">
+class Vehicule {
+public:
+    Vehicule(const std::string& immat, double masseKg) : immat_(immat), masseKg_(masseKg) {}
+    virtual ~Vehicule() = default;                       // destruction via unique_ptr<Vehicule> : obligatoire
+    virtual double taxe() const = 0;                     // pas de version commune : pure
+    virtual void afficher(std::ostream& out) const { out << immat_ << " (" << masseKg_ << " kg)"; }
+protected:
+    double masseKg_;                                     // utilisée par les dérivées pour la taxe
+private:
+    std::string immat_;
+};
+
+class Voiture : public Vehicule {
+public:
+    Voiture(const std::string& immat, double masseKg, int places) : Vehicule(immat, masseKg), places_(places) {}
+    double taxe() const override { return masseKg_ * 0.1; }
+    void afficher(std::ostream& out) const override { Vehicule::afficher(out); out << ", " << places_ << " places"; }
+private:
+    int places_;
+};
+
+class Camion : public Vehicule {
+public:
+    Camion(const std::string& immat, double masseKg, double chargeKg) : Vehicule(immat, masseKg), chargeKg_(chargeKg) {}
+    double taxe() const override { return (masseKg_ + chargeKg_) * 0.2; }
+    void afficher(std::ostream& out) const override { Vehicule::afficher(out); out << ", charge " << chargeKg_ << " kg"; }
+private:
+    double chargeKg_;
+};
+
+class Flotte {
+public:
+    void ajouter(std::unique_ptr<Vehicule> v) { vehicules_.push_back(std::move(v)); }   // transfert de propriété
+    double taxeTotale() const {
+        double total = 0;
+        for (const auto& v : vehicules_) total += v->taxe();                          // appel virtuel
+        return total;
+    }
+    void afficher(std::ostream& out) const {
+        for (const auto& v : vehicules_) { v->afficher(out); out << "\n"; }
+    }
+    const std::vector<std::unique_ptr<Vehicule>>& getVehicules() const { return vehicules_; }
+private:
+    std::vector<std::unique_ptr<Vehicule>> vehicules_;   // composition : la flotte possède, non partagé
+};
+
+int nombreDeCamions(const Flotte& flotte) {
+    int n = 0;
+    for (const auto& v : flotte.getVehicules())
+        if (dynamic_cast<const Camion*>(v.get()) != nullptr) ++n;   // test de type justifié : propre à une dérivée
+    return n;
+}
+// flotte.ajouter(std::make_unique<Camion>("ABC 123", 8000, 12000));
+</script>
+<p><code>unique_ptr</code> : les véhicules ne sont jamais partagés et meurent avec la flotte ; <code>vector&lt;Vehicule&gt;</code> est impossible (classe abstraite, et découpage). Destructeur virtuel : oui, les objets sont détruits à travers des <code>unique_ptr&lt;Vehicule&gt;</code>.</p>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="intra-s3">
+<header><span class="tag exam">Synthèse</span><span class="tag theme">M2 + M3 + M4</span><h4>Équipe de joueurs partagés</h4></header>
+<div class="enonce">
+<p>Un Joueur a un nom et un salaire. Une Equipe a un nom et des joueurs <em>partagés</em> entre équipes (un joueur prêté apparaît dans deux équipes ; modifier son salaire est visible partout). Écrivez Equipe avec : <code>Equipe&amp; operator+=(shared_ptr&lt;Joueur&gt;)</code> (refuse nullptr et les doublons), <code>Equipe&amp; operator-=(shared_ptr&lt;Joueur&gt;)</code>, <code>double masseSalariale() const</code>, <code>shared_ptr&lt;Joueur&gt; operator[](size_t i) const</code>, <code>bool operator==(const Equipe&amp;) const</code> (mêmes joueurs, même ordre) et <code>operator&lt;&lt;</code>. Faut-il écrire un constructeur de copie ? Que donne la copie d'une équipe ?</p>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/cpp">
+class Equipe {
+public:
+    explicit Equipe(const std::string& nom) : nom_(nom) {}
+
+    Equipe& operator+=(const std::shared_ptr<Joueur>& joueur) {
+        if (joueur == nullptr) return *this;
+        for (const auto& j : joueurs_) if (j == joueur) return *this;      // même objet
+        joueurs_.push_back(joueur);
+        return *this;
+    }
+    Equipe& operator-=(const std::shared_ptr<Joueur>& joueur) {
+        for (size_t i = 0; i < joueurs_.size(); ++i)
+            if (joueurs_[i] == joueur) { joueurs_.erase(joueurs_.begin() + i); break; }
+        return *this;
+    }
+    double masseSalariale() const {
+        double total = 0;
+        for (const auto& j : joueurs_) total += j->getSalaire();
+        return total;
+    }
+    std::shared_ptr<Joueur> operator[](size_t i) const { return joueurs_[i]; }   // précondition : i < size
+    bool operator==(const Equipe& autre) const { return joueurs_ == autre.joueurs_; }   // vector compare les shared_ptr (adresses) un à un
+
+    friend std::ostream& operator<<(std::ostream& out, const Equipe& e) {
+        out << e.nom_ << " :";
+        for (const auto& j : e.joueurs_) out << " " << j->getNom();
+        return out;
+    }
+private:
+    std::string nom_;
+    std::vector<std::shared_ptr<Joueur>> joueurs_;
+};
+</script>
+<p>Pas de constructeur de copie à écrire : string et vector de shared_ptr se copient correctement par défaut. La copie d'une équipe est une nouvelle équipe qui <em>partage</em> les mêmes joueurs (use_count augmente) : retirer un joueur de la copie ne le retire pas de l'original, mais changer son salaire est visible des deux côtés.</p>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="intra-s4">
+<header><span class="tag exam">Synthèse</span><span class="tag theme">M5 + M6 + M7</span><h4>Conteneur générique de pointeurs polymorphes</h4></header>
+<div class="enonce">
+<p>Écrivez une classe générique <code>Registre&lt;T&gt;</code> qui conserve des <code>shared_ptr&lt;T&gt;</code> (sans doublons d'objet) avec <code>ajouter</code>, <code>size</code>, <code>operator[]</code> const et une méthode générique <code>template &lt;typename D&gt; vector&lt;shared_ptr&lt;D&gt;&gt; filtrer() const</code> qui retourne les éléments dont le type réel est D ou une dérivée de D. Utilisez-la avec Composante / Moteur / Capteur pour obtenir les moteurs d'un robot. Quelle condition sur Composante rend <code>filtrer</code> possible ?</p>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/cpp" data-title="Registre.h">
+#pragma once
+#include <memory>
+#include <vector>
+
+template <typename T>
+class Registre {
+public:
+    bool ajouter(const std::shared_ptr<T>& element) {
+        if (element == nullptr) return false;
+        for (const auto& e : elements_) if (e == element) return false;
+        elements_.push_back(element);
+        return true;
+    }
+    std::size_t size() const { return elements_.size(); }
+    const std::shared_ptr<T>& operator[](std::size_t i) const { return elements_[i]; }
+
+    template <typename D>                                     // méthode générique d'une classe générique
+    std::vector<std::shared_ptr<D>> filtrer() const {
+        std::vector<std::shared_ptr<D>> resultat;
+        for (const auto& e : elements_) {
+            auto d = std::dynamic_pointer_cast<D>(e);          // exige T polymorphe (destructeur virtuel)
+            if (d) resultat.push_back(d);
+        }
+        return resultat;
+    }
+private:
+    std::vector<std::shared_ptr<T>> elements_;
+};
+
+// main.cpp
+Registre<Composante> registre;
+registre.ajouter(std::make_shared<Moteur>("roue", 2, 40));      // conversion ascendante implicite
+registre.ajouter(std::make_shared<Capteur>("temp", 0.5, 1));
+auto moteurs = registre.filtrer<Moteur>();                       // D précisé : non déductible
+for (const auto& m : moteurs) m->setCharge(0.5);
+</script>
+<p>Condition : Composante doit être polymorphe (au moins une méthode virtuelle, en pratique <code>virtual ~Composante()</code>), sinon <code>dynamic_pointer_cast</code> ne compile pas. Tout le code reste dans le .h.</p>
+</div></details>
+</article>
+
+</div>
+
+<h2>5. Chronomètre d'entraînement</h2>
+<div class="widget" id="chrono">
+  <p class="w-title">1 h 50 comme à l'examen</p>
+  <p class="w-desc">Lancez le chronomètre et faites les quatre exercices de synthèse d'un trait. Réservez les 10 dernières minutes à la relecture : <code>const</code> manquants, <code>return *this</code>, destructeur virtuel, liste d'initialisation dans l'ordre.</p>
+  <div class="btn-row">
+    <button class="btn small" type="button" id="chrono-start">Démarrer (110 min)</button>
+    <button class="btn secondary small" type="button" id="chrono-stop">Arrêter</button>
+    <span class="readout" style="margin:0"><span class="stat"><span class="k">Temps restant</span> <span class="v" id="chrono-val">1:50:00</span></span></span>
+  </div>
+</div>
+
+<h2>6. Liste de vérification</h2>
+<div class="two-col">
+<div class="box tip"><span class="label">La veille</span>
+<ul>
+  <li>Site copié sur la clé USB, aide-mémoire imprimé, TP sur la clé.</li>
+  <li>Quiz de chaque module refait : score au-dessus de 12 / 15.</li>
+  <li>Les quatre « Devinez l'affichage » (M1, M3, M4, M5) refaits sans regarder.</li>
+  <li>Une heure sur les exercices de synthèse, chronomètre en marche.</li>
+</ul></div>
+<div class="box exam"><span class="label">Pendant l'examen</span>
+<ul>
+  <li>Lire tout l'énoncé ; repérer les contrats (préconditions, valeurs de retour) avant d'écrire.</li>
+  <li>Pour chaque classe : liste d'initialisation, const sur les accesseurs, <code>std::</code> dans les en-têtes, <code>override</code>, destructeur virtuel si base.</li>
+  <li>Pour chaque opérateur : membre ou libre, type de retour, const, <code>return *this</code> / <code>return out</code>.</li>
+  <li>Pour chaque « affichage » : compter constructions et destructions, vérifier virtuel ou non, <code>endl</code>.</li>
+  <li>Justifier les vrai/faux en une phrase avec le mot-clé attendu (liaison dynamique, découpage, règle des trois...).</li>
+</ul></div>
+</div>
+
+</article>
+</main>
+<footer class="footer">INF1010 - site d'étude personnel. Les documents officiels (Moodle, plan de cours, énoncés de TP) font foi.</footer>
+<script defer src="assets/app.js?v=3"></script>
+<script defer src="assets/widgets.js?v=2"></script>
+<script>
+(function () {
+  var total = 110 * 60, left = total, timer = null;
+  var val = document.getElementById('chrono-val');
+  function fmt(s) { var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60; return h + ':' + (m < 10 ? '0' : '') + m + ':' + (sec < 10 ? '0' : '') + sec; }
+  function tick() { left--; if (left <= 0) { left = 0; clearInterval(timer); timer = null; val.textContent = 'Terminé'; return; } val.textContent = fmt(left); }
+  document.getElementById('chrono-start').addEventListener('click', function () { if (timer) return; left = total; val.textContent = fmt(left); timer = setInterval(tick, 1000); });
+  document.getElementById('chrono-stop').addEventListener('click', function () { if (timer) { clearInterval(timer); timer = null; } });
+})();
+</script>
+</body>
+</html>

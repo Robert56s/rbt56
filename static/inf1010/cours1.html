@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 1 - Concepts de base et allocation dynamique | INF1010</title>
+<link rel="stylesheet" href="assets/style.css?v=3">
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="index.html">INF1010 <small>Programmation orientée objet</small></a>
+  <nav>
+    <a href="index.html">Accueil</a>
+    <a href="cours1.html" title="Concepts de base, allocation dynamique">M1</a>
+    <a href="cours2.html" title="Méthodes constantes, passage de paramètres, vecteurs">M2</a>
+    <a href="cours3.html" title="Pointeurs intelligents, composition et agrégation">M3</a>
+    <a href="cours4.html" title="Pointeur this, surcharge d'opérateurs, copie et affectation">M4</a>
+    <a href="cours5.html" title="Héritage et polymorphisme">M5</a>
+    <a href="cours6.html" title="Classes abstraites, conversion d'objets">M6</a>
+    <a href="cours7.html" title="Héritage multiple, fonctions et classes génériques">M7</a>
+    <a href="cours8.html" title="STL : conteneurs et itérateurs">M8</a>
+    <a href="cours9.html" title="STL : algorithmes, foncteurs, lambdas">M9</a>
+    <a href="cours10.html" title="Variables statiques, exceptions, Python">M10</a>
+    <span class="sep"></span>
+    <a href="intra.html">Intra</a>
+    <a href="aide-memoire.html">Aide-mémoire</a>
+    <button class="theme-btn" type="button">Thème</button>
+  </nav>
+</header>
+
+<main class="layout">
+<aside class="toc"></aside>
+<article class="content">
+
+<div class="course-hero">
+  <div class="kicker">Module 1 - cours du 25 août</div>
+  <h1>Concepts de base et allocation dynamique</h1>
+  <p class="meta">Leçons Moodle « Concepts de base » et « Allocation dynamique » | Horstmann, <em>Big C++: Late Objects</em>, chapitres sur les classes et les pointeurs | Mis en pratique au TP1 (classes de pièces de robot, pointeurs bruts)</p>
+  <p><span class="pill accent">Classe et objet</span><span class="pill accent">Encapsulation</span><span class="pill accent">Constructeur et destructeur</span><span class="pill accent">Liste d'initialisation</span><span class="pill accent">Pile et tas</span><span class="pill accent">new / delete</span><span class="pill accent">Tableaux dynamiques</span></p>
+  <p class="small">Fil conducteur de tout le site : l'atelier de robotique des TP (batterie, moteurs, capteurs, pinces, robot). Chaque notion est illustrée avec ces classes, puis exercée avec des questions du type de celles des intras passés.</p>
+</div>
+
+<h2>1. Une classe décrit, un objet existe</h2>
+<p>Une <strong>classe</strong> est un plan : elle décrit les <strong>attributs</strong> (les données) et les <strong>méthodes</strong> (les fonctions membres) de ses objets. Un <strong>objet</strong> (ou instance) est une variable construite d'après ce plan. Deux moteurs construits séparément ont chacun leur nom, leur masse et leur charge : modifier l'un ne modifie pas l'autre.</p>
+<div class="box def"><span class="label">Vocabulaire</span>
+<ul>
+  <li><strong>Interface</strong> d'une classe : l'ensemble de ses membres publics (ce que le reste du programme peut utiliser).</li>
+  <li><strong>Implémentation</strong> : le code des méthodes et les attributs privés (le « comment »).</li>
+  <li><strong>Encapsulation</strong> : l'état d'un objet n'est manipulable que par son interface. Les attributs sont donc privés et modifiés uniquement par des méthodes, ce qui empêche n'importe qui de mettre l'objet dans un état incohérent (une charge de moteur à 250 %, par exemple).</li>
+</ul></div>
+
+<p>Par convention à Polytechnique (guide de codage) : attributs privés avec un suffixe <code>_</code>, noms de classes en <code>CamelCase</code>, méthodes en <code>camelCase</code>, accesseurs <code>getX()</code> et mutateurs <code>setX()</code>. La déclaration va dans un fichier d'en-tête <code>.h</code>, la définition des méthodes dans le <code>.cpp</code> correspondant, <em>dans le même ordre</em> que dans le <code>.h</code> (exigence des TP).</p>
+
+<div class="two-col">
+<script type="text/cpp" data-title="Moteur.h">
+#pragma once
+#include <iostream>
+#include <string>
+
+class Moteur {
+public:
+    Moteur(const std::string& nom, double masseKg, double puissanceW);
+    const std::string& getNom() const;
+    double getMasseKg() const;
+    double getConsommationW() const;
+    bool setCharge(double charge);
+    void afficher(std::ostream& out) const;
+
+private:
+    std::string nom_;
+    double masseKg_;
+    double puissanceW_;
+    double charge_;      // entre 0 et 1
+};
+</script>
+<script type="text/cpp" data-title="Moteur.cpp">
+#include "Moteur.h"
+
+Moteur::Moteur(const std::string& nom, double masseKg, double puissanceW)
+    : nom_(nom), masseKg_(masseKg), puissanceW_(puissanceW), charge_(1.0) {}
+
+const std::string& Moteur::getNom() const { return nom_; }
+double Moteur::getMasseKg() const { return masseKg_; }
+double Moteur::getConsommationW() const { return puissanceW_ * charge_; }
+
+bool Moteur::setCharge(double charge) {
+    if (charge < 0 || charge > 1) return false;   // on refuse, sans modifier
+    charge_ = charge;
+    return true;
+}
+
+void Moteur::afficher(std::ostream& out) const {
+    out << "Moteur " << nom_ << " : " << masseKg_ << " kg, "
+        << getConsommationW() << " W" << std::endl;
+}
+</script>
+</div>
+<script type="text/cpp" data-title="main.cpp">
+#include "Moteur.h"
+using namespace std;
+
+int main() {
+    Moteur roue("roue", 2, 40);        // objet automatique (sur la pile)
+    Moteur bras("bras", 1.5, 25);
+    roue.setCharge(0.5);               // appel de méthode : objet.methode()
+    roue.afficher(cout);               // Moteur roue : 2 kg, 20 W
+    bras.afficher(cout);               // Moteur bras : 1.5 kg, 25 W
+    return 0;
+}
+</script>
+<div class="box tip"><span class="label">Lecture du code</span>
+<ul>
+  <li><code>Moteur::getNom</code> : l'opérateur de portée <code>::</code> dit « la méthode getNom de la classe Moteur ». Sans lui, on définirait une fonction libre du même nom.</li>
+  <li><code>#pragma once</code> évite d'inclure deux fois le même en-tête (équivalent des gardes <code>#ifndef MOTEUR_H</code>).</li>
+  <li>Dans le <code>.h</code> on écrit <code>std::string</code> (jamais <code>using namespace std;</code> dans un en-tête : il s'imposerait à tous les fichiers qui l'incluent).</li>
+</ul></div>
+
+<h2>2. Constructeurs et destructeur</h2>
+<p>Le <strong>constructeur</strong> porte le nom de la classe, n'a pas de type de retour et s'exécute automatiquement à la création de l'objet. Le <strong>destructeur</strong> (<code>~Moteur()</code>) s'exécute automatiquement à sa destruction : il sert à libérer ce que l'objet possède (mémoire dynamique, fichier ouvert).</p>
+<table>
+<thead><tr><th>Type de constructeur</th><th>Signature</th><th>Quand il est appelé</th></tr></thead>
+<tbody>
+<tr><td>Par défaut</td><td><code>Moteur();</code></td><td><code>Moteur m;</code>, <code>Moteur t[10];</code>, <code>new Moteur[5]</code>, <code>vector&lt;Moteur&gt; v(3)</code>. Fourni automatiquement par le compilateur <em>seulement si la classe ne déclare aucun constructeur</em>.</td></tr>
+<tr><td>Par paramètres</td><td><code>Moteur(const string&amp; nom, double m, double p);</code></td><td><code>Moteur m("roue", 2, 40);</code>, <code>new Moteur("roue", 2, 40)</code>. Des valeurs par défaut (<code>double p = 0</code>) permettent à un même constructeur de servir de constructeur par défaut.</td></tr>
+<tr><td>Par copie</td><td><code>Moteur(const Moteur&amp; autre);</code></td><td><code>Moteur m2 = m1;</code>, <code>Moteur m2(m1);</code>, passage par valeur, retour par valeur. Fourni automatiquement (copie membre à membre). Détails au module 4.</td></tr>
+</tbody>
+</table>
+
+<h3>La liste d'initialisation</h3>
+<p>Entre la signature du constructeur et son corps, après <code>:</code>, on <em>initialise</em> les attributs. C'est la forme attendue dans les TP (pénalité de style sinon) et la seule possible pour les attributs constants, les références et les attributs objets sans constructeur par défaut.</p>
+<div class="cmp">
+<div class="good"><div class="cmp-title">Avec la liste d'initialisation</div>
+<script type="text/cpp">
+Moteur::Moteur(const string& nom, double masseKg, double puissanceW)
+    : nom_(nom), masseKg_(masseKg),
+      puissanceW_(puissanceW), charge_(1.0) {}
+</script>
+<p class="small">Chaque attribut est construit une seule fois, directement avec la bonne valeur.</p></div>
+<div class="bad"><div class="cmp-title">Avec des affectations dans le corps</div>
+<script type="text/cpp">
+Moteur::Moteur(const string& nom, double masseKg, double puissanceW) {
+    nom_ = nom;             // nom_ a d'abord été construit vide,
+    masseKg_ = masseKg;     // puis on l'écrase : deux opérations
+    puissanceW_ = puissanceW;
+    charge_ = 1.0;
+}
+</script>
+<p class="small">Les attributs sont d'abord construits par défaut, puis affectés. Plus lent, et impossible pour <code>const</code>, les références ou une classe de base.</p></div>
+</div>
+<div class="box warn"><span class="label">Piège classique</span>
+<p>Les attributs sont initialisés <strong>dans l'ordre de leur déclaration dans la classe</strong>, pas dans l'ordre de la liste. Écrire la liste dans un autre ordre déclenche l'avertissement <code>-Wreorder</code> (donc une pénalité au TP) et peut donner un attribut initialisé à partir d'un autre pas encore construit. Règle simple : même ordre dans la liste que dans le <code>.h</code>.</p></div>
+
+<h3>Quand le destructeur est-il appelé ?</h3>
+<ol>
+  <li>À la sortie de la portée (accolade fermante, fin de fonction) pour une variable locale, dans l'<strong>ordre inverse</strong> de construction.</li>
+  <li>Au <code>delete</code> pour un objet dynamique.</li>
+  <li>À la destruction d'un objet qui le contient (attribut, élément d'un vecteur).</li>
+  <li>À la fin d'une expression pour un objet temporaire (par exemple <code>f(Moteur("x", 1, 1))</code>).</li>
+</ol>
+
+<div class="widget" data-widget="trace">
+  <p class="w-title">Pas à pas : construction et destruction d'objets automatiques</p>
+  <p class="w-desc">Suivez l'exécution ligne par ligne. Observez l'ordre des destructions à la fermeture de chaque bloc.</p>
+<script type="text/cpp">
+class Moteur {
+public:
+    Moteur(string nom) : nom_(nom) { cout << "Moteur(" << nom_ << ")" << endl; }
+    ~Moteur() { cout << "~Moteur(" << nom_ << ")" << endl; }
+private:
+    string nom_;
+};
+
+int main() {
+    Moteur a("gauche");
+    {
+        Moteur b("droit");
+        cout << "fin du bloc" << endl;
+    }
+    cout << "fin de main" << endl;
+    return 0;
+}
+</script>
+<script type="application/json" data-role="steps">
+[
+ {"line": 10, "print": "Moteur(gauche)", "vars": [["pile", "a", "Moteur { nom_ = \"gauche\" }"]], "note": "<strong>a</strong> est une variable automatique : construite ici, sur la pile. Le constructeur s'exécute immédiatement."},
+ {"line": 12, "print": "Moteur(droit)", "vars": [["pile", "a", "Moteur { nom_ = \"gauche\" }"], ["pile", "b", "Moteur { nom_ = \"droit\" }"]], "note": "<strong>b</strong> est construit dans le bloc intérieur. Les deux objets existent en même temps."},
+ {"line": 13, "print": "fin du bloc", "note": "Affichage normal."},
+ {"line": 14, "print": "~Moteur(droit)", "vars": [["pile", "a", "Moteur { nom_ = \"gauche\" }"], ["pile", "b", "détruit", "gone"]], "note": "L'accolade fermante termine la portée de <strong>b</strong> : son destructeur est appelé automatiquement. <strong>a</strong> survit, il appartient au bloc de main."},
+ {"line": 15, "print": "fin de main", "note": "Seul a existe encore."},
+ {"line": 17, "print": "~Moteur(gauche)", "vars": [["pile", "a", "détruit", "gone"]], "note": "La fin de main détruit <strong>a</strong>. Règle générale : les variables d'un bloc sont détruites dans l'ordre inverse de leur construction."}
+]
+</script>
+</div>
+
+<h2>3. Accesseurs, mutateurs et méthodes</h2>
+<p>Comme les attributs sont privés, on fournit des <strong>accesseurs</strong> (<code>getMasseKg()</code>, en lecture seule, donc <code>const</code>, voir module 2) et des <strong>mutateurs</strong> (<code>setCharge()</code>) qui valident la nouvelle valeur. Un mutateur peut retourner <code>bool</code> pour signaler un refus (convention des TP : <code>setCharge</code> retourne <code>false</code> pour une charge hors de [0, 1], sans modifier l'objet).</p>
+<p>Une méthode a accès à tous les membres de l'objet sur lequel elle est appelée, y compris les privés, et aux membres privés des <em>autres objets de la même classe</em> (la visibilité est par classe, pas par objet). C'est ce qui permettra d'écrire <code>autre.nom_</code> dans un constructeur de copie.</p>
+
+<h2>4. Pile et tas : allocation automatique ou dynamique</h2>
+<table>
+<thead><tr><th></th><th>Allocation automatique (pile)</th><th>Allocation dynamique (tas)</th></tr></thead>
+<tbody>
+<tr><td>Syntaxe</td><td><code>Moteur m("roue", 2, 40);</code></td><td><code>Moteur* p = new Moteur("roue", 2, 40);</code></td></tr>
+<tr><td>Taille décidée</td><td>à la compilation</td><td>à l'exécution (<code>new int[n]</code> avec <code>n</code> lu au clavier)</td></tr>
+<tr><td>Durée de vie</td><td>jusqu'à la fin du bloc : destruction automatique</td><td>jusqu'au <code>delete</code> explicite ; sinon l'objet survit à la fonction (ou fuit)</td></tr>
+<tr><td>Accès aux membres</td><td><code>m.afficher(cout)</code></td><td><code>p-&gt;afficher(cout)</code>, équivalent à <code>(*p).afficher(cout)</code></td></tr>
+<tr><td>Libération</td><td>automatique</td><td><code>delete p;</code> pour un objet, <code>delete[] t;</code> pour un tableau</td></tr>
+</tbody>
+</table>
+<div class="box def"><span class="label">Pointeurs : rappel</span>
+<p>Un pointeur contient une <em>adresse</em>. <code>Moteur* p</code> déclare un pointeur vers un Moteur ; <code>&amp;m</code> donne l'adresse de <code>m</code> ; <code>*p</code> est l'objet pointé ; <code>p-&gt;x</code> équivaut à <code>(*p).x</code>. Un pointeur qui ne pointe rien doit valoir <code>nullptr</code> (jamais <code>0</code> ni <code>NULL</code> en C++ moderne). Déréférencer un pointeur nul ou pendant est un comportement indéfini (plantage typique).</p></div>
+
+<div class="widget" data-widget="trace">
+  <p class="w-title">Pas à pas : new, delete et fuite de mémoire</p>
+  <p class="w-desc">Le pointeur vit sur la pile, l'objet pointé sur le tas. Observez ce qui arrive à l'objet « bras ».</p>
+<script type="text/cpp">
+int main() {
+    Moteur* p = new Moteur("roue");      // objet sur le tas
+    Moteur* q = new Moteur("bras");
+    p->afficher(cout);
+    delete p;                             // appelle ~Moteur puis libère
+    p = nullptr;                          // évite un pointeur pendant
+    q = new Moteur("pince");              // l'adresse de "bras" est perdue
+    delete q;
+    return 0;
+}
+</script>
+<script type="application/json" data-role="steps">
+[
+ {"line": 2, "print": "Moteur(roue)", "vars": [["pile", "p", "0x1000 → tas"], ["tas", "0x1000", "Moteur { \"roue\" }"]], "note": "<code>new</code> réserve la mémoire sur le tas, appelle le constructeur et retourne l'adresse. Seule l'adresse est sur la pile."},
+ {"line": 3, "print": "Moteur(bras)", "vars": [["pile", "p", "0x1000 → tas"], ["pile", "q", "0x2000 → tas"], ["tas", "0x1000", "Moteur { \"roue\" }"], ["tas", "0x2000", "Moteur { \"bras\" }"]], "note": "Deuxième objet dynamique."},
+ {"line": 4, "print": "Moteur roue ...", "note": "Accès aux membres d'un objet pointé : <code>p-&gt;afficher(cout)</code>."},
+ {"line": 5, "print": "~Moteur(roue)", "vars": [["pile", "p", "0x1000 (pendant !)"], ["pile", "q", "0x2000 → tas"], ["tas", "0x1000", "libéré", "gone"], ["tas", "0x2000", "Moteur { \"bras\" }"]], "note": "<code>delete p</code> appelle le destructeur puis rend la mémoire. p contient toujours l'ancienne adresse : c'est un pointeur pendant, interdit de l'utiliser."},
+ {"line": 6, "vars": [["pile", "p", "nullptr"], ["pile", "q", "0x2000 → tas"], ["tas", "0x2000", "Moteur { \"bras\" }"]], "note": "Bonne pratique : remettre le pointeur à nullptr après delete (un <code>delete nullptr</code> est sans effet, un double delete est un plantage)."},
+ {"line": 7, "print": "Moteur(pince)", "vars": [["pile", "p", "nullptr"], ["pile", "q", "0x3000 → tas"], ["tas", "0x2000", "Moteur { \"bras\" } : plus aucun pointeur !"], ["tas", "0x3000", "Moteur { \"pince\" }"]], "note": "<strong>Fuite de mémoire</strong> : on écrase q sans avoir fait <code>delete q</code>. L'objet « bras » reste alloué jusqu'à la fin du programme, et personne ne peut plus le libérer."},
+ {"line": 8, "print": "~Moteur(pince)", "vars": [["pile", "p", "nullptr"], ["pile", "q", "0x3000 (pendant)"], ["tas", "0x2000", "Moteur { \"bras\" } : fuite"], ["tas", "0x3000", "libéré", "gone"]], "note": "« pince » est correctement détruit."},
+ {"line": 9, "vars": [["pile", "p", "détruit", "gone"], ["pile", "q", "détruit", "gone"], ["tas", "0x2000", "Moteur { \"bras\" } : jamais détruit"]], "note": "Fin de main : les pointeurs (sur la pile) disparaissent, mais <strong>aucun destructeur n'est appelé pour un objet dynamique sans delete</strong>. Le ~Moteur(bras) ne s'affiche jamais. Règle : à chaque new son delete, exactement un."}
+]
+</script>
+</div>
+
+<h3>Objets et tableaux dynamiques</h3>
+<script type="text/cpp">
+Moteur* m = new Moteur("roue", 2, 40);   // un objet : constructeur par paramètres
+m->setCharge(0.5);
+delete m;                                 // un objet : delete
+
+int* t = new int[n];                      // n entiers (non initialisés !)
+Moteur* parc = new Moteur[4];             // 4 moteurs : il FAUT un constructeur par défaut
+delete[] t;                               // un tableau : delete[] (crochets obligatoires)
+delete[] parc;                            // appelle ~Moteur 4 fois puis libère
+
+Moteur** ptrs = new Moteur*[3];           // tableau de 3 pointeurs vers Moteur (tous à initialiser)
+ptrs[0] = new Moteur("a", 1, 1);          // chaque case reçoit son propre objet dynamique
+delete ptrs[0];                           // libérer les objets...
+delete[] ptrs;                            // ...puis le tableau de pointeurs
+</script>
+<div class="box exam"><span class="label">Question d'examen classique (intra H16)</span>
+<p>Avec <code>const int INTMAX = 10;</code>, déclarer : (i) un tableau sur la pile de INTMAX objets AA : <code>AA tableau1[INTMAX];</code> ; (ii) un tableau sur le tas de INTMAX objets AA : <code>AA* tableau2 = new AA[INTMAX];</code> ; (iii) un tableau sur le tas de INTMAX <em>pointeurs</em> vers des AA alloués sur le tas : <code>AA** tableau3 = new AA*[INTMAX];</code> puis <code>tableau3[i] = new AA;</code> pour chaque case.</p></div>
+
+<h3>Agrandir un tableau dynamique</h3>
+<p>Un tableau alloué avec <code>new int[taille]</code> a une taille fixe. Pour l'agrandir, on alloue un nouveau tableau plus grand, on copie les éléments, on libère l'ancien et on fait pointer la variable vers le nouveau. C'est exactement ce que <code>std::vector</code> fait pour vous (module 2).</p>
+<script type="text/cpp">
+int taille = 5;
+int* a = new int[taille];
+// ... remplissage de a[0] à a[4] ...
+int nouvelleTaille = 10;
+int* b = new int[nouvelleTaille];       // 1. nouveau bloc plus grand
+for (int i = 0; i < taille; ++i) {
+    b[i] = a[i];                        // 2. copie des éléments existants
+}
+delete[] a;                             // 3. libération de l'ancien bloc
+a = b;                                  // 4. a pointe le nouveau bloc (b n'est plus utile)
+taille = nouvelleTaille;
+</script>
+<p>Insertion à la position <code>pos</code> en conservant l'ordre : décaler les éléments de la fin vers <code>pos</code> (boucle <em>décroissante</em>, <code>tab[i] = tab[i-1]</code>), puis écrire <code>tab[pos] = val</code>. Suppression : décaler vers la gauche (boucle croissante, <code>tab[i] = tab[i+1]</code>). Il faut bien sûr qu'il reste de la capacité pour insérer.</p>
+
+<div class="widget" data-widget="guess-output">
+  <p class="w-title">Devinez l'affichage : objets automatiques et dynamiques mélangés</p>
+<script type="text/cpp">
+class A {
+public:
+    A(int v) : v_(v) { cout << "A" << v_ << endl; }
+    ~A() { cout << "~A" << v_ << endl; }
+private:
+    int v_;
+};
+
+int main() {
+    A a(1);
+    A* p = new A(2);
+    {
+        A b(3);
+    }
+    delete p;
+    A c(4);
+    cout << "fin" << endl;
+    return 0;
+}
+</script>
+<script type="text/plain" data-role="expected">
+A1
+A2
+A3
+~A3
+~A2
+A4
+fin
+~A4
+~A1
+</script>
+<div data-role="explain" class="box tip"><span class="label">Explication</span>
+<p><code>a</code> est construit, puis l'objet dynamique (A2), puis <code>b</code> dans le bloc intérieur, détruit dès l'accolade fermante (~A3). <code>delete p</code> détruit A2 à ce moment précis. <code>c</code> est construit après. À la fin de main, les variables locales encore vivantes sont détruites dans l'ordre inverse de construction : <code>c</code> (A4) puis <code>a</code> (A1).</p></div>
+</div>
+
+<h2>5. Erreurs de mémoire à reconnaître</h2>
+<table>
+<thead><tr><th>Erreur</th><th>Exemple</th><th>Conséquence</th></tr></thead>
+<tbody>
+<tr><td>Fuite de mémoire</td><td><code>p = new Moteur(...)</code> deux fois sans <code>delete</code> entre les deux ; oublier <code>delete</code> avant la fin d'une fonction</td><td>mémoire jamais rendue ; le destructeur n'est jamais appelé</td></tr>
+<tr><td>Pointeur pendant</td><td>utiliser <code>p</code> après <code>delete p</code> ; retourner l'adresse d'une variable locale</td><td>comportement indéfini (valeurs aléatoires, plantage)</td></tr>
+<tr><td>Double libération</td><td><code>delete p; delete p;</code> ; deux objets qui possèdent le même pointeur (copie superficielle, module 4)</td><td>plantage</td></tr>
+<tr><td>Mauvais delete</td><td><code>delete t</code> sur un tableau alloué avec <code>new[]</code> ; <code>delete</code> sur une adresse qui ne vient pas de <code>new</code> (variable locale)</td><td>comportement indéfini</td></tr>
+<tr><td>Déréférencement nul</td><td><code>Moteur* p = nullptr; p-&gt;afficher(cout);</code></td><td>plantage immédiat</td></tr>
+</tbody>
+</table>
+<div class="box tip"><span class="label">Règle d'or du cours</span>
+<p>Qui fait <code>new</code> fait <code>delete</code> : chaque objet dynamique a <em>un seul propriétaire</em> responsable de le libérer, exactement une fois. Dans le TP1, le robot possède sa batterie et son châssis (il les libère dans son destructeur) mais seulement <em>utilise</em> les moteurs, capteurs et pinces (c'est l'appelant qui les libère). Les pointeurs intelligents (module 3) automatisent cette règle.</p></div>
+
+<h2>6. Organisation des fichiers et compilation</h2>
+<ul>
+  <li><code>Moteur.h</code> : déclaration de la classe (interface). <code>Moteur.cpp</code> : définition des méthodes, qui inclut <code>"Moteur.h"</code>. <code>main.cpp</code> : utilise la classe.</li>
+  <li>Chaque <code>.cpp</code> est compilé séparément en un fichier objet, puis l'éditeur de liens les assemble. Une méthode déclarée mais jamais définie donne une erreur « symbole externe non résolu » à l'édition des liens, pas à la compilation.</li>
+  <li>Les fonctions et classes <strong>génériques</strong> (module 7) font exception : leur définition reste dans le <code>.h</code>.</li>
+  <li>Options imposées aux TP : <code>-std=c++20 -Wall -Wextra -pedantic-errors</code>, zéro avertissement. Un avertissement courant : <code>-Wreorder</code> (liste d'initialisation dans le mauvais ordre), variable non utilisée, comparaison entre <code>int</code> et <code>size_t</code> (<code>-Wsign-compare</code>) dans une boucle sur un vecteur.</li>
+</ul>
+
+<h2>7. À retenir</h2>
+<ul class="summary-list">
+  <li>Classe = plan (attributs privés + méthodes publiques) ; objet = instance. L'interface est l'ensemble des membres publics.</li>
+  <li>Constructeur : même nom que la classe, pas de type de retour, liste d'initialisation dans l'ordre des attributs. Le constructeur par défaut implicite disparaît dès qu'on déclare un constructeur.</li>
+  <li>Destructeur : <code>~Classe()</code>, appelé automatiquement en fin de portée, au <code>delete</code>, ou avec l'objet qui contient l'attribut. Ordre inverse de la construction.</li>
+  <li>Pile : automatique, taille connue à la compilation. Tas : <code>new</code> / <code>delete</code>, <code>new[]</code> / <code>delete[]</code>, un seul propriétaire, <code>nullptr</code> après <code>delete</code>.</li>
+  <li>Agrandir un tableau = nouveau bloc, copie, <code>delete[]</code> de l'ancien, réaffectation du pointeur.</li>
+</ul>
+
+<section class="quiz" data-quiz-id="c1" id="quiz-c1">
+<h2>Quiz rapide - Module 1</h2>
+<p class="small">Une seule bonne réponse par question. Le meilleur score est mémorisé dans ce navigateur.</p>
+
+<div class="q" data-answer="1">
+<p class="q-text">Qu'est-ce que l'interface d'une classe ?</p>
+<ul class="choices">
+<li>L'ensemble de ses attributs</li>
+<li>L'ensemble de ses membres publics</li>
+<li>Le contenu de son fichier .cpp</li>
+<li>Ses constructeurs seulement</li>
+</ul>
+<div class="explain">L'interface est ce que le reste du programme peut utiliser : tous les membres publics (méthodes, et attributs publics s'il y en a). L'implémentation (attributs privés, corps des méthodes) peut changer sans toucher l'interface.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Une classe déclare un seul constructeur <code>Capteur(const string&amp; nom, double masse);</code>. Laquelle de ces lignes ne compile pas ?</p>
+<ul class="choices">
+<li><code>Capteur c("temp", 0.5);</code></li>
+<li><code>Capteur* p = new Capteur("temp", 0.5);</code></li>
+<li><code>Capteur tableau[3];</code></li>
+<li><code>Capteur c = Capteur("temp", 0.5);</code></li>
+</ul>
+<div class="explain">Dès qu'une classe déclare un constructeur, le compilateur ne fournit plus de constructeur par défaut. Un tableau d'objets exige un constructeur par défaut pour chaque élément : erreur de compilation.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Dans quel ordre les attributs sont-ils initialisés par la liste d'initialisation ?</p>
+<ul class="choices">
+<li>Dans l'ordre de leur déclaration dans la classe</li>
+<li>Dans l'ordre où ils apparaissent dans la liste</li>
+<li>Dans l'ordre alphabétique</li>
+<li>Dans l'ordre inverse de la liste</li>
+</ul>
+<div class="explain">Toujours l'ordre de déclaration dans la classe. Si la liste est dans un autre ordre, clang émet <code>-Wreorder</code> ; la règle des TP est d'écrire la liste dans le même ordre que les attributs.</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Quand le destructeur d'une variable locale est-il appelé ?</p>
+<ul class="choices">
+<li>Jamais, sauf si on appelle <code>delete</code></li>
+<li>Seulement à la fin du programme</li>
+<li>Quand on appelle explicitement <code>~Classe()</code></li>
+<li>Automatiquement à la sortie de son bloc</li>
+</ul>
+<div class="explain">Une variable automatique est détruite à l'accolade fermante du bloc où elle est déclarée, dans l'ordre inverse de la construction. On n'appelle jamais un destructeur à la main.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Que fait <code>delete p;</code> quand <code>p</code> pointe un objet alloué avec <code>new</code> ?</p>
+<ul class="choices">
+<li>Il met <code>p</code> à <code>nullptr</code></li>
+<li>Il libère la mémoire sans appeler le destructeur</li>
+<li>Il appelle le destructeur puis libère la mémoire ; <code>p</code> garde l'ancienne adresse</li>
+<li>Il détruit aussi la variable <code>p</code></li>
+</ul>
+<div class="explain">Après <code>delete p</code>, le pointeur contient toujours l'adresse de la mémoire libérée (pointeur pendant). D'où la bonne pratique <code>p = nullptr;</code> juste après.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Quelle différence entre <code>delete</code> et <code>delete[]</code> ?</p>
+<ul class="choices">
+<li>Aucune, ce sont des synonymes</li>
+<li><code>delete[]</code> libère un tableau alloué avec <code>new[]</code> et appelle le destructeur de chaque élément</li>
+<li><code>delete[]</code> libère plusieurs pointeurs à la fois</li>
+<li><code>delete</code> est réservé aux types fondamentaux</li>
+</ul>
+<div class="explain">Un bloc alloué avec <code>new T[n]</code> doit être libéré avec <code>delete[]</code>, qui détruit les n objets. Utiliser <code>delete</code> sur un tableau est un comportement indéfini.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Quelle déclaration réserve, sur le tas, un tableau de 10 pointeurs vers des objets AA ?</p>
+<ul class="choices">
+<li><code>AA** t = new AA*[10];</code></li>
+<li><code>AA* t = new AA[10];</code></li>
+<li><code>AA t[10];</code></li>
+<li><code>AA* t[10] = new AA;</code></li>
+</ul>
+<div class="explain"><code>new AA*[10]</code> alloue 10 pointeurs (non initialisés) ; le résultat est un pointeur vers un pointeur, <code>AA**</code>. Chaque case devra ensuite recevoir son propre <code>new AA</code>.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Quel est l'affichage de ce programme ?</p>
+<script type="text/cpp">
+class T { public: T(char c) : c_(c) { cout << c_; } ~T() { cout << '~' << c_; } char c_; };
+int main() { T a('a'); { T b('b'); } T c('c'); return 0; }
+</script>
+<ul class="choices">
+<li><code>abc~c~b~a</code></li>
+<li><code>ab~bc~a~c</code></li>
+<li><code>ab~bc~c~a</code></li>
+<li><code>abc~a~b~c</code></li>
+</ul>
+<div class="explain"><code>b</code> est détruit dès la fin de son bloc. À la fin de main, <code>c</code> (construit en dernier) est détruit avant <code>a</code>.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Pourquoi garder les attributs privés ?</p>
+<ul class="choices">
+<li>Pour économiser de la mémoire</li>
+<li>Pour que l'état de l'objet ne soit modifiable que par ses méthodes, qui peuvent valider les valeurs</li>
+<li>Parce que le compilateur l'exige</li>
+<li>Pour accélérer l'exécution</li>
+</ul>
+<div class="explain">C'est le principe d'encapsulation : l'implémentation est cachée, l'objet reste cohérent (par exemple <code>setCharge</code> refuse une charge hors de [0, 1]).</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Quelle affirmation sur la pile et le tas est vraie ?</p>
+<ul class="choices">
+<li>Les objets du tas sont détruits automatiquement à la fin de la fonction</li>
+<li>La taille d'un tableau sur la pile peut être décidée à l'exécution</li>
+<li>Un objet sur la pile doit être libéré avec <code>delete</code></li>
+<li>Un objet sur le tas survit à la fonction qui l'a créé tant qu'on ne fait pas <code>delete</code></li>
+</ul>
+<div class="explain">C'est tout l'intérêt (et le danger) de l'allocation dynamique : la durée de vie est contrôlée par le programmeur, pas par les blocs.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Dans une méthode de la classe Moteur, l'expression <code>autre.nom_</code> (où <code>autre</code> est un autre Moteur) :</p>
+<ul class="choices">
+<li>Compile : la visibilité privée est par classe, pas par objet</li>
+<li>Ne compile pas : <code>nom_</code> est privé</li>
+<li>Compile seulement si <code>autre</code> est passé par valeur</li>
+<li>Compile seulement dans le constructeur</li>
+</ul>
+<div class="explain">Une méthode de Moteur peut accéder aux membres privés de n'importe quel Moteur. C'est indispensable pour le constructeur de copie et les opérateurs.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Ce code contient une erreur de mémoire. Laquelle ?</p>
+<script type="text/cpp">
+Pince* p = new Pince("p1", 1, 10);
+p = new Pince("p2", 1, 10);
+delete p;
+</script>
+<ul class="choices">
+<li>Double libération</li>
+<li>Pointeur pendant</li>
+<li>Fuite de mémoire : l'objet « p1 » n'est jamais libéré</li>
+<li>Aucune, le code est correct</li>
+</ul>
+<div class="explain">Le deuxième <code>new</code> écrase la seule adresse de « p1 ». Plus personne ne peut la libérer : fuite.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Que vaut un pointeur juste après <code>int* p;</code> dans une fonction ?</p>
+<ul class="choices">
+<li><code>nullptr</code></li>
+<li>Une valeur indéterminée (garbage)</li>
+<li><code>0</code></li>
+<li>L'adresse de la première variable locale</li>
+</ul>
+<div class="explain">Une variable locale non initialisée contient n'importe quoi. Toujours initialiser : <code>int* p = nullptr;</code>.</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Combien de fois le destructeur de Moteur est-il appelé par <code>delete[] parc;</code> si <code>parc = new Moteur[4]</code> ?</p>
+<ul class="choices">
+<li>0 fois</li>
+<li>1 fois</li>
+<li>Cela dépend du compilateur</li>
+<li>4 fois</li>
+</ul>
+<div class="explain"><code>delete[]</code> détruit chaque élément du tableau (4 appels à ~Moteur) avant de libérer le bloc.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Où doit-on définir le corps de <code>double Moteur::getMasseKg() const</code> dans un TP ?</p>
+<ul class="choices">
+<li>Dans Moteur.cpp, à la même position que sa déclaration dans Moteur.h</li>
+<li>Dans main.cpp</li>
+<li>Obligatoirement dans Moteur.h</li>
+<li>N'importe où, l'ordre n'a pas d'importance pour la note</li>
+</ul>
+<div class="explain">Règle des TP : méthodes non génériques définies dans le .cpp, dans le même ordre que dans le .h (pénalité de style sinon). Les classes et fonctions génériques restent dans le .h.</div>
+</div>
+</section>
+
+<h2 id="dev-c1">Exercices à développement (à faire sur papier ou dans un éditeur)</h2>
+<p class="small">Résolvez avant de déplier l'indice ou la solution. Les énoncés marqués « Intra » viennent des séances de révision d'intras passés (A2018, H2019).</p>
+<div class="exo-tools" data-scope="dev-c1-list">
+  <div class="progress-bar"><span></span></div><span class="progress-label small"></span>
+  <button class="btn secondary small" type="button" data-action="open-all">Déplier les solutions</button>
+  <button class="btn secondary small" type="button" data-action="close-all">Tout replier</button>
+</div>
+<div id="dev-c1-list">
+
+<article class="exo" data-exo-id="c1-d1">
+<header><span class="tag">Classe complète</span><span class="tag theme">TP1</span><h4>Écrire la classe Capteur</h4></header>
+<div class="enonce">
+<p>Un capteur a un nom, une masse en kg (positive ou nulle), une puissance en W et un état actif ou inactif (inactif à la construction). Il consomme sa puissance seulement lorsqu'il est actif. Écrivez la déclaration (<code>Capteur.h</code>) et la définition (<code>Capteur.cpp</code>) avec : un constructeur par paramètres (liste d'initialisation), les accesseurs <code>getNom</code>, <code>getMasseKg</code>, <code>estActif</code>, <code>getConsommationW</code>, le mutateur <code>setActif(bool)</code> et <code>afficher(std::ostream&amp;)</code>.</p>
+</div>
+<details class="hint"><summary>Indice</summary><div class="body"><p>Quatre attributs : <code>std::string nom_; double masseKg_; double puissanceW_; bool actif_;</code>. La consommation est une expression conditionnelle : <code>actif_ ? puissanceW_ : 0.0</code>. Tous les accesseurs sont <code>const</code>.</p></div></details>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/cpp" data-title="Capteur.h">
+#pragma once
+#include <iostream>
+#include <string>
+
+class Capteur {
+public:
+    Capteur(const std::string& nom, double masseKg, double puissanceW);
+    const std::string& getNom() const;
+    double getMasseKg() const;
+    bool estActif() const;
+    double getConsommationW() const;
+    void setActif(bool actif);
+    void afficher(std::ostream& out) const;
+
+private:
+    std::string nom_;
+    double masseKg_;
+    double puissanceW_;
+    bool actif_;
+};
+</script>
+<script type="text/cpp" data-title="Capteur.cpp">
+#include "Capteur.h"
+
+Capteur::Capteur(const std::string& nom, double masseKg, double puissanceW)
+    : nom_(nom), masseKg_(masseKg), puissanceW_(puissanceW), actif_(false) {}
+
+const std::string& Capteur::getNom() const { return nom_; }
+double Capteur::getMasseKg() const { return masseKg_; }
+bool Capteur::estActif() const { return actif_; }
+double Capteur::getConsommationW() const { return actif_ ? puissanceW_ : 0.0; }
+void Capteur::setActif(bool actif) { actif_ = actif; }
+
+void Capteur::afficher(std::ostream& out) const {
+    out << "Capteur " << nom_ << " (" << masseKg_ << " kg) : "
+        << (actif_ ? "actif" : "inactif") << ", " << getConsommationW() << " W\n";
+}
+</script>
+<p>Points à vérifier : liste d'initialisation dans l'ordre des attributs ; <code>const</code> sur tout ce qui ne modifie pas l'objet ; définitions dans le même ordre que les déclarations ; <code>std::</code> dans l'en-tête.</p>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="c1-d2">
+<header><span class="tag exam">Intra</span><span class="tag theme">Affichage</span><h4>Constructeurs, destructeurs et portées</h4></header>
+<div class="enonce">
+<p>Donnez l'affichage exact de ce programme.</p>
+<script type="text/cpp">
+class Piece {
+public:
+    Piece(string n) : n_(n) { cout << "+" << n_ << " "; }
+    ~Piece() { cout << "-" << n_ << " "; }
+private:
+    string n_;
+};
+
+void f() {
+    Piece locale("f");
+    Piece* dyn = new Piece("d");
+    cout << "| ";
+}
+
+int main() {
+    Piece a("a");
+    f();
+    Piece* p = new Piece("p");
+    delete p;
+    {
+        Piece b("b");
+        f();
+    }
+    cout << "fin ";
+    return 0;
+}
+</script>
+</div>
+<details class="hint"><summary>Indice</summary><div class="body"><p>Dans <code>f()</code>, l'objet dynamique « d » n'est jamais libéré : son destructeur ne s'affiche jamais (fuite, deux fois).</p></div></details>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/plain" data-title="Affichage">
++a +f +d | -f +p -p +b +f +d | -f -b fin -a
+</script>
+<ol class="steps">
+<li><code>a</code> construit (+a). Appel de f : +f, +d, « | », puis fin de f : seule <code>locale</code> est détruite (-f). « d » fuit.</li>
+<li>+p puis -p immédiatement au delete.</li>
+<li>Bloc : +b, f() de nouveau (+f +d | -f), accolade fermante : -b.</li>
+<li>« fin », puis fin de main : -a. Les deux objets « d » ne sont jamais détruits.</li>
+</ol>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="c1-d3">
+<header><span class="tag exam">Intra</span><span class="tag theme">Tableaux dynamiques</span><h4>Insérer dans un tableau dynamique</h4></header>
+<div class="enonce">
+<p>Écrivez la fonction <code>void inserer(int* tab, int taille, int val, int pos)</code> qui insère <code>val</code> à l'indice <code>pos</code> d'un tableau contenant <code>taille</code> éléments valides, en décalant les éléments suivants pour conserver l'ordre. On suppose que la capacité allouée est suffisante (au moins <code>taille + 1</code>). Écrivez ensuite <code>supprimer(int* tab, int taille, int pos)</code>.</p>
+</div>
+<details class="hint"><summary>Indice</summary><div class="body"><p>Pour insérer, décalez de la <em>fin</em> vers <code>pos</code> (boucle décroissante) sinon vous écrasez des valeurs. Pour supprimer, décalez de <code>pos</code> vers la fin (boucle croissante).</p></div></details>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/cpp">
+void inserer(int* tab, int taille, int val, int pos) {
+    for (int i = taille; i > pos; --i) {
+        tab[i] = tab[i - 1];      // on pousse chaque élément d'une case vers la droite
+    }
+    tab[pos] = val;
+}
+
+void supprimer(int* tab, int taille, int pos) {
+    for (int i = pos; i < taille - 1; ++i) {
+        tab[i] = tab[i + 1];      // on ramène chaque élément d'une case vers la gauche
+    }
+    // l'appelant décrémente taille
+}
+</script>
+<p>Avec un <code>std::vector&lt;int&gt;&amp;</code>, l'insertion devient <code>tab.push_back(tab.back());</code> puis la même boucle de décalage à partir de <code>tab.size() - 1</code> ; la suppression se termine par <code>tab.pop_back();</code>. Ou simplement <code>tab.insert(tab.begin() + pos, val)</code> et <code>tab.erase(tab.begin() + pos)</code> (module 2).</p>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="c1-d4">
+<header><span class="tag exam">Intra H15</span><span class="tag theme">Mémoire</span><h4>Compter les blocs mémoire</h4></header>
+<div class="enonce">
+<p>En considérant que la classe Poney possède tous les constructeurs nécessaires, combien de blocs mémoire contenant un objet Poney sont alloués par ce programme ?</p>
+<script type="text/cpp">
+int main() {
+    Poney poney1("Granny Smith");
+    Poney groupePoney[6];
+    groupePoney[1] = Poney();
+    Poney poney2;
+    groupePoney[0] = poney1;
+    groupePoney[2] = poney2;
+    Poney poney3 = Poney();
+    Poney* poney4 = new Poney();
+    groupePoney[3] = poney3;
+    groupePoney[4] = *poney4;
+    return 0;
+}
+</script>
+</div>
+<details class="hint"><summary>Indice</summary><div class="body"><p>Une affectation (<code>=</code> entre deux objets existants) ne crée pas d'objet ; elle copie dans un bloc déjà alloué. Un objet temporaire <code>Poney()</code> occupe un bloc le temps de l'expression.</p></div></details>
+<details class="sol"><summary>Solution</summary><div class="body">
+<p class="answer">11 blocs.</p>
+<ul>
+  <li><code>poney1</code> : 1 ; <code>groupePoney[6]</code> : 6 ; le temporaire <code>Poney()</code> affecté à la case 1 : 1 ; <code>poney2</code> : 1 ; <code>poney3</code> : 1 (le temporaire est élidé directement dans poney3) ; <code>new Poney()</code> : 1. Total 11.</li>
+  <li>Les affectations <code>groupePoney[0] = poney1</code>, <code>[2] = poney2</code>, <code>[3] = poney3</code>, <code>[4] = *poney4</code> copient le contenu dans des blocs existants : aucun nouveau bloc.</li>
+  <li>Remarque : le bloc de <code>poney4</code> n'est jamais libéré (fuite).</li>
+</ul>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="c1-d5">
+<header><span class="tag">Débogage</span><span class="tag theme">Mémoire</span><h4>Trouver les erreurs de mémoire</h4></header>
+<div class="enonce">
+<p>Ce code compile. Identifiez chaque erreur de gestion de mémoire et corrigez-la.</p>
+<script type="text/cpp">
+Moteur* creerMoteur() {
+    Moteur m("temp", 1, 10);
+    return &m;
+}
+
+int main() {
+    Moteur* a = creerMoteur();
+    Moteur* t = new Moteur[3];
+    Moteur* b = new Moteur("b", 1, 10);
+    Moteur* c = b;
+    delete b;
+    delete c;
+    delete t;
+    a->afficher(cout);
+    return 0;
+}
+</script>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<ol>
+  <li><code>creerMoteur</code> retourne l'adresse d'une variable locale, détruite à la sortie de la fonction : pointeur pendant. Correction : <code>return new Moteur("temp", 1, 10);</code> (et l'appelant fait <code>delete</code>), ou retourner l'objet par valeur.</li>
+  <li><code>new Moteur[3]</code> exige un constructeur par défaut (ici il n'existe pas : erreur de compilation en réalité) et doit être libéré avec <code>delete[] t</code>, pas <code>delete t</code>.</li>
+  <li><code>b</code> et <code>c</code> pointent le même objet : <code>delete b; delete c;</code> est une double libération. Un seul <code>delete</code>, puis les deux pointeurs à <code>nullptr</code>.</li>
+  <li><code>a-&gt;afficher(cout)</code> utilise un pointeur pendant.</li>
+</ol>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="c1-d6">
+<header><span class="tag">Conception</span><span class="tag theme">Constructeurs</span><h4>Constructeurs et valeurs par défaut</h4></header>
+<div class="enonce">
+<p>La classe Batterie a un nom, une masse, une tension (V), une capacité totale (Wh), une énergie restante (Wh, égale à la capacité au départ) et un courant maximal (A). Écrivez un constructeur par paramètres qui permette aussi de construire une batterie sans argument (nom vide, toutes les valeurs à 0). Puis écrivez <code>getPuissanceMaxW()</code> et <code>getTempsRestant(double puissanceW)</code> : 0 si la puissance est négative ou dépasse le maximum, l'infini (<code>INFINITY</code> de <code>&lt;cmath&gt;</code>) si elle est nulle, sinon énergie restante / puissance.</p>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/cpp">
+class Batterie {
+public:
+    Batterie(const std::string& nom = "", double masseKg = 0, double tensionV = 0,
+             double capaciteWh = 0, double courantMaxA = 0)
+        : nom_(nom), masseKg_(masseKg), tensionV_(tensionV), capaciteWh_(capaciteWh),
+          energieWh_(capaciteWh), courantMaxA_(courantMaxA) {}
+
+    double getPuissanceMaxW() const { return tensionV_ * courantMaxA_; }
+
+    double getTempsRestant(double puissanceW) const {
+        if (puissanceW < 0 || puissanceW > getPuissanceMaxW()) return 0;
+        if (puissanceW == 0) return INFINITY;
+        return energieWh_ / puissanceW;
+    }
+
+private:
+    std::string nom_;
+    double masseKg_;
+    double tensionV_;
+    double capaciteWh_;
+    double energieWh_;
+    double courantMaxA_;
+};
+</script>
+<p>Grâce aux valeurs par défaut, <code>Batterie b;</code> et <code>Batterie t[3];</code> compilent. <code>energieWh_</code> est initialisé à partir du paramètre <code>capaciteWh</code>, pas de l'attribut <code>capaciteWh_</code> (qui, lui, est bien déjà construit puisqu'il est déclaré avant, mais la règle d'ordre rend la version par paramètre plus sûre).</p>
+</div></details>
+</article>
+
+</div>
+
+</article>
+</main>
+<footer class="footer">INF1010 - site d'étude personnel. Les documents officiels (Moodle, plan de cours, énoncés de TP) font foi.</footer>
+<script defer src="assets/app.js?v=3"></script>
+<script defer src="assets/widgets.js?v=2"></script>
+</body>
+</html>

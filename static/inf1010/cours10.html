@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 10 - Variables de classe, exceptions, introduction à Python | INF1010</title>
+<link rel="stylesheet" href="assets/style.css?v=3">
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="index.html">INF1010 <small>Programmation orientée objet</small></a>
+  <nav>
+    <a href="index.html">Accueil</a>
+    <a href="cours1.html" title="Concepts de base, allocation dynamique">M1</a>
+    <a href="cours2.html" title="Méthodes constantes, passage de paramètres, vecteurs">M2</a>
+    <a href="cours3.html" title="Pointeurs intelligents, composition et agrégation">M3</a>
+    <a href="cours4.html" title="Pointeur this, surcharge d'opérateurs, copie et affectation">M4</a>
+    <a href="cours5.html" title="Héritage et polymorphisme">M5</a>
+    <a href="cours6.html" title="Classes abstraites, conversion d'objets">M6</a>
+    <a href="cours7.html" title="Héritage multiple, fonctions et classes génériques">M7</a>
+    <a href="cours8.html" title="STL : conteneurs et itérateurs">M8</a>
+    <a href="cours9.html" title="STL : algorithmes, foncteurs, lambdas">M9</a>
+    <a href="cours10.html" title="Variables statiques, exceptions, Python">M10</a>
+    <span class="sep"></span>
+    <a href="intra.html">Intra</a>
+    <a href="aide-memoire.html">Aide-mémoire</a>
+    <button class="theme-btn" type="button">Thème</button>
+  </nav>
+</header>
+
+<main class="layout">
+<aside class="toc"></aside>
+<article class="content">
+
+<div class="course-hero">
+  <div class="kicker">Module 10 - cours du 10 novembre (quiz 9) - matière du final</div>
+  <h1>Variables de classe, gestion des exceptions, introduction à Python</h1>
+  <p class="meta">Leçons Moodle « Variables et fonctions statiques », « Gestion des exceptions », document « Apprendre Python avec C++ » (« Passer de C++ à Python ») | Simulateur de hockey : exercice « Exceptions / statiques » | TP5 en Python</p>
+  <p><span class="pill accent">static : variable et méthode de classe</span><span class="pill accent">throw / try / catch</span><span class="pill accent">Hiérarchie std::exception</span><span class="pill accent">Classes d'exception</span><span class="pill accent">Dépilement et RAII</span><span class="pill accent">Python : syntaxe, classes, héritage</span></p>
+</div>
+
+<h2>1. Membres statiques : partagés par toute la classe</h2>
+<p>Un attribut <code>static</code> est une <strong>variable de classe</strong> : il existe en un seul exemplaire, partagé par tous les objets, et même sans aucun objet. Une méthode <code>static</code> appartient à la classe : elle n'a pas de <code>this</code> et ne peut utiliser que les membres statiques. Usage typique : compter les instances, attribuer des identifiants uniques, constantes de classe, fabriques.</p>
+<script type="text/cpp" data-title="Joueur.h">
+class Joueur {
+public:
+    Joueur(const std::string& nom) : nom_(nom), index_(prochainIndex_++) { ++nombre_; }   // identifiant unique
+    ~Joueur() { --nombre_; }
+    int getIndex() const { return index_; }
+    static int getNombre() { return nombre_; }           // méthode de classe : pas de this
+    static const int MAX_JOUEURS = 20;                   // constante de classe (initialisable ici si entière)
+private:
+    std::string nom_;
+    int index_;
+    static int nombre_;                                  // DÉCLARATION seulement
+    static int prochainIndex_;
+};
+</script>
+<script type="text/cpp" data-title="Joueur.cpp">
+int Joueur::nombre_ = 0;             // DÉFINITION obligatoire, une seule fois, hors de la classe (sans static)
+int Joueur::prochainIndex_ = 0;
+</script>
+<script type="text/cpp">
+Joueur a("Koivu"), b("Kovalev");
+cout << Joueur::getNombre();         // 2 : appel par la classe (recommandé)
+cout << b.getNombre();               // 2 : appel par un objet, possible mais trompeur
+cout << a.getIndex() << b.getIndex(); // 0 1
+</script>
+<ul>
+  <li>La définition <code>int Joueur::nombre_ = 0;</code> va dans le <code>.cpp</code> (sinon « symbole externe non résolu » ; dans le .h, elle serait dupliquée dans chaque fichier qui l'inclut). Depuis C++17, <code>inline static int nombre_ = 0;</code> dans la classe évite cette ligne.</li>
+  <li>Une méthode statique peut être appelée sans objet : <code>Joueur::getNombre()</code>. Elle ne peut pas être <code>const</code> ni <code>virtual</code>.</li>
+  <li>Variable locale <code>static</code> dans une fonction : initialisée une seule fois, conserve sa valeur entre les appels (compteur d'appels). Fonction libre <code>static</code> : visible uniquement dans son fichier.</li>
+  <li>Dans le simulateur de hockey, l'index affiché devant chaque joueur disponible (<code>[0] 27 Kovalev</code>) est attribué « par l'entremise d'une variable static dans la classe Joueur ».</li>
+</ul>
+
+<h2>2. Gestion des exceptions</h2>
+<p>Une <strong>exception</strong> signale une erreur à l'endroit où elle est détectée (<code>throw</code>) et la traite à l'endroit où l'on sait quoi faire (<code>catch</code>), même plusieurs appels de fonction plus haut. Entre les deux, les fonctions sont quittées une à une (<em>dépilement</em>) et leurs objets locaux détruits normalement. C'est l'alternative aux codes de retour qu'on oublie de tester.</p>
+<script type="text/cpp">
+#include <stdexcept>
+double diviser(double a, double b) {
+    if (b == 0) throw std::invalid_argument("division par zero");   // on lance un OBJET (n'importe quel type)
+    return a / b;
+}
+
+int main() {
+    try {
+        cout << diviser(1, 2) << endl;        // 0.5
+        cout << diviser(1, 0) << endl;        // lance : la suite du bloc try est abandonnée
+        cout << "jamais affiche" << endl;
+    } catch (const std::invalid_argument& e) {   // attrape par référence constante (pas de copie, pas de découpage)
+        cout << "Erreur : " << e.what() << endl;
+    } catch (const std::exception& e) {          // les classes de base APRÈS les dérivées
+        cout << "Autre : " << e.what() << endl;
+    } catch (...) {                              // tout le reste (int, string...)
+        cout << "Exception inconnue" << endl;
+    }
+    cout << "suite du programme" << endl;        // l'exécution reprend après le dernier catch
+    return 0;
+}
+</script>
+<div class="box def"><span class="label">Règles</span>
+<ul>
+  <li>Les blocs <code>catch</code> sont essayés <strong>dans l'ordre</strong> ; le premier dont le type correspond (type exact, ou classe de base avec une référence) gère l'exception, les autres sont ignorés. Un catch de la base placé avant celui de la dérivée rend ce dernier inatteignable (avertissement).</li>
+  <li>Une exception non attrapée remonte à l'appelant, puis à son appelant, jusqu'à <code>main</code> ; si personne ne l'attrape, <code>std::terminate()</code> arrête le programme.</li>
+  <li><code>throw;</code> seul dans un catch relance l'exception courante vers le niveau supérieur (après un traitement partiel : journal, nettoyage).</li>
+  <li>Lancer par valeur, attraper par <code>const&amp;</code>.</li>
+  <li>Un constructeur peut lancer : l'objet n'est pas créé (pas de destructeur appelé pour lui, mais ses attributs déjà construits sont détruits). Un destructeur ne doit <strong>jamais</strong> laisser sortir une exception (terminate).</li>
+  <li><code>noexcept</code> marque une fonction qui promet de ne pas lancer.</li>
+</ul></div>
+
+<h3>La hiérarchie standard et vos propres exceptions</h3>
+<script type="text/cpp">
+// <stdexcept> : std::exception (what())
+//   logic_error : invalid_argument, out_of_range (vector::at, map::at), length_error, domain_error
+//   runtime_error : overflow_error, underflow_error, range_error
+// <new> : bad_alloc (new sans mémoire)   <typeinfo> : bad_cast (dynamic_cast sur référence)
+
+class ExceptionBase : public std::exception {                       // base abstraite (exercice du simulateur)
+public:
+    virtual std::string get_erreur() const = 0;
+    const char* what() const noexcept override { return "ExceptionBase"; }
+};
+class ExceptionNombreJoueur : public ExceptionBase {
+public:
+    ExceptionNombreJoueur(bool equipe) : equipe_(equipe) {}
+    std::string get_erreur() const override {
+        return "Mauvais nombre de joueurs/entraineurs pour l'equipe " + std::to_string(equipe_);
+    }
+private:
+    bool equipe_;
+};
+class ExceptionMasseSalariale : public ExceptionBase {
+public:
+    ExceptionMasseSalariale(double masse, bool equipe) : masse_(masse), equipe_(equipe) {}
+    std::string get_erreur() const override {
+        return "Cap salarial de " + std::to_string(masse_) + " depassee par l'equipe " + std::to_string(equipe_);
+    }
+private:
+    double masse_;
+    bool equipe_;
+};
+
+// Version courte quand un message suffit : dériver de runtime_error
+class ExceptionCapteur : public std::runtime_error {
+public:
+    ExceptionCapteur(const std::string& m) : std::runtime_error(m) {}
+};
+try { valider(match); }
+catch (const ExceptionBase& e) { cout << e.get_erreur() << endl; }   // attrape les deux dérivées par la base
+</script>
+
+<h3>Dépilement et libération des ressources</h3>
+<p>Quand une exception traverse une fonction, ses variables locales sont détruites : un <code>unique_ptr</code> ou un <code>vector</code> libère sa mémoire, un <code>ofstream</code> ferme son fichier. Un pointeur brut, lui, n'est pas suivi d'un <code>delete</code> : fuite. C'est le principe RAII (l'acquisition d'une ressource est son initialisation, sa libération est dans un destructeur) et une raison de plus d'utiliser les pointeurs intelligents.</p>
+<div class="cmp">
+<div class="bad"><div class="cmp-title">Fuite en cas d'exception</div>
+<script type="text/cpp">
+void f() {
+    Robot* r = new Robot("x");
+    traiter(*r);        // si traiter lance...
+    delete r;           // ...cette ligne n'est jamais exécutée
+}
+</script></div>
+<div class="good"><div class="cmp-title">Libération garantie</div>
+<script type="text/cpp">
+void f() {
+    auto r = std::make_unique<Robot>("x");
+    traiter(*r);        // si traiter lance, ~unique_ptr libère r
+}                       // pendant le dépilement
+</script></div>
+</div>
+
+<div class="widget" data-widget="exception-sim">
+  <p class="w-title">Simulateur de try / catch</p>
+  <p class="w-desc">Choisissez ce qui est lancé et quels blocs catch existent : lequel attrape, et qu'affiche le programme ?</p>
+</div>
+
+<div class="widget" data-widget="guess-output">
+  <p class="w-title">Devinez l'affichage : exceptions et destructeurs</p>
+<script type="text/cpp">
+struct Garde {
+    Garde(string n) : n_(n) { cout << "+" << n_ << endl; }
+    ~Garde() { cout << "-" << n_ << endl; }
+    string n_;
+};
+
+void niveau2(int x) {
+    Garde g("n2");
+    if (x < 0) throw out_of_range("negatif");
+    if (x == 0) throw 0;
+    cout << "n2 ok" << endl;
+}
+
+void niveau1(int x) {
+    Garde g("n1");
+    try {
+        niveau2(x);
+    } catch (const out_of_range& e) {
+        cout << "n1 attrape " << e.what() << endl;
+        throw;
+    }
+    cout << "n1 fin" << endl;
+}
+
+int main() {
+    for (int x : {1, -1, 0}) {
+        try {
+            niveau1(x);
+        } catch (const exception& e) {
+            cout << "main attrape " << e.what() << endl;
+        } catch (...) {
+            cout << "main attrape autre" << endl;
+        }
+    }
+    return 0;
+}
+</script>
+<script type="text/plain" data-role="expected">
++n1
++n2
+n2 ok
+-n2
+n1 fin
+-n1
++n1
++n2
+-n2
+n1 attrape negatif
+-n1
+main attrape negatif
++n1
++n2
+-n2
+-n1
+main attrape autre
+</script>
+<div data-role="explain" class="box tip"><span class="label">Explication</span>
+<p>x = 1 : tout se passe normalement. x = -1 : niveau2 lance ; <code>g("n2")</code> est détruit pendant le dépilement avant que le catch de niveau1 ne s'exécute ; niveau1 relance (<code>throw;</code>), « n1 fin » est sauté, <code>g("n1")</code> détruit, puis main attrape (out_of_range dérive de exception). x = 0 : <code>throw 0</code> est un int : le catch de niveau1 (out_of_range) ne correspond pas, les gardes sont détruits, main l'attrape avec <code>catch (...)</code>.</p></div>
+</div>
+
+<h2>3. Introduction à Python</h2>
+<p>Python reprend les mêmes idées (classes, héritage, polymorphisme, exceptions, conteneurs) avec une syntaxe plus légère : pas de déclaration de types, pas de point-virgule, les blocs sont délimités par l'<strong>indentation</strong>, et la mémoire est gérée automatiquement (chaque variable est une référence, comme un <code>shared_ptr</code>). Le document « Passer de C++ à Python » du cours et le TP5 couvrent cette partie.</p>
+<div class="two-col">
+<script type="text/cpp" data-title="C++">
+#include <iostream>
+#include <vector>
+#include <string>
+using namespace std;
+
+class Moteur {
+public:
+    Moteur(const string& nom, double puissance)
+        : nom_(nom), puissance_(puissance), charge_(1.0) {}
+    double getConsommation() const { return puissance_ * charge_; }
+    bool setCharge(double c) {
+        if (c < 0 || c > 1) return false;
+        charge_ = c;
+        return true;
+    }
+    const string& getNom() const { return nom_; }
+private:
+    string nom_;
+    double puissance_;
+    double charge_;
+};
+
+int main() {
+    vector<Moteur> moteurs = { Moteur("roue", 40), Moteur("bras", 25) };
+    double total = 0;
+    for (const Moteur& m : moteurs) total += m.getConsommation();
+    cout << "Total : " << total << " W" << endl;
+    for (size_t i = 0; i < moteurs.size(); ++i)
+        cout << i << " " << moteurs[i].getNom() << endl;
+    return 0;
+}
+</script>
+<script type="text/py" data-title="Python">
+class Moteur:
+    def __init__(self, nom, puissance):      # constructeur ; self = this, explicite
+        self.nom = nom                       # les attributs naissent à l'affectation
+        self.puissance = puissance
+        self._charge = 1.0                   # _ : "privé" par convention seulement
+
+    def get_consommation(self):              # pas de const, pas de types
+        return self.puissance * self._charge
+
+    def set_charge(self, c):
+        if c < 0 or c > 1:
+            return False
+        self._charge = c
+        return True
+
+    def __str__(self):                       # équivalent de operator<<
+        return f"Moteur {self.nom} : {self.get_consommation()} W"
+
+
+moteurs = [Moteur("roue", 40), Moteur("bras", 25)]      # liste = vector
+total = sum(m.get_consommation() for m in moteurs)     # expression génératrice
+print(f"Total : {total} W")
+for i, m in enumerate(moteurs):                        # indice et élément
+    print(i, m.nom)
+print(moteurs[0])                                      # appelle __str__
+</script>
+</div>
+<h3>Correspondances à connaître</h3>
+<table>
+<thead><tr><th>Notion</th><th>C++</th><th>Python</th></tr></thead>
+<tbody>
+<tr><td>Variables</td><td><code>int n = 3; double x = 2.5; string s = "a"; bool b = true;</code></td><td><code>n = 3; x = 2.5; s = "a"; b = True</code> (le type est celui de la valeur)</td></tr>
+<tr><td>Conditions</td><td><code>if (a &amp;&amp; !b) { } else if (c) { } else { }</code></td><td><code>if a and not b:</code> / <code>elif c:</code> / <code>else:</code></td></tr>
+<tr><td>Boucles</td><td><code>for (int i = 0; i &lt; n; ++i)</code> ; <code>for (auto&amp; x : v)</code> ; <code>while (c)</code></td><td><code>for i in range(n):</code> ; <code>for x in v:</code> ; <code>while c:</code></td></tr>
+<tr><td>Fonctions</td><td><code>double f(double a, int b = 2) { return a * b; }</code></td><td><code>def f(a, b=2):</code> <code>return a * b</code></td></tr>
+<tr><td>Conteneurs</td><td><code>vector</code>, <code>map</code>, <code>set</code>, <code>pair</code></td><td><code>list</code> <code>[1, 2]</code>, <code>dict</code> <code>{"a": 1}</code>, <code>set</code> <code>{1, 2}</code>, <code>tuple</code> <code>(1, 2)</code></td></tr>
+<tr><td>Opérations sur listes</td><td><code>v.push_back(x); v.size(); v[i]; v.pop_back(); v.insert(...)</code></td><td><code>v.append(x); len(v); v[i]; v.pop(); v.insert(i, x); v[-1]</code> (dernier) ; <code>v[1:3]</code> (tranche)</td></tr>
+<tr><td>Algorithmes et lambdas</td><td><code>sort(b, e, comp); count_if; transform; [](int n) { return n * 2; }</code></td><td><code>sorted(v, key=lambda m: m.nom)</code> ; <code>[n * 2 for n in v if n &gt; 0]</code> (compréhension) ; <code>map</code>, <code>filter</code></td></tr>
+<tr><td>Classe et héritage</td><td><code>class Capteur : public Composante { Capteur(...) : Composante(...) {} };</code></td><td><code>class Capteur(Composante):</code> / <code>def __init__(self, nom, masse): super().__init__(nom, masse)</code></td></tr>
+<tr><td>Polymorphisme</td><td><code>virtual</code> + <code>override</code>, pointeurs</td><td>toutes les méthodes sont virtuelles ; on redéfinit simplement ; <code>raise NotImplementedError</code> pour une « pure »</td></tr>
+<tr><td>Opérateurs</td><td><code>operator+</code>, <code>operator==</code>, <code>operator&lt;</code>, <code>operator&lt;&lt;</code>, <code>operator[]</code></td><td><code>__add__</code>, <code>__eq__</code>, <code>__lt__</code>, <code>__str__</code> / <code>__repr__</code>, <code>__getitem__</code>, <code>__len__</code></td></tr>
+<tr><td>Exceptions</td><td><code>throw X(); try { } catch (const X&amp; e) { }</code></td><td><code>raise X()</code> ; <code>try:</code> / <code>except X as e:</code> / <code>finally:</code></td></tr>
+<tr><td>Entrées-sorties</td><td><code>cout &lt;&lt; a &lt;&lt; endl; cin &gt;&gt; n;</code></td><td><code>print(a)</code> ; <code>n = int(input())</code> ; <code>f"{a:.2f}"</code> pour le format</td></tr>
+<tr><td>Mémoire</td><td><code>new</code> / <code>delete</code>, pointeurs intelligents, copie par valeur</td><td>références partout (<code>b = a</code> partage l'objet, comme un shared_ptr) ; <code>copy.deepcopy</code> pour une copie profonde ; ramasse-miettes</td></tr>
+<tr><td>Variable de classe</td><td><code>static int nombre_;</code></td><td>attribut défini dans le corps de la classe : <code>nombre = 0</code> puis <code>Joueur.nombre += 1</code> ; <code>@staticmethod</code>, <code>@classmethod</code></td></tr>
+</tbody>
+</table>
+<script type="text/py" data-title="Héritage, polymorphisme et exceptions en Python">
+class Composante:
+    nombre = 0                                   # variable de classe (static)
+
+    def __init__(self, nom, masse):
+        self.nom = nom
+        self.masse = masse
+        Composante.nombre += 1
+
+    def consommation(self):                      # "virtuelle pure"
+        raise NotImplementedError
+
+    def __str__(self):
+        return f"{self.nom} ({self.masse} kg)"
+
+
+class Moteur(Composante):
+    def __init__(self, nom, masse, puissance):
+        super().__init__(nom, masse)             # constructeur de la base
+        self.puissance = puissance
+
+    def consommation(self):                      # redéfinition : polymorphisme automatique
+        return self.puissance
+
+    def __str__(self):
+        return super().__str__() + f", {self.consommation()} W"
+
+
+def total(composantes):
+    return sum(c.consommation() for c in composantes)
+
+
+try:
+    pieces = [Moteur("roue", 2, 40), Composante("x", 1)]
+    print(total(pieces))
+except NotImplementedError:
+    print("une composante abstraite ne consomme pas")
+finally:
+    print(Composante.nombre, "composantes creees")
+</script>
+<div class="box warn"><span class="label">Différences qui piègent</span>
+<ul>
+  <li>L'indentation <em>est</em> la syntaxe : un bloc mal indenté est une erreur ou change le sens du programme.</li>
+  <li><code>b = a</code> ne copie pas une liste ou un objet : les deux noms désignent le même objet (<code>b.append(1)</code> modifie aussi <code>a</code>). Copier : <code>b = list(a)</code>, <code>a[:]</code>, <code>copy.copy</code>, <code>copy.deepcopy</code>.</li>
+  <li>Pas de surcharge de fonctions par type : un seul <code>def f</code> par nom (le dernier gagne) ; on utilise les valeurs par défaut ou <code>isinstance</code>.</li>
+  <li>Les attributs ne sont pas déclarés : une faute de frappe dans <code>self.puisance</code> crée un nouvel attribut au lieu de signaler une erreur.</li>
+  <li>Division : <code>7 / 2</code> vaut 3.5 ; <code>7 // 2</code> vaut 3. <code>==</code> compare les valeurs, <code>is</code> l'identité.</li>
+</ul></div>
+
+<h2>4. À retenir</h2>
+<ul class="summary-list">
+  <li><code>static</code> : un seul exemplaire par classe ; définir la variable dans le .cpp (<code>int C::x_ = 0;</code>) ; méthode statique sans <code>this</code>, appelée <code>C::f()</code>.</li>
+  <li><code>throw objet;</code> ; <code>try { } catch (const T&amp; e) { }</code> dans l'ordre, dérivées avant bases, <code>catch (...)</code> en dernier, <code>throw;</code> pour relancer ; <code>e.what()</code>. Non attrapée : terminate. Les destructeurs s'exécutent pendant le dépilement : pointeurs intelligents sûrs, pointeurs bruts fuient.</li>
+  <li>Classe d'exception : dériver de <code>std::exception</code> ou de <code>std::runtime_error</code> (message dans le constructeur).</li>
+  <li>Python : indentation, pas de types, <code>self</code>, <code>__init__</code>, <code>super().__init__()</code>, méthodes toutes virtuelles, <code>__str__</code>, listes et dictionnaires, <code>raise</code> / <code>except</code>, références partagées.</li>
+</ul>
+
+<section class="quiz" data-quiz-id="c10" id="quiz-c10">
+<h2>Quiz rapide - Module 10</h2>
+
+<div class="q" data-answer="2">
+<p class="q-text">Combien d'exemplaires d'un attribut <code>static int nombre_;</code> existent pour 5 objets de la classe ?</p>
+<ul class="choices"><li>5</li><li>6</li><li>1</li><li>0 tant qu'aucun objet n'est créé</li></ul>
+<div class="explain">Un seul, partagé, qui existe même sans objet.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">La classe déclare <code>static int nombre_;</code> et l'utilise dans son constructeur. L'édition des liens échoue : « symbole externe non résolu Joueur::nombre_ ». Pourquoi ?</p>
+<ul class="choices"><li>Il manque <code>static</code> devant l'utilisation</li><li>La définition <code>int Joueur::nombre_ = 0;</code> manque dans le .cpp</li><li>nombre_ doit être public</li><li>Les attributs statiques doivent être const</li></ul>
+<div class="explain">La déclaration dans la classe ne réserve pas de mémoire ; la définition hors classe le fait, une seule fois.</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Que ne peut pas faire une méthode statique ?</p>
+<ul class="choices"><li>Être appelée sans objet</li><li>Accéder aux attributs statiques</li><li>Être publique</li><li>Utiliser <code>this</code> ou les attributs non statiques</li></ul>
+<div class="explain">Elle appartient à la classe, pas à un objet.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Qu'affiche ce programme ?</p>
+<script type="text/cpp">
+try { throw runtime_error("a"); cout << "b"; }
+catch (const exception& e) { cout << e.what(); }
+catch (const runtime_error& e) { cout << "r"; }
+cout << "c";
+</script>
+<ul class="choices"><li>ac (et un avertissement : le second catch est inatteignable)</li><li>rc</li><li>abc</li><li>arc</li></ul>
+<div class="explain">Le premier catch compatible gagne : runtime_error dérive d'exception. Mettre les dérivées en premier.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Que se passe-t-il si une exception n'est attrapée par aucun catch, jusque dans main ?</p>
+<ul class="choices"><li>Elle est ignorée</li><li>Le programme continue après l'instruction fautive</li><li><code>std::terminate()</code> arrête le programme</li><li>main la retourne comme code d'erreur</li></ul>
+<div class="explain">D'où l'intérêt d'un <code>catch (...)</code> ou <code>catch (const exception&amp;)</code> dans main pour un arrêt propre.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Pourquoi attraper par <code>const T&amp;</code> plutôt que par valeur ?</p>
+<ul class="choices"><li>Par valeur ne compile pas</li><li>Pour éviter une copie et surtout le découpage : <code>catch (exception e)</code> perdrait la partie dérivée et <code>e.what()</code> donnerait le message de la base</li><li>Pour pouvoir modifier l'exception</li><li>Parce que les exceptions sont des pointeurs</li></ul>
+<div class="explain">Même règle que pour le polymorphisme : référence, pas copie.</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Une fonction alloue <code>Robot* r = new Robot;</code>, appelle une fonction qui lance une exception, puis fait <code>delete r;</code>. Que devient le robot ?</p>
+<ul class="choices"><li>Il est détruit par le dépilement</li><li>Il est détruit par le catch</li><li>Le programme plante</li><li>Il fuit : le delete n'est jamais atteint ; un unique_ptr l'aurait libéré</li></ul>
+<div class="explain">Seuls les objets locaux (et ce que leurs destructeurs libèrent) sont nettoyés pendant le dépilement.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">À quoi sert <code>throw;</code> (sans argument) dans un catch ?</p>
+<ul class="choices"><li>À relancer l'exception courante vers l'appelant après un traitement partiel</li><li>À lancer une exception vide</li><li>À arrêter le programme</li><li>À revenir au début du try</li></ul>
+<div class="explain">Utile pour journaliser puis laisser un niveau supérieur décider.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Comment définir une classe d'exception avec un message ?</p>
+<ul class="choices"><li><code>class E { string msg; };</code> puis <code>throw E;</code></li><li><code>exception E("message");</code></li><li><code>class E : public std::runtime_error { public: E(const string&amp; m) : std::runtime_error(m) {} };</code></li><li><code>typedef string E;</code></li></ul>
+<div class="explain">what() est hérité ; un <code>catch (const exception&amp;)</code> l'attrape aussi.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Que fait <code>vector::at(i)</code> avec un indice invalide ?</p>
+<ul class="choices"><li>Retourne 0</li><li>Lance <code>std::out_of_range</code></li><li>Comportement indéfini</li><li>Agrandit le vecteur</li></ul>
+<div class="explain">Contrairement à <code>[]</code>. out_of_range dérive de logic_error, elle-même dérivée d'exception.</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">En Python, que fait <code>b = a</code> si <code>a</code> est une liste ?</p>
+<ul class="choices"><li>Copie la liste</li><li>Erreur</li><li>Crée une liste vide</li><li>Fait de b un second nom pour la même liste : modifier b modifie a</li></ul>
+<div class="explain">Comme copier un shared_ptr. Pour copier : <code>b = list(a)</code> ou <code>copy.deepcopy(a)</code>.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Comment une classe Python appelle-t-elle le constructeur de sa classe de base ?</p>
+<ul class="choices"><li><code>super().__init__(args)</code> dans <code>__init__</code></li><li>Automatiquement, toujours</li><li><code>Base::Base(args)</code></li><li><code>this.Base(args)</code></li></ul>
+<div class="explain">Contrairement à C++, l'appel n'est pas automatique si la dérivée définit son propre __init__.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Quel est l'équivalent Python de <code>operator&lt;&lt;</code> pour afficher un objet avec print ?</p>
+<ul class="choices"><li><code>__print__</code></li><li><code>__cout__</code></li><li><code>__str__</code> (ou <code>__repr__</code>)</li><li><code>to_string</code></li></ul>
+<div class="explain"><code>print(obj)</code> appelle <code>str(obj)</code>, donc <code>__str__</code>.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">En Python, une méthode redéfinie dans une classe dérivée est-elle appelée via une variable qui contient l'objet dérivé ?</p>
+<ul class="choices"><li>Seulement si elle est déclarée virtual</li><li>Oui, toujours : toutes les méthodes sont « virtuelles », le type réel décide</li><li>Non, sauf avec un cast</li><li>Seulement pour <code>__str__</code></li></ul>
+<div class="explain">Il n'y a pas de type déclaré, donc pas de liaison statique possible.</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Que vaut <code>[n * 2 for n in [1, 2, 3] if n != 2]</code> ?</p>
+<ul class="choices"><li>[2, 4, 6]</li><li>[1, 3]</li><li>[2, 6, 4]</li><li>[2, 6]</li></ul>
+<div class="explain">Compréhension de liste : filtre puis transformation, l'équivalent de copy_if + transform.</div>
+</div>
+</section>
+
+<h2 id="dev-c10">Exercices à développement</h2>
+<div class="exo-tools" data-scope="dev-c10-list">
+  <div class="progress-bar"><span></span></div><span class="progress-label small"></span>
+  <button class="btn secondary small" type="button" data-action="open-all">Déplier les solutions</button>
+  <button class="btn secondary small" type="button" data-action="close-all">Tout replier</button>
+</div>
+<div id="dev-c10-list">
+
+<article class="exo" data-exo-id="c10-d1">
+<header><span class="tag">static</span><h4>Identifiants uniques et compteur</h4></header>
+<div class="enonce">
+<p>Chaque Robot reçoit à sa construction un identifiant unique croissant (1, 2, 3...). La classe doit pouvoir dire combien de robots existent actuellement (destructions comprises) et combien ont été créés au total. Écrivez la déclaration, les définitions nécessaires dans le .cpp, et un main qui affiche ces compteurs. Que se passe-t-il pour l'identifiant lors d'une copie ?</p>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/cpp" data-title="Robot.h">
+class Robot {
+public:
+    Robot(const std::string& nom) : nom_(nom), id_(++dernierId_) { ++vivants_; }
+    Robot(const Robot& autre) : nom_(autre.nom_), id_(++dernierId_) { ++vivants_; }   // une copie est un nouveau robot : nouvel id
+    ~Robot() { --vivants_; }
+    int getId() const { return id_; }
+    static int getVivants() { return vivants_; }
+    static int getTotalCrees() { return dernierId_; }
+private:
+    std::string nom_;
+    int id_;
+    static int dernierId_;
+    static int vivants_;
+};
+</script>
+<script type="text/cpp" data-title="Robot.cpp">
+int Robot::dernierId_ = 0;
+int Robot::vivants_ = 0;
+</script>
+<script type="text/cpp" data-title="main.cpp">
+int main() {
+    Robot a("a");
+    {
+        Robot b("b");
+        Robot c = b;                                      // id 3
+        std::cout << Robot::getVivants() << std::endl;    // 3
+    }
+    std::cout << Robot::getVivants() << " " << Robot::getTotalCrees() << std::endl;   // 1 3
+    return 0;
+}
+</script>
+<p>Sans constructeur de copie explicite, la copie membre à membre dupliquerait l'identifiant et n'incrémenterait pas <code>vivants_</code> (le destructeur de la copie le décrémenterait quand même : compteur faux).</p>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="c10-d2">
+<header><span class="tag">Simulateur de hockey</span><span class="tag theme">Exceptions + foncteur</span><h4>FoncteurValider et les classes d'exception</h4></header>
+<div class="enonce">
+<p>Avec les classes ExceptionBase, ExceptionNombreJoueur et ExceptionMasseSalariale du cours, écrivez le foncteur <code>FoncteurValider</code> qui reçoit un <code>bool equipe</code> et, appliqué à un <code>vector&lt;MembreEquipe*&gt;</code> (via <code>operator()(const vector&lt;MembreEquipe*&gt;&amp;)</code>), vérifie que l'équipe compte exactement 3 joueurs et 1 entraîneur (sinon ExceptionNombreJoueur) et que la masse salariale ne dépasse pas 10 000 000 (sinon ExceptionMasseSalariale). Montrez le code du menu qui appelle la validation et affiche <code>get_erreur()</code>.</p>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/cpp">
+class FoncteurValider {
+public:
+    FoncteurValider(bool equipe) : equipe_(equipe) {}
+    void operator()(const vector<MembreEquipe*>& membres) const {
+        int joueurs = 0, entraineurs = 0;
+        double masse = 0;
+        for (const MembreEquipe* m : membres) {
+            if (m->getEquipe() != equipe_) continue;
+            masse += m->getSalaire();
+            if (dynamic_cast<const Joueur*>(m)) ++joueurs; else ++entraineurs;
+        }
+        if (joueurs != 3 || entraineurs != 1) throw ExceptionNombreJoueur(equipe_);
+        if (masse > 10000000) throw ExceptionMasseSalariale(masse, equipe_);
+    }
+private:
+    bool equipe_;
+};
+
+// Dans le menu, option « Jouez! » :
+try {
+    FoncteurValider(false)(membres);      // objet temporaire appelé immédiatement
+    FoncteurValider(true)(membres);
+    match.simuler();
+} catch (const ExceptionBase& e) {        // attrape les deux types par la base, par référence
+    cout << e.get_erreur() << endl;       // appel virtuel : message de la dérivée
+}
+</script>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="c10-d3">
+<header><span class="tag">Exceptions</span><span class="tag theme">Conception</span><h4>Batterie avec exceptions</h4></header>
+<div class="enonce">
+<p>Réécrivez <code>Batterie::consommer(double energieWh)</code> pour qu'elle lance <code>std::invalid_argument</code> si l'énergie est négative et une exception maison <code>EnergieInsuffisante</code> (dérivée de <code>std::runtime_error</code>, message contenant l'énergie manquante) si la batterie ne peut pas fournir. Puis écrivez <code>Robot::fonctionner(double heures)</code> qui appelle consommer et retourne <code>false</code> en cas d'énergie insuffisante, mais laisse remonter les autres exceptions.</p>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/cpp">
+class EnergieInsuffisante : public std::runtime_error {
+public:
+    EnergieInsuffisante(double manque)
+        : std::runtime_error("energie insuffisante : il manque " + std::to_string(manque) + " Wh"), manque_(manque) {}
+    double getManque() const { return manque_; }
+private:
+    double manque_;
+};
+
+void Batterie::consommer(double energieWh) {
+    if (energieWh < 0) throw std::invalid_argument("energie negative");
+    if (energieWh > energieWh_) throw EnergieInsuffisante(energieWh - energieWh_);
+    energieWh_ -= energieWh;
+}
+
+bool Robot::fonctionner(double heures) {
+    if (!batterie_) return false;
+    try {
+        batterie_->consommer(getConsommationW() * heures);
+        return true;
+    } catch (const EnergieInsuffisante& e) {   // cas attendu : signalé par false
+        return false;
+    }                                          // invalid_argument remonte à l'appelant : c'est un bug de programmation
+}
+</script>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="c10-d4">
+<header><span class="tag">Python</span><h4>Traduire Robot en Python</h4></header>
+<div class="enonce">
+<p>Écrivez en Python une classe Composante (nom, masse, méthode <code>consommation()</code> non implémentée), Moteur (puissance, charge entre 0 et 1 avec un <code>set_charge</code> qui retourne False si invalide) et Robot qui contient une liste de composantes, avec <code>ajouter</code> (refuse les doublons et None), <code>masse()</code>, <code>consommation()</code>, <code>__str__</code>, et une méthode <code>moteurs()</code> qui retourne la liste des composantes qui sont des Moteur (<code>isinstance</code>).</p>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/py">
+class Composante:
+    def __init__(self, nom, masse):
+        self.nom = nom
+        self.masse = masse
+
+    def consommation(self):
+        raise NotImplementedError("a redefinir dans la classe derivee")
+
+    def __str__(self):
+        return f"{self.nom} ({self.masse} kg)"
+
+
+class Moteur(Composante):
+    def __init__(self, nom, masse, puissance):
+        super().__init__(nom, masse)
+        self.puissance = puissance
+        self.charge = 1.0
+
+    def set_charge(self, charge):
+        if charge < 0 or charge > 1:
+            return False
+        self.charge = charge
+        return True
+
+    def consommation(self):
+        return self.puissance * self.charge
+
+    def __str__(self):
+        return super().__str__() + f", {self.consommation()} W"
+
+
+class Robot:
+    def __init__(self, nom):
+        self.nom = nom
+        self.composantes = []
+
+    def ajouter(self, c):
+        if c is None or c in self.composantes:      # "in" compare avec == (identité par défaut)
+            return False
+        self.composantes.append(c)
+        return True
+
+    def masse(self):
+        return sum(c.masse for c in self.composantes)
+
+    def consommation(self):
+        return sum(c.consommation() for c in self.composantes)
+
+    def moteurs(self):
+        return [c for c in self.composantes if isinstance(c, Moteur)]
+
+    def __str__(self):
+        lignes = [f"Robot {self.nom} : {self.masse()} kg, {self.consommation()} W"]
+        lignes += ["  " + str(c) for c in self.composantes]
+        return "\n".join(lignes)
+
+
+r = Robot("PolyBot")
+m = Moteur("roue", 2, 40)
+r.ajouter(m)
+r.ajouter(m)            # refusé : même objet
+m.set_charge(0.5)
+print(r)
+</script>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="c10-d5">
+<header><span class="tag">Python</span><span class="tag theme">Dictionnaires</span><h4>Compter les mots en Python</h4></header>
+<div class="enonce">
+<p>Écrivez une fonction Python <code>compter(mots)</code> qui retourne un dictionnaire mot → nombre d'occurrences, puis affichez les mots par ordre alphabétique avec leur compte, et le mot le plus fréquent. Comparez avec la version C++ du module 8.</p>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/py">
+def compter(mots):
+    compte = {}
+    for m in mots:
+        compte[m] = compte.get(m, 0) + 1       # get : valeur par défaut si la clé est absente
+    return compte
+
+
+mots = "le chat et le chien et le canard".split()
+compte = compter(mots)
+for mot in sorted(compte):                      # un dict n'est pas trié : on trie les clés
+    print(mot, compte[mot])
+plus_frequent = max(compte, key=lambda m: compte[m])   # clé maximisant la valeur
+print(plus_frequent)
+</script>
+<p>En C++, <code>map&lt;string, int&gt;</code> trie automatiquement et <code>compte[m]++</code> crée la clé à 0 ; en Python, <code>dict</code> conserve l'ordre d'insertion et <code>get</code> remplace la création automatique.</p>
+</div></details>
+</article>
+
+</div>
+
+</article>
+</main>
+<footer class="footer">INF1010 - site d'étude personnel. Les documents officiels (Moodle, plan de cours, énoncés de TP) font foi.</footer>
+<script defer src="assets/app.js?v=3"></script>
+<script defer src="assets/widgets.js?v=2"></script>
+</body>
+</html>

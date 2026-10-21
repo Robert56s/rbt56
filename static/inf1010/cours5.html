@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 5 - Héritage et polymorphisme | INF1010</title>
+<link rel="stylesheet" href="assets/style.css?v=3">
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="index.html">INF1010 <small>Programmation orientée objet</small></a>
+  <nav>
+    <a href="index.html">Accueil</a>
+    <a href="cours1.html" title="Concepts de base, allocation dynamique">M1</a>
+    <a href="cours2.html" title="Méthodes constantes, passage de paramètres, vecteurs">M2</a>
+    <a href="cours3.html" title="Pointeurs intelligents, composition et agrégation">M3</a>
+    <a href="cours4.html" title="Pointeur this, surcharge d'opérateurs, copie et affectation">M4</a>
+    <a href="cours5.html" title="Héritage et polymorphisme">M5</a>
+    <a href="cours6.html" title="Classes abstraites, conversion d'objets">M6</a>
+    <a href="cours7.html" title="Héritage multiple, fonctions et classes génériques">M7</a>
+    <a href="cours8.html" title="STL : conteneurs et itérateurs">M8</a>
+    <a href="cours9.html" title="STL : algorithmes, foncteurs, lambdas">M9</a>
+    <a href="cours10.html" title="Variables statiques, exceptions, Python">M10</a>
+    <span class="sep"></span>
+    <a href="intra.html">Intra</a>
+    <a href="aide-memoire.html">Aide-mémoire</a>
+    <button class="theme-btn" type="button">Thème</button>
+  </nav>
+</header>
+
+<main class="layout">
+<aside class="toc"></aside>
+<article class="content">
+
+<div class="course-hero">
+  <div class="kicker">Module 5 - cours du 15 septembre (quiz 4)</div>
+  <h1>Héritage et polymorphisme (partie 1)</h1>
+  <p class="meta">Leçons Moodle « Héritage », « Polymorphisme » | Vidéos « L'héritage en programmation orientée objet », « Résolution statique des liens en C++ », « Polymorphisme et liaisons dynamiques » | Mis en pratique au TP3 (hiérarchie Composante → Moteur, Capteur, SourceEnergie...)</p>
+  <p><span class="pill accent">est un</span><span class="pill accent">public / protected / private</span><span class="pill accent">Ordre de construction</span><span class="pill accent">Redéfinition et Base::methode()</span><span class="pill accent">virtual et override</span><span class="pill accent">Liaison statique ou dynamique</span><span class="pill accent">Destructeur virtuel</span></p>
+  <p class="small">Deux questions reviennent à chaque intra : « donnez l'affichage » d'une hiérarchie de constructeurs et destructeurs, et « quelle méthode est appelée » selon que la méthode est virtuelle ou non. Les deux démos interactives de ce module servent exactement à ça.</p>
+</div>
+
+<h2>1. L'héritage : une relation « est un »</h2>
+<p>Une classe <strong>dérivée</strong> hérite de tous les membres d'une classe <strong>de base</strong> et en ajoute ou en redéfinit. <code>class Moteur : public Composante</code> signifie qu'un Moteur <em>est une</em> Composante : partout où une Composante est attendue (référence ou pointeur), on peut fournir un Moteur. On choisit l'héritage quand la phrase « A est un B » est vraie, la composition quand « A a un B » est vraie (intra H15, question 7).</p>
+<script type="text/cpp">
+class Composante {
+public:
+    Composante(const std::string& nom, double masseKg) : nom_(nom), masseKg_(masseKg) {}
+    const std::string& getNom() const { return nom_; }
+    double getMasseKg() const { return masseKg_; }
+    void afficher(std::ostream& out) const { out << nom_ << " (" << masseKg_ << " kg)"; }
+protected:
+    double masseKg_;            // accessible aux classes dérivées, pas à l'extérieur
+private:
+    std::string nom_;           // accessible seulement via getNom() (même pour Moteur)
+};
+
+class Moteur : public Composante {                 // héritage public : « un moteur est une composante »
+public:
+    Moteur(const std::string& nom, double masseKg, double puissanceW)
+        : Composante(nom, masseKg), puissanceW_(puissanceW), charge_(1.0) {}   // la base d'abord, dans la liste
+    double getConsommationW() const { return puissanceW_ * charge_; }
+    void afficher(std::ostream& out) const {        // redéfinition (masque la version de Composante)
+        Composante::afficher(out);                   // appel explicite de la version de la base
+        out << ", " << getConsommationW() << " W";
+    }
+private:
+    double puissanceW_;
+    double charge_;
+};
+</script>
+
+<h3>Qui voit quoi ?</h3>
+<ul>
+  <li><code>public</code> : accessible à tout le monde.</li>
+  <li><code>protected</code> : accessible dans la classe et dans ses classes dérivées, pas depuis l'extérieur.</li>
+  <li><code>private</code> : accessible dans la classe seulement. <strong>Un attribut privé de la classe de base est hérité mais inaccessible à la classe dérivée</strong> (intra H16, vrai/faux : FAUX). La dérivée passe par les méthodes publiques ou protégées de la base.</li>
+</ul>
+<div class="widget" data-widget="access">
+  <p class="w-title">Droits d'accès selon le mode d'héritage</p>
+  <p class="w-desc">Le cours utilise presque toujours l'héritage <code>public</code>. Les modes <code>protected</code> et <code>private</code> restreignent ce que les utilisateurs de la classe dérivée voient de la base.</p>
+</div>
+
+<h3>Constructeurs, destructeurs et ordre d'exécution</h3>
+<p>Les constructeurs et destructeurs ne sont pas hérités. Le constructeur de la dérivée doit construire sa partie « base » : on appelle le constructeur de la base <strong>dans la liste d'initialisation</strong> (<code>: Composante(nom, masseKg)</code>). Si on ne le fait pas, le constructeur <em>par défaut</em> de la base est appelé (erreur de compilation s'il n'existe pas).</p>
+<div class="box def"><span class="label">Ordre de construction d'un objet dérivé</span>
+<ol>
+  <li>la classe de base (récursivement : sa propre base d'abord) ;</li>
+  <li>les attributs de la classe, dans l'ordre de leur déclaration ;</li>
+  <li>le corps du constructeur.</li>
+</ol>
+<p>Destruction dans l'ordre inverse : corps du destructeur de la dérivée, puis ses attributs (du dernier au premier), puis la classe de base. L'ordre dans la liste d'initialisation n'y change rien (seulement un avertissement <code>-Wreorder</code>).</p></div>
+
+<div class="widget" data-widget="trace">
+  <p class="w-title">Pas à pas : exercice 4 de l'intra A17 (« Donnez l'affichage »)</p>
+  <p class="w-desc">Base, attributs, corps : suivez la construction de <code>D unObjet(1, 2)</code> puis sa destruction.</p>
+<script type="text/cpp">
+class A {
+public:
+    A() { cout << "A()" << endl; }
+    A(int i) { cout << "A(" << i << ")" << endl; }
+    ~A() { cout << "~A()" << endl; }
+};
+class B : public A {
+public:
+    B(int i) : att_(i) { cout << "B" << endl; }
+    ~B() { cout << "~B()" << endl; }
+private:
+    A att_;
+};
+class C {
+public:
+    C() { cout << "C" << endl; }
+    C(int i) { cout << "C(" << i << ")" << endl; }
+    ~C() { cout << "~C()" << endl; }
+};
+class D : public B {
+public:
+    D(int i, int j) : att_(i), B(j) { cout << "D" << endl; }
+    ~D() { cout << "~D()" << endl; }
+private:
+    C att_;
+};
+int main() {
+    D unObjet(1, 2);
+    return 0;
+}
+</script>
+<script type="application/json" data-role="steps">
+[
+ {"line": 28, "note": "Construction d'un D avec i = 1, j = 2. Règle : la classe de base d'abord. D hérite de B, donc on exécute <code>B(j)</code> = <code>B(2)</code>, même si la liste d'initialisation écrit <code>att_(i)</code> avant (avertissement -Wreorder, sans effet sur l'ordre)."},
+ {"line": 3, "print": "A()", "note": "B hérite de A et sa liste d'initialisation n'appelle pas de constructeur de A : le constructeur <strong>par défaut</strong> A() est appelé pour la partie base de B."},
+ {"line": 4, "print": "A(2)", "note": "Ensuite les attributs de B : <code>att_(i)</code> avec i = 2 construit l'attribut <code>A att_</code> avec A(2)."},
+ {"line": 9, "print": "B", "note": "Enfin le corps du constructeur de B."},
+ {"line": 17, "print": "C(1)", "note": "Retour à D : après sa base, ses attributs. <code>C att_</code> est construit avec <code>att_(i)</code>, i = 1 : C(1)."},
+ {"line": 22, "print": "D", "note": "Corps du constructeur de D. L'objet est complet : 5 constructeurs ont été exécutés."},
+ {"line": 23, "print": "~D()", "note": "Fin de main : destruction de unObjet, dans l'ordre inverse. D'abord le corps du destructeur de D."},
+ {"line": 18, "print": "~C()", "note": "Puis les attributs de D : <code>C att_</code>."},
+ {"line": 10, "print": "~B()", "note": "Puis la partie base B : son corps de destructeur..."},
+ {"line": 5, "print": "~A()", "note": "...puis les attributs de B (<code>A att_</code>)..."},
+ {"line": 5, "print": "~A()", "note": "...puis la base de B, c'est-à-dire la partie A. 5 destructeurs, dans l'ordre exactement inverse des 5 constructeurs."}
+]
+</script>
+</div>
+
+<h3>Redéfinir une méthode et appeler la version de la base</h3>
+<p>Une méthode de la dérivée portant le même nom et la même signature qu'une méthode de la base la <strong>redéfinit</strong> (elle la masque). Pour réutiliser le travail de la base, on l'appelle explicitement avec l'opérateur de portée : <code>Composante::afficher(out);</code>. C'est le schéma attendu au TP3 : <code>Moteur::afficher</code> appelle <code>Composante::afficher</code> puis ajoute sa consommation.</p>
+<div class="box exam"><span class="label">Intra H16 : MetSucre, Tarte, TarteAuSucre</span>
+<script type="text/cpp">
+MetSucre::MetSucre(int quantiteSucre) : quantiteSucre_(quantiteSucre) {}
+
+Tarte::Tarte(double taille, int quantiteSucre)
+    : MetSucre(quantiteSucre), taille_(taille) {}          // base dans la liste, puis attribut
+
+TarteAuSucre::TarteAuSucre(double taille, int quantiteSucre)
+    : Tarte(taille, quantiteSucre) {}                      // on délègue à la base directe
+
+void MetSucre::afficher() { cout << "Quantite de sucre: " << quantiteSucre_ << endl; }
+
+void Tarte::afficher() {
+    cout << "Taille: " << taille_ << endl;
+    MetSucre::afficher();                                  // quantiteSucre_ est privé : on réutilise la base
+}
+
+bool TarteAuSucre::estBon() { return estTresSucre() && getTaille() >= 13.8; }
+</script></div>
+
+<h2>2. Polymorphisme : liaison statique ou dynamique</h2>
+<p>Le polymorphisme, c'est manipuler des objets de classes dérivées différentes à travers un pointeur ou une référence vers leur classe de base, en obtenant pour chaque objet le comportement de <em>son</em> type réel. Pour cela, la méthode doit être déclarée <code>virtual</code> dans la base.</p>
+<div class="cmp">
+<div class="bad"><div class="cmp-title">Sans virtual : liaison statique</div>
+<script type="text/cpp">
+class Composante {
+public:
+    void afficher() const { cout << "composante"; }
+};
+class Moteur : public Composante {
+public:
+    void afficher() const { cout << "moteur"; }
+};
+Composante* p = new Moteur;
+p->afficher();     // affiche "composante" !
+</script>
+<p class="small">Le compilateur choisit la méthode d'après le <strong>type déclaré</strong> du pointeur (<code>Composante*</code>), à la compilation.</p></div>
+<div class="good"><div class="cmp-title">Avec virtual : liaison dynamique</div>
+<script type="text/cpp">
+class Composante {
+public:
+    virtual void afficher() const { cout << "composante"; }
+    virtual ~Composante() {}
+};
+class Moteur : public Composante {
+public:
+    void afficher() const override { cout << "moteur"; }
+};
+Composante* p = new Moteur;
+p->afficher();     // affiche "moteur"
+</script>
+<p class="small">La méthode choisie dépend du <strong>type réel</strong> de l'objet, déterminé à l'exécution (table des méthodes virtuelles).</p></div>
+</div>
+<ul>
+  <li><code>virtual</code> se met dans la classe de base ; la méthode reste virtuelle dans toutes les dérivées (on peut répéter le mot, ce n'est pas obligatoire).</li>
+  <li><code>override</code> (dans la dérivée) demande au compilateur de vérifier qu'on redéfinit bien une méthode virtuelle de la base : une faute de frappe ou un <code>const</code> oublié devient une erreur de compilation au lieu d'une méthode silencieusement différente. Exigé au TP3.</li>
+  <li>La liaison dynamique ne joue qu'à travers un <strong>pointeur</strong> ou une <strong>référence</strong>. Un objet copié dans une variable de type base (<code>Composante c = moteur;</code>) perd sa partie Moteur : c'est le <em>découpage</em> (slicing), détaillé au module 6.</li>
+  <li>Dans un constructeur ou un destructeur, un appel virtuel utilise la version de la classe en cours de construction (la partie dérivée n'existe pas encore, ou déjà plus).</li>
+  <li><code>final</code> interdit de redéfinir plus bas ; une méthode virtuelle a un petit coût (indirection), les autres aucun.</li>
+</ul>
+
+<div class="widget" data-widget="dispatch">
+  <p class="w-title">Quelle méthode s'exécute ?</p>
+  <p class="w-desc">Animal déclare <code>parler()</code> virtuelle et <code>dormir()</code> non virtuelle ; Chien redéfinit les deux ; Chiot hérite de Chien sans rien redéfinir. Choisissez un code et une méthode.</p>
+</div>
+
+<h3>Le destructeur virtuel</h3>
+<p>Si on détruit un objet dérivé à travers un pointeur de base (<code>Composante* p = new Moteur; delete p;</code>, ou un <code>unique_ptr&lt;Composante&gt;</code>), seul le destructeur de la base s'exécute à moins qu'il ne soit <code>virtual</code> : les ressources de la partie Moteur fuient (comportement indéfini). Règle : <strong>toute classe destinée à être une classe de base avec des méthodes virtuelles déclare <code>virtual ~Base() = default;</code></strong> (énoncé du TP3 : « Composante possède un destructeur virtuel »).</p>
+<script type="text/cpp">
+std::vector<std::shared_ptr<Composante>> composantes;           // collection hétérogène
+composantes.push_back(std::make_shared<Moteur>("roue", 2, 40));  // conversion ascendante implicite
+composantes.push_back(std::make_shared<Capteur>("temp", 0.5, 1));
+for (const auto& c : composantes) {
+    c->afficher(std::cout);          // chaque objet affiche selon son type réel
+    total += c->getConsommationW();  // sans tester le type : c'est tout l'intérêt
+}
+</script>
+<div class="box tip"><span class="label">Vocabulaire des vidéos du cours</span>
+<p><strong>Résolution statique des liens</strong> : le compilateur fixe l'appel d'après le type déclaré (surcharge, méthodes non virtuelles). <strong>Liaison dynamique</strong> : l'appel est résolu à l'exécution d'après le type réel (méthodes virtuelles via pointeur ou référence). Le polymorphisme est le second mécanisme.</p></div>
+
+<h2>3. À retenir</h2>
+<ul class="summary-list">
+  <li>Héritage public = « est un ». La dérivée hérite de tout, mais les membres privés de la base lui sont inaccessibles ; <code>protected</code> est fait pour elle.</li>
+  <li>Construction : base, attributs (ordre de déclaration), corps. Destruction : inverse. La base se construit dans la liste d'initialisation, sinon son constructeur par défaut est appelé.</li>
+  <li>Redéfinir = même signature dans la dérivée ; <code>Base::methode()</code> pour réutiliser la version de la base.</li>
+  <li><code>virtual</code> dans la base + <code>override</code> dans la dérivée = liaison dynamique à travers pointeurs et références. Sans <code>virtual</code>, le type déclaré décide.</li>
+  <li>Destructeur virtuel dans toute classe de base polymorphe.</li>
+</ul>
+
+<section class="quiz" data-quiz-id="c5" id="quiz-c5">
+<h2>Quiz rapide - Module 5</h2>
+
+<div class="q" data-answer="1">
+<p class="q-text">Un attribut privé de la classe de base est accessible aux classes dérivées.</p>
+<ul class="choices">
+<li>Vrai</li>
+<li>Faux : il est hérité mais inaccessible ; il faut passer par des méthodes publiques ou protégées</li>
+<li>Vrai, seulement avec l'héritage public</li>
+<li>Vrai, seulement dans les constructeurs</li>
+</ul>
+<div class="explain">Question vrai/faux de l'intra H16. Pour donner accès aux dérivées sans l'ouvrir à tous, on déclare l'attribut <code>protected</code>.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">La liste d'initialisation d'un constructeur permet d'initialiser les attributs composites et la classe de base.</p>
+<ul class="choices">
+<li>Faux : la base s'initialise dans le corps</li>
+<li>Faux : seuls les types fondamentaux y sont permis</li>
+<li>Vrai</li>
+<li>Vrai pour les attributs, faux pour la base</li>
+</ul>
+<div class="explain">Intra H16 : VRAI. C'est même le seul endroit où l'on peut choisir quel constructeur de la base appeler.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Dans quel ordre un objet d'une classe dérivée est-il construit ?</p>
+<ul class="choices">
+<li>Classe de base, puis attributs dans l'ordre de déclaration, puis corps du constructeur</li>
+<li>Attributs, puis classe de base, puis corps</li>
+<li>Corps du constructeur, puis attributs, puis base</li>
+<li>Dans l'ordre de la liste d'initialisation</li>
+</ul>
+<div class="explain">Et la destruction suit l'ordre inverse : corps du destructeur, attributs du dernier au premier, base.</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Quelles sont les deux premières lignes affichées par <code>FF uneInstance;</code> ?</p>
+<script type="text/cpp">
+class AA { public: AA() { cout << "AA" << endl; } };
+class BB { public: BB() { cout << "BB" << endl; } };
+class CC { public: CC() { cout << "CC" << endl; } private: BB attribC_; };
+class EE : public AA { public: EE() { cout << "EE" << endl; } };
+class DD : public AA { public: DD() { cout << "DD" << endl; } private: EE attribD_; };
+class FF : public CC { public: FF() { cout << "FF" << endl; } private: DD attribF_; };
+</script>
+<ul class="choices">
+<li>CC, BB</li>
+<li>FF, DD</li>
+<li>AA, BB</li>
+<li>BB, CC</li>
+</ul>
+<div class="explain">FF construit d'abord sa base CC ; CC construit d'abord son attribut BB, puis son corps. Suite complète : BB CC AA AA EE DD FF (intra H15).</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Si la classe dérivée n'appelle aucun constructeur de la base dans sa liste d'initialisation :</p>
+<ul class="choices">
+<li>La partie base n'est pas construite</li>
+<li>Le constructeur par défaut de la base est appelé (erreur de compilation s'il n'existe pas)</li>
+<li>Le compilateur choisit le constructeur le plus proche</li>
+<li>C'est une erreur de compilation dans tous les cas</li>
+</ul>
+<div class="explain">C'est ce qui se passe pour B dans l'exercice A17 : <code>A()</code> s'affiche en premier.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Comment la méthode <code>Tarte::afficher()</code> peut-elle afficher <code>quantiteSucre_</code>, attribut privé de MetSucre, sans accesseur ?</p>
+<ul class="choices">
+<li>En écrivant <code>quantiteSucre_</code> directement</li>
+<li>En déclarant Tarte friend de MetSucre</li>
+<li>En appelant <code>MetSucre::afficher();</code> qui a accès à l'attribut</li>
+<li>C'est impossible</li>
+</ul>
+<div class="explain">La méthode de la base est appelée explicitement avec l'opérateur de portée. Intra H16.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Qu'affiche ce code ?</p>
+<script type="text/cpp">
+class Base { public: void f() const { cout << "base"; } };
+class Derivee : public Base { public: void f() const { cout << "derivee"; } };
+Base* p = new Derivee;
+p->f();
+</script>
+<ul class="choices">
+<li>base : f n'est pas virtuelle, le type déclaré Base* décide</li>
+<li>derivee : l'objet est une Derivee</li>
+<li>Erreur de compilation</li>
+<li>basederivee</li>
+</ul>
+<div class="explain">Liaison statique. Pour obtenir « derivee », il faut <code>virtual void f() const</code> dans Base.</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">À quoi sert le mot-clé <code>override</code> ?</p>
+<ul class="choices">
+<li>À rendre une méthode virtuelle</li>
+<li>À appeler la méthode de la base</li>
+<li>À interdire la redéfinition</li>
+<li>À faire vérifier par le compilateur que la méthode redéfinit bien une méthode virtuelle de la base (même signature, même constance)</li>
+</ul>
+<div class="explain">Sans override, <code>void afficher()</code> (sans const) dans la dérivée créerait une nouvelle méthode au lieu de redéfinir <code>virtual void afficher() const</code>, et le polymorphisme ne fonctionnerait pas en silence.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Pourquoi une classe de base polymorphe doit-elle avoir un destructeur virtuel ?</p>
+<ul class="choices">
+<li>Pour que ses attributs soient détruits</li>
+<li>Pour que <code>delete</code> via un pointeur de base (ou un unique_ptr&lt;Base&gt;) exécute aussi le destructeur de la classe dérivée</li>
+<li>Pour empêcher la copie</li>
+<li>Parce que le compilateur l'exige</li>
+</ul>
+<div class="explain">Sans lui, <code>Composante* p = new Moteur; delete p;</code> n'appelle que ~Composante : comportement indéfini, fuites.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Quel est l'affichage ?</p>
+<script type="text/cpp">
+class Animal { public: virtual void parler() const { cout << "..."; } void dormir() const { cout << "zzz"; } };
+class Chien : public Animal { public: void parler() const override { cout << "wouf"; } void dormir() const { cout << "ZZZ"; } };
+Chien c; Animal& r = c;
+r.parler(); r.dormir();
+</script>
+<ul class="choices">
+<li>...zzz</li>
+<li>woufZZZ</li>
+<li>woufzzz</li>
+<li>...ZZZ</li>
+</ul>
+<div class="explain"><code>parler</code> est virtuelle : liaison dynamique via la référence, version Chien. <code>dormir</code> ne l'est pas : type déclaré Animal, version Animal.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Quelle déclaration permet à une classe dérivée d'accéder à un attribut sans l'exposer à l'extérieur ?</p>
+<ul class="choices">
+<li><code>protected:</code></li>
+<li><code>private:</code></li>
+<li><code>public:</code></li>
+<li><code>friend:</code></li>
+</ul>
+<div class="explain">protected est l'intermédiaire : visible dans la hiérarchie, invisible depuis main.</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Dans une collection <code>vector&lt;shared_ptr&lt;Composante&gt;&gt;</code>, pourquoi peut-on faire <code>push_back(make_shared&lt;Moteur&gt;(...))</code> ?</p>
+<ul class="choices">
+<li>Parce que make_shared convertit tout en Composante</li>
+<li>Parce que le vecteur accepte n'importe quel type</li>
+<li>On ne peut pas, il faut un cast</li>
+<li>Parce qu'un shared_ptr&lt;Moteur&gt; se convertit implicitement en shared_ptr&lt;Composante&gt; (conversion ascendante : un Moteur est une Composante)</li>
+</ul>
+<div class="explain">La conversion dérivée → base est toujours implicite, pour les pointeurs bruts comme pour les pointeurs intelligents.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Les constructeurs sont-ils hérités ?</p>
+<ul class="choices">
+<li>Oui, comme toutes les méthodes</li>
+<li>Non : la dérivée définit les siens et appelle ceux de la base dans sa liste d'initialisation</li>
+<li>Oui, mais seulement le constructeur par défaut</li>
+<li>Oui, si la base est abstraite</li>
+</ul>
+<div class="explain">Idem pour les destructeurs et l'opérateur d'affectation (qui est toutefois appelé automatiquement par la version par défaut de la dérivée).</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Combien de destructeurs s'exécutent à la destruction de <code>D unObjet(1, 2)</code> dans l'exercice A17 (A, B avec un attribut A, C, D avec un attribut C) ?</p>
+<ul class="choices">
+<li>2</li>
+<li>4</li>
+<li>5</li>
+<li>3</li>
+</ul>
+<div class="explain">~D, ~C (attribut), ~B, ~A (attribut de B), ~A (base de B) : autant que de constructeurs.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Quelle est la différence entre surcharge et redéfinition ?</p>
+<ul class="choices">
+<li>Surcharge : même nom, paramètres différents, dans la même portée ; redéfinition : même signature dans une classe dérivée</li>
+<li>Ce sont des synonymes</li>
+<li>La surcharge exige virtual</li>
+<li>La redéfinition n'existe qu'avec les opérateurs</li>
+</ul>
+<div class="explain">La surcharge est résolue à la compilation ; la redéfinition d'une méthode virtuelle est résolue à l'exécution.</div>
+</div>
+</section>
+
+<h2 id="dev-c5">Exercices à développement</h2>
+<div class="exo-tools" data-scope="dev-c5-list">
+  <div class="progress-bar"><span></span></div><span class="progress-label small"></span>
+  <button class="btn secondary small" type="button" data-action="open-all">Déplier les solutions</button>
+  <button class="btn secondary small" type="button" data-action="close-all">Tout replier</button>
+</div>
+<div id="dev-c5-list">
+
+<article class="exo" data-exo-id="c5-d1">
+<header><span class="tag exam">Intra H15</span><span class="tag theme">Affichage</span><h4>Ordre de construction avec attributs et bases</h4></header>
+<div class="enonce">
+<p>Donnez l'affichage complet de <code>FF uneInstance;</code> avec les classes du quiz (AA, BB, CC avec attribut BB, EE : AA, DD : AA avec attribut EE, FF : CC avec attribut DD).</p>
+<div class="widget" data-widget="guess-output">
+  <p class="w-title">Vérifiez votre réponse</p>
+<script type="text/cpp">
+class AA { public: AA() { cout << "AA" << endl; } };
+class BB { public: BB() { cout << "BB" << endl; } };
+class CC { public: CC() { cout << "CC" << endl; } private: BB attribC_; };
+class EE : public AA { public: EE() { cout << "EE" << endl; } };
+class DD : public AA { public: DD() { cout << "DD" << endl; } private: EE attribD_; };
+class FF : public CC { public: FF() { cout << "FF" << endl; } private: DD attribF_; };
+int main() { FF uneInstance; return 0; }
+</script>
+<script type="text/plain" data-role="expected">
+BB
+CC
+AA
+AA
+EE
+DD
+FF
+</script>
+<div data-role="explain" class="box tip"><span class="label">Explication</span>
+<p>FF : base CC d'abord → CC construit son attribut BB (« BB ») puis son corps (« CC »). Puis l'attribut DD de FF : base AA (« AA »), puis l'attribut EE de DD : base AA (« AA ») puis corps (« EE »), puis corps de DD (« DD »). Enfin le corps de FF.</p></div>
+</div>
+</div>
+</article>
+
+<article class="exo" data-exo-id="c5-d2">
+<header><span class="tag exam">Intra H16</span><span class="tag theme">Constructeurs</span><h4>MetSucre, Tarte, TarteAuSucre</h4></header>
+<div class="enonce">
+<p>Soit les déclarations suivantes. Écrivez l'implémentation : (1) du constructeur de MetSucre ; (2) du constructeur de Tarte qui initialise <code>taille_</code> et <code>quantiteSucre_</code> ; (3) du constructeur de TarteAuSucre ; (4) de <code>MetSucre::afficher()</code> et <code>Tarte::afficher()</code> qui affichent les attributs <em>sans</em> utiliser les accesseurs ; (5) de <code>TarteAuSucre::estBon()</code> : vraie si la tarte est très sucrée et d'au moins 13,8 cm.</p>
+<script type="text/cpp">
+class MetSucre {
+public:
+    MetSucre(int quantiteSucre);
+    int getQuantiteSucre() const;
+    void setQuantiteSucre(int quantiteSucre);
+    void afficher();
+    bool estTresSucre();
+private:
+    int quantiteSucre_;
+};
+class Tarte : public MetSucre {
+public:
+    Tarte(double taille, int quantiteSucre);
+    double getTaille() const;
+    void setTaille(int taille);
+    void afficher();
+private:
+    double taille_;
+};
+class TarteAuSucre : public Tarte {
+public:
+    TarteAuSucre(double taille, int quantiteSucre);
+    void afficher();
+    bool estBon();
+};
+</script>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/cpp">
+MetSucre::MetSucre(int quantiteSucre) : quantiteSucre_(quantiteSucre) {}
+
+Tarte::Tarte(double taille, int quantiteSucre) : MetSucre(quantiteSucre), taille_(taille) {}
+
+TarteAuSucre::TarteAuSucre(double taille, int quantiteSucre) : Tarte(taille, quantiteSucre) {}
+
+void MetSucre::afficher() {
+    cout << "Quantite de sucre: " << quantiteSucre_ << endl;
+}
+
+void Tarte::afficher() {
+    cout << "Taille: " << taille_ << endl;
+    MetSucre::afficher();               // quantiteSucre_ est privé dans MetSucre : on délègue
+}
+
+bool TarteAuSucre::estBon() {
+    return estTresSucre() && getTaille() >= 13.8;    // taille_ est privé dans Tarte : accesseur
+}
+</script>
+<p>Pièges : Tarte ne peut pas écrire <code>quantiteSucre_(quantiteSucre)</code> dans sa liste (l'attribut appartient à MetSucre : on appelle le constructeur de la base) ; TarteAuSucre ne peut pas appeler <code>MetSucre(...)</code> directement (seule la base <em>directe</em> Tarte est permise dans la liste).</p>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="c5-d3">
+<header><span class="tag">Simulateur de hockey</span><span class="tag theme">Conception</span><h4>Patineur, Joueur, Arbitre</h4></header>
+<div class="enonce">
+<p>Un patineur a un nom, une vitesse (0 à 10) et une position (x, y). Un arbitre est un patineur. Un joueur est un patineur qui possède une habileté (0 à 10) et une équipe (<code>bool</code>). Un match contient des joueurs et des arbitres. Faites le diagramme de classes (en mots), écrivez les déclarations avec les relations d'héritage et les constructeurs, puis <code>Joueur::jouer()</code> qui déplace le joueur (fourni par <code>Patineur::jouer()</code>) et compte un but si <code>rand() % 600000 &lt; ((getX() + getY()) * habilete_) / 10</code>.</p>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<p>Diagramme : Patineur est la base ; Arbitre et Joueur en héritent (flèches vers Patineur). Match contient (composition par valeur, ou vecteurs) des Joueur et des Arbitre.</p>
+<script type="text/cpp">
+class Patineur {
+public:
+    Patineur(const string& nom, int vitesse) : nom_(nom), vitesse_(vitesse), x_(0), y_(0) {}
+    virtual ~Patineur() = default;
+    void jouer();                       // déplace le patineur (fourni)
+    int getX() const { return x_; }
+    int getY() const { return y_; }
+protected:
+    string nom_;
+    int vitesse_;
+    int x_, y_;
+};
+
+class Arbitre : public Patineur {
+public:
+    Arbitre(const string& nom, int vitesse) : Patineur(nom, vitesse) {}
+};
+
+class Joueur : public Patineur {
+public:
+    Joueur(const string& nom, int vitesse, int habilete, bool equipe)
+        : Patineur(nom, vitesse), habilete_(habilete), equipe_(equipe), buts_(0) {}
+    void jouer();                       // redéfinition
+    int getButs() const { return buts_; }
+private:
+    int habilete_;
+    bool equipe_;
+    int buts_;
+};
+
+void Joueur::jouer() {
+    Patineur::jouer();                                            // réutilise le déplacement
+    if (rand() % 600000 < ((getX() + getY()) * habilete_) / 10)
+        ++buts_;
+}
+
+class Match {
+public:
+    void simuler() { for (Joueur& j : joueurs_) j.jouer(); for (Arbitre& a : arbitres_) a.jouer(); }
+private:
+    vector<Joueur> joueurs_;
+    vector<Arbitre> arbitres_;
+};
+</script>
+<p>Version polymorphe (module 6) : <code>virtual void jouer()</code> dans Patineur et un seul <code>vector&lt;unique_ptr&lt;Patineur&gt;&gt;</code>.</p>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="c5-d4">
+<header><span class="tag">TP3</span><span class="tag theme">Polymorphisme</span><h4>Composante, Moteur et Pince avec méthodes virtuelles</h4></header>
+<div class="enonce">
+<p>Écrivez la classe de base Composante (nom, masse ; destructeur virtuel ; <code>getConsommationW()</code> virtuelle retournant 0 par défaut ; <code>afficher(ostream&amp;)</code> virtuelle qui écrit « nom (masse kg) » et retourne le flux), puis Moteur (puissance nominale, charge ; consommation = produit) et Pince (puissance de maintien, état fermé ; consomme seulement fermée), qui redéfinissent les deux méthodes avec <code>override</code> en réutilisant l'affichage de la base. Ajoutez un <code>operator&lt;&lt;</code> unique qui délègue à <code>afficher</code> pour préserver le polymorphisme.</p>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/cpp">
+class Composante {
+public:
+    Composante(const std::string& nom, double masseKg) : nom_(nom), masseKg_(masseKg) {}
+    virtual ~Composante() = default;
+    const std::string& getNom() const { return nom_; }
+    double getMasseKg() const { return masseKg_; }
+    virtual double getConsommationW() const { return 0.0; }
+    virtual std::ostream& afficher(std::ostream& out) const {
+        return out << nom_ << " (" << masseKg_ << " kg)";
+    }
+private:
+    std::string nom_;
+    double masseKg_;
+};
+
+std::ostream& operator<<(std::ostream& out, const Composante& c) {
+    return c.afficher(out);      // appel virtuel : la version du type réel est choisie
+}
+
+class Moteur : public Composante {
+public:
+    Moteur(const std::string& nom, double masseKg, double puissanceW)
+        : Composante(nom, masseKg), puissanceW_(puissanceW), charge_(1.0) {}
+    bool setCharge(double charge) { if (charge < 0 || charge > 1) return false; charge_ = charge; return true; }
+    double getConsommationW() const override { return puissanceW_ * charge_; }
+    std::ostream& afficher(std::ostream& out) const override {
+        Composante::afficher(out);
+        return out << ", moteur " << getConsommationW() << " W";
+    }
+private:
+    double puissanceW_;
+    double charge_;
+};
+
+class Pince : public Composante {
+public:
+    Pince(const std::string& nom, double masseKg, double puissanceMaintienW, bool fermee = false)
+        : Composante(nom, masseKg), puissanceMaintienW_(puissanceMaintienW), fermee_(fermee) {}
+    void setFermee(bool fermee) { fermee_ = fermee; }
+    bool estFermee() const { return fermee_; }
+    double getConsommationW() const override { return fermee_ ? puissanceMaintienW_ : 0.0; }
+    std::ostream& afficher(std::ostream& out) const override {
+        Composante::afficher(out);
+        return out << ", pince " << (fermee_ ? "fermee" : "ouverte") << ", " << getConsommationW() << " W";
+    }
+private:
+    double puissanceMaintienW_;
+    bool fermee_;
+};
+</script>
+<p>Au TP3, <code>getConsommationW</code> est <em>pure</em> (<code>= 0</code>) et Composante devient abstraite : module 6.</p>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="c5-d5">
+<header><span class="tag">Affichage</span><span class="tag theme">Liaison</span><h4>Virtuelle ou pas ?</h4></header>
+<div class="enonce">
+<p>Donnez l'affichage.</p>
+<div class="widget" data-widget="guess-output">
+  <p class="w-title">Vérifiez votre réponse</p>
+<script type="text/cpp">
+class Base {
+public:
+    Base() { cout << "Base()" << endl; }
+    virtual ~Base() { cout << "~Base()" << endl; }
+    virtual void a() const { cout << "Base::a" << endl; }
+    void b() const { cout << "Base::b" << endl; a(); }
+};
+class Derivee : public Base {
+public:
+    Derivee() { cout << "Derivee()" << endl; }
+    ~Derivee() { cout << "~Derivee()" << endl; }
+    void a() const override { cout << "Derivee::a" << endl; }
+    void b() const { cout << "Derivee::b" << endl; }
+};
+int main() {
+    Base* p = new Derivee;
+    p->a();
+    p->b();
+    delete p;
+    return 0;
+}
+</script>
+<script type="text/plain" data-role="expected">
+Base()
+Derivee()
+Derivee::a
+Base::b
+Derivee::a
+~Derivee()
+~Base()
+</script>
+<div data-role="explain" class="box tip"><span class="label">Explication</span>
+<p><code>p-&gt;a()</code> : virtuelle, type réel Derivee. <code>p-&gt;b()</code> : non virtuelle, type déclaré Base, donc <code>Base::b</code> ; mais à l'intérieur, <code>a()</code> est un appel virtuel sur le même objet : <code>Derivee::a</code>. <code>delete p</code> : le destructeur est virtuel, donc ~Derivee puis ~Base. Sans <code>virtual ~Base</code>, seul « ~Base() » s'afficherait.</p></div>
+</div>
+</div>
+</article>
+
+<article class="exo" data-exo-id="c5-d6">
+<header><span class="tag">Accès</span><span class="tag theme">Compilation</span><h4>Quelles lignes compilent ?</h4></header>
+<div class="enonce">
+<script type="text/cpp">
+class Compte {
+public:
+    Compte(double solde) : solde_(solde) {}
+    double getSolde() const { return solde_; }
+protected:
+    void ajouter(double m) { solde_ += m; }
+private:
+    double solde_;
+};
+class Epargne : public Compte {
+public:
+    Epargne(double solde, double taux) : Compte(solde), taux_(taux) {}
+    void capitaliser() { ajouter(solde_ * taux_); }      // ligne 1
+    void bonus() { ajouter(getSolde() * 0.01); }          // ligne 2
+private:
+    double taux_;
+};
+int main() {
+    Epargne e(100, 0.05);
+    e.ajouter(10);                                        // ligne 3
+    e.capitaliser();                                      // ligne 4
+    cout << e.getSolde();                                 // ligne 5
+}
+</script>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<ul>
+  <li><strong>Ligne 1</strong> : erreur, <code>solde_</code> est privé dans Compte, inaccessible à Epargne. Correction : <code>ajouter(getSolde() * taux_)</code>.</li>
+  <li><strong>Ligne 2</strong> : compile, <code>ajouter</code> est protégée (accessible à la dérivée) et <code>getSolde</code> publique.</li>
+  <li><strong>Ligne 3</strong> : erreur, <code>ajouter</code> est protégée : inaccessible depuis main, même via un Epargne.</li>
+  <li><strong>Lignes 4 et 5</strong> : compilent (méthodes publiques).</li>
+</ul>
+</div></details>
+</article>
+
+</div>
+
+</article>
+</main>
+<footer class="footer">INF1010 - site d'étude personnel. Les documents officiels (Moodle, plan de cours, énoncés de TP) font foi.</footer>
+<script defer src="assets/app.js?v=3"></script>
+<script defer src="assets/widgets.js?v=2"></script>
+</body>
+</html>

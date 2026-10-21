@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>INF1010 - Site d'étude</title>
+<link rel="stylesheet" href="assets/style.css?v=3">
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="index.html">INF1010 <small>Programmation orientée objet</small></a>
+  <nav>
+    <a href="index.html">Accueil</a>
+    <a href="cours1.html" title="Concepts de base, allocation dynamique">M1</a>
+    <a href="cours2.html" title="Méthodes constantes, passage de paramètres, vecteurs">M2</a>
+    <a href="cours3.html" title="Pointeurs intelligents, composition et agrégation">M3</a>
+    <a href="cours4.html" title="Pointeur this, surcharge d'opérateurs, copie et affectation">M4</a>
+    <a href="cours5.html" title="Héritage et polymorphisme">M5</a>
+    <a href="cours6.html" title="Classes abstraites, conversion d'objets">M6</a>
+    <a href="cours7.html" title="Héritage multiple, fonctions et classes génériques">M7</a>
+    <a href="cours8.html" title="STL : conteneurs et itérateurs">M8</a>
+    <a href="cours9.html" title="STL : algorithmes, foncteurs, lambdas">M9</a>
+    <a href="cours10.html" title="Variables statiques, exceptions, Python">M10</a>
+    <span class="sep"></span>
+    <a href="intra.html">Intra</a>
+    <a href="aide-memoire.html">Aide-mémoire</a>
+    <button class="theme-btn" type="button">Thème</button>
+  </nav>
+</header>
+
+<main class="single">
+<div class="course-hero">
+  <div class="kicker">Polytechnique Montréal | Automne 2026 | Prof. Martine Bellaïche</div>
+  <h1>INF1010 - Programmation orientée objet</h1>
+  <p class="meta">Manuel : Horstmann, <em>Big C++: Late Objects</em>, 3<sup>e</sup> éd. | Évaluation : TP 27 % (TP1 3 %, TP2 5 %, TP3 8 %, TP4 9 %, TP5 2 %) | 9 quiz 8 % | Contrôle périodique 25 % (vendredi 23 octobre, 18h30) | Examen final 40 % (lundi 7 décembre, 9h30)</p>
+  <p>Ce site reprend la matière du cours, semaine par semaine, avec des démonstrations interactives (exécution pas à pas, « devinez l'affichage », simulateurs de pointeurs intelligents, de vecteurs, de conversions, d'exceptions), un quiz par module, des exercices du type de ceux des intras passés avec corrigés dépliables, une page de préparation à l'intra et un aide-mémoire imprimable, permis à l'examen. Tout fonctionne hors ligne : copiez le dossier sur une clé USB.</p>
+</div>
+
+<h2>Matière de l'intra (modules 1 à 7)</h2>
+<div class="cards">
+  <a class="card" href="cours1.html">
+    <div class="kicker">Module 1 - 25 août</div>
+    <h3>Concepts de base et allocation dynamique</h3>
+    <p>Classe et objet, encapsulation, constructeurs et destructeur, liste d'initialisation, pile et tas, new / delete, tableaux dynamiques.</p>
+    <p class="counts">3 démos interactives | quiz de 15 questions | 6 exercices corrigés</p>
+    <div class="prog" data-progress-for="cours1.html" data-quiz-id="c1" data-exo-total="6"></div>
+  </a>
+  <a class="card" href="cours2.html">
+    <div class="kicker">Module 2 - 1er septembre</div>
+    <h3>Méthodes constantes, passage de paramètres, vecteurs</h3>
+    <p>const, valeur / référence / référence constante / pointeur, résolution de surcharge, std::vector et boucles sur intervalle.</p>
+    <p class="counts">3 démos interactives | quiz de 15 questions | 6 exercices corrigés</p>
+    <div class="prog" data-progress-for="cours2.html" data-quiz-id="c2" data-exo-total="6"></div>
+  </a>
+  <a class="card" href="cours3.html">
+    <div class="kicker">Module 3 - 4 septembre</div>
+    <h3>Pointeurs intelligents, composition et agrégation</h3>
+    <p>Possède ou utilise, qui détruit, unique_ptr et std::move, shared_ptr et compteur de références, le modèle des TP1 et TP2.</p>
+    <p class="counts">3 démos interactives | quiz de 15 questions | 6 exercices corrigés</p>
+    <div class="prog" data-progress-for="cours3.html" data-quiz-id="c3" data-exo-total="6"></div>
+  </a>
+  <a class="card" href="cours4.html">
+    <div class="kicker">Module 4 - 8 septembre</div>
+    <h3>Pointeur this, surcharge d'opérateurs, copie et affectation</h3>
+    <p>Appels en cascade, membre ou friend, signatures de tous les opérateurs, copie superficielle et profonde, règle des trois.</p>
+    <p class="counts">2 démos interactives | quiz de 15 questions | 6 exercices corrigés</p>
+    <div class="prog" data-progress-for="cours4.html" data-quiz-id="c4" data-exo-total="6"></div>
+  </a>
+  <a class="card" href="cours5.html">
+    <div class="kicker">Module 5 - 15 septembre</div>
+    <h3>Héritage et polymorphisme (partie 1)</h3>
+    <p>est un, droits d'accès, ordre de construction et de destruction, redéfinition, virtual et override, liaison statique ou dynamique.</p>
+    <p class="counts">5 démos interactives | quiz de 15 questions | 6 exercices corrigés</p>
+    <div class="prog" data-progress-for="cours5.html" data-quiz-id="c5" data-exo-total="6"></div>
+  </a>
+  <a class="card" href="cours6.html">
+    <div class="kicker">Module 6 - 22 septembre</div>
+    <h3>Classes abstraites et conversion d'objets</h3>
+    <p>Méthodes virtuelles pures, interfaces, collections hétérogènes, découpage, static_cast, dynamic_cast, dynamic_pointer_cast.</p>
+    <p class="counts">2 démos interactives | quiz de 15 questions | 5 exercices corrigés</p>
+    <div class="prog" data-progress-for="cours6.html" data-quiz-id="c6" data-exo-total="5"></div>
+  </a>
+  <a class="card" href="cours7.html">
+    <div class="kicker">Module 7 - 6 octobre</div>
+    <h3>Héritage multiple, fonctions et classes génériques</h3>
+    <p>Bases multiples, ambiguïtés, diamant et héritage virtuel, template, Liste&lt;T&gt;, sommer et filtrerParType du TP3.</p>
+    <p class="counts">2 démos interactives | quiz de 13 questions | 5 exercices corrigés</p>
+    <div class="prog" data-progress-for="cours7.html" data-quiz-id="c7" data-exo-total="5"></div>
+  </a>
+  <a class="card exam" href="intra.html">
+    <div class="kicker">Contrôle périodique - vendredi 23 octobre, 18h30</div>
+    <h3>Préparation à l'intra</h3>
+    <p>Stratégie par type de question, quiz de révision de 31 questions, quatre exercices de synthèse au format examen, chronomètre et liste de vérification.</p>
+    <p class="counts">quiz de 31 questions | 4 exercices corrigés</p>
+    <div class="prog" data-progress-for="intra.html" data-quiz-id="intra" data-exo-total="4"></div>
+  </a>
+  <a class="card" href="aide-memoire.html">
+    <div class="kicker">Référence - permise à l'examen</div>
+    <h3>Aide-mémoire C++ imprimable</h3>
+    <p>Toute la syntaxe du cours en tableaux : signatures des opérateurs, règle des trois, héritage, casts, templates, STL, exceptions, Python, et les erreurs de compilation fréquentes.</p>
+  </a>
+</div>
+
+<h2>Matière du final (modules 8 à 10, avec les modules 1 à 7)</h2>
+<div class="cards">
+  <a class="card" href="cours8.html">
+    <div class="kicker">Module 8 - 27 octobre</div>
+    <h3>STL : conteneurs et itérateurs</h3>
+    <p>vector, deque, list, set, map, multimap, unordered_map, adaptateurs, itérateurs et invalidation, choisir le bon conteneur.</p>
+    <p class="counts">3 démos interactives | quiz de 14 questions | 5 exercices corrigés</p>
+    <div class="prog" data-progress-for="cours8.html" data-quiz-id="c8" data-exo-total="5"></div>
+  </a>
+  <a class="card" href="cours9.html">
+    <div class="kicker">Module 9 - 3 novembre</div>
+    <h3>STL : algorithmes, foncteurs, fonctions lambda</h3>
+    <p>find_if, count_if, sort avec comparateur, accumulate, transform, erase-remove, foncteurs avec état, lambdas et captures.</p>
+    <p class="counts">3 démos interactives | quiz de 13 questions | 5 exercices corrigés</p>
+    <div class="prog" data-progress-for="cours9.html" data-quiz-id="c9" data-exo-total="5"></div>
+  </a>
+  <a class="card" href="cours10.html">
+    <div class="kicker">Module 10 - 10 novembre</div>
+    <h3>Variables de classe, exceptions, introduction à Python</h3>
+    <p>static, throw / try / catch, hiérarchie std::exception, classes d'exception, dépilement, et la traduction des concepts du cours en Python.</p>
+    <p class="counts">2 démos interactives | quiz de 15 questions | 5 exercices corrigés</p>
+    <div class="prog" data-progress-for="cours10.html" data-quiz-id="c10" data-exo-total="5"></div>
+  </a>
+</div>
+
+<h2>Calendrier de la session</h2>
+<ul class="timeline">
+  <li data-date="2026-10-20"><span class="d">mar. 20 octobre</span><span>Remise du TP3 avant 23h30 ; cours de révision</span></li>
+  <li data-date="2026-10-23"><span class="d">ven. 23 octobre</span><span><strong>Contrôle périodique</strong>, 18h30 à 20h30, sur Moodle Examen, documentation papier ou clé USB permise (modules 1 à 7)</span></li>
+  <li data-date="2026-10-27"><span class="d">mar. 27 octobre</span><span>Cours : STL, conteneurs et itérateurs ; quiz 7 du mercredi 18h30 au vendredi 23h59 ; début du TP4 en labo</span></li>
+  <li data-date="2026-11-03"><span class="d">mar. 3 novembre</span><span>Cours : STL, algorithmes, foncteurs, lambdas ; quiz 8</span></li>
+  <li data-date="2026-11-10"><span class="d">mar. 10 novembre</span><span>Cours : variables de classe, exceptions, introduction à Python ; quiz 9</span></li>
+  <li data-date="2026-11-17"><span class="d">mar. 17 novembre</span><span>Cours de révision ; remise du TP4 avant 23h30 ; début du TP5 (Python)</span></li>
+  <li data-date="2026-12-01"><span class="d">mar. 1er décembre</span><span>Remise du TP5 avant 23h30 (pas de cours les 24 novembre et 1er décembre)</span></li>
+  <li data-date="2026-12-07"><span class="d">lun. 7 décembre</span><span><strong>Examen final</strong>, 9h30, sur Moodle Examen, toute la matière, documentation permise</span></li>
+</ul>
+<p class="small">Les quiz comptabilisés (3 essais, meilleure note retenue) sont ouverts du mercredi 18h30 au vendredi 23h59 de la semaine du cours. Les notes de TP ne comptent que si l'intra ou le final est réussi à 40 % ou plus.</p>
+
+<h2>Comment utiliser ce site</h2>
+<ol>
+  <li><strong>Théorie</strong> : chaque module suit l'ordre du cours, avec le code des TP comme fil conducteur. Les encadrés « Question d'examen classique » signalent ce qui est tombé aux intras passés.</li>
+  <li><strong>Démos</strong> : exécutez le code pas à pas (constructions, destructions, pointeurs), devinez l'affichage avant de vérifier, manipulez les simulateurs (shared_ptr, vector, liaison dynamique, conversions, exceptions, algorithmes).</li>
+  <li><strong>Quiz</strong> : 12 à 15 questions par module ; le meilleur score est mémorisé dans ce navigateur. Lisez les explications, elles contiennent la justification attendue aux vrai/faux.</li>
+  <li><strong>Exercices</strong> : écrivez le code sur papier ou dans un éditeur avant de déplier la solution ; cochez « Fait ». Les énoncés marqués « Intra » viennent des séances de révision d'intras passés (A2018, H2019).</li>
+  <li><strong>Avant l'examen</strong> : la page <a href="intra.html">Intra</a> (stratégie, quiz de révision, synthèses chronométrées) et l'<a href="aide-memoire.html">aide-mémoire</a> à imprimer ou à mettre sur la clé USB avec le site.</li>
+</ol>
+
+<h2>Rappels du plan de cours</h2>
+<ul>
+  <li>Contrôle périodique (1 h 50) et examen final : sur Moodle Examen, toute documentation sur papier ou sur clé USB ; questions de programmation C++ (analyse du problème, conception du programme, écriture de code). Vérifiez vous-même que vos fichiers s'ouvrent sur la clé.</li>
+  <li>TP en équipe de deux, de la même section ; remise sur Moodle, un seul membre soumet, les deux vérifient ; retard = 0. Compilation sans erreur ni avertissement (<code>-std=c++20 -Wall -Wextra -pedantic-errors</code>), liste d'initialisation obligatoire, définitions dans le .cpp dans l'ordre du .h.</li>
+  <li>Les systèmes d'IA générative sont interdits pour les TP, quiz, intra et final.</li>
+  <li>Centre de consultation du lundi au vendredi, 11h30 à 14h30, au M-4018.</li>
+</ul>
+
+<p class="small">Les données de progression (scores de quiz, exercices cochés, thème) sont stockées uniquement dans ce navigateur. Aucune connexion internet n'est nécessaire.</p>
+</main>
+<footer class="footer">INF1010 - site d'étude personnel. Les documents officiels (Moodle, plan de cours, énoncés de TP) font foi.</footer>
+<script defer src="assets/app.js?v=3"></script>
+<script defer src="assets/widgets.js?v=2"></script>
+</body>
+</html>

@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 8 - STL : conteneurs et itérateurs | INF1010</title>
+<link rel="stylesheet" href="assets/style.css?v=3">
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="index.html">INF1010 <small>Programmation orientée objet</small></a>
+  <nav>
+    <a href="index.html">Accueil</a>
+    <a href="cours1.html" title="Concepts de base, allocation dynamique">M1</a>
+    <a href="cours2.html" title="Méthodes constantes, passage de paramètres, vecteurs">M2</a>
+    <a href="cours3.html" title="Pointeurs intelligents, composition et agrégation">M3</a>
+    <a href="cours4.html" title="Pointeur this, surcharge d'opérateurs, copie et affectation">M4</a>
+    <a href="cours5.html" title="Héritage et polymorphisme">M5</a>
+    <a href="cours6.html" title="Classes abstraites, conversion d'objets">M6</a>
+    <a href="cours7.html" title="Héritage multiple, fonctions et classes génériques">M7</a>
+    <a href="cours8.html" title="STL : conteneurs et itérateurs">M8</a>
+    <a href="cours9.html" title="STL : algorithmes, foncteurs, lambdas">M9</a>
+    <a href="cours10.html" title="Variables statiques, exceptions, Python">M10</a>
+    <span class="sep"></span>
+    <a href="intra.html">Intra</a>
+    <a href="aide-memoire.html">Aide-mémoire</a>
+    <button class="theme-btn" type="button">Thème</button>
+  </nav>
+</header>
+
+<main class="layout">
+<aside class="toc"></aside>
+<article class="content">
+
+<div class="course-hero">
+  <div class="kicker">Module 8 - cours du 27 octobre (quiz 7) - matière du final</div>
+  <h1>STL : conteneurs et itérateurs</h1>
+  <p class="meta">Leçon Moodle « Itérateurs et conteneurs » | Simulateur de hockey : exercice « Conteneurs » (afficherEquipe, afficherTroisEtoiles) | Horstmann, chapitre sur la bibliothèque standard | Sera mis en pratique au TP4</p>
+  <p><span class="pill accent">vector, deque, list</span><span class="pill accent">set, map, multimap</span><span class="pill accent">unordered_map</span><span class="pill accent">stack, queue, priority_queue</span><span class="pill accent">Itérateurs : begin, end, ++, *</span><span class="pill accent">Invalidation</span><span class="pill accent">Choisir un conteneur</span></p>
+</div>
+
+<h2>1. La bibliothèque standard de structures de données</h2>
+<p>La STL (Standard Template Library) repose sur trois piliers indépendants : les <strong>conteneurs</strong> (structures qui stockent des objets), les <strong>itérateurs</strong> (une façon uniforme de parcourir n'importe quel conteneur) et les <strong>algorithmes</strong> (module 9), qui travaillent sur des itérateurs et fonctionnent donc avec tous les conteneurs. Les <strong>foncteurs</strong> et lambdas (module 9) paramètrent les algorithmes. Tout est générique : <code>vector&lt;T&gt;</code>, <code>map&lt;K, V&gt;</code>.</p>
+<table>
+<thead><tr><th>Famille</th><th>Conteneurs</th><th>Organisation</th><th>Points forts</th></tr></thead>
+<tbody>
+<tr><td>Séquentiels</td><td><code>vector</code>, <code>deque</code>, <code>list</code>, <code>array</code>, <code>forward_list</code></td><td>ordre d'insertion, choisi par le programmeur</td><td>vector : accès par indice et insertion en fin ; deque : aussi en tête ; list : insertion et suppression n'importe où sans déplacer les autres</td></tr>
+<tr><td>Associatifs ordonnés</td><td><code>set</code>, <code>multiset</code>, <code>map</code>, <code>multimap</code></td><td>arbre équilibré trié par <code>operator&lt;</code> de la clé</td><td>recherche, insertion, suppression en O(log n) ; parcours trié</td></tr>
+<tr><td>Associatifs non ordonnés</td><td><code>unordered_set</code>, <code>unordered_map</code> (+ multi)</td><td>table de hachage</td><td>recherche en O(1) en moyenne ; pas d'ordre</td></tr>
+<tr><td>Adaptateurs</td><td><code>stack</code>, <code>queue</code>, <code>priority_queue</code></td><td>interface restreinte au-dessus d'un autre conteneur</td><td>LIFO, FIFO, file de priorité (le plus grand d'abord)</td></tr>
+</tbody>
+</table>
+
+<h3>Opérations communes et spécifiques</h3>
+<script type="text/cpp">
+#include <vector> <deque> <list> <set> <map> <stack> <queue>
+// Tous : size(), empty(), clear(), begin(), end(), constructeur de copie, operator= , operator== (contenus)
+vector<int> v = {3, 1, 2};    v.push_back(4);  v.pop_back();  v[0];  v.at(0);  v.front();  v.back();
+deque<int> d;                 d.push_front(1); d.push_back(2); d.pop_front(); d[0];
+list<int> l = {3, 1, 2};      l.push_front(0); l.push_back(9); l.front(); l.back();   // PAS de l[i]
+l.sort();  l.reverse();  l.remove(3);  l.unique();  l.merge(autreListe);  l.splice(it, autreListe);
+set<string> s;                s.insert("b"); s.insert("a"); s.insert("a");   // {a, b} : trié, unique
+s.count("a");                 // 0 ou 1 ;  s.find("a") != s.end() ;  s.erase("a")
+map<string, int> m;           m["pomme"] = 3;   m["poire"]++;        // [] crée la clé si absente (valeur 0)
+m.at("pomme");                // lance out_of_range si absente ;  m.find("x") ne crée rien
+m.insert({"kiwi", 5});        // retourne pair<iterator, bool> (false si la clé existait déjà)
+m.erase("poire");  m.count("kiwi");  m.size();
+multimap<int, string> mm;     mm.insert({2, "a"}); mm.insert({2, "b"});   // clés répétées ; équal_range(2)
+stack<int> st;    st.push(1); st.top(); st.pop();                        // pop ne retourne rien
+queue<int> q;     q.push(1); q.front(); q.back(); q.pop();
+priority_queue<int> pq;  pq.push(3); pq.push(9); pq.top();  // 9 : le plus grand d'abord
+pair<string, int> p("a", 1);  p.first;  p.second;  auto p2 = make_pair("b", 2);
+</script>
+<div class="box warn"><span class="label">Pièges</span>
+<ul>
+  <li><code>m[cle]</code> <em>insère</em> la clé avec une valeur par défaut si elle n'existe pas : pour tester la présence, utilisez <code>find</code> ou <code>count</code>. Et <code>operator[]</code> n'existe pas sur une map constante.</li>
+  <li>Les clés d'un <code>set</code> ou d'une <code>map</code> sont constantes : on ne modifie pas une clé en place (on supprime et on réinsère). Le type de clé doit avoir <code>operator&lt;</code> (ou on fournit un comparateur, module 9).</li>
+  <li><code>list</code> n'a ni <code>[]</code> ni <code>at</code> : on avance avec un itérateur. <code>sort</code> de <code>&lt;algorithm&gt;</code> ne marche pas sur une liste (itérateurs non aléatoires) : utiliser <code>l.sort()</code>.</li>
+  <li><code>pop_back</code>, <code>pop_front</code>, <code>pop</code> ne retournent pas l'élément : lire <code>back()</code> / <code>front()</code> / <code>top()</code> avant.</li>
+</ul></div>
+
+<h2>2. Les itérateurs</h2>
+<p>Un itérateur est un objet qui désigne un élément d'un conteneur et sait passer au suivant : un pointeur généralisé. Chaque conteneur fournit <code>begin()</code> (premier élément) et <code>end()</code> (position <em>après</em> le dernier : ne jamais le déréférencer). Les opérations : <code>*it</code> (l'élément), <code>it-&gt;membre</code>, <code>++it</code>, et la comparaison <code>it != fin</code>.</p>
+<script type="text/cpp">
+vector<Moteur> moteurs;
+for (vector<Moteur>::iterator it = moteurs.begin(); it != moteurs.end(); ++it)   // != et non < (list ne supporte pas <)
+    it->setCharge(0.5);
+for (vector<Moteur>::const_iterator it = moteurs.cbegin(); it != moteurs.cend(); ++it)   // lecture seule
+    cout << it->getNom();
+for (auto it = moteurs.rbegin(); it != moteurs.rend(); ++it) ...            // à rebours (reverse_iterator)
+for (const Moteur& m : moteurs) ...                                          // boucle sur intervalle = la même chose, caché
+
+map<string, int> m;
+for (auto it = m.begin(); it != m.end(); ++it)
+    cout << it->first << " : " << it->second << endl;                       // paires clé/valeur, triées par clé
+for (const auto& [cle, valeur] : m) cout << cle << valeur;                  // C++17 : liaison structurée
+auto it = m.find("pomme");
+if (it != m.end()) it->second += 1;                                          // la valeur est modifiable, pas la clé
+</script>
+<table>
+<thead><tr><th>Catégorie</th><th>Conteneurs</th><th>Opérations</th></tr></thead>
+<tbody>
+<tr><td>Accès aléatoire</td><td>vector, deque, array, string</td><td><code>++ -- + n - n it[n] &lt; &gt;</code> ; <code>sort</code> exige cette catégorie</td></tr>
+<tr><td>Bidirectionnel</td><td>list, set, map, multiset, multimap</td><td><code>++ --</code> seulement : pas de <code>it + 2</code>, utiliser <code>std::advance(it, 2)</code> ou <code>std::next(it, 2)</code></td></tr>
+<tr><td>Avant (forward)</td><td>forward_list, unordered_*</td><td><code>++</code> seulement</td></tr>
+</tbody>
+</table>
+<p>Fonctions utilitaires (<code>&lt;iterator&gt;</code>) : <code>std::distance(a, b)</code> (nombre d'éléments entre deux itérateurs), <code>std::advance(it, n)</code>, <code>std::next(it, n)</code>, <code>std::prev(it)</code>.</p>
+
+<h3>Insérer et supprimer avec des itérateurs</h3>
+<script type="text/cpp">
+v.insert(v.begin() + 2, 42);          // vector : insère avant la position ; déplace les suivants
+auto it = l.begin();  std::advance(it, 2);
+l.insert(it, 42);                      // list : insère avant it, rien n'est déplacé
+it = v.erase(it);                      // erase retourne l'itérateur sur l'élément SUIVANT
+</script>
+<div class="box warn"><span class="label">Invalidation d'itérateurs</span>
+<ul>
+  <li><code>vector</code> : <code>push_back</code> et <code>insert</code> peuvent réallouer : <strong>tous</strong> les itérateurs, pointeurs et références deviennent invalides. <code>erase</code> invalide ceux qui suivent la position.</li>
+  <li><code>list</code>, <code>set</code>, <code>map</code> : seuls les itérateurs vers l'élément supprimé sont invalidés ; les insertions n'invalident rien.</li>
+  <li>Supprimer en parcourant : toujours <code>it = c.erase(it);</code> dans la branche de suppression, et <code>++it</code> seulement dans l'autre branche.</li>
+</ul></div>
+<div class="widget" data-widget="trace">
+  <p class="w-title">Pas à pas : supprimer les nombres pairs pendant le parcours</p>
+  <p class="w-desc">Le schéma correct : <code>it = v.erase(it)</code> remplace <code>++it</code> quand on supprime. Suivez l'itérateur et le contenu.</p>
+<script type="text/cpp">
+vector<int> v = {2, 7, 4, 4, 9};
+auto it = v.begin();
+while (it != v.end()) {
+    if (*it % 2 == 0) {
+        it = v.erase(it);      // it désigne maintenant l'élément suivant
+    } else {
+        ++it;
+    }
+}
+// v == {7, 9}
+</script>
+<script type="application/json" data-role="steps">
+[
+ {"line": 2, "vars": [["pile", "v", "{2, 7, 4, 4, 9}"], ["pile", "it", "→ v[0] = 2"]], "note": "L'itérateur désigne le premier élément."},
+ {"line": 4, "note": "2 est pair : suppression."},
+ {"line": 5, "vars": [["pile", "v", "{7, 4, 4, 9}"], ["pile", "it", "→ v[0] = 7"]], "note": "<code>erase</code> retire 2 et retourne un itérateur sur l'élément qui a pris sa place (7). Sans cette réaffectation, <code>it</code> serait invalide."},
+ {"line": 4, "note": "7 est impair."},
+ {"line": 7, "vars": [["pile", "v", "{7, 4, 4, 9}"], ["pile", "it", "→ v[1] = 4"]], "note": "On avance normalement."},
+ {"line": 5, "vars": [["pile", "v", "{7, 4, 9}"], ["pile", "it", "→ v[1] = 4"]], "note": "Premier 4 supprimé ; le second 4 glisse à l'indice 1 et <code>it</code> le désigne. Avec un <code>++it</code> après erase, ce second 4 aurait été sauté : c'est le bug classique."},
+ {"line": 5, "vars": [["pile", "v", "{7, 9}"], ["pile", "it", "→ v[1] = 9"]], "note": "Second 4 supprimé, it désigne 9."},
+ {"line": 7, "vars": [["pile", "v", "{7, 9}"], ["pile", "it", "→ v.end()"]], "note": "9 est impair ; <code>++it</code> atteint <code>end()</code> : la boucle s'arrête."},
+ {"line": 10, "vars": [["pile", "v", "{7, 9}"]], "note": "Résultat. Avec les algorithmes du module 9 : <code>v.erase(remove_if(v.begin(), v.end(), [](int n) { return n % 2 == 0; }), v.end());</code>"}
+]
+</script>
+</div>
+
+<h2>3. Choisir le bon conteneur</h2>
+<table>
+<thead><tr><th>Besoin</th><th>Conteneur</th></tr></thead>
+<tbody>
+<tr><td>Accès par indice, ajout en fin, parcours rapide (le choix par défaut)</td><td><code>vector</code></td></tr>
+<tr><td>Ajouts et retraits fréquents aux deux extrémités</td><td><code>deque</code></td></tr>
+<tr><td>Insertions et suppressions fréquentes au milieu, itérateurs stables, pas d'accès par indice</td><td><code>list</code></td></tr>
+<tr><td>Éléments uniques, parcours trié, test d'appartenance rapide</td><td><code>set</code></td></tr>
+<tr><td>Association clé → valeur, parcours trié par clé (dictionnaire, comptage)</td><td><code>map</code></td></tr>
+<tr><td>Plusieurs valeurs par clé</td><td><code>multimap</code></td></tr>
+<tr><td>Association sans besoin d'ordre, vitesse maximale</td><td><code>unordered_map</code></td></tr>
+<tr><td>Dernier entré, premier sorti / premier entré, premier sorti / le plus prioritaire d'abord</td><td><code>stack</code> / <code>queue</code> / <code>priority_queue</code></td></tr>
+</tbody>
+</table>
+<p>Complexités à retenir : vector <code>[]</code> O(1), <code>push_back</code> O(1) amorti, <code>insert</code> au milieu O(n) ; list <code>insert</code>/<code>erase</code> O(1) à une position connue, mais trouver la position O(n) ; set/map O(log n) par opération ; unordered O(1) en moyenne.</p>
+
+<h3>Exemple du simulateur de hockey : afficher une équipe par numéro de chandail</h3>
+<p>L'exercice « Conteneurs » demande d'afficher les membres d'une équipe triés par numéro, à partir d'une liste de tous les membres : on copie la liste, on retire l'équipe adverse, on recopie dans un conteneur trié. Un <code>set</code> avec un comparateur (foncteur, module 9) trie automatiquement.</p>
+<script type="text/cpp">
+struct ParNumero {                                    // foncteur de comparaison
+    bool operator()(const MembreEquipe* a, const MembreEquipe* b) const { return a->getNumero() < b->getNumero(); }
+};
+
+void Match::afficherEquipe(bool equipe) const {
+    list<MembreEquipe*> copie(membres_);              // copie de la liste de tous les membres
+    copie.remove_if([equipe](const MembreEquipe* m) { return m->getEquipe() != equipe; });   // retire l'adversaire
+    set<MembreEquipe*, ParNumero> tries(copie.begin(), copie.end());   // insertion triée par numéro
+    for (const MembreEquipe* m : tries) cout << *m << endl;
+}
+</script>
+
+<div class="widget" data-widget="guess-output">
+  <p class="w-title">Devinez l'affichage : map, set et itérateurs</p>
+<script type="text/cpp">
+int main() {
+    map<string, int> stock;
+    stock["pomme"] = 3;
+    stock["kiwi"] += 2;
+    stock["pomme"]++;
+    stock.insert({"kiwi", 10});
+    cout << stock.size() << endl;
+    for (const auto& [nom, qte] : stock) cout << nom << "=" << qte << " ";
+    cout << endl;
+    set<int> s = {5, 1, 5, 3};
+    s.insert(2);
+    auto it = s.find(3);
+    ++it;
+    cout << s.size() << " " << *s.begin() << " " << *it << endl;
+    cout << (stock.find("poire") == stock.end() ? "absent" : "present") << " " << stock.count("kiwi") << endl;
+    return 0;
+}
+</script>
+<script type="text/plain" data-role="expected">
+2
+kiwi=2 pomme=4
+4 1 5
+absent 1
+</script>
+<div data-role="explain" class="box tip"><span class="label">Explication</span>
+<p><code>stock["kiwi"] += 2</code> crée kiwi à 0 puis ajoute 2. <code>insert({"kiwi", 10})</code> ne remplace pas une clé existante. Le parcours d'une map est trié par clé (kiwi avant pomme). Le set ignore le doublon 5 : {1, 2, 3, 5}, l'élément après 3 est 5. <code>find</code> ne crée pas de clé.</p></div>
+</div>
+
+<h2>4. À retenir</h2>
+<ul class="summary-list">
+  <li>vector par défaut ; list pour insérer/supprimer au milieu sans accès par indice ; set/map pour l'unicité, le tri et la recherche rapide ; unordered_map pour la vitesse sans ordre ; stack/queue/priority_queue comme adaptateurs.</li>
+  <li>Itérateur : <code>begin()</code>, <code>end()</code> (après le dernier), <code>*it</code>, <code>it-&gt;</code>, <code>++it</code>, <code>!=</code>. <code>const_iterator</code> pour lire, <code>reverse_iterator</code> pour l'envers. Seuls vector et deque supportent <code>it + n</code>.</li>
+  <li><code>m[k]</code> crée ; <code>find</code>/<code>count</code> testent ; <code>it-&gt;first</code> clé constante, <code>it-&gt;second</code> valeur.</li>
+  <li>Supprimer en parcourant : <code>it = c.erase(it)</code>. vector : réallocation = invalidation totale.</li>
+</ul>
+
+<section class="quiz" data-quiz-id="c8" id="quiz-c8">
+<h2>Quiz rapide - Module 8</h2>
+
+<div class="q" data-answer="2">
+<p class="q-text">Que désigne <code>v.end()</code> ?</p>
+<ul class="choices"><li>Le dernier élément</li><li>Le premier élément</li><li>La position après le dernier élément ; on ne le déréférence jamais</li><li>La taille du vecteur</li></ul>
+<div class="explain">L'intervalle d'un conteneur est [begin, end[ : end sert de sentinelle de fin de boucle.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Pourquoi écrire <code>it != v.end()</code> plutôt que <code>it &lt; v.end()</code> ?</p>
+<ul class="choices"><li>C'est plus rapide</li><li><code>&lt;</code> n'existe que pour les itérateurs à accès aléatoire (vector, deque) ; <code>!=</code> fonctionne pour tous les conteneurs</li><li><code>&lt;</code> ne compile jamais sur des itérateurs</li><li>Par convention seulement</li></ul>
+<div class="explain">Un code écrit avec <code>!=</code> reste correct si on remplace le vector par une list.</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Que fait <code>m["x"]</code> sur une <code>map&lt;string, int&gt; m</code> qui ne contient pas « x » ?</p>
+<ul class="choices"><li>Lance out_of_range</li><li>Retourne 0 sans rien insérer</li><li>Retourne m.end()</li><li>Insère la clé « x » avec la valeur 0 et retourne une référence vers cette valeur</li></ul>
+<div class="explain">D'où l'intérêt de <code>m["x"]++</code> pour compter, et le danger de tester la présence avec <code>[]</code>.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Quel conteneur pour insérer et supprimer souvent au milieu, sans jamais accéder par indice ?</p>
+<ul class="choices"><li><code>list</code></li><li><code>vector</code></li><li><code>map</code></li><li><code>stack</code></li></ul>
+<div class="explain">Insertion et suppression en O(1) à une position connue par itérateur, sans déplacer les autres éléments.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Quel est le contenu de <code>s</code> après <code>set&lt;int&gt; s; s.insert(3); s.insert(1); s.insert(3); s.insert(2);</code> et dans quel ordre est-il parcouru ?</p>
+<ul class="choices"><li>{3, 1, 3, 2} dans l'ordre d'insertion</li><li>{3, 1, 2} dans l'ordre d'insertion</li><li>{1, 2, 3} en ordre croissant</li><li>{3, 2, 1} en ordre décroissant</li></ul>
+<div class="explain">Unique et trié par operator&lt; ; size() vaut 3.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Comment supprimer correctement l'élément désigné par <code>it</code> au cours d'un parcours de vector ?</p>
+<ul class="choices"><li><code>v.erase(it); ++it;</code></li><li><code>it = v.erase(it);</code> sans incrémenter</li><li><code>v.erase(it); --it;</code></li><li><code>delete it;</code></li></ul>
+<div class="explain">erase invalide it et retourne l'itérateur sur l'élément suivant.</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Après <code>auto it = v.begin(); v.push_back(5);</code> sur un vector :</p>
+<ul class="choices"><li><code>it</code> désigne toujours le premier élément</li><li><code>it</code> désigne 5</li><li><code>it</code> vaut end()</li><li><code>it</code> peut être invalide si push_back a réalloué</li></ul>
+<div class="explain">Toute insertion dans un vector peut déplacer tous les éléments en mémoire.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Comment accéder à la clé et à la valeur via un itérateur de map ?</p>
+<ul class="choices"><li><code>it-&gt;first</code> et <code>it-&gt;second</code></li><li><code>it.key()</code> et <code>it.value()</code></li><li><code>*it</code> et <code>it[1]</code></li><li><code>it-&gt;cle</code> et <code>it-&gt;valeur</code></li></ul>
+<div class="explain">Un élément de map est une <code>pair&lt;const K, V&gt;</code>.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Pourquoi <code>sort(l.begin(), l.end())</code> ne compile-t-il pas pour une <code>list</code> ?</p>
+<ul class="choices"><li>Les listes sont toujours triées</li><li>sort n'existe pas dans la STL</li><li>sort exige des itérateurs à accès aléatoire ; list n'offre que des bidirectionnels : utiliser <code>l.sort()</code></li><li>Les listes ne sont pas copiables</li></ul>
+<div class="explain">La liste fournit ses propres sort, remove, unique, merge, splice.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Que retourne <code>st.pop()</code> sur une <code>stack&lt;int&gt;</code> ?</p>
+<ul class="choices"><li>L'élément retiré</li><li>Rien (void) : il faut lire <code>top()</code> avant</li><li>Un itérateur</li><li>true si la pile n'est pas vide</li></ul>
+<div class="explain">Même convention pour pop_back, pop_front et queue::pop.</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Quelle est la complexité de la recherche d'une clé dans une map de n éléments ?</p>
+<ul class="choices"><li>O(1)</li><li>O(n)</li><li>O(n log n)</li><li>O(log n)</li></ul>
+<div class="explain">Arbre binaire équilibré. unordered_map : O(1) en moyenne.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Que fait <code>std::advance(it, 3)</code> ?</p>
+<ul class="choices"><li>Avance l'itérateur de 3 positions, même pour une list</li><li>Retourne le troisième élément</li><li>Insère 3 éléments</li><li>Ne compile que pour vector</li></ul>
+<div class="explain"><code>it + 3</code> ne compile que pour les itérateurs à accès aléatoire ; advance s'adapte (3 incrémentations pour une list).</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Peut-on modifier la clé d'un élément de set via son itérateur ?</p>
+<ul class="choices"><li>Oui, avec <code>*it = nouvelleValeur</code></li><li>Oui, avec <code>it-&gt;first = ...</code></li><li>Non : les éléments d'un set sont constants ; il faut supprimer puis réinsérer</li><li>Oui, si le set est non const</li></ul>
+<div class="explain">Modifier une clé casserait l'ordre de l'arbre.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Quel type d'itérateur utiliser dans une méthode const pour parcourir un attribut <code>vector&lt;Moteur&gt; moteurs_</code> ?</p>
+<ul class="choices"><li><code>vector&lt;Moteur&gt;::iterator</code></li><li><code>vector&lt;Moteur&gt;::const_iterator</code> (ou <code>auto it = moteurs_.cbegin()</code>)</li><li><code>Moteur*</code></li><li><code>reverse_iterator</code></li></ul>
+<div class="explain">Dans une méthode const, <code>begin()</code> retourne déjà un const_iterator ; un <code>iterator</code> ne compile pas.</div>
+</div>
+</section>
+
+<h2 id="dev-c8">Exercices à développement</h2>
+<div class="exo-tools" data-scope="dev-c8-list">
+  <div class="progress-bar"><span></span></div><span class="progress-label small"></span>
+  <button class="btn secondary small" type="button" data-action="open-all">Déplier les solutions</button>
+  <button class="btn secondary small" type="button" data-action="close-all">Tout replier</button>
+</div>
+<div id="dev-c8-list">
+
+<article class="exo" data-exo-id="c8-d1">
+<header><span class="tag">map</span><h4>Compter les mots</h4></header>
+<div class="enonce">
+<p>Écrivez <code>map&lt;string, int&gt; compterMots(const vector&lt;string&gt;&amp; mots)</code>, puis une fonction qui affiche les mots apparaissant au moins deux fois, par ordre alphabétique, et enfin une fonction qui retourne le mot le plus fréquent (le premier dans l'ordre alphabétique en cas d'égalité).</p>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/cpp">
+map<string, int> compterMots(const vector<string>& mots) {
+    map<string, int> compte;
+    for (const string& m : mots) compte[m]++;          // crée à 0 puis incrémente
+    return compte;
+}
+
+void afficherDoublons(const map<string, int>& compte) {
+    for (const auto& [mot, n] : compte)                 // parcours trié par clé
+        if (n >= 2) cout << mot << " (" << n << ")" << endl;
+}
+
+string plusFrequent(const map<string, int>& compte) {
+    string meilleur;  int max = 0;
+    for (auto it = compte.begin(); it != compte.end(); ++it)
+        if (it->second > max) { max = it->second; meilleur = it->first; }   // > strict : le premier gagne l'égalité
+    return meilleur;
+}
+</script>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="c8-d2">
+<header><span class="tag">list</span><span class="tag theme">Itérateurs</span><h4>Insertion triée dans une liste</h4></header>
+<div class="enonce">
+<p>Écrivez <code>void insererTrie(list&lt;int&gt;&amp; l, int val)</code> qui insère <code>val</code> dans une liste triée en gardant le tri, avec un itérateur (pas d'indice). Puis <code>void retirerPairs(list&lt;int&gt;&amp; l)</code> de deux façons : avec une boucle et <code>erase</code>, puis avec <code>remove_if</code> de la liste.</p>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/cpp">
+void insererTrie(list<int>& l, int val) {
+    auto it = l.begin();
+    while (it != l.end() && *it < val) ++it;     // première position dont l'élément est >= val
+    l.insert(it, val);                           // insère avant it (it == end() : à la fin)
+}
+
+void retirerPairs(list<int>& l) {
+    for (auto it = l.begin(); it != l.end(); ) {
+        if (*it % 2 == 0) it = l.erase(it);
+        else ++it;
+    }
+}
+// ou :  l.remove_if([](int n) { return n % 2 == 0; });
+</script>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="c8-d3">
+<header><span class="tag">Simulateur de hockey</span><span class="tag theme">set, multimap</span><h4>Les trois étoiles</h4></header>
+<div class="enonce">
+<p><code>Match</code> possède <code>list&lt;Joueur*&gt; joueurs_</code>. Écrivez <code>void Match::afficherTroisEtoiles() const</code> qui affiche les trois joueurs ayant marqué le plus de buts (toutes équipes confondues), en copiant les joueurs dans un conteneur approprié. Proposez une version avec <code>multimap</code> et une avec <code>vector</code> + tri (module 9).</p>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/cpp">
+void Match::afficherTroisEtoiles() const {
+    multimap<int, Joueur*> parButs;                              // clé = buts (répétables), trié croissant
+    for (Joueur* j : joueurs_) parButs.insert({ j->getButs(), j });
+    int n = 0;
+    for (auto it = parButs.rbegin(); it != parButs.rend() && n < 3; ++it, ++n)   // parcours décroissant
+        cout << *(it->second) << endl;
+}
+
+// Variante vector + tri décroissant (module 9) :
+void Match::afficherTroisEtoiles() const {
+    vector<Joueur*> v(joueurs_.begin(), joueurs_.end());
+    sort(v.begin(), v.end(), [](const Joueur* a, const Joueur* b) { return a->getButs() > b->getButs(); });
+    for (size_t i = 0; i < v.size() && i < 3; ++i) cout << *v[i] << endl;
+}
+</script>
+<p>Un <code>set</code> ne conviendrait pas : deux joueurs avec le même nombre de buts seraient considérés comme un doublon par un comparateur sur les buts.</p>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="c8-d4">
+<header><span class="tag">Conception</span><h4>Quel conteneur ?</h4></header>
+<div class="enonce">
+<p>Pour chaque situation, choisissez le conteneur et justifiez : (1) l'historique des commandes d'un éditeur avec « annuler » ; (2) les clients qui attendent au comptoir ; (3) le répertoire téléphonique nom → numéro ; (4) les numéros de chandail déjà attribués (vérifier rapidement qu'un numéro est libre) ; (5) les tâches à exécuter par priorité ; (6) les notes d'un étudiant par cours, un cours pouvant avoir plusieurs notes ; (7) une file d'attente où l'on retire aussi par l'avant et par l'arrière.</p>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<ol>
+  <li><code>stack</code> : dernier entré, premier annulé.</li>
+  <li><code>queue</code> : premier arrivé, premier servi.</li>
+  <li><code>map&lt;string, string&gt;</code> (ou <code>unordered_map</code> si l'ordre alphabétique est inutile).</li>
+  <li><code>set&lt;int&gt;</code> (ou <code>unordered_set</code>) : unicité et <code>count</code> en O(log n) ou O(1).</li>
+  <li><code>priority_queue</code> : <code>top()</code> donne la plus prioritaire.</li>
+  <li><code>multimap&lt;string, double&gt;</code>, ou <code>map&lt;string, vector&lt;double&gt;&gt;</code>.</li>
+  <li><code>deque</code> : <code>pop_front</code> et <code>pop_back</code> en O(1).</li>
+</ol>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="c8-d5">
+<header><span class="tag">Affichage</span><span class="tag theme">Itérateurs</span><h4>Devinez l'affichage</h4></header>
+<div class="enonce">
+<div class="widget" data-widget="guess-output">
+  <p class="w-title">Vérifiez votre réponse</p>
+<script type="text/cpp">
+int main() {
+    list<int> l = {4, 8, 15, 16, 23, 42};
+    auto it = l.begin();
+    advance(it, 2);
+    l.insert(it, 10);
+    it = l.erase(it);
+    cout << *it << " " << l.size() << endl;
+    l.push_front(1);
+    l.remove(8);
+    for (auto r = l.rbegin(); r != l.rend(); ++r) cout << *r << " ";
+    cout << endl;
+    vector<int> v(l.begin(), l.end());
+    cout << v[1] << " " << *(v.end() - 1) << " " << distance(v.begin(), find(v.begin(), v.end(), 23)) << endl;
+    return 0;
+}
+</script>
+<script type="text/plain" data-role="expected">
+16 6
+42 23 16 10 4 1
+4 42 3
+</script>
+<div data-role="explain" class="box tip"><span class="label">Explication</span>
+<p><code>it</code> désigne 15 ; <code>insert</code> met 10 avant 15 (l = 4 8 10 15 16 23 42) ; <code>erase(it)</code> retire 15 et retourne l'itérateur sur 16 ; taille 6. Après <code>push_front(1)</code> et <code>remove(8)</code> : 1 4 10 16 23 42, affiché à l'envers. Le vecteur construit à partir de la liste : v[1] = 4, dernier = 42, 23 est à l'indice 3.</p></div>
+</div>
+</div>
+</article>
+
+</div>
+
+</article>
+</main>
+<footer class="footer">INF1010 - site d'étude personnel. Les documents officiels (Moodle, plan de cours, énoncés de TP) font foi.</footer>
+<script defer src="assets/app.js?v=3"></script>
+<script defer src="assets/widgets.js?v=2"></script>
+</body>
+</html>

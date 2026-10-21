@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 3 - Pointeurs intelligents, composition et agrégation | INF1010</title>
+<link rel="stylesheet" href="assets/style.css?v=3">
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="index.html">INF1010 <small>Programmation orientée objet</small></a>
+  <nav>
+    <a href="index.html">Accueil</a>
+    <a href="cours1.html" title="Concepts de base, allocation dynamique">M1</a>
+    <a href="cours2.html" title="Méthodes constantes, passage de paramètres, vecteurs">M2</a>
+    <a href="cours3.html" title="Pointeurs intelligents, composition et agrégation">M3</a>
+    <a href="cours4.html" title="Pointeur this, surcharge d'opérateurs, copie et affectation">M4</a>
+    <a href="cours5.html" title="Héritage et polymorphisme">M5</a>
+    <a href="cours6.html" title="Classes abstraites, conversion d'objets">M6</a>
+    <a href="cours7.html" title="Héritage multiple, fonctions et classes génériques">M7</a>
+    <a href="cours8.html" title="STL : conteneurs et itérateurs">M8</a>
+    <a href="cours9.html" title="STL : algorithmes, foncteurs, lambdas">M9</a>
+    <a href="cours10.html" title="Variables statiques, exceptions, Python">M10</a>
+    <span class="sep"></span>
+    <a href="intra.html">Intra</a>
+    <a href="aide-memoire.html">Aide-mémoire</a>
+    <button class="theme-btn" type="button">Thème</button>
+  </nav>
+</header>
+
+<main class="layout">
+<aside class="toc"></aside>
+<article class="content">
+
+<div class="course-hero">
+  <div class="kicker">Module 3 - cours du 4 septembre (quiz 2)</div>
+  <h1>Pointeurs intelligents, composition et agrégation</h1>
+  <p class="meta">Leçons Moodle « Pointeurs intelligents », « Composition et agrégation » | Mis en pratique au TP1 (composition et agrégation par pointeurs bruts) et au TP2 (<code>unique_ptr</code> pour la batterie et le châssis, <code>shared_ptr</code> pour les pièces partagées)</p>
+  <p><span class="pill accent">Composition (a un, possède)</span><span class="pill accent">Agrégation (utilise)</span><span class="pill accent">Propriété et durée de vie</span><span class="pill accent">unique_ptr</span><span class="pill accent">shared_ptr</span><span class="pill accent">make_unique / make_shared</span><span class="pill accent">std::move</span></p>
+  <p class="small">Question centrale de ce module, et de beaucoup de questions d'intra : <em>qui possède l'objet, et donc qui est responsable de le détruire ?</em> La composition répond « le contenant », l'agrégation répond « quelqu'un d'autre », et les pointeurs intelligents encodent cette réponse dans le type.</p>
+</div>
+
+<h2>1. Les trois relations entre classes</h2>
+<table>
+<thead><tr><th></th><th>Composition</th><th>Agrégation</th><th>Héritage (modules 5 et 6)</th></tr></thead>
+<tbody>
+<tr><td>Phrase clé</td><td>A <strong>possède</strong> un B (« a un », partie de)</td><td>A <strong>utilise</strong> un B (« a un », mais sans le posséder)</td><td>A <strong>est un</strong> B</td></tr>
+<tr><td>Exemple</td><td>une voiture a 4 roues ; une roue appartient à une seule voiture</td><td>une compagnie emploie des employés ; un employé peut travailler pour plusieurs compagnies</td><td>un gérant est un employé</td></tr>
+<tr><td>Durée de vie</td><td>liée : le B est créé et détruit avec le A</td><td>indépendante : le B existe avant et après le A</td><td>un seul objet</td></tr>
+<tr><td>Partage</td><td>non : un seul propriétaire</td><td>oui : plusieurs A peuvent utiliser le même B</td><td>sans objet</td></tr>
+<tr><td>UML</td><td>losange plein du côté du contenant</td><td>losange vide</td><td>flèche à pointe vide vers la classe de base</td></tr>
+<tr><td>Dans le TP1</td><td>batterie et châssis du robot (le robot les reçoit, les libère, les remplace)</td><td>moteurs, capteurs, pinces (le robot ne fait que mémoriser leur adresse)</td><td>TP3 : <code>Moteur : public Composante</code></td></tr>
+</tbody>
+</table>
+
+<h3>Reconnaître la relation dans le code</h3>
+<table>
+<thead><tr><th>Attribut dans la classe A</th><th>Initialisation</th><th>Relation</th><th>Qui détruit le B</th></tr></thead>
+<tbody>
+<tr><td><code>B b_;</code> (objet)</td><td>liste d'initialisation, copie de l'argument</td><td>composition (par valeur)</td><td>automatique, avec A</td></tr>
+<tr><td><code>B* b_;</code> avec <code>new</code> dans A</td><td><code>b_(new B(...))</code> ou <code>b_(new B(*autre))</code></td><td>composition (par pointeur)</td><td>le destructeur de A (<code>delete b_;</code>)</td></tr>
+<tr><td><code>B* b_;</code> reçu de l'extérieur</td><td><code>b_(ptr)</code> ou <code>b_(&amp;objet)</code></td><td>agrégation (par pointeur)</td><td>l'extérieur, jamais A</td></tr>
+<tr><td><code>B&amp; b_;</code></td><td>obligatoirement dans la liste d'initialisation (une référence ne peut pas rester vide ni changer de cible)</td><td>agrégation (par référence)</td><td>l'extérieur ; l'objet doit vivre plus longtemps que A</td></tr>
+<tr><td><code>unique_ptr&lt;B&gt; b_;</code></td><td><code>make_unique&lt;B&gt;(...)</code> ou <code>std::move(ptr)</code></td><td>composition (propriété exclusive)</td><td>automatique, avec A</td></tr>
+<tr><td><code>shared_ptr&lt;B&gt; b_;</code></td><td>copie d'un <code>shared_ptr</code> reçu</td><td>partage (agrégation avec propriété partagée)</td><td>automatique, quand le dernier propriétaire disparaît</td></tr>
+</tbody>
+</table>
+<div class="box exam"><span class="label">Intra H15, exercice 3 : composition ou agrégation ?</span>
+<div class="two-col">
+<div>
+<script type="text/cpp">
+// Q1
+class BB {
+public:
+    BB(AA attrib) : attribB_(attrib) {}
+private:
+    AA attribB_;
+};
+// main : AA objetA; BB objetB(objetA);
+</script>
+<p class="answer">Composition : attribut objet, copie privée.</p>
+<script type="text/cpp">
+// Q2
+class BB {
+public:
+    BB(AA* attrib) : attribB_(attrib) {}
+private:
+    AA* attribB_;
+};
+// main : AA* objetA = new AA(); BB objetB(objetA); delete objetA;
+</script>
+<p class="answer">Agrégation : le pointeur vient de l'extérieur, qui le détruit.</p>
+<script type="text/cpp">
+// Q3
+class BB {
+public:
+    BB(AA attrib) : attribB_(new AA(attrib)) {}
+private:
+    AA* attribB_;
+};
+</script>
+<p class="answer">Composition par pointeur : BB fait le <code>new</code> (et devra faire le <code>delete</code>).</p>
+</div>
+<div>
+<script type="text/cpp">
+// Q4
+class BB {
+public:
+    BB(AA& attrib) : attribB_(attrib) {}
+private:
+    AA& attribB_;
+};
+// main : AA objetA; BB objetB(objetA);
+</script>
+<p class="answer">Agrégation par référence : BB désigne l'objet du main.</p>
+<script type="text/cpp">
+// Q5
+class BB {
+public:
+    BB(AA* attrib) : attribB_(attrib) {}
+private:
+    AA* attribB_;
+};
+// main : AA objetA; BB objetB(&objetA);
+</script>
+<p class="answer">Agrégation : l'objet est une variable locale du main, BB ne doit surtout pas le détruire.</p>
+</div>
+</div>
+</div>
+<div class="box tip"><span class="label">Méthode</span>
+<p>Cherchez le <code>new</code>. S'il est <em>dans</em> la classe (constructeur ou méthode d'installation qui prend la propriété), c'est une composition et le destructeur de la classe doit faire le <code>delete</code>. Si l'objet vient de l'extérieur et que la classe n'en fait que mémoriser l'adresse, c'est une agrégation : pas de <code>delete</code> dans la classe. Un attribut objet (sans pointeur) est toujours une composition.</p></div>
+
+<h3>Composition et agrégation par pointeurs bruts (TP1)</h3>
+<script type="text/cpp">
+class Robot {
+public:
+    explicit Robot(const std::string& nom) : nom_(nom), batterie_(nullptr), chassis_(nullptr) {}
+    ~Robot() { delete batterie_; delete chassis_; }   // composition : le robot libère ce qu'il possède
+                                                      // (delete nullptr est sans effet) ; les moteurs ne sont PAS libérés
+    void installerBatterie(Batterie* batterie) {      // reçoit la propriété d'un objet alloué avec new
+        if (batterie == batterie_) return;            // réinstaller le même pointeur : sans effet
+        delete batterie_;                             // libère l'ancienne (ou rien si nullptr)
+        batterie_ = batterie;                         // nullptr = retirer la batterie
+    }
+    const Batterie* getBatterie() const { return batterie_; }   // pointeur d'observation : ne pas le delete
+
+    bool ajouterMoteur(Moteur* moteur) {              // agrégation : on mémorise l'adresse, sans posséder
+        if (moteur == nullptr) return false;
+        for (const Moteur* m : moteurs_) if (m == moteur) return false;
+        moteurs_.push_back(moteur);
+        return true;
+    }
+private:
+    std::string nom_;
+    Batterie* batterie_;            // composition
+    Chassis* chassis_;              // composition
+    std::vector<Moteur*> moteurs_;  // agrégation
+};
+</script>
+<div class="box warn"><span class="label">Conséquences pour l'appelant (énoncé du TP1)</span>
+<ul>
+  <li>Ne jamais passer l'adresse d'un objet local à <code>installerBatterie</code> : le robot tenterait un <code>delete</code> sur la pile.</li>
+  <li>Ne pas faire <code>delete</code> sur une batterie installée, ni la confier à deux robots (double libération).</li>
+  <li>Garder les moteurs vivants tant qu'un robot les référence ; les supprimer après leur retrait de tous les robots, exactement une fois.</li>
+  <li>Ne pas copier un robot : la copie membre à membre dupliquerait <code>batterie_</code> et les deux destructeurs feraient <code>delete</code> sur le même objet. Le TP1 interdit la copie avec <code>Robot(const Robot&amp;) = delete;</code>.</li>
+</ul></div>
+
+<h2>2. Pointeurs intelligents</h2>
+<p>Un pointeur intelligent est un petit objet qui <em>possède</em> un pointeur brut et appelle <code>delete</code> dans son propre destructeur. Comme il est une variable automatique (ou un attribut), la libération suit automatiquement la fin de portée ou la destruction du contenant : plus de fuite, plus de double libération, et les fonctions qui quittent par exception restent sûres. En-tête <code>&lt;memory&gt;</code>.</p>
+
+<h3>unique_ptr : propriété exclusive</h3>
+<script type="text/cpp">
+#include <memory>
+std::unique_ptr<Batterie> b = std::make_unique<Batterie>("B", 3, 12, 100, 10);  // création recommandée
+b->getNom();  (*b).getNom();              // même syntaxe qu'un pointeur
+if (b) { ... }   if (b == nullptr) { ... } // test de vide
+Batterie* brut = b.get();                 // pointeur d'observation (ne pas delete, ne pas stocker longtemps)
+b.reset();                                // détruit l'objet maintenant, b devient nul
+b.reset(new Batterie(...));               // remplace (l'ancien est détruit)
+
+std::unique_ptr<Batterie> c = b;          // ERREUR : non copiable (un seul propriétaire)
+std::unique_ptr<Batterie> c = std::move(b);  // transfert : c possède l'objet, b est nul
+</script>
+<ul>
+  <li><strong>Non copiable, déplaçable</strong> : <code>std::move</code> transfère la propriété ; le pointeur source devient <code>nullptr</code>. Après le transfert, ne plus utiliser la source.</li>
+  <li>Passer un <code>unique_ptr</code> par valeur à une fonction = lui donner l'objet (il faut écrire <code>f(std::move(b))</code>). Retourner un <code>unique_ptr</code> par valeur = donner l'objet à l'appelant (pas besoin de <code>move</code> au <code>return</code>).</li>
+  <li>Un attribut <code>unique_ptr</code> rend la classe non copiable par défaut : il faut écrire soi-même le constructeur de copie (module 4) pour dupliquer l'objet possédé.</li>
+  <li>Taille et vitesse d'un pointeur brut : à utiliser systématiquement à la place de <code>new</code>/<code>delete</code> pour une composition par pointeur.</li>
+</ul>
+
+<div class="widget" data-widget="trace">
+  <p class="w-title">Pas à pas : transfert de propriété avec unique_ptr</p>
+  <p class="w-desc">Suivez qui possède l'objet Batterie, et quand son destructeur s'exécute.</p>
+<script type="text/cpp">
+int main() {
+    unique_ptr<Batterie> b1 = make_unique<Batterie>("B1");
+    unique_ptr<Batterie> b2;              // vide (nullptr)
+    // b2 = b1;                           // erreur de compilation : non copiable
+    b2 = std::move(b1);                   // transfert : b1 devient nul
+    if (!b1) cout << "b1 est vide" << endl;
+    b2->afficher(cout);
+    b2.reset();                           // destruction immédiate
+    cout << "fin" << endl;
+    return 0;
+}
+</script>
+<script type="application/json" data-role="steps">
+[
+ {"line": 2, "print": "Batterie(B1)", "vars": [["pile", "b1", "unique_ptr → 0x1000"], ["tas", "0x1000", "Batterie { \"B1\" }"]], "note": "<code>make_unique</code> fait le <code>new</code> et place l'adresse dans un unique_ptr. b1 est le propriétaire."},
+ {"line": 3, "vars": [["pile", "b1", "unique_ptr → 0x1000"], ["pile", "b2", "unique_ptr = nullptr"], ["tas", "0x1000", "Batterie { \"B1\" }"]], "note": "Un unique_ptr par défaut est nul."},
+ {"line": 4, "note": "<code>b2 = b1</code> ne compile pas : copier reviendrait à avoir deux propriétaires, donc deux delete. Le constructeur et l'opérateur de copie de unique_ptr sont supprimés (<code>= delete</code>)."},
+ {"line": 5, "vars": [["pile", "b1", "unique_ptr = nullptr"], ["pile", "b2", "unique_ptr → 0x1000"], ["tas", "0x1000", "Batterie { \"B1\" }"]], "note": "<code>std::move</code> autorise le transfert : b2 reçoit l'adresse, b1 est remis à nullptr. Aucun objet Batterie n'est copié ni détruit."},
+ {"line": 6, "print": "b1 est vide", "note": "Un unique_ptr se teste comme un booléen."},
+ {"line": 7, "print": "Batterie B1 ...", "note": "b2 s'utilise comme un pointeur brut : <code>-&gt;</code>."},
+ {"line": 8, "print": "~Batterie(B1)", "vars": [["pile", "b1", "unique_ptr = nullptr"], ["pile", "b2", "unique_ptr = nullptr"], ["tas", "0x1000", "libéré", "gone"]], "note": "<code>reset()</code> détruit l'objet possédé immédiatement. Sans ce reset, la destruction aurait eu lieu à la fin de main, automatiquement."},
+ {"line": 9, "print": "fin", "note": "Plus aucun objet sur le tas."},
+ {"line": 10, "vars": [["pile", "b1", "détruit", "gone"], ["pile", "b2", "détruit", "gone"]], "note": "Les deux unique_ptr sont nuls : leurs destructeurs ne font rien. Bilan : exactement un new et un delete, sans écrire delete."}
+]
+</script>
+</div>
+
+<h3>shared_ptr : propriété partagée</h3>
+<script type="text/cpp">
+std::shared_ptr<Moteur> m = std::make_shared<Moteur>("roue", 2, 40);   // use_count = 1
+std::shared_ptr<Moteur> copie = m;        // copie autorisée : use_count = 2, MÊME objet
+m->setCharge(0.5);                        // visible via copie aussi
+m.use_count();                            // 2
+copie.reset();                            // use_count = 1
+m = nullptr;                              // use_count = 0 : ~Moteur ici
+</script>
+<ul>
+  <li>Chaque copie incrémente un <strong>compteur de références</strong> partagé ; chaque destruction ou <code>reset</code> le décrémente. Quand il tombe à 0, l'objet est détruit. Il n'y a pas de « premier » propriétaire : le dernier à partir éteint la lumière.</li>
+  <li>Copier un <code>shared_ptr</code> partage l'objet (pas de copie de l'objet). C'est le mécanisme des pièces partagées du TP2 : modifier la charge d'un moteur est visible depuis toutes les configurations qui l'utilisent.</li>
+  <li>Un <code>vector&lt;shared_ptr&lt;Moteur&gt;&gt;</code> détruit automatiquement les moteurs que plus personne ne partage.</li>
+  <li><code>std::make_shared&lt;T&gt;(args)</code> alloue l'objet et le compteur d'un coup. Préférable à <code>shared_ptr&lt;T&gt;(new T(...))</code>.</li>
+  <li><code>weak_ptr</code> : observe un objet partagé sans le posséder (ne compte pas) ; sert à casser les cycles (deux objets qui se pointent mutuellement ne seraient jamais détruits).</li>
+</ul>
+<div class="box warn"><span class="label">Erreurs fatales avec les pointeurs intelligents</span>
+<ul>
+  <li>Créer deux pointeurs intelligents à partir du <em>même pointeur brut</em> : <code>Moteur* p = new Moteur(...); shared_ptr&lt;Moteur&gt; a(p); shared_ptr&lt;Moteur&gt; b(p);</code> → deux compteurs indépendants, double delete. Toujours copier le <code>shared_ptr</code>, jamais reconstruire depuis <code>.get()</code>.</li>
+  <li>Faire <code>delete ptr.get()</code> : le pointeur intelligent fera un second delete.</li>
+  <li>Conserver un pointeur brut obtenu par <code>get()</code> après que le propriétaire a été remplacé ou détruit : pointeur pendant (règle énoncée dans les TP pour <code>getBatterie()</code>).</li>
+  <li>Oublier <code>std::move</code> pour un <code>unique_ptr</code> : erreur de compilation « call to deleted constructor ».</li>
+</ul></div>
+
+<div class="widget" data-widget="shared-sim">
+  <p class="w-title">Simulateur de shared_ptr</p>
+  <p class="w-desc">Trois variables a, b, c de type <code>shared_ptr&lt;Objet&gt;</code>. Exécutez des instructions et suivez le compteur de références et les destructions.</p>
+</div>
+
+<div class="widget" data-widget="guess-output">
+  <p class="w-title">Devinez l'affichage : use_count et destructions</p>
+<script type="text/cpp">
+struct Objet {
+    Objet(string n) : n_(n) { cout << "+" << n_ << endl; }
+    ~Objet() { cout << "-" << n_ << endl; }
+    string n_;
+};
+
+int main() {
+    shared_ptr<Objet> a = make_shared<Objet>("A");
+    shared_ptr<Objet> b = a;
+    cout << a.use_count() << endl;
+    {
+        shared_ptr<Objet> c = make_shared<Objet>("C");
+        b = c;
+        cout << a.use_count() << " " << c.use_count() << endl;
+    }
+    cout << b->n_ << endl;
+    a.reset();
+    cout << "fin" << endl;
+    return 0;
+}
+</script>
+<script type="text/plain" data-role="expected">
++A
+2
++C
+1 2
+C
+-A
+fin
+-C
+</script>
+<div data-role="explain" class="box tip"><span class="label">Explication</span>
+<p><code>b = a</code> partage A (compteur 2). <code>b = c</code> : b lâche A (compteur 1) et partage C (compteur 2). À la fin du bloc, <code>c</code> disparaît mais C survit grâce à <code>b</code> (compteur 1). <code>a.reset()</code> fait tomber A à 0 : « -A » immédiatement. « fin », puis la destruction de <code>b</code> à la fin de main détruit C.</p></div>
+</div>
+
+<h3>Le modèle du TP2 : unique_ptr pour posséder, shared_ptr pour partager</h3>
+<script type="text/cpp">
+class Robot {
+public:
+    void installerBatterie(std::unique_ptr<Batterie> batterie) {   // reçu par valeur : transfert
+        batterie_ = std::move(batterie);     // l'ancienne batterie (s'il y en a une) est détruite automatiquement
+    }                                        // installerBatterie(nullptr) retire la batterie
+    const Batterie* getBatterie() const { return batterie_.get(); }   // observation seulement
+
+    Robot& operator+=(const std::shared_ptr<Moteur>& moteur) {       // ajout d'une pièce partagée
+        if (moteur && find(moteurs_.begin(), moteurs_.end(), moteur) == moteurs_.end())
+            moteurs_.push_back(moteur);      // copie du shared_ptr : use_count + 1
+        return *this;
+    }
+private:
+    std::string nom_;
+    std::unique_ptr<Batterie> batterie_;                 // composition : un seul propriétaire
+    std::unique_ptr<Chassis> chassis_;
+    std::vector<std::shared_ptr<Moteur>> moteurs_;       // partagées entre configurations
+};
+
+// utilisation
+Robot prototype("PolyBot");
+auto batterie = std::make_unique<Batterie>("B", 3, 12, 100, 10);
+prototype.installerBatterie(std::move(batterie));      // batterie est nul après
+auto moteur = std::make_shared<Moteur>("Roue", 2, 40);
+prototype += moteur;                                   // le main et le robot partagent le moteur
+</script>
+<p>Plus aucun <code>new</code> ni <code>delete</code> explicite : la destruction du robot libère la batterie (unique_ptr) et décrémente le compteur des moteurs (détruits seulement si personne d'autre ne les partage).</p>
+
+<h2>3. À retenir</h2>
+<ul class="summary-list">
+  <li>Composition : « possède », durée de vie liée, un seul propriétaire, c'est le contenant qui détruit. Agrégation : « utilise », durée de vie indépendante, l'objet peut être partagé, c'est l'extérieur qui détruit.</li>
+  <li>Indice décisif : où est le <code>new</code> ? Attribut objet ou <code>unique_ptr</code> = composition ; pointeur ou référence reçu de l'extérieur = agrégation ; <code>shared_ptr</code> = partage.</li>
+  <li><code>unique_ptr</code> : non copiable, <code>std::move</code> pour transférer, <code>make_unique</code>, <code>get()</code> pour observer, <code>reset()</code> pour détruire.</li>
+  <li><code>shared_ptr</code> : copie = partage, <code>use_count()</code>, destruction au dernier propriétaire, <code>make_shared</code>. Jamais deux pointeurs intelligents à partir du même pointeur brut.</li>
+  <li>Une référence attribut s'initialise obligatoirement dans la liste d'initialisation et ne change jamais de cible.</li>
+</ul>
+
+<section class="quiz" data-quiz-id="c3" id="quiz-c3">
+<h2>Quiz rapide - Module 3</h2>
+
+<div class="q" data-answer="0">
+<p class="q-text">Dans <code>class Voiture { Moteur moteur_; };</code>, la relation entre Voiture et Moteur est :</p>
+<ul class="choices">
+<li>Une composition : le moteur est créé et détruit avec la voiture</li>
+<li>Une agrégation : le moteur peut être partagé</li>
+<li>Un héritage</li>
+<li>Indéterminée sans voir le constructeur</li>
+</ul>
+<div class="explain">Un attribut objet (par valeur) est toujours une composition : il fait physiquement partie de l'objet contenant.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Dans <code>class Equipe { Entraineur* coach_; };</code> avec <code>Equipe(Entraineur* c) : coach_(c) {}</code> et aucun <code>delete</code> dans Equipe :</p>
+<ul class="choices">
+<li>Composition par pointeur</li>
+<li>Agrégation : l'entraîneur vient de l'extérieur, qui reste responsable de sa destruction</li>
+<li>Erreur de compilation</li>
+<li>Composition, car un pointeur implique toujours la possession</li>
+</ul>
+<div class="explain">Pas de <code>new</code> dans la classe : elle ne fait que mémoriser une adresse. Un entraîneur pourrait d'ailleurs être agrégé par plusieurs équipes.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Pour un attribut <code>Licorne&amp; licorne_;</code>, quelle affirmation est vraie ?</p>
+<ul class="choices">
+<li>Il peut être affecté dans le corps du constructeur</li>
+<li>Il peut être changé de cible plus tard par <code>licorne_ = autre;</code></li>
+<li>Il doit être initialisé dans la liste d'initialisation et désigne toujours le même objet</li>
+<li>Il représente une composition</li>
+</ul>
+<div class="explain">Une référence doit être liée à sa création et ne peut pas être réassignée (<code>licorne_ = autre</code> copierait le contenu d'autre dans l'objet référencé). C'est une agrégation : l'objet appartient à l'extérieur.</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Quelle est la différence essentielle entre <code>unique_ptr</code> et <code>shared_ptr</code> ?</p>
+<ul class="choices">
+<li><code>shared_ptr</code> ne libère jamais l'objet</li>
+<li><code>unique_ptr</code> est plus lent</li>
+<li><code>unique_ptr</code> ne peut pointer qu'un seul type</li>
+<li><code>unique_ptr</code> a un seul propriétaire (non copiable) ; <code>shared_ptr</code> compte ses propriétaires et détruit l'objet quand le dernier disparaît</li>
+</ul>
+<div class="explain">Un seul propriétaire = composition ; propriété partagée = compteur de références.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Que se passe-t-il ici ?</p>
+<script type="text/cpp">
+unique_ptr<Batterie> a = make_unique<Batterie>("A");
+unique_ptr<Batterie> b = a;
+</script>
+<ul class="choices">
+<li>b et a pointent le même objet</li>
+<li>Erreur de compilation : le constructeur de copie de unique_ptr est supprimé</li>
+<li>b reçoit l'objet et a devient nul</li>
+<li>L'objet est dupliqué</li>
+</ul>
+<div class="explain">Pour transférer, il faut écrire explicitement <code>unique_ptr&lt;Batterie&gt; b = std::move(a);</code>.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Après <code>auto p = make_shared&lt;Moteur&gt;("m", 1, 10); auto q = p; auto r = q; q.reset();</code>, que vaut <code>p.use_count()</code> ?</p>
+<ul class="choices">
+<li>1</li>
+<li>3</li>
+<li>2</li>
+<li>0</li>
+</ul>
+<div class="explain">p, q, r partagent le moteur (3), puis q lâche sa part (2). L'objet n'est pas détruit.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Pourquoi ce code est-il faux ?</p>
+<script type="text/cpp">
+Moteur* brut = new Moteur("m", 1, 10);
+shared_ptr<Moteur> a(brut);
+shared_ptr<Moteur> b(brut);
+</script>
+<ul class="choices">
+<li>a et b ont chacun leur compteur : l'objet sera détruit deux fois</li>
+<li>Il ne compile pas</li>
+<li>Il crée une fuite de mémoire</li>
+<li>Rien : a et b partagent correctement l'objet</li>
+</ul>
+<div class="explain">Le partage ne fonctionne qu'en copiant un shared_ptr existant (<code>b = a</code>). Construire deux shared_ptr depuis le même pointeur brut est une double libération garantie. Utilisez make_shared.</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Que fait <code>installerBatterie(std::move(batterie))</code> au <code>unique_ptr</code> nommé <code>batterie</code> de l'appelant ?</p>
+<ul class="choices">
+<li>Il le copie</li>
+<li>Rien, il reste utilisable</li>
+<li>Il détruit l'objet Batterie</li>
+<li>Il le vide : après l'appel, <code>batterie</code> vaut nullptr et le robot possède l'objet</li>
+</ul>
+<div class="explain">C'est le transfert de propriété. Énoncé du TP2 : « Après le transfert d'un unique_ptr nommé, le pointeur de l'appelant est nul. »</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Un <code>vector&lt;shared_ptr&lt;Capteur&gt;&gt;</code> est détruit alors qu'un autre shared_ptr vers l'un des capteurs existe ailleurs. Que se passe-t-il ?</p>
+<ul class="choices">
+<li>Tous les capteurs sont détruits</li>
+<li>Les capteurs partagés ailleurs survivent ; les autres sont détruits</li>
+<li>Aucun capteur n'est détruit</li>
+<li>Le programme plante</li>
+</ul>
+<div class="explain">Chaque compteur est décrémenté ; seuls ceux qui tombent à 0 entraînent une destruction.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Quelle est la bonne manière de créer un objet géré par shared_ptr ?</p>
+<ul class="choices">
+<li><code>shared_ptr&lt;Moteur&gt; m = new Moteur("m", 1, 10);</code></li>
+<li><code>shared_ptr&lt;Moteur&gt; m; m = Moteur("m", 1, 10);</code></li>
+<li><code>auto m = make_shared&lt;Moteur&gt;("m", 1, 10);</code></li>
+<li><code>shared_ptr&lt;Moteur&gt; m = &amp;Moteur("m", 1, 10);</code></li>
+</ul>
+<div class="explain">La première ne compile pas (conversion implicite interdite, constructeur <code>explicit</code>) ; <code>make_shared</code> alloue l'objet et son compteur en une fois.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Dans le TP1, pourquoi la copie du robot est-elle interdite (<code>= delete</code>) ?</p>
+<ul class="choices">
+<li>Parce que la copie par défaut dupliquerait les pointeurs propriétaires, et les deux destructeurs libéreraient la même batterie</li>
+<li>Parce qu'un robot est trop gros pour être copié</li>
+<li>Parce que les vecteurs ne sont pas copiables</li>
+<li>Parce que le nom doit être unique</li>
+</ul>
+<div class="explain">C'est le problème de la copie superficielle, résolu au TP2 par un constructeur de copie qui duplique la batterie (module 4).</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Quel est le rôle de <code>batterie_.get()</code> dans <code>const Batterie* getBatterie() const</code> ?</p>
+<ul class="choices">
+<li>Transférer la propriété à l'appelant</li>
+<li>Créer une copie de la batterie</li>
+<li>Libérer la batterie</li>
+<li>Donner un pointeur d'observation, sans propriété, valide tant que le robot garde cette batterie</li>
+</ul>
+<div class="explain">L'appelant ne doit ni faire delete ni construire un pointeur intelligent à partir de cette adresse. Il devient invalide si la batterie est remplacée ou le robot détruit.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Deux robots du TP2 partagent le même <code>shared_ptr&lt;Moteur&gt;</code>. On règle la charge du moteur depuis le premier robot. Que voit le second ?</p>
+<ul class="choices">
+<li>L'ancienne charge : chaque robot a sa copie</li>
+<li>La nouvelle charge : c'est le même objet</li>
+<li>Une erreur d'accès</li>
+<li>Cela dépend de l'ordre de création</li>
+</ul>
+<div class="explain">Copier un shared_ptr partage l'objet. Le TP2 utilise cela pour montrer la différence avec les batteries, dupliquées par le constructeur de copie.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Quand faut-il écrire un destructeur explicite dans une classe ?</p>
+<ul class="choices">
+<li>Toujours</li>
+<li>Jamais depuis C++11</li>
+<li>Quand la classe possède une ressource acquise manuellement (pointeur brut issu de new, fichier) : composition par pointeur brut</li>
+<li>Quand la classe a des attributs de type vector</li>
+</ul>
+<div class="explain">Marqueur : s'il y a un <code>new</code> dont la classe est responsable, il faut un <code>delete</code> dans le destructeur. Avec des unique_ptr, vector et string, le destructeur implicite suffit.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">À quoi sert <code>weak_ptr</code> ?</p>
+<ul class="choices">
+<li>À observer un objet géré par shared_ptr sans en être propriétaire (ne compte pas), par exemple pour éviter les cycles</li>
+<li>À posséder un objet de façon exclusive</li>
+<li>À remplacer les pointeurs bruts dans les tableaux</li>
+<li>À convertir un unique_ptr en shared_ptr</li>
+</ul>
+<div class="explain">Un cycle de shared_ptr (A pointe B, B pointe A) ne tombe jamais à 0 ; un des deux liens doit être un weak_ptr.</div>
+</div>
+</section>
+
+<h2 id="dev-c3">Exercices à développement</h2>
+<div class="exo-tools" data-scope="dev-c3-list">
+  <div class="progress-bar"><span></span></div><span class="progress-label small"></span>
+  <button class="btn secondary small" type="button" data-action="open-all">Déplier les solutions</button>
+  <button class="btn secondary small" type="button" data-action="close-all">Tout replier</button>
+</div>
+<div id="dev-c3-list">
+
+<article class="exo" data-exo-id="c3-d1">
+<header><span class="tag exam">Intra H16</span><span class="tag theme">Relations</span><h4>Composition ou agrégation ? (PaysDesMerveilles)</h4></header>
+<div class="enonce">
+<p>Pour chacune des trois versions, dites s'il s'agit de composition ou d'agrégation pour les attributs <code>lutin_</code> et <code>licorne_</code>, et justifiez.</p>
+<script type="text/cpp">
+// Version 1
+class PaysDesMerveilles {
+public:
+    PaysDesMerveilles(Lutin* lutin, Licorne licorne);
+private:
+    Lutin lutin_;
+    Licorne& licorne_;
+};
+
+// Version 2
+class PaysDesMerveilles {
+public:
+    PaysDesMerveilles(Licorne* licorne) {
+        licorne_ = new Licorne(*licorne);
+        lutin_ = new Lutin();
+    }
+private:
+    Lutin* lutin_;
+    Licorne* licorne_;
+};
+
+// Version 3
+class PaysDesMerveilles {
+public:
+    PaysDesMerveilles(Lutin* lutin, Licorne licorne) {
+        lutin_ = lutin;
+        licorne_ = licorne;
+    }
+private:
+    Lutin* lutin_;
+    Licorne licorne_;
+};
+</script>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<ul>
+  <li><strong>Version 1</strong> : <code>lutin_</code> est un objet → composition (le constructeur copiera <code>*lutin</code> dedans). <code>licorne_</code> est une référence → agrégation (une référence vers un objet extérieur ; une composition n'aurait pas de sens par référence). Remarque : le constructeur reçoit <code>licorne</code> par valeur, donc <code>licorne_</code> référencerait un paramètre détruit à la fin du constructeur : erreur de conception.</li>
+  <li><strong>Version 2</strong> : les deux attributs sont alloués avec <code>new</code> <em>dans</em> la classe (copie de <code>*licorne</code>, nouveau Lutin) → composition par pointeur pour les deux ; la classe doit les libérer dans son destructeur.</li>
+  <li><strong>Version 3</strong> : <code>lutin_</code> reçoit un pointeur venu de l'extérieur sans <code>new</code> → agrégation par pointeur. <code>licorne_</code> est un objet → composition (copie du paramètre).</li>
+</ul>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="c3-d2">
+<header><span class="tag">TP1</span><span class="tag theme">Composition par pointeur brut</span><h4>installerChassis et le destructeur du robot</h4></header>
+<div class="enonce">
+<p>Avec les attributs <code>Chassis* chassis_</code> et <code>Batterie* batterie_</code> (pointeurs bruts), écrivez <code>void Robot::installerChassis(Chassis* chassis)</code> selon le contrat du TP1 : le robot reçoit la propriété d'un objet alloué avec <code>new</code> ; lors d'un remplacement, l'ancienne pièce est libérée ; installer <code>nullptr</code> retire et libère la pièce ; réinstaller exactement le même pointeur est sans effet. Écrivez aussi le destructeur.</p>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/cpp">
+void Robot::installerChassis(Chassis* chassis) {
+    if (chassis == chassis_) return;    // même pointeur : rien à faire (sinon on libérerait ce qu'on garde !)
+    delete chassis_;                    // libère l'ancien ; delete nullptr est sans effet
+    chassis_ = chassis;                 // nouveau propriétaire (ou nullptr = retrait)
+}
+
+Robot::~Robot() {
+    delete batterie_;
+    delete chassis_;
+    // moteurs_, capteurs_, pinces_ : agrégation, on ne libère rien ; les vecteurs se détruisent seuls
+}
+</script>
+<p>Le test <code>chassis == chassis_</code> en premier est indispensable : sans lui, réinstaller le même pointeur ferait <code>delete</code> puis stockerait une adresse libérée.</p>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="c3-d3">
+<header><span class="tag">TP2</span><span class="tag theme">unique_ptr et shared_ptr</span><h4>Retirer une pièce partagée et transférer une batterie</h4></header>
+<div class="enonce">
+<p>Avec <code>std::vector&lt;std::shared_ptr&lt;Capteur&gt;&gt; capteurs_</code> et <code>std::unique_ptr&lt;Batterie&gt; batterie_</code>, écrivez :</p>
+<ol>
+  <li><code>Robot&amp; Robot::operator-=(const std::shared_ptr&lt;Capteur&gt;&amp; capteur)</code> : retire le pointeur s'il est présent, en conservant l'ordre des autres ; retirer un capteur absent ne fait rien ; retourne le robot pour permettre le chaînage.</li>
+  <li><code>std::unique_ptr&lt;Batterie&gt; Robot::retirerBatterie()</code> : rend la batterie à l'appelant (le robot n'en a plus).</li>
+</ol>
+</div>
+<details class="hint"><summary>Indice</summary><div class="body"><p>Comparer deux <code>shared_ptr</code> avec <code>==</code> compare les adresses pointées (même objet). Pour rendre un unique_ptr, retournez <code>std::move(batterie_)</code> : l'attribut devient nul.</p></div></details>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/cpp">
+Robot& Robot::operator-=(const std::shared_ptr<Capteur>& capteur) {
+    for (size_t i = 0; i < capteurs_.size(); ++i) {
+        if (capteurs_[i] == capteur) {                  // même objet pointé
+            capteurs_.erase(capteurs_.begin() + i);     // use_count - 1 ; l'objet survit si partagé ailleurs
+            break;
+        }
+    }
+    return *this;
+}
+
+std::unique_ptr<Batterie> Robot::retirerBatterie() {
+    return std::move(batterie_);        // transfert vers la valeur de retour ; batterie_ == nullptr après
+}
+</script>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="c3-d4">
+<header><span class="tag">Simulateur de hockey</span><span class="tag theme">Fuite de mémoire</span><h4>Corriger une fuite avec des pointeurs intelligents</h4></header>
+<div class="enonce">
+<p>Ce simulateur souffre d'une fuite de mémoire. Identifiez-la et corrigez-la en utilisant des pointeurs intelligents, sans changer le comportement.</p>
+<script type="text/cpp">
+class Match {
+public:
+    void ajouterJoueur(const string& nom, int habilete) {
+        joueurs_.push_back(new Joueur(nom, habilete));
+    }
+    void simuler() {
+        for (Joueur* j : joueurs_) j->jouer();
+    }
+private:
+    vector<Joueur*> joueurs_;
+};
+
+int main() {
+    Match m;
+    m.ajouterJoueur("Koivu", 8);
+    m.ajouterJoueur("Kovalev", 9);
+    m.simuler();
+    return 0;
+}
+</script>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<p>Les joueurs sont alloués avec <code>new</code> et jamais libérés : ni <code>delete</code> dans un destructeur de Match, ni dans le main. Deux objets Joueur fuient. Correction : le match possède ses joueurs, donc <code>unique_ptr</code> (ou <code>shared_ptr</code> si on veut un jour les partager entre matchs).</p>
+<script type="text/cpp">
+class Match {
+public:
+    void ajouterJoueur(const string& nom, int habilete) {
+        joueurs_.push_back(make_unique<Joueur>(nom, habilete));
+    }
+    void simuler() {
+        for (const unique_ptr<Joueur>& j : joueurs_) j->jouer();   // référence : on ne copie pas (impossible) le unique_ptr
+    }
+private:
+    vector<unique_ptr<Joueur>> joueurs_;     // destruction automatique avec le match
+};
+</script>
+<p>Autre correction acceptable sans pointeurs intelligents : un destructeur <code>~Match() { for (Joueur* j : joueurs_) delete j; }</code>, et alors interdire ou écrire correctement la copie de Match (module 4).</p>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="c3-d5">
+<header><span class="tag">Débogage</span><span class="tag theme">Pointeurs intelligents</span><h4>Trouver les erreurs</h4></header>
+<div class="enonce">
+<p>Chaque extrait contient une erreur (compilation ou exécution). Laquelle ?</p>
+<script type="text/cpp">
+// a)
+unique_ptr<Moteur> m = make_unique<Moteur>("m", 1, 10);
+Robot r("r");
+r.installerMoteur(m);                       // installerMoteur(unique_ptr<Moteur>)
+
+// b)
+shared_ptr<Capteur> c = make_shared<Capteur>("c", 1, 1);
+Capteur* brut = c.get();
+delete brut;
+
+// c)
+Robot r("r");
+Batterie locale("b", 3, 12, 100, 10);
+r.installerBatterie(unique_ptr<Batterie>(&locale));
+
+// d)
+unique_ptr<Batterie> b = make_unique<Batterie>("b", 3, 12, 100, 10);
+r.installerBatterie(std::move(b));
+cout << b->getNom();
+</script>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<ul>
+  <li><strong>a)</strong> Erreur de compilation : passer un unique_ptr par valeur exige un transfert explicite, <code>r.installerMoteur(std::move(m));</code>.</li>
+  <li><strong>b)</strong> Double libération : le shared_ptr détruira encore le capteur à la fin. Ne jamais faire <code>delete</code> sur <code>get()</code>.</li>
+  <li><strong>c)</strong> Le unique_ptr possède l'adresse d'une variable locale : à la destruction du robot, <code>delete</code> sur la pile, plantage. Il faut <code>make_unique</code>.</li>
+  <li><strong>d)</strong> Après <code>std::move(b)</code>, <code>b</code> est nul : <code>b-&gt;getNom()</code> déréférence nullptr. Utiliser <code>r.getBatterie()-&gt;getNom()</code>.</li>
+</ul>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="c3-d6">
+<header><span class="tag">Conception</span><span class="tag theme">UML et code</span><h4>Modéliser un atelier</h4></header>
+<div class="enonce">
+<p>Un atelier contient des établis (créés et détruits avec l'atelier, jamais partagés). Chaque établi utilise un outil pris dans l'armoire de l'atelier ; un même outil peut être utilisé par plusieurs établis au fil de la journée, et il existe même quand aucun établi ne l'utilise. Proposez les attributs (avec le bon type de pointeur) des classes Atelier et Etabli, et dites quelle relation lie chaque paire de classes.</p>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/cpp">
+class Etabli {
+public:
+    void utiliser(std::shared_ptr<Outil> outil) { outil_ = outil; }   // partage, pas de copie de l'outil
+private:
+    std::shared_ptr<Outil> outil_;          // agrégation (propriété partagée avec l'armoire) ; nul si aucun outil
+};
+
+class Atelier {
+private:
+    std::vector<std::unique_ptr<Etabli>> etablis_;      // composition : l'atelier possède ses établis
+    std::vector<std::shared_ptr<Outil>> armoire_;       // les outils vivent dans l'armoire, partagés avec les établis
+};
+</script>
+<p>Atelier - Etabli : composition (losange plein) ; Etabli - Outil : agrégation (losange vide) ; Atelier - Outil : composition de l'armoire, mais comme les outils sont partagés avec les établis, <code>shared_ptr</code> garantit qu'un outil n'est détruit que lorsqu'il n'est plus ni dans l'armoire ni utilisé. Un <code>Outil*</code> brut dans Etabli serait aussi acceptable (observation) tant que l'armoire survit aux établis.</p>
+</div></details>
+</article>
+
+</div>
+
+</article>
+</main>
+<footer class="footer">INF1010 - site d'étude personnel. Les documents officiels (Moodle, plan de cours, énoncés de TP) font foi.</footer>
+<script defer src="assets/app.js?v=3"></script>
+<script defer src="assets/widgets.js?v=2"></script>
+</body>
+</html>

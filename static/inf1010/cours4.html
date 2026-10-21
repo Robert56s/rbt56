@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 4 - Pointeur this, surcharge d'opérateurs, copie et affectation | INF1010</title>
+<link rel="stylesheet" href="assets/style.css?v=3">
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="index.html">INF1010 <small>Programmation orientée objet</small></a>
+  <nav>
+    <a href="index.html">Accueil</a>
+    <a href="cours1.html" title="Concepts de base, allocation dynamique">M1</a>
+    <a href="cours2.html" title="Méthodes constantes, passage de paramètres, vecteurs">M2</a>
+    <a href="cours3.html" title="Pointeurs intelligents, composition et agrégation">M3</a>
+    <a href="cours4.html" title="Pointeur this, surcharge d'opérateurs, copie et affectation">M4</a>
+    <a href="cours5.html" title="Héritage et polymorphisme">M5</a>
+    <a href="cours6.html" title="Classes abstraites, conversion d'objets">M6</a>
+    <a href="cours7.html" title="Héritage multiple, fonctions et classes génériques">M7</a>
+    <a href="cours8.html" title="STL : conteneurs et itérateurs">M8</a>
+    <a href="cours9.html" title="STL : algorithmes, foncteurs, lambdas">M9</a>
+    <a href="cours10.html" title="Variables statiques, exceptions, Python">M10</a>
+    <span class="sep"></span>
+    <a href="intra.html">Intra</a>
+    <a href="aide-memoire.html">Aide-mémoire</a>
+    <button class="theme-btn" type="button">Thème</button>
+  </nav>
+</header>
+
+<main class="layout">
+<aside class="toc"></aside>
+<article class="content">
+
+<div class="course-hero">
+  <div class="kicker">Module 4 - cours du 8 septembre (quiz 3)</div>
+  <h1>Pointeur this, surcharge des opérateurs, constructeur de copie et opérateur d'affectation</h1>
+  <p class="meta">Leçons Moodle « Pointeur this &amp; surcharge des opérateurs », « Constructeur par copie &amp; opérateur d'affectation » | Mis en pratique au TP2 (copie du robot, <code>+=</code>, <code>-=</code>, <code>[]</code>, <code>&lt;&lt;</code>)</p>
+  <p><span class="pill accent">this</span><span class="pill accent">Appels en cascade</span><span class="pill accent">Opérateur membre ou friend</span><span class="pill accent">operator&lt;&lt;</span><span class="pill accent">++ préfixe et suffixe</span><span class="pill accent">Copie superficielle et profonde</span><span class="pill accent">Règle des trois</span></p>
+  <p class="small">Le module le plus sollicité aux intras : « donnez l'implémentation de la surcharge de ... », « quelles fonctions membres manquent pour éviter la copie superficielle ? », « combien de fois le constructeur de copie est-il appelé ? ». Tout ce qu'il faut est ici.</p>
+</div>
+
+<h2>1. Le pointeur this</h2>
+<p>Dans toute méthode, <code>this</code> est un pointeur vers l'objet courant (celui sur lequel la méthode a été appelée). Il est implicite : écrire <code>nom_</code> revient à écrire <code>this-&gt;nom_</code>. On l'explicite dans trois situations :</p>
+<ol>
+  <li><strong>Conflit de noms</strong> : un paramètre porte le même nom qu'un attribut. <code>void setNom(string nom) { this-&gt;nom = nom; }</code>. (Avec la convention du suffixe <code>_</code>, le conflit n'arrive pas : <code>nom_ = nom;</code>.)</li>
+  <li><strong>Retourner l'objet courant</strong> : <code>return *this;</code> dans <code>operator=</code>, <code>operator+=</code>, pour permettre les appels en cascade <code>(robot += moteur) += capteur;</code>.</li>
+  <li><strong>Comparer des adresses</strong> : <code>if (this != &amp;autre)</code> détecte l'auto-affectation <code>a = a;</code>.</li>
+</ol>
+<p>Dans une méthode <code>const</code>, <code>this</code> est de type <code>const Classe*</code> : impossible de modifier <code>*this</code>.</p>
+
+<h2>2. Surcharge des opérateurs</h2>
+<p>Surcharger un opérateur, c'est définir une fonction nommée <code>operator<em>op</em></code> pour qu'une expression comme <code>a + b</code> ou <code>cout &lt;&lt; a</code> ait un sens pour vos classes. Le compilateur traduit <code>a + b</code> en <code>a.operator+(b)</code> (fonction membre) ou <code>operator+(a, b)</code> (fonction libre).</p>
+<div class="box def"><span class="label">Règles</span>
+<ul>
+  <li>On ne peut pas inventer de nouveaux opérateurs ni changer leur <strong>priorité</strong>, leur associativité ou leur nombre d'opérandes (un opérateur <em>unaire</em> agit sur l'objet courant seul : <code>-a</code>, <code>++a</code>, <code>!a</code> ; un <em>binaire</em> a un opérande gauche et un droit).</li>
+  <li>Au moins un opérande doit être d'un type classe (on ne redéfinit pas <code>int + int</code>).</li>
+  <li>Non surchargeables : <code>::</code>, <code>.</code>, <code>.*</code>, <code>?:</code>, <code>sizeof</code>.</li>
+  <li>Une surcharge n'implique pas les autres : définir <code>==</code> ne donne pas <code>!=</code>, définir <code>+</code> ne donne pas <code>+=</code>.</li>
+</ul></div>
+
+<h3>Fonction membre ou fonction amie (friend) ?</h3>
+<table>
+<thead><tr><th></th><th>Fonction membre</th><th>Fonction libre (friend si elle touche aux membres privés)</th></tr></thead>
+<tbody>
+<tr><td>Forme</td><td><code>Type operator<em>op</em>(const Droite&amp; d) const;</code> : l'opérande gauche est <code>*this</code></td><td><code>friend Type operator<em>op</em>(const Gauche&amp; g, const Droite&amp; d);</code> : les deux opérandes sont des paramètres</td></tr>
+<tr><td>Quand</td><td>l'opérande gauche est un objet de la classe</td><td>l'opérande gauche est d'un autre type (<code>ostream</code>, <code>int</code>), ou pour que l'opérateur soit commutatif (<code>2 * v</code> et <code>v * 2</code>)</td></tr>
+<tr><td>Obligatoirement membre</td><td><code>=</code>, <code>[]</code>, <code>()</code>, <code>-&gt;</code></td><td></td></tr>
+<tr><td>Obligatoirement libre</td><td></td><td><code>&lt;&lt;</code> et <code>&gt;&gt;</code> sur les flux (l'opérande gauche est le flux, pas notre objet)</td></tr>
+</tbody>
+</table>
+<p>Une fonction <code>friend</code> est une fonction globale déclarée dans la classe avec le mot-clé <code>friend</code> : elle n'est pas membre (pas de <code>this</code>, pas de <code>Classe::</code> dans sa définition), mais elle a accès aux membres privés. Sans <code>friend</code>, la fonction libre doit passer par les accesseurs publics.</p>
+
+<h3>Les signatures à connaître par cœur</h3>
+<script type="text/cpp">
+class Vecteur2D {
+public:
+    Vecteur2D(double x = 0, double y = 0) : x_(x), y_(y) {}
+
+    // Affectation : membre obligatoire, retourne une référence pour a = b = c
+    Vecteur2D& operator=(const Vecteur2D& autre);
+
+    // Arithmétique binaire : retourne un NOUVEL objet par valeur, ne modifie pas *this (const)
+    Vecteur2D operator+(const Vecteur2D& autre) const { return Vecteur2D(x_ + autre.x_, y_ + autre.y_); }
+    Vecteur2D operator-() const { return Vecteur2D(-x_, -y_); }          // unaire : aucun paramètre
+
+    // Affectation composée : modifie *this et le retourne par référence (chaînage)
+    Vecteur2D& operator+=(const Vecteur2D& autre) { x_ += autre.x_; y_ += autre.y_; return *this; }
+
+    // Comparaisons : bool, const
+    bool operator==(const Vecteur2D& autre) const { return x_ == autre.x_ && y_ == autre.y_; }
+    bool operator!=(const Vecteur2D& autre) const { return !(*this == autre); }
+    bool operator<(const Vecteur2D& autre) const { return norme() < autre.norme(); }
+
+    // Incrémentation : préfixe (retourne une référence) et suffixe (paramètre int fictif, retourne l'ancienne valeur)
+    Vecteur2D& operator++() { ++x_; ++y_; return *this; }
+    Vecteur2D operator++(int) { Vecteur2D copie(*this); ++(*this); return copie; }
+
+    // Indexation : membre obligatoire ; une version const et une non const
+    double& operator[](int i) { return i == 0 ? x_ : y_; }
+    const double& operator[](int i) const { return i == 0 ? x_ : y_; }
+
+    // Multiplication par un scalaire dans les deux sens : friend pour la commutativité
+    friend Vecteur2D operator*(double k, const Vecteur2D& v) { return Vecteur2D(k * v.x_, k * v.y_); }
+    friend Vecteur2D operator*(const Vecteur2D& v, double k) { return k * v; }
+
+    // Flux : TOUJOURS libres (l'opérande gauche est le flux) ; retournent le flux pour la cascade
+    friend std::ostream& operator<<(std::ostream& out, const Vecteur2D& v) {
+        out << "(" << v.x_ << ", " << v.y_ << ")";
+        return out;
+    }
+    friend std::istream& operator>>(std::istream& in, Vecteur2D& v) {   // v non const : on la remplit
+        in >> v.x_ >> v.y_;
+        return in;
+    }
+
+    double norme() const;
+private:
+    double x_, y_;
+};
+</script>
+<div class="box tip"><span class="label">Comment choisir le type de retour</span>
+<ul>
+  <li><code>+</code>, <code>-</code>, <code>*</code> produisent une <em>nouvelle</em> valeur : retour par valeur, méthode <code>const</code>.</li>
+  <li><code>=</code>, <code>+=</code>, <code>-=</code>, <code>++</code> préfixe modifient l'objet : retour <code>Classe&amp;</code> avec <code>return *this;</code>, jamais <code>const</code>.</li>
+  <li><code>==</code>, <code>&lt;</code>, <code>!=</code> : <code>bool</code>, <code>const</code>.</li>
+  <li><code>&lt;&lt;</code> : <code>ostream&amp;</code> (le même flux), pour enchaîner <code>cout &lt;&lt; a &lt;&lt; b &lt;&lt; endl;</code>.</li>
+  <li><code>[]</code> : une référence (<code>double&amp;</code>) pour permettre <code>v[0] = 5;</code>, plus une version <code>const</code> qui retourne <code>const double&amp;</code> ou une copie. Le TP2 retourne <code>const shared_ptr&lt;Moteur&gt;&amp;</code> : on peut régler le moteur pointé, pas remplacer le pointeur.</li>
+</ul></div>
+
+<h3>Pourquoi les appels en cascade fonctionnent</h3>
+<p><code>cout &lt;&lt; "x = " &lt;&lt; x &lt;&lt; endl;</code> s'évalue de gauche à droite : <code>operator&lt;&lt;(cout, "x = ")</code> retourne <code>cout</code> (une référence vers le même flux), qui devient l'opérande gauche de l'appel suivant. C'est exactement comme écrire les trois instructions l'une après l'autre, en plus lisible. Si <code>operator&lt;&lt;</code> retournait <code>void</code>, le deuxième <code>&lt;&lt;</code> n'aurait pas de flux à gauche : erreur de compilation. Même principe pour <code>(robot += moteur) += capteur;</code> et <code>a = b = c;</code>.</p>
+
+<h3>Pourquoi un paramètre int fictif pour le ++ suffixe ?</h3>
+<p><code>++mc</code> et <code>mc++</code> appellent tous deux un opérateur à un seul opérande : impossible de les distinguer par les arguments. Le langage impose donc que la version <em>suffixe</em> déclare un paramètre <code>int</code> jamais utilisé : <code>mc++</code> est traduit en <code>mc.operator++(0)</code>, <code>++mc</code> en <code>mc.operator++()</code>. La version préfixe incrémente et retourne l'objet lui-même (par référence) ; la version suffixe sauvegarde une copie, incrémente via la préfixe, et retourne la copie (par valeur : l'ancienne valeur).</p>
+
+<h3>Trois écritures équivalentes</h3>
+<script type="text/cpp">
+Personnage& Personnage::operator+=(const Personnage& p) {
+    if (*this != p) cout << p << endl;              // forme naturelle
+    if (this->operator!=(p)) operator<<(cout, p);   // appels explicites : membre et fonction libre
+    if (operator!=(p)) { operator<<(cout, p); }     // this-> implicite
+    return *this;
+}
+// dans main :  baube += flavien;   équivaut à   baube.operator+=(flavien);
+</script>
+
+<h3>Surcharger &lt;&lt; sans friend (intra H16)</h3>
+<p>Quand la classe n'a pas déclaré la fonction <code>friend</code>, on écrit une fonction libre qui n'utilise que l'interface publique :</p>
+<script type="text/cpp">
+ostream& operator<<(ostream& out, const Achats& liste) {
+    for (const Item& item : liste.getItems())        // getItems() est public
+        out << item.getNom() << " " << item.getQuantite() << endl;
+    return out;
+}
+</script>
+
+<h2>3. Constructeur de copie et opérateur d'affectation</h2>
+<p>Le compilateur fournit par défaut un constructeur de copie et un opérateur d'affectation qui copient <strong>membre à membre</strong>. Pour une classe faite de <code>string</code>, <code>vector</code>, <code>double</code> et <code>shared_ptr</code>, c'est exactement ce qu'il faut (chaque membre sait se copier correctement : un vecteur copie ses éléments). Le problème surgit avec un <strong>pointeur brut vers une ressource possédée</strong> (composition par pointeur) : la copie membre à membre copie l'adresse, pas l'objet pointé.</p>
+<div class="widget" data-widget="copy-sim">
+  <p class="w-title">Copie superficielle ou profonde ?</p>
+  <p class="w-desc">La classe Tableau possède un bloc <code>new int[3]</code>. Comparez la copie par défaut et un vrai constructeur de copie, puis détruisez les objets.</p>
+</div>
+<div class="box warn"><span class="label">Copie superficielle (shallow copy) : les trois symptômes</span>
+<ol>
+  <li>Modifier l'un des objets modifie l'autre (ils partagent le même bloc).</li>
+  <li>La destruction du premier objet laisse le second avec un pointeur pendant.</li>
+  <li>La destruction du second fait un <strong>double delete</strong> : plantage.</li>
+</ol></div>
+
+<h3>Les deux fonctions à écrire</h3>
+<script type="text/cpp">
+class Tableau {
+public:
+    Tableau(int n) : taille_(n), donnees_(new int[n]()) {}
+
+    // 1. Constructeur de copie : construit un objet NEUF à partir d'un autre
+    Tableau(const Tableau& autre) : taille_(autre.taille_), donnees_(new int[autre.taille_]) {
+        for (int i = 0; i < taille_; ++i) donnees_[i] = autre.donnees_[i];   // copie profonde
+    }
+
+    // 2. Opérateur d'affectation : remplace le contenu d'un objet EXISTANT
+    Tableau& operator=(const Tableau& autre) {
+        if (this != &autre) {                        // auto-affectation : t = t;  (sinon on détruirait nos données avant de les copier)
+            delete[] donnees_;                       // libérer l'ancienne ressource
+            taille_ = autre.taille_;
+            donnees_ = new int[taille_];             // allouer la nouvelle
+            for (int i = 0; i < taille_; ++i) donnees_[i] = autre.donnees_[i];
+        }
+        return *this;                                // pour a = b = c
+    }
+
+    // 3. Destructeur
+    ~Tableau() { delete[] donnees_; }
+
+private:
+    int taille_;
+    int* donnees_;
+};
+</script>
+<div class="box def"><span class="label">Règle des trois</span>
+<p>Si une classe a besoin de l'un des trois (destructeur, constructeur de copie, opérateur d'affectation), elle a presque sûrement besoin des trois. Le marqueur : un <code>new</code> dont la classe est responsable. Si la copie n'a pas de sens (TP1), on l'interdit : <code>Robot(const Robot&amp;) = delete; Robot&amp; operator=(const Robot&amp;) = delete;</code>. Si la copie par défaut convient, on peut l'écrire explicitement : <code>= default</code>. (En C++ moderne s'ajoutent le constructeur et l'affectation de déplacement, <code>T(T&amp;&amp;)</code> : règle des cinq. Le cours s'en tient aux trois.)</p></div>
+
+<h3>Quand le constructeur de copie est-il appelé ?</h3>
+<ul>
+  <li>Initialisation à partir d'un objet du même type : <code>Robot b(a);</code>, <code>Robot b = a;</code>, <code>Robot b{a};</code>.</li>
+  <li>Passage d'un paramètre <strong>par valeur</strong>.</li>
+  <li>Retour <strong>par valeur</strong> (sauf élision du compilateur : depuis C++17, <code>Robot r = creer();</code> construit directement <code>r</code> quand <code>creer</code> retourne un temporaire).</li>
+  <li>Insertion dans un conteneur par valeur : <code>v.push_back(a)</code>.</li>
+</ul>
+<p><code>b = a;</code> entre deux objets <em>déjà construits</em> appelle <code>operator=</code>, jamais le constructeur de copie. La ligne <code>Robot b = a;</code> est trompeuse : c'est une initialisation (constructeur de copie), pas une affectation.</p>
+
+<div class="widget" data-widget="guess-output">
+  <p class="w-title">Devinez l'affichage : constructeur, copie, affectation, destructeur</p>
+<script type="text/cpp">
+class P {
+public:
+    P(int v) : v_(v) { cout << "ctor " << v_ << endl; }
+    P(const P& a) : v_(a.v_) { cout << "copie " << v_ << endl; }
+    P& operator=(const P& a) { v_ = a.v_; cout << "affect " << v_ << endl; return *this; }
+    ~P() { cout << "dtor " << v_ << endl; }
+private:
+    int v_;
+};
+
+P f(P p) {
+    return p;
+}
+
+int main() {
+    P a(1);
+    P b = a;
+    P c(2);
+    b = c;
+    P d = f(b);
+    return 0;
+}
+</script>
+<script type="text/plain" data-role="expected">
+ctor 1
+copie 1
+ctor 2
+affect 2
+copie 2
+copie 2
+dtor 2
+dtor 2
+dtor 2
+dtor 2
+dtor 1
+</script>
+<div data-role="explain" class="box tip"><span class="label">Explication (compilé en C++17 ou plus, comme aux TP)</span>
+<ol class="steps">
+<li><code>P a(1)</code> : ctor 1. <code>P b = a</code> : initialisation, donc <strong>copie</strong> 1. <code>P c(2)</code> : ctor 2.</li>
+<li><code>b = c</code> : objets existants, <strong>affect</strong> 2 (b vaut maintenant 2).</li>
+<li><code>f(b)</code> : le paramètre <code>p</code> est construit par copie (copie 2). <code>return p</code> construit la valeur de retour par copie du paramètre (copie 2). À la sortie de f, <code>p</code> est détruit (dtor 2). La valeur de retour devient directement <code>d</code> (élision garantie) : pas de copie supplémentaire.</li>
+<li>Fin de main : destruction dans l'ordre inverse de déclaration : d (2), c (2), b (2), a (1).</li>
+</ol></div>
+</div>
+
+<h3>Copie et affectation avec des pointeurs intelligents (TP2)</h3>
+<script type="text/cpp">
+// unique_ptr n'est pas copiable : sans ces deux fonctions, Robot ne serait pas copiable du tout.
+Robot::Robot(const Robot& autre)
+    : nom_(autre.nom_),
+      batterie_(autre.batterie_ ? std::make_unique<Batterie>(*autre.batterie_) : nullptr),  // copie PROFONDE : nouvelle batterie
+      chassis_(autre.chassis_ ? std::make_unique<Chassis>(*autre.chassis_) : nullptr),
+      moteurs_(autre.moteurs_),      // vecteurs de shared_ptr : copie des pointeurs, pièces PARTAGÉES
+      capteurs_(autre.capteurs_),
+      pinces_(autre.pinces_) {}
+
+Robot& Robot::operator=(const Robot& autre) {
+    if (this != &autre) {
+        Robot copie(autre);          // idiome copie-et-échange : on construit une copie temporaire...
+        std::swap(nom_, copie.nom_); // ...puis on échange chaque attribut avec elle ;
+        std::swap(batterie_, copie.batterie_);   // les anciennes ressources partent avec « copie »,
+        std::swap(chassis_, copie.chassis_);     // détruite à la fin de la fonction
+        std::swap(moteurs_, copie.moteurs_);
+        std::swap(capteurs_, copie.capteurs_);
+        std::swap(pinces_, copie.pinces_);
+    }
+    return *this;
+}
+</script>
+<p><code>*autre.batterie_</code> déréférence le unique_ptr pour obtenir la Batterie, dont le constructeur de copie reproduit tous les attributs, y compris l'énergie restante (copier une batterie déchargée ne la remplit pas). Copier un robot ne duplique donc que ce qu'il possède en exclusivité ; les pièces partagées voient leur <code>use_count</code> augmenter.</p>
+
+<h2>4. À retenir</h2>
+<ul class="summary-list">
+  <li><code>this</code> : pointeur vers l'objet courant ; <code>return *this;</code> pour le chaînage, <code>this != &amp;autre</code> contre l'auto-affectation.</li>
+  <li>Membre quand l'opérande gauche est l'objet ; friend ou fonction libre quand il est d'un autre type (flux, scalaire) ou pour la commutativité ; <code>=</code>, <code>[]</code>, <code>()</code> sont obligatoirement membres ; <code>&lt;&lt;</code> obligatoirement libre.</li>
+  <li>Retours : valeur pour <code>+ - *</code> (const), <code>Classe&amp;</code> pour <code>= += ++préfixe</code>, <code>bool</code> pour les comparaisons, <code>ostream&amp;</code> pour <code>&lt;&lt;</code>, référence pour <code>[]</code>.</li>
+  <li><code>++</code> suffixe : paramètre <code>int</code> fictif, retourne l'ancienne valeur par valeur.</li>
+  <li>Copie superficielle = adresse copiée. Règle des trois : destructeur, constructeur de copie, <code>operator=</code> (test d'auto-affectation, libérer, réallouer, copier, <code>return *this</code>). Avec vector, string, shared_ptr, la copie par défaut convient ; avec unique_ptr, il faut l'écrire ; avec un pointeur brut possédé, il faut l'écrire ou l'interdire.</li>
+</ul>
+
+<section class="quiz" data-quiz-id="c4" id="quiz-c4">
+<h2>Quiz rapide - Module 4</h2>
+
+<div class="q" data-answer="2">
+<p class="q-text">Qu'est-ce que <code>this</code> ?</p>
+<ul class="choices">
+<li>Une référence vers la classe</li>
+<li>Une copie de l'objet courant</li>
+<li>Un pointeur vers l'objet sur lequel la méthode est appelée</li>
+<li>Un pointeur vers le premier attribut</li>
+</ul>
+<div class="explain">Dans <code>robot.afficher()</code>, <code>this == &amp;robot</code> à l'intérieur d'afficher. <code>*this</code> est l'objet lui-même.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Peut-on surcharger <code>operator&lt;&lt;</code> (flux de sortie) comme fonction membre de la classe AA ?</p>
+<ul class="choices">
+<li>Oui, c'est même recommandé</li>
+<li>Non : l'opérande gauche est le flux, pas un AA ; il faut une fonction libre (friend ou non)</li>
+<li>Oui, si AA hérite de ostream</li>
+<li>Oui, mais seulement pour cout</li>
+</ul>
+<div class="explain">Une fonction membre <code>AA::operator&lt;&lt;(ostream&amp;)</code> correspondrait à <code>aa &lt;&lt; cout</code>. Pour <code>cout &lt;&lt; aa</code>, la fonction doit être libre. Question vrai/faux de l'intra H16 : FAUX.</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Les surcharges de « objet AA + int » et « int + objet AA » sont toutes deux des fonctions membres de AA.</p>
+<ul class="choices">
+<li>Vrai</li>
+<li>Vrai si AA définit un constructeur à partir d'un int</li>
+<li>Faux : aucune des deux ne peut être membre</li>
+<li>Faux : seule « AA + int » peut être membre ; « int + AA » doit être une fonction libre (friend)</li>
+</ul>
+<div class="explain">Une fonction membre a toujours l'objet courant comme opérande gauche. Quand l'opérande gauche est un int, il faut une fonction libre.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Quelle signature est correcte pour l'opérateur <code>+=</code> de la classe Complexe, fonction membre ?</p>
+<ul class="choices">
+<li><code>Complexe&amp; operator+=(const Complexe&amp; c);</code></li>
+<li><code>Complexe operator+=(const Complexe&amp; c) const;</code></li>
+<li><code>void operator+=(Complexe c);</code></li>
+<li><code>friend Complexe&amp; operator+=(Complexe&amp; a, const Complexe&amp; b);</code></li>
+</ul>
+<div class="explain">Modifie l'objet (pas const), retourne une référence pour le chaînage. La quatrième compile mais contredit l'énoncé (« doit être une méthode »). Question de l'intra H15.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Pourquoi <code>operator&lt;&lt;</code> retourne-t-il une référence vers le flux ?</p>
+<ul class="choices">
+<li>Pour éviter de copier l'objet affiché</li>
+<li>Pour permettre les appels en cascade : le résultat de <code>cout &lt;&lt; a</code> sert d'opérande gauche à <code>&lt;&lt; b</code></li>
+<li>Parce que ostream n'a pas de destructeur</li>
+<li>Pour que l'opérateur soit commutatif</li>
+</ul>
+<div class="explain">Il s'agit de l'objet de classe ostream. Retourner <code>void</code> interdirait <code>cout &lt;&lt; a &lt;&lt; b</code>.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Quelle est la différence entre <code>T&amp; operator++()</code> et <code>T operator++(int)</code> ?</p>
+<ul class="choices">
+<li>La première incrémente de 1, la seconde de la valeur de l'int</li>
+<li>La première est friend, la seconde membre</li>
+<li>La première est le ++ préfixe (retourne l'objet incrémenté par référence), la seconde le ++ suffixe (l'int fictif sert seulement à les distinguer ; retourne l'ancienne valeur par valeur)</li>
+<li>Aucune, ce sont des synonymes</li>
+</ul>
+<div class="explain"><code>mc++</code> devient <code>mc.operator++(0)</code>. Le paramètre n'est jamais utilisé.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Dans <code>operator=</code>, comment vérifier qu'on n'affecte pas un objet à lui-même ?</p>
+<ul class="choices">
+<li><code>if (this != &amp;autre)</code> : comparer l'adresse de l'objet courant à celle du paramètre</li>
+<li><code>if (*this != autre)</code> : comparer les contenus</li>
+<li><code>if (this != autre)</code></li>
+<li>Ce n'est jamais nécessaire</li>
+</ul>
+<div class="explain">Comparer les contenus (b) appellerait <code>operator!=</code> et laisserait passer deux objets distincts de même valeur. Sans ce test, <code>t = t;</code> ferait <code>delete[]</code> sur les données avant de les copier : lecture d'une mémoire libérée.</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Quelles fonctions membres manquent à cette classe pour éviter la copie superficielle de <code>attribut_</code> ?</p>
+<script type="text/cpp">
+class AA {
+public:
+    AA() : attribut_(nullptr) {}
+    AA(string msg) : attribut_(new string(msg)) {}
+    ~AA() { delete attribut_; }
+private:
+    string* attribut_;
+};
+</script>
+<ul class="choices">
+<li>Un constructeur par défaut</li>
+<li>Un accesseur et un mutateur</li>
+<li>Seulement le constructeur de copie</li>
+<li>Le constructeur de copie et l'opérateur d'affectation</li>
+</ul>
+<div class="explain">Règle des trois : le destructeur est là, il manque <code>AA(const AA&amp;)</code> (appelé par <code>uneFonction(deux)</code>, passage par valeur, et par les retours par valeur) et <code>AA&amp; operator=(const AA&amp;)</code> (appelé par <code>un = deuxFonction();</code>). Question de l'intra H16.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Laquelle de ces lignes appelle l'opérateur d'affectation plutôt que le constructeur de copie ?</p>
+<ul class="choices">
+<li><code>Robot b = a;</code></li>
+<li><code>b = a;</code> (b déjà déclaré)</li>
+<li><code>Robot b(a);</code></li>
+<li><code>f(a);</code> avec <code>void f(Robot r)</code></li>
+</ul>
+<div class="explain">Seule l'affectation entre deux objets existants appelle <code>operator=</code>. <code>Robot b = a;</code> est une initialisation malgré le signe =.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">La classe Achats n'a qu'un attribut <code>vector&lt;Item&gt; mesAchats_</code>. Pour permettre <code>liste2 = liste;</code>, faut-il écrire un opérateur d'affectation ?</p>
+<ul class="choices">
+<li>Oui, obligatoirement, sinon erreur de compilation</li>
+<li>Oui, pour éviter la copie superficielle du vecteur</li>
+<li>Non : l'opérateur par défaut appelle <code>operator=</code> de vector, qui copie les éléments en profondeur</li>
+<li>Non, car un vecteur ne peut pas être copié</li>
+</ul>
+<div class="explain">Pas d'allocation dynamique gérée à la main : l'affectation membre à membre suffit (réponse attendue à l'intra H16).</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Pourquoi <code>operator+</code> devrait-il être <code>const</code> et retourner par valeur ?</p>
+<ul class="choices">
+<li>Il crée un nouvel objet sans modifier ses opérandes ; retourner une référence pointerait vers une variable locale détruite</li>
+<li>Pour qu'il soit commutatif</li>
+<li>Parce que le compilateur l'exige</li>
+<li>Pour pouvoir l'enchaîner avec <code>&lt;&lt;</code></li>
+</ul>
+<div class="explain"><code>a + b</code> ne change ni a ni b : const. Le résultat est un objet neuf, construit dans la fonction : par valeur.</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Que se passe-t-il lors de la copie d'un Robot du TP2 (batterie en unique_ptr, moteurs en vector de shared_ptr) avec le constructeur de copie décrit dans l'énoncé ?</p>
+<ul class="choices">
+<li>Les deux robots partagent la même batterie</li>
+<li>Les moteurs sont dupliqués</li>
+<li>Rien n'est copié, c'est une erreur</li>
+<li>La batterie est dupliquée (objet distinct) ; les moteurs sont partagés (mêmes objets, use_count augmente)</li>
+</ul>
+<div class="explain">C'est précisément ce que la démonstration du TP2 met en évidence : la mission de la copie ne décharge pas la batterie du prototype, mais régler le moteur partagé change les deux.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Quel est l'intérêt de l'idiome copie-et-échange (copy-and-swap) dans <code>operator=</code> ?</p>
+<ul class="choices">
+<li>Il évite d'écrire un constructeur de copie</li>
+<li>Il réutilise le constructeur de copie et le destructeur ; si la copie échoue, l'objet d'origine n'est pas modifié à moitié</li>
+<li>Il est plus rapide que la copie membre à membre</li>
+<li>Il rend l'opérateur commutatif</li>
+</ul>
+<div class="explain">On construit une copie temporaire, on échange, et la temporaire (avec les anciennes ressources) se détruit seule.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Quel doit être le type de retour de <code>operator[]</code> pour que <code>v[0] = 5;</code> compile ?</p>
+<ul class="choices">
+<li><code>double</code></li>
+<li><code>const double&amp;</code></li>
+<li><code>double&amp;</code></li>
+<li><code>bool</code></li>
+</ul>
+<div class="explain">Pour écrire dans l'élément, il faut une référence non constante. On ajoute une surcharge <code>const</code> pour les objets constants. Si on refuse l'écriture (intra H16 : retourner un Item par défaut hors bornes), retourner par valeur est un choix de conception valable.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Une fonction friend d'une classe :</p>
+<ul class="choices">
+<li>N'est pas membre de la classe (pas de this) mais a accès à ses membres privés</li>
+<li>Est une méthode statique</li>
+<li>Doit être définie dans le .cpp avec <code>Classe::</code></li>
+<li>Ne peut accéder qu'aux membres publics</li>
+</ul>
+<div class="explain">Elle est déclarée dans la classe avec le mot-clé friend, définie comme une fonction globale (sans <code>Classe::</code>).</div>
+</div>
+</section>
+
+<h2 id="dev-c4">Exercices à développement</h2>
+<div class="exo-tools" data-scope="dev-c4-list">
+  <div class="progress-bar"><span></span></div><span class="progress-label small"></span>
+  <button class="btn secondary small" type="button" data-action="open-all">Déplier les solutions</button>
+  <button class="btn secondary small" type="button" data-action="close-all">Tout replier</button>
+</div>
+<div id="dev-c4-list">
+
+<article class="exo" data-exo-id="c4-d1">
+<header><span class="tag exam">Intra H16</span><span class="tag theme">Opérateurs</span><h4>Achats : operator[], operator+ et operator&lt;&lt;</h4></header>
+<div class="enonce">
+<p>Avec les classes Item et Achats du module 2 (attribut <code>vector&lt;Item&gt; mesAchats_</code>, accesseur public <code>getItems()</code>), donnez uniquement l'implémentation de :</p>
+<ol>
+  <li>la surcharge de l'opérateur d'indexation <code>[]</code>, qui retourne l'item à l'indice demandé ; vous devez vérifier les bornes et retourner un Item par défaut si l'indice sort des bornes ;</li>
+  <li>la surcharge de l'opérateur <code>+</code>, fonction membre, qui combine deux listes d'achats en une nouvelle liste ;</li>
+  <li>sans fonction amie, la surcharge de <code>&lt;&lt;</code> qui affiche les items d'un Achats.</li>
+</ol>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/cpp">
+Item Achats::operator[](size_t index) const {          // retour par valeur : un Item par défaut n'existe nulle part ailleurs
+    if (index < mesAchats_.size())
+        return mesAchats_[index];
+    return Item();
+}
+
+Achats Achats::operator+(const Achats& autre) const {   // const : ne modifie ni *this ni autre ; nouvel objet par valeur
+    Achats resultat(*this);                              // copie de la liste courante
+    for (const Item& item : autre.mesAchats_)            // accès privé permis : même classe
+        resultat.mesAchats_.push_back(item);
+    return resultat;
+}
+
+ostream& operator<<(ostream& out, const Achats& liste) {   // fonction libre, interface publique seulement
+    for (const Item& item : liste.getItems())
+        out << item.getNom() << " " << item.getQuantite() << endl;
+    return out;
+}
+</script>
+<p>Avec un indice <code>int</code>, il faudrait tester <code>index &gt;= 0 &amp;&amp; index &lt; mesAchats_.size()</code> (et convertir pour éviter -Wsign-compare). Déclarations correspondantes dans la classe : <code>Item operator[](size_t index) const;</code> et <code>Achats operator+(const Achats&amp; autre) const;</code>.</p>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="c4-d2">
+<header><span class="tag exam">Intra H16</span><span class="tag theme">Règle des trois</span><h4>AA : éviter la copie superficielle</h4></header>
+<div class="enonce">
+<p>Pour la classe AA du quiz (attribut <code>string* attribut_</code>, destructeur qui fait <code>delete attribut_</code>), écrivez les deux fonctions membres manquantes. Attention : <code>attribut_</code> peut être <code>nullptr</code>.</p>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/cpp">
+AA::AA(const AA& autre)
+    : attribut_(autre.attribut_ == nullptr ? nullptr : new string(*autre.attribut_)) {}
+
+AA& AA::operator=(const AA& autre) {
+    if (this != &autre) {
+        delete attribut_;                                 // delete nullptr est permis
+        attribut_ = (autre.attribut_ == nullptr) ? nullptr : new string(*autre.attribut_);
+    }
+    return *this;
+}
+</script>
+<p>Dans le main de l'énoncé, <code>uneFonction(deux)</code> (paramètre par valeur) et <code>AA deuxFonction()</code> (retour par valeur) appellent le constructeur de copie ; <code>un = deuxFonction();</code> appelle l'opérateur d'affectation. Sans ces fonctions : double delete à la sortie de <code>uneFonction</code>.</p>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="c4-d3">
+<header><span class="tag exam">Intra H15</span><span class="tag theme">Opérateurs</span><h4>Classe Complexe</h4></header>
+<div class="enonce">
+<p>Écrivez la classe Complexe (partie réelle et imaginaire, <code>double</code>) avec : constructeur (valeurs par défaut 0), <code>+=</code> (méthode), <code>+</code> entre deux complexes (méthode const), <code>*</code> entre un double et un complexe <em>dans les deux sens</em>, <code>==</code>, <code>-</code> unaire, et <code>&lt;&lt;</code> au format <code>3 + 2i</code>.</p>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/cpp">
+class Complexe {
+public:
+    Complexe(double re = 0, double im = 0) : re_(re), im_(im) {}
+
+    Complexe& operator+=(const Complexe& c) { re_ += c.re_; im_ += c.im_; return *this; }
+    Complexe operator+(const Complexe& c) const { return Complexe(re_ + c.re_, im_ + c.im_); }
+    Complexe operator-() const { return Complexe(-re_, -im_); }
+    bool operator==(const Complexe& c) const { return re_ == c.re_ && im_ == c.im_; }
+
+    friend Complexe operator*(double k, const Complexe& c) { return Complexe(k * c.re_, k * c.im_); }
+    friend Complexe operator*(const Complexe& c, double k) { return k * c; }    // commutativité
+
+    friend ostream& operator<<(ostream& out, const Complexe& c) {
+        out << c.re_ << (c.im_ < 0 ? " - " : " + ") << (c.im_ < 0 ? -c.im_ : c.im_) << "i";
+        return out;
+    }
+private:
+    double re_;
+    double im_;
+};
+</script>
+<p>Variante sans friend pour <code>+</code> : <code>Complexe operator+(const Complexe&amp; a, const Complexe&amp; b) { Complexe r(a); r += b; return r; }</code> réutilise <code>+=</code>.</p>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="c4-d4">
+<header><span class="tag">TP2</span><span class="tag theme">Copie</span><h4>Copie d'un robot avec pointeurs intelligents</h4></header>
+<div class="enonce">
+<p>La classe Robot possède <code>std::string nom_</code>, <code>std::unique_ptr&lt;Batterie&gt; batterie_</code>, <code>std::unique_ptr&lt;Chassis&gt; chassis_</code> et <code>std::vector&lt;std::shared_ptr&lt;Moteur&gt;&gt; moteurs_</code>. Écrivez le constructeur de copie (batterie et châssis dupliqués s'ils existent, moteurs partagés) et l'opérateur d'affectation avec l'idiome copie-et-échange. Pourquoi ne peut-on pas simplement écrire <code>batterie_(autre.batterie_)</code> ?</p>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/cpp">
+Robot::Robot(const Robot& autre)
+    : nom_(autre.nom_),
+      batterie_(autre.batterie_ ? std::make_unique<Batterie>(*autre.batterie_) : nullptr),
+      chassis_(autre.chassis_ ? std::make_unique<Chassis>(*autre.chassis_) : nullptr),
+      moteurs_(autre.moteurs_) {}
+
+Robot& Robot::operator=(const Robot& autre) {
+    if (this != &autre) {
+        Robot copie(autre);
+        std::swap(nom_, copie.nom_);
+        std::swap(batterie_, copie.batterie_);
+        std::swap(chassis_, copie.chassis_);
+        std::swap(moteurs_, copie.moteurs_);
+    }   // « copie » (qui contient maintenant nos anciennes ressources) est détruite ici
+    return *this;
+}
+</script>
+<p><code>batterie_(autre.batterie_)</code> tenterait de copier un unique_ptr : constructeur supprimé, erreur de compilation. Il faut construire une <em>nouvelle</em> batterie à partir de l'objet pointé, <code>*autre.batterie_</code>, avec le constructeur de copie de Batterie. L'opérateur ternaire garde <code>nullptr</code> si l'original n'a pas de batterie.</p>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="c4-d5">
+<header><span class="tag">Affichage</span><span class="tag theme">Copie</span><h4>Qui est appelé ?</h4></header>
+<div class="enonce">
+<p>La classe Z affiche « ctor », « copie », « affect » ou « dtor » dans chacune de ses quatre fonctions spéciales (comme la classe P plus haut). Donnez l'affichage de :</p>
+<script type="text/cpp">
+void parValeur(Z z) {}
+void parRef(const Z& z) {}
+
+int main() {
+    Z a;
+    Z b(a);
+    Z c = b;
+    a = b;
+    parValeur(a);
+    parRef(a);
+    Z* p = new Z(b);
+    delete p;
+    c = c;
+    return 0;
+}
+</script>
+</div>
+<details class="hint"><summary>Indice</summary><div class="body"><p>Comptez les objets créés (chacun finira par un « dtor ») et distinguez initialisation (constructeur de copie) et affectation entre objets existants (<code>operator=</code>, même quand l'objet est affecté à lui-même).</p></div></details>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/plain" data-title="Affichage">
+ctor
+copie
+copie
+affect
+copie
+dtor
+copie
+dtor
+affect
+dtor
+dtor
+dtor
+</script>
+<ol class="steps">
+<li><code>Z a;</code> ctor. <code>Z b(a);</code> copie. <code>Z c = b;</code> copie (initialisation, pas affectation).</li>
+<li><code>a = b;</code> affect.</li>
+<li><code>parValeur(a)</code> : copie du paramètre, puis dtor à la sortie de la fonction. <code>parRef(a)</code> : rien du tout.</li>
+<li><code>new Z(b)</code> : copie sur le tas ; <code>delete p</code> : dtor.</li>
+<li><code>c = c;</code> : l'opérateur d'affectation est appelé (affect) ; c'est le test <code>this != &amp;autre</code> à l'intérieur qui évite de casser l'objet.</li>
+<li>Fin de main : dtor c, dtor b, dtor a (ordre inverse de déclaration). Au total 5 objets créés, 5 détruits.</li>
+</ol>
+<p>Pour l'examen, l'analyse attendue : une copie par passage par valeur, une par <code>new Z(objet)</code> ou <code>Z x = objet</code>, aucune par référence ; une affectation par <code>=</code> entre objets existants.</p>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="c4-d6">
+<header><span class="tag exam">Révision H2019</span><span class="tag theme">Opérateurs</span><h4>Personnage : égalité, affichage, incrémentation</h4></header>
+<div class="enonce">
+<p>La classe Personnage a <code>string nom_</code>, <code>int niveau_</code>, <code>int experience_</code>. Écrivez : <code>operator==</code> (même nom et même niveau), <code>operator!=</code> en réutilisant <code>==</code>, <code>operator&lt;&lt;</code> (friend) qui affiche « nom (niveau N) », <code>++</code> préfixe (monte d'un niveau) et <code>++</code> suffixe, puis <code>operator+=(int xp)</code> qui ajoute de l'expérience et monte d'un niveau par tranche de 100 points. Montrez ensuite un appel en cascade.</p>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/cpp">
+class Personnage {
+public:
+    Personnage(const string& nom, int niveau = 1) : nom_(nom), niveau_(niveau), experience_(0) {}
+
+    bool operator==(const Personnage& p) const { return nom_ == p.nom_ && niveau_ == p.niveau_; }
+    bool operator!=(const Personnage& p) const { return !(*this == p); }
+
+    Personnage& operator++() { ++niveau_; return *this; }               // préfixe
+    Personnage operator++(int) { Personnage avant(*this); ++(*this); return avant; }   // suffixe
+
+    Personnage& operator+=(int xp) {
+        experience_ += xp;
+        while (experience_ >= 100) { experience_ -= 100; ++(*this); }
+        return *this;
+    }
+
+    friend ostream& operator<<(ostream& out, const Personnage& p) {
+        out << p.nom_ << " (niveau " << p.niveau_ << ")";
+        return out;
+    }
+private:
+    string nom_;
+    int niveau_;
+    int experience_;
+};
+
+// cascade : (baube += 150) += 60;   puis   cout << baube << " vs " << flavien << endl;
+</script>
+</div></details>
+</article>
+
+</div>
+
+</article>
+</main>
+<footer class="footer">INF1010 - site d'étude personnel. Les documents officiels (Moodle, plan de cours, énoncés de TP) font foi.</footer>
+<script defer src="assets/app.js?v=3"></script>
+<script defer src="assets/widgets.js?v=2"></script>
+</body>
+</html>

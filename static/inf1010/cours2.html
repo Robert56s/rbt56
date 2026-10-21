@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 2 - Méthodes constantes, passage de paramètres, vecteurs | INF1010</title>
+<link rel="stylesheet" href="assets/style.css?v=3">
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="index.html">INF1010 <small>Programmation orientée objet</small></a>
+  <nav>
+    <a href="index.html">Accueil</a>
+    <a href="cours1.html" title="Concepts de base, allocation dynamique">M1</a>
+    <a href="cours2.html" title="Méthodes constantes, passage de paramètres, vecteurs">M2</a>
+    <a href="cours3.html" title="Pointeurs intelligents, composition et agrégation">M3</a>
+    <a href="cours4.html" title="Pointeur this, surcharge d'opérateurs, copie et affectation">M4</a>
+    <a href="cours5.html" title="Héritage et polymorphisme">M5</a>
+    <a href="cours6.html" title="Classes abstraites, conversion d'objets">M6</a>
+    <a href="cours7.html" title="Héritage multiple, fonctions et classes génériques">M7</a>
+    <a href="cours8.html" title="STL : conteneurs et itérateurs">M8</a>
+    <a href="cours9.html" title="STL : algorithmes, foncteurs, lambdas">M9</a>
+    <a href="cours10.html" title="Variables statiques, exceptions, Python">M10</a>
+    <span class="sep"></span>
+    <a href="intra.html">Intra</a>
+    <a href="aide-memoire.html">Aide-mémoire</a>
+    <button class="theme-btn" type="button">Thème</button>
+  </nav>
+</header>
+
+<main class="layout">
+<aside class="toc"></aside>
+<article class="content">
+
+<div class="course-hero">
+  <div class="kicker">Module 2 - cours du 1er septembre (quiz 1)</div>
+  <h1>Méthodes constantes, passage de paramètres, vecteurs</h1>
+  <p class="meta">Leçons Moodle « Méthodes constantes », « Passage de paramètres », « Vecteurs » | Vidéo « Passage des paramètres en programmation orientée objet » | Mis en pratique au TP1 (paramètres par valeur, référence constante, pointeur, flux ; vecteurs de pointeurs)</p>
+  <p><span class="pill accent">const</span><span class="pill accent">Par valeur, par référence, par pointeur</span><span class="pill accent">Référence constante</span><span class="pill accent">Résolution de surcharge</span><span class="pill accent">std::vector</span><span class="pill accent">Boucle for sur un intervalle</span></p>
+  <p class="small">Trois questions à se poser pour chaque paramètre et chaque méthode : est-ce qu'on copie ? est-ce qu'on modifie ? est-ce qu'on promet de ne pas modifier ? Le mot-clé <code>const</code> répond à la troisième, et le compilateur vérifie la promesse.</p>
+</div>
+
+<h2>1. Méthodes constantes</h2>
+<p>Une méthode déclarée avec <code>const</code> <em>après</em> sa liste de paramètres promet de ne pas modifier l'objet sur lequel elle est appelée. Dans son corps, l'objet courant est vu comme constant.</p>
+<script type="text/cpp">
+class Moteur {
+public:
+    double getConsommationW() const;      // promet de ne pas modifier l'objet
+    bool setCharge(double charge);         // modifie l'objet : pas const
+private:
+    double puissanceW_;
+    double charge_;
+};
+
+double Moteur::getConsommationW() const {   // le const se répète dans la définition
+    return puissanceW_ * charge_;
+}
+</script>
+<div class="box def"><span class="label">Ce qu'une méthode const ne peut pas faire</span>
+<ul>
+  <li>modifier un attribut (<code>charge_ = 0;</code> → erreur « cannot assign to non-static data member within const member function ») ;</li>
+  <li>appeler une méthode non constante de l'objet courant ou de ses attributs objets ;</li>
+  <li>retourner une référence (ou un pointeur) <em>non constante</em> vers l'objet lui-même ou vers un attribut (cela ouvrirait une porte de modification).</li>
+</ul>
+<p>Elle peut par contre modifier ses paramètres et ses variables locales, même s'ils sont de la même classe : la constance porte sur <code>*this</code> seulement.</p></div>
+<p><strong>Pourquoi ?</strong> Un objet constant (<code>const Moteur m(...)</code>) et une référence constante (<code>const Moteur&amp; m</code>, le mode de passage le plus courant) ne peuvent appeler <em>que</em> des méthodes constantes. Si <code>getNom()</code> n'est pas <code>const</code>, un paramètre <code>const Robot&amp; r</code> ne peut même pas faire <code>r.getNom()</code>. Règle pratique : tout accesseur et toute méthode d'affichage ou de calcul est <code>const</code>.</p>
+<script type="text/cpp">
+void afficherNom(const Moteur& m) {
+    cout << m.getNom() << endl;        // OK seulement si getNom() est const
+    m.setCharge(0.5);                  // erreur : setCharge n'est pas const
+}
+const Moteur fixe("f", 1, 1);
+fixe.getConsommationW();               // OK
+fixe.setCharge(0.2);                   // erreur
+</script>
+<div class="box warn"><span class="label">Pièges</span>
+<ul>
+  <li>Une méthode <code>const</code> peut retourner une <em>copie</em> d'un attribut ou une <code>const T&amp;</code>, jamais une <code>T&amp;</code>. Les deux versions <code>T&amp; get()</code> et <code>const T&amp; get() const</code> peuvent coexister (surcharge sur la constance) : le compilateur choisit selon que l'objet est constant ou non.</li>
+  <li><code>const</code> fait partie de la signature : si le <code>.h</code> dit <code>const</code>, le <code>.cpp</code> doit le répéter, sinon vous définissez une autre méthode (erreur « out-of-line definition does not match »).</li>
+  <li>Un attribut <code>mutable</code> peut être modifié par une méthode <code>const</code> (rare, pour un cache ou un compteur d'accès).</li>
+</ul></div>
+
+<h2>2. Passage de paramètres</h2>
+<table>
+<thead><tr><th>Mode</th><th>Syntaxe</th><th>Copie ?</th><th>L'appelé peut modifier l'original ?</th><th>Quand l'utiliser</th></tr></thead>
+<tbody>
+<tr><td>Par valeur</td><td><code>void f(Robot r)</code></td><td>oui (constructeur de copie)</td><td>non, il travaille sur la copie</td><td>types fondamentaux (<code>int</code>, <code>double</code>, <code>bool</code>), petits objets, ou quand on veut justement une copie à modifier</td></tr>
+<tr><td>Par référence</td><td><code>void f(Robot&amp; r)</code></td><td>non (alias)</td><td>oui</td><td>paramètre de sortie, objet à modifier (<code>swap</code>, flux <code>ostream&amp;</code>)</td></tr>
+<tr><td>Par référence constante</td><td><code>void f(const Robot&amp; r)</code></td><td>non</td><td>non (seules les méthodes const sont utilisables)</td><td><strong>le mode par défaut pour tout objet</strong> qu'on ne veut que lire : <code>string</code>, <code>vector</code>, classes du TP</td></tr>
+<tr><td>Par pointeur</td><td><code>void f(Robot* r)</code></td><td>copie de l'adresse seulement</td><td>oui (via <code>r-&gt;</code>)</td><td>quand « pas d'objet » (<code>nullptr</code>) est une valeur possible ; transfert de propriété (TP1 : <code>installerBatterie(Batterie*)</code>) ; tableaux C</td></tr>
+<tr><td>Par pointeur constant</td><td><code>void f(const Robot* r)</code></td><td>adresse</td><td>non</td><td>observation d'un objet optionnel</td></tr>
+</tbody>
+</table>
+<div class="box tip"><span class="label">Référence constante : pourquoi c'est le choix par défaut</span>
+<p><em>Référence</em> : on évite de copier l'objet (temps et mémoire ; une copie d'un vecteur de 10 000 éléments copie les 10 000). <em>Constante</em> : on empêche de modifier l'original, et on peut passer des temporaires et des objets constants. Utilisez <code>const T&amp;</code> partout où vous auriez écrit <code>T</code> sans avoir besoin de modifier le paramètre.</p></div>
+
+<div class="widget" data-widget="trace">
+  <p class="w-title">Pas à pas : valeur, référence, référence constante</p>
+  <p class="w-desc">Même objet, trois façons de le passer. Observez ce qui est copié et ce qui est modifié.</p>
+<script type="text/cpp">
+void parValeur(Robot r) {              // r est une COPIE de l'argument
+    r.setNom("copie");
+}
+void parReference(Robot& r) {          // r est un autre nom pour l'argument
+    r.setNom("modifie");
+}
+void parRefConst(const Robot& r) {     // lecture seule, sans copie
+    cout << r.getNom() << endl;
+    // r.setNom("x");  -> erreur de compilation
+}
+int main() {
+    Robot a("original");
+    parValeur(a);
+    cout << a.getNom() << endl;
+    parReference(a);
+    cout << a.getNom() << endl;
+    parRefConst(a);
+    return 0;
+}
+</script>
+<script type="application/json" data-role="steps">
+[
+ {"line": 12, "vars": [["pile (main)", "a", "Robot { nom_ = \"original\" }"]], "note": "Un seul objet pour l'instant."},
+ {"line": 13, "vars": [["pile (main)", "a", "Robot { nom_ = \"original\" }"], ["pile (parValeur)", "r", "Robot { nom_ = \"original\" } (copie)"]], "note": "Passage par valeur : le <strong>constructeur de copie</strong> de Robot construit <code>r</code> à partir de <code>a</code>. Deux objets distincts existent."},
+ {"line": 2, "vars": [["pile (main)", "a", "Robot { nom_ = \"original\" }"], ["pile (parValeur)", "r", "Robot { nom_ = \"copie\" }"]], "note": "Seule la copie change."},
+ {"line": 14, "print": "original", "vars": [["pile (main)", "a", "Robot { nom_ = \"original\" }"], ["pile (parValeur)", "r", "détruit à la fin de parValeur", "gone"]], "note": "À la sortie de parValeur, la copie <code>r</code> est détruite (destructeur). <code>a</code> n'a pas bougé."},
+ {"line": 15, "vars": [["pile (main)", "a", "Robot { nom_ = \"original\" }"], ["pile (parReference)", "r", "→ alias de a (aucune copie)"]], "note": "Passage par référence : <code>r</code> désigne l'objet <code>a</code> lui-même. Aucun constructeur appelé."},
+ {"line": 5, "vars": [["pile (main)", "a", "Robot { nom_ = \"modifie\" }"], ["pile (parReference)", "r", "→ alias de a"]], "note": "Modifier <code>r</code>, c'est modifier <code>a</code>."},
+ {"line": 16, "print": "modifie", "vars": [["pile (main)", "a", "Robot { nom_ = \"modifie\" }"]], "note": "L'original a bien changé."},
+ {"line": 17, "vars": [["pile (main)", "a", "Robot { nom_ = \"modifie\" }"], ["pile (parRefConst)", "r", "→ alias de a, lecture seule"]], "note": "Référence constante : pas de copie, et le compilateur interdit toute méthode non const sur <code>r</code>."},
+ {"line": 8, "print": "modifie", "note": "<code>getNom()</code> doit être une méthode const pour que cet appel compile."},
+ {"line": 19, "vars": [["pile (main)", "a", "détruit", "gone"]], "note": "Fin du programme. Bilan : un seul constructeur de copie appelé (ligne 14), une seule destruction de copie."}
+]
+</script>
+</div>
+
+<h3>Retourner une valeur</h3>
+<ul>
+  <li><strong>Par valeur</strong> (<code>Robot creer()</code>) : copie (ou déplacement) du résultat. Toujours correct, même pour une variable locale.</li>
+  <li><strong>Par référence constante</strong> (<code>const string&amp; getNom() const</code>) : pas de copie ; valable tant que l'objet qui contient l'attribut existe. C'est le choix des accesseurs des TP pour les chaînes et les vecteurs (<code>const vector&lt;Moteur*&gt;&amp; getMoteurs() const</code> : on donne accès au vecteur sans le copier, sans permettre de le modifier).</li>
+  <li><strong>Par référence</strong> (<code>Robot&amp; operator+=(...)</code> retourne <code>*this</code>) : pour le chaînage d'appels (module 4).</li>
+  <li><strong>Jamais</strong> une référence ou un pointeur vers une variable locale de la fonction : elle est détruite au <code>return</code>.</li>
+</ul>
+
+<h3>Résolution de surcharge</h3>
+<p>Plusieurs fonctions peuvent porter le même nom si leurs paramètres diffèrent (nombre ou types). Le compilateur choisit d'après le type des arguments, <em>à la compilation</em>. Le type de retour ne compte pas. Un appel qui correspond aussi bien à deux surcharges est ambigu : erreur de compilation.</p>
+<div class="widget" data-widget="overload">
+  <p class="w-title">Quelle surcharge est appelée ? (intra H18, question 1f)</p>
+  <p class="w-desc">Quatre fonctions <code>tester</code> sont déclarées. Choisissez un appel et vérifiez votre réponse.</p>
+<script type="text/cpp">
+void tester(Jouet* p);     // A
+void tester(Jouet** p);    // B
+void tester(Jouet& p);     // C
+void tester(Jouet p);      // D
+
+Jouet* p = new Jouet();
+Jouet q;
+Jouet** t = new Jouet*[10];
+</script>
+<script type="application/json" data-role="cases">
+[
+ {"call": "tester(new Jouet());", "answer": "A : tester(Jouet*)", "why": "<code>new Jouet()</code> est une expression de type <code>Jouet*</code>."},
+ {"call": "tester(new Jouet[10]);", "answer": "A : tester(Jouet*)", "why": "<code>new Jouet[10]</code> retourne l'adresse du premier élément : un <code>Jouet*</code>, pas un tableau de pointeurs."},
+ {"call": "tester(new Jouet*[10]);", "answer": "B : tester(Jouet**)", "why": "Un tableau de 10 pointeurs : l'adresse du premier pointeur est de type <code>Jouet**</code>."},
+ {"call": "tester(p);", "answer": "A : tester(Jouet*)", "why": "<code>p</code> est déclaré <code>Jouet*</code>."},
+ {"call": "tester(*p);", "answer": "C ou D : ambigu", "why": "<code>*p</code> est un objet <code>Jouet</code> (lvalue). Les versions par référence (C) et par valeur (D) conviennent aussi bien : si les deux existent, le compilateur refuse l'appel (« call to tester is ambiguous »). Avec une seule des deux, elle serait choisie.", "kind": "warn"},
+ {"call": "tester(q);", "answer": "C ou D : ambigu", "why": "Même situation : <code>q</code> est un <code>Jouet</code>. Référence et valeur sont indiscernables pour la résolution de surcharge.", "kind": "warn"},
+ {"call": "tester(&q);", "answer": "A : tester(Jouet*)", "why": "<code>&amp;q</code> est l'adresse d'un Jouet : <code>Jouet*</code>."},
+ {"call": "tester(t);", "answer": "B : tester(Jouet**)", "why": "<code>t</code> est déclaré <code>Jouet**</code>."},
+ {"call": "tester(t[0]);", "answer": "A : tester(Jouet*)", "why": "<code>t[0]</code> est le premier pointeur du tableau : <code>Jouet*</code> (non initialisé ici, mais le type suffit au compilateur)."},
+ {"call": "tester(**t);", "answer": "C ou D : ambigu", "why": "<code>**t</code> déréférence deux fois : un objet <code>Jouet</code>.", "kind": "warn"}
+]
+</script>
+</div>
+
+<h2>3. Pointeur ou référence ?</h2>
+<table>
+<thead><tr><th></th><th>Référence <code>T&amp;</code></th><th>Pointeur <code>T*</code></th></tr></thead>
+<tbody>
+<tr><td>Doit désigner un objet</td><td>toujours, dès sa déclaration (<code>Robot&amp; r = a;</code>)</td><td>non : peut valoir <code>nullptr</code></td></tr>
+<tr><td>Peut changer de cible</td><td>non</td><td>oui (<code>p = &amp;b;</code>)</td></tr>
+<tr><td>Accès aux membres</td><td><code>r.getNom()</code></td><td><code>p-&gt;getNom()</code></td></tr>
+<tr><td>Arithmétique</td><td>non</td><td>oui (<code>p + 1</code>, tableaux)</td></tr>
+<tr><td>Dans le cours</td><td>paramètres et retours de fonctions</td><td>allocation dynamique, agrégation, tableaux, polymorphisme</td></tr>
+</tbody>
+</table>
+<p>Attention aux deux sens du symbole <code>&amp;</code> : dans une <em>déclaration</em> (<code>Robot&amp; r</code>, <code>void f(const Robot&amp;)</code>) il signifie « référence » ; dans une <em>expression</em> (<code>&amp;q</code>) il signifie « adresse de ». De même <code>*</code> : « pointeur » dans une déclaration, « objet pointé » dans une expression.</p>
+
+<h2>4. Les vecteurs de la bibliothèque standard</h2>
+<p><code>std::vector&lt;T&gt;</code> (en-tête <code>&lt;vector&gt;</code>) est un tableau dynamique qui gère lui-même sa mémoire : il grandit au besoin, se copie en profondeur et libère ses éléments dans son destructeur. Dans les TP, il remplace les tableaux <code>new T[n]</code>.</p>
+<script type="text/cpp">
+#include <vector>
+vector<int> v;                      // vide
+vector<int> w(5);                   // 5 zéros
+vector<int> x = { 3, 1, 4 };        // 3 éléments
+vector<Moteur*> moteurs;            // vecteur de pointeurs (agrégation, TP1)
+
+v.push_back(7);                     // ajoute à la fin (size passe à 1)
+v.push_back(9);
+cout << v.size();                   // 2 (type size_t, non signé)
+cout << v[0];                       // 7 : accès sans vérification (indice invalide = comportement indéfini)
+cout << v.at(5);                    // lance std::out_of_range (vérifié)
+v.front(); v.back();                // premier, dernier (vecteur non vide !)
+v.pop_back();                       // retire le dernier (ne le retourne pas)
+v.insert(v.begin() + 1, 42);        // insère à l'indice 1, décale la suite
+v.erase(v.begin() + 0);             // retire l'élément d'indice 0, décale la suite (ordre conservé)
+v.empty();  v.clear();              // vide ?  / retire tout (size = 0)
+
+for (size_t i = 0; i < v.size(); ++i) cout << v[i];      // indice : size_t pour éviter -Wsign-compare
+for (int n : v) cout << n;                                // boucle sur un intervalle : copie chaque élément
+for (const Moteur* m : moteurs) m->afficher(cout);        // pointeurs : copier le pointeur est gratuit
+for (const Robot& r : robots) r.afficher(cout);           // objets : par référence constante pour ne pas copier
+for (Robot& r : robots) r.setNom("x");                    // par référence pour modifier
+</script>
+<div class="box warn"><span class="label">Pièges de vector</span>
+<ul>
+  <li><code>v[i]</code> ne vérifie rien : lire ou écrire hors de <code>[0, size()[</code> est un comportement indéfini, même si la capacité est plus grande. <code>vector&lt;int&gt; v(9); v[9] = 7;</code> est une erreur.</li>
+  <li><code>push_back</code> peut réallouer : tous les pointeurs, références et itérateurs vers les éléments deviennent invalides. Ne gardez pas <code>&amp;v[i]</code> pendant qu'on ajoute.</li>
+  <li>Passer un vecteur <strong>par valeur</strong> le copie en entier. Paramètres : <code>const vector&lt;T&gt;&amp;</code> (lecture) ou <code>vector&lt;T&gt;&amp;</code> (modification).</li>
+  <li><code>size()</code> retourne un <code>size_t</code> (non signé) : <code>v.size() - 1</code> sur un vecteur vide donne un nombre gigantesque, et comparer avec un <code>int</code> provoque <code>-Wsign-compare</code>.</li>
+  <li>Un <code>vector&lt;Moteur*&gt;</code> détruit ses pointeurs, pas les objets pointés : avec des pointeurs bruts, c'est à vous de faire les <code>delete</code> (ou d'utiliser des pointeurs intelligents, module 3).</li>
+</ul></div>
+
+<div class="widget" data-widget="vector-sim">
+  <p class="w-title">Simulateur de std::vector&lt;int&gt;</p>
+  <p class="w-desc">Exécutez des opérations et observez la taille, la capacité (croissance typique par doublement) et les erreurs d'indice. Les cases en pointillé sont allouées mais inutilisées.</p>
+</div>
+
+<h3>Retirer un élément en conservant l'ordre (TP1 : retirerMoteur)</h3>
+<script type="text/cpp">
+bool Robot::retirerMoteur(Moteur* moteur) {
+    for (size_t i = 0; i < moteurs_.size(); ++i) {
+        if (moteurs_[i] == moteur) {                 // même adresse (même objet), pas même nom
+            moteurs_.erase(moteurs_.begin() + i);    // décale les suivants : l'ordre est conservé
+            return true;
+        }
+    }
+    return false;                                     // absent
+}
+
+bool Robot::ajouterMoteur(Moteur* moteur) {
+    if (moteur == nullptr) return false;
+    for (const Moteur* m : moteurs_) {
+        if (m == moteur) return false;                // doublon : le même pointeur
+    }
+    moteurs_.push_back(moteur);
+    return true;
+}
+</script>
+<p>Avec les algorithmes de la STL (module 9), la recherche s'écrit <code>auto it = find(moteurs_.begin(), moteurs_.end(), moteur);</code> puis <code>if (it != moteurs_.end()) moteurs_.erase(it);</code>.</p>
+
+<h2>5. À retenir</h2>
+<ul class="summary-list">
+  <li><code>const</code> après la signature : la méthode ne modifie pas <code>*this</code>. Obligatoire pour qu'elle soit appelable sur un objet ou une référence constante. Accesseurs, affichages, calculs : toujours <code>const</code>.</li>
+  <li>Objets en paramètre : <code>const T&amp;</code> par défaut, <code>T&amp;</code> pour modifier, <code>T</code> (valeur) pour les types simples ou quand on veut une copie, <code>T*</code> quand l'absence est possible ou pour transférer la propriété.</li>
+  <li>La surcharge est résolue à la compilation d'après les types des arguments ; référence et valeur sont ambiguës entre elles.</li>
+  <li><code>vector</code> : <code>push_back</code>, <code>size</code>, <code>[]</code> (non vérifié) ou <code>at</code> (vérifié), <code>insert</code>/<code>erase</code> avec <code>begin() + i</code>, <code>pop_back</code>, <code>empty</code>, <code>clear</code> ; boucle <code>for (const T&amp; x : v)</code>.</li>
+</ul>
+
+<section class="quiz" data-quiz-id="c2" id="quiz-c2">
+<h2>Quiz rapide - Module 2</h2>
+
+<div class="q" data-answer="2">
+<p class="q-text">Que signifie le <code>const</code> dans <code>double getMasse() const;</code> ?</p>
+<ul class="choices">
+<li>La valeur retournée ne peut pas être modifiée par l'appelant</li>
+<li>La méthode ne peut être appelée qu'une fois</li>
+<li>La méthode ne modifie pas l'objet sur lequel elle est appelée</li>
+<li>Les paramètres de la méthode sont constants</li>
+</ul>
+<div class="explain">Le <code>const</code> après la signature porte sur <code>*this</code>. Un <code>const</code> devant le type de retour (<code>const string&amp; getNom() const</code>) porterait, lui, sur la valeur retournée.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Dans une fonction <code>void f(const Robot&amp; r)</code>, lequel de ces appels compile ?</p>
+<ul class="choices">
+<li><code>r.setNom("x");</code> (setNom n'est pas const)</li>
+<li><code>r.getNom();</code> (getNom est const)</li>
+<li><code>r = Robot("y");</code></li>
+<li>Tous les trois</li>
+</ul>
+<div class="explain">Sur une référence constante, seules les méthodes constantes sont autorisées, et l'affectation est interdite.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Une méthode const peut-elle modifier une variable locale de type Robot déclarée dans son corps ?</p>
+<ul class="choices">
+<li>Oui : la constance ne porte que sur l'objet courant</li>
+<li>Non : tout Robot est constant dans une méthode const</li>
+<li>Seulement si la variable est déclarée <code>mutable</code></li>
+<li>Seulement si Robot n'a pas d'attributs</li>
+</ul>
+<div class="explain">Les paramètres et variables locales ne sont pas concernés, même s'ils sont de la même classe que l'objet courant.</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Quel mode de passage choisir pour un paramètre <code>std::string</code> qu'on ne fait que lire ?</p>
+<ul class="choices">
+<li><code>string s</code></li>
+<li><code>string&amp; s</code></li>
+<li><code>string* s</code></li>
+<li><code>const string&amp; s</code></li>
+</ul>
+<div class="explain">Pas de copie (référence) et pas de modification possible (const). C'est la convention des TP : « le nom est transmis par référence constante ».</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Combien de fois le constructeur de copie de Robot est-il appelé ?</p>
+<script type="text/cpp">
+void f(Robot r) {}
+void g(const Robot& r) {}
+int main() { Robot a("a"); Robot b = a; f(a); g(a); Robot c(b); }
+</script>
+<ul class="choices">
+<li>2</li>
+<li>3</li>
+<li>4</li>
+<li>5</li>
+</ul>
+<div class="explain"><code>Robot b = a</code> (1), <code>f(a)</code> par valeur (2), <code>Robot c(b)</code> (3). <code>g(a)</code> passe par référence constante : aucune copie.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Pourquoi ce code est-il dangereux ?</p>
+<script type="text/cpp">
+const string& nomComplet(const string& prenom, const string& nom) {
+    string resultat = prenom + " " + nom;
+    return resultat;
+}
+</script>
+<ul class="choices">
+<li>Il ne compile pas</li>
+<li>La concaténation copie les chaînes</li>
+<li>Il retourne une référence vers une variable locale détruite à la sortie</li>
+<li>Les paramètres devraient être passés par valeur</li>
+</ul>
+<div class="explain">Il faut retourner par valeur (<code>string nomComplet(...)</code>). Une référence vers un objet détruit est un pointeur pendant déguisé.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Avec <code>void tester(Jouet&amp; p)</code> et <code>void tester(Jouet p)</code> toutes deux déclarées, l'appel <code>tester(q)</code> avec <code>Jouet q;</code> :</p>
+<ul class="choices">
+<li>Ne compile pas : appel ambigu</li>
+<li>Appelle la version par référence</li>
+<li>Appelle la version par valeur</li>
+<li>Appelle les deux</li>
+</ul>
+<div class="explain">Référence et valeur conviennent aussi bien : le compilateur ne peut pas trancher.</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Qu'affiche ce programme ?</p>
+<script type="text/cpp">
+vector<int> v(9);
+v.push_back(3);
+v[5] = 8;
+v.push_back(v[1]);
+for (int i = 0; i < 3; i++) v.pop_back();
+v[2] = 6;
+v.push_back(v.back());
+v.push_back(v[1]);
+v[9] = 7;
+cout << v.size();
+</script>
+<ul class="choices">
+<li>9</li>
+<li>11</li>
+<li>12</li>
+<li>10</li>
+</ul>
+<div class="explain">9, +1 = 10, +1 = 11, -3 = 8, +1 = 9, +1 = 10. Les affectations <code>v[i] = ...</code> ne changent pas la taille (et <code>v[9] = 7</code> est valide seulement parce que la taille est redevenue 10). Question de l'intra H15.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Quelle différence entre <code>v[i]</code> et <code>v.at(i)</code> ?</p>
+<ul class="choices">
+<li>Aucune</li>
+<li><code>at</code> vérifie l'indice et lance <code>std::out_of_range</code> ; <code>[]</code> ne vérifie rien</li>
+<li><code>[]</code> vérifie l'indice, <code>at</code> non</li>
+<li><code>at</code> retourne une copie, <code>[]</code> une référence</li>
+</ul>
+<div class="explain">Les deux retournent une référence. Seul <code>at</code> est vérifié (plus lent, mais sûr).</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Pour parcourir un <code>vector&lt;Robot&gt; robots</code> sans copier chaque robot ni le modifier, on écrit :</p>
+<ul class="choices">
+<li><code>for (Robot r : robots)</code></li>
+<li><code>for (Robot&amp; r : robots)</code></li>
+<li><code>for (const Robot&amp; r : robots)</code></li>
+<li><code>for (Robot* r : robots)</code></li>
+</ul>
+<div class="explain">La première copie chaque élément, la deuxième permet de modifier, la quatrième ne compile pas (les éléments sont des objets, pas des pointeurs).</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Que fait <code>v.erase(v.begin() + 2);</code> ?</p>
+<ul class="choices">
+<li>Retire l'élément d'indice 2 et décale les suivants vers la gauche</li>
+<li>Retire les 2 premiers éléments</li>
+<li>Retire l'élément de valeur 2</li>
+<li>Met l'élément d'indice 2 à zéro</li>
+</ul>
+<div class="explain"><code>erase</code> prend un itérateur ; <code>begin() + i</code> désigne l'indice i. La taille diminue de 1 et l'ordre des autres est conservé.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Que se passe-t-il quand <code>push_back</code> dépasse la capacité du vecteur ?</p>
+<ul class="choices">
+<li>Une exception est lancée</li>
+<li>Un bloc plus grand est alloué, les éléments y sont copiés, l'ancien bloc est libéré ; les anciens pointeurs vers les éléments deviennent invalides</li>
+<li>L'élément est refusé</li>
+<li>Le vecteur est vidé</li>
+</ul>
+<div class="explain">C'est l'algorithme « agrandir un tableau » du module 1, automatisé. D'où l'invalidation des pointeurs et itérateurs.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Un <code>vector&lt;Capteur*&gt;</code> est détruit. Que deviennent les capteurs pointés ?</p>
+<ul class="choices">
+<li>Ils sont détruits automatiquement</li>
+<li>Ils sont copiés dans un autre vecteur</li>
+<li>Rien : seuls les pointeurs disparaissent, les objets restent alloués</li>
+<li>Le programme plante</li>
+</ul>
+<div class="explain">Le vecteur possède des pointeurs, pas des objets. Si personne ne fait <code>delete</code>, c'est une fuite. C'est la situation du TP1 (agrégation).</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Que vaut <code>v.size() - 1</code> si <code>v</code> est vide ?</p>
+<ul class="choices">
+<li>-1</li>
+<li>0</li>
+<li>Une exception</li>
+<li>Un très grand nombre positif (débordement non signé)</li>
+</ul>
+<div class="explain"><code>size()</code> retourne un <code>size_t</code>, non signé : 0 - 1 déborde vers la valeur maximale. Écrire <code>i + 1 &lt; v.size()</code> plutôt que <code>i &lt; v.size() - 1</code>.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Quelle signature permet à <code>f</code> d'accepter <code>nullptr</code> comme argument ?</p>
+<ul class="choices">
+<li><code>void f(Batterie* b)</code></li>
+<li><code>void f(Batterie&amp; b)</code></li>
+<li><code>void f(const Batterie&amp; b)</code></li>
+<li><code>void f(Batterie b)</code></li>
+</ul>
+<div class="explain">Une référence doit toujours désigner un objet. Seul un pointeur peut représenter « aucun objet » (c'est l'usage dans <code>installerBatterie(nullptr)</code> du TP1 pour retirer la batterie).</div>
+</div>
+</section>
+
+<h2 id="dev-c2">Exercices à développement</h2>
+<div class="exo-tools" data-scope="dev-c2-list">
+  <div class="progress-bar"><span></span></div><span class="progress-label small"></span>
+  <button class="btn secondary small" type="button" data-action="open-all">Déplier les solutions</button>
+  <button class="btn secondary small" type="button" data-action="close-all">Tout replier</button>
+</div>
+<div id="dev-c2-list">
+
+<article class="exo" data-exo-id="c2-d1">
+<header><span class="tag exam">Intra H15</span><span class="tag theme">Copies</span><h4>Compter les appels au constructeur de copie</h4></header>
+<div class="enonce">
+<p>La classe Dragon est fonctionnelle et possède tous les constructeurs nécessaires. Combien de fois son constructeur de copie est-il appelé ?</p>
+<script type="text/cpp">
+void fonction1(Dragon dragon1) {
+    Dragon dragon2;
+}
+Dragon fonction2(const Dragon& dragon2) {
+    return (*new Dragon());
+}
+int main() {
+    Dragon dragon1;
+    Dragon dragon2(dragon1);
+    Dragon dragon3 = dragon1;
+    Dragon dragon4;
+    dragon3 = dragon2;
+    fonction1(dragon1);
+    dragon4 = fonction2(dragon1);
+    fonction1(dragon4);
+    return 0;
+}
+</script>
+</div>
+<details class="hint"><summary>Indice</summary><div class="body"><p>Le constructeur de copie sert à <em>créer</em> un objet à partir d'un autre : déclaration avec initialisation, paramètre par valeur, retour par valeur. Une affectation entre deux objets existants appelle <code>operator=</code>, pas le constructeur de copie.</p></div></details>
+<details class="sol"><summary>Solution</summary><div class="body">
+<p class="answer">5 appels.</p>
+<ol>
+  <li><code>Dragon dragon2(dragon1);</code> : 1.</li>
+  <li><code>Dragon dragon3 = dragon1;</code> : 2 (c'est une initialisation, pas une affectation).</li>
+  <li><code>dragon3 = dragon2;</code> : opérateur d'affectation, pas de copie.</li>
+  <li><code>fonction1(dragon1);</code> : paramètre par valeur, 3. (<code>Dragon dragon2;</code> à l'intérieur : constructeur par défaut.)</li>
+  <li><code>fonction2(dragon1)</code> : le paramètre est une référence constante (0) ; le <code>return *new Dragon()</code> construit la valeur de retour par copie de l'objet dynamique : 4. Puis <code>dragon4 = ...</code> est une affectation. Au passage, l'objet créé par <code>new</code> n'est jamais libéré : fuite.</li>
+  <li><code>fonction1(dragon4);</code> : 5.</li>
+</ol>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="c2-d2">
+<header><span class="tag">Const</span><span class="tag theme">Correction d'erreurs</span><h4>Rendre la classe const-correcte</h4></header>
+<div class="enonce">
+<p>Ce code ne compile pas. Trouvez les erreurs liées à <code>const</code> et corrigez la déclaration de la classe pour que <code>main</code> fonctionne sans retirer aucun <code>const</code> de <code>main</code>.</p>
+<script type="text/cpp">
+class Pince {
+public:
+    Pince(const string& nom, double puissanceW) : nom_(nom), puissanceW_(puissanceW), fermee_(false) {}
+    string getNom() { return nom_; }
+    bool estFermee() { return fermee_; }
+    void setFermee(bool f) const { fermee_ = f; }
+    double getConsommationW() { return fermee_ ? puissanceW_ : 0; }
+private:
+    string nom_;
+    double puissanceW_;
+    bool fermee_;
+};
+
+void afficher(const Pince& p) {
+    cout << p.getNom() << " " << p.getConsommationW() << endl;
+}
+int main() {
+    const Pince fixe("f", 10);
+    Pince mobile("m", 5);
+    afficher(fixe);
+    mobile.setFermee(true);
+    afficher(mobile);
+}
+</script>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/cpp">
+    const string& getNom() const { return nom_; }      // accesseur : const (et référence constante : pas de copie)
+    bool estFermee() const { return fermee_; }
+    void setFermee(bool f) { fermee_ = f; }             // mutateur : ne peut PAS être const
+    double getConsommationW() const { return fermee_ ? puissanceW_ : 0; }
+</script>
+<ul>
+  <li><code>afficher</code> reçoit une <code>const Pince&amp;</code> : <code>getNom</code> et <code>getConsommationW</code> doivent être <code>const</code>, sinon « member function not viable: 'this' argument has type const Pince ».</li>
+  <li><code>setFermee</code> déclaré <code>const</code> ne peut pas écrire <code>fermee_ = f</code>. On retire le <code>const</code>. Il reste appelable sur <code>mobile</code> (non constant).</li>
+</ul>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="c2-d3">
+<header><span class="tag exam">Intra H16</span><span class="tag theme">Vecteurs</span><h4>Achats::Ajout</h4></header>
+<div class="enonce">
+<p>Soit la fonction membre <code>Ajout</code> de la classe Achats, qui reçoit le nom de l'item (string) et la quantité (int) et l'insère dans le vecteur <code>mesAchats_</code>. Donnez uniquement l'implémentation de <code>Ajout</code>.</p>
+<script type="text/cpp">
+class Item {
+public:
+    Item(string nom = "", int nb = 0) : nomItem_(nom), quantite_(nb) {}
+    string getNom() const { return nomItem_; }
+    int getQuantite() const { return quantite_; }
+private:
+    string nomItem_;
+    int quantite_;
+};
+
+class Achats {
+public:
+    Achats() {}
+    vector<Item> getItems() const { return mesAchats_; }
+    void Ajout(const string& nom, int quantite);
+private:
+    vector<Item> mesAchats_;
+};
+</script>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/cpp">
+void Achats::Ajout(const string& nom, int quantite) {
+    mesAchats_.push_back(Item(nom, quantite));
+}
+</script>
+<p>On construit un Item temporaire et <code>push_back</code> le copie dans le vecteur. (<code>mesAchats_.emplace_back(nom, quantite);</code> construit l'élément directement dans le vecteur.) Remarque : <code>getItems()</code> retourne le vecteur <em>par valeur</em>, donc une copie complète à chaque appel ; <code>const vector&lt;Item&gt;&amp;</code> serait préférable.</p>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="c2-d4">
+<header><span class="tag">Vecteurs</span><span class="tag theme">TP1</span><h4>Masse et consommation d'un robot</h4></header>
+<div class="enonce">
+<p>Le robot du TP1 possède <code>Batterie* batterie_</code>, <code>Chassis* chassis_</code> (peuvent être <code>nullptr</code>) et des vecteurs <code>vector&lt;Moteur*&gt; moteurs_</code>, <code>vector&lt;Capteur*&gt; capteurs_</code>, <code>vector&lt;Pince*&gt; pinces_</code>. Écrivez <code>double Robot::getMasse() const</code> (somme des masses de toutes les pièces présentes) et <code>double Robot::getConsommationW() const</code> (somme des consommations des moteurs, capteurs et pinces ; la batterie et le châssis ne consomment pas). Chaque pièce a <code>getMasseKg()</code> et, sauf la batterie et le châssis, <code>getConsommationW()</code>.</p>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/cpp">
+double Robot::getMasse() const {
+    double masse = 0;
+    if (batterie_ != nullptr) masse += batterie_->getMasseKg();   // ne jamais déréférencer un pointeur nul
+    if (chassis_ != nullptr) masse += chassis_->getMasseKg();
+    for (const Moteur* m : moteurs_) masse += m->getMasseKg();
+    for (const Capteur* c : capteurs_) masse += c->getMasseKg();
+    for (const Pince* p : pinces_) masse += p->getMasseKg();
+    return masse;
+}
+
+double Robot::getConsommationW() const {
+    double total = 0;
+    for (const Moteur* m : moteurs_) total += m->getConsommationW();
+    for (const Capteur* c : capteurs_) total += c->getConsommationW();
+    for (const Pince* p : pinces_) total += p->getConsommationW();
+    return total;
+}
+</script>
+<p>Les deux méthodes sont <code>const</code> (elles ne modifient pas le robot) et n'appellent que des méthodes <code>const</code> des pièces. Les boucles sur intervalle avec <code>const Moteur*</code> copient seulement le pointeur.</p>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="c2-d5">
+<header><span class="tag">Paramètres</span><span class="tag theme">Conception</span><h4>Choisir le bon mode de passage</h4></header>
+<div class="enonce">
+<p>Pour chaque fonction, proposez la signature la plus appropriée (valeur, référence, référence constante, pointeur) et justifiez en une phrase.</p>
+<ol>
+  <li><code>echanger</code> : échange le contenu de deux robots.</li>
+  <li><code>estPlusLourd</code> : compare la masse de deux robots et retourne un booléen.</li>
+  <li><code>installerBatterie</code> (TP1) : donne au robot une batterie allouée avec <code>new</code>, ou aucune.</li>
+  <li><code>afficher</code> : écrit la description d'un robot dans un flux de sortie.</li>
+  <li><code>setCharge</code> : règle la charge d'un moteur avec un <code>double</code>.</li>
+  <li><code>nomsDesMoteurs</code> : retourne la liste des noms des moteurs d'un robot.</li>
+</ol>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<ol>
+  <li><code>void echanger(Robot&amp; a, Robot&amp; b)</code> : on doit modifier les deux originaux.</li>
+  <li><code>bool estPlusLourd(const Robot&amp; a, const Robot&amp; b)</code> : lecture seule, sans copier les robots.</li>
+  <li><code>void Robot::installerBatterie(Batterie* batterie)</code> : « aucune » se représente par <code>nullptr</code>, et le pointeur matérialise le transfert de propriété (le robot fera le <code>delete</code>).</li>
+  <li><code>void Robot::afficher(std::ostream&amp; out) const</code> : un flux se passe toujours par référence (il n'est pas copiable, et écrire dedans le modifie) ; la méthode est <code>const</code>.</li>
+  <li><code>bool Moteur::setCharge(double charge)</code> : un <code>double</code> se passe par valeur.</li>
+  <li><code>vector&lt;string&gt; Robot::nomsDesMoteurs() const</code> : un nouveau vecteur est construit dans la fonction, on le retourne par valeur (jamais par référence : il serait détruit).</li>
+</ol>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="c2-d6">
+<header><span class="tag">Vecteurs</span><span class="tag theme">Algorithme</span><h4>Insertion triée et suppression</h4></header>
+<div class="enonce">
+<p>Écrivez <code>void insererTrie(vector&lt;int&gt;&amp; v, int val)</code> qui insère <code>val</code> dans un vecteur déjà trié en ordre croissant, en gardant le tri, et <code>void supprimerValeur(vector&lt;int&gt;&amp; v, int val)</code> qui retire <em>toutes</em> les occurrences de <code>val</code>.</p>
+</div>
+<details class="hint"><summary>Indice</summary><div class="body"><p>Pour la suppression, attention à l'indice après un <code>erase</code> : l'élément suivant a pris la place de celui qu'on vient de retirer, il ne faut pas l'enjamber.</p></div></details>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/cpp">
+void insererTrie(vector<int>& v, int val) {
+    size_t pos = 0;
+    while (pos < v.size() && v[pos] < val) ++pos;    // première position dont l'élément est >= val
+    v.insert(v.begin() + pos, val);
+}
+
+void supprimerValeur(vector<int>& v, int val) {
+    for (size_t i = 0; i < v.size(); ) {               // pas de ++i dans l'en-tête de boucle
+        if (v[i] == val) v.erase(v.begin() + i);       // le suivant glisse à l'indice i : on le réexamine
+        else ++i;
+    }
+}
+</script>
+<p>Version STL (module 9) : <code>v.insert(lower_bound(v.begin(), v.end(), val), val);</code> et <code>v.erase(remove(v.begin(), v.end(), val), v.end());</code>.</p>
+</div></details>
+</article>
+
+</div>
+
+</article>
+</main>
+<footer class="footer">INF1010 - site d'étude personnel. Les documents officiels (Moodle, plan de cours, énoncés de TP) font foi.</footer>
+<script defer src="assets/app.js?v=3"></script>
+<script defer src="assets/widgets.js?v=2"></script>
+</body>
+</html>

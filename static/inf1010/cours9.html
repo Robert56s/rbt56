@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 9 - STL : algorithmes, foncteurs, fonctions lambda | INF1010</title>
+<link rel="stylesheet" href="assets/style.css?v=3">
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="index.html">INF1010 <small>Programmation orientée objet</small></a>
+  <nav>
+    <a href="index.html">Accueil</a>
+    <a href="cours1.html" title="Concepts de base, allocation dynamique">M1</a>
+    <a href="cours2.html" title="Méthodes constantes, passage de paramètres, vecteurs">M2</a>
+    <a href="cours3.html" title="Pointeurs intelligents, composition et agrégation">M3</a>
+    <a href="cours4.html" title="Pointeur this, surcharge d'opérateurs, copie et affectation">M4</a>
+    <a href="cours5.html" title="Héritage et polymorphisme">M5</a>
+    <a href="cours6.html" title="Classes abstraites, conversion d'objets">M6</a>
+    <a href="cours7.html" title="Héritage multiple, fonctions et classes génériques">M7</a>
+    <a href="cours8.html" title="STL : conteneurs et itérateurs">M8</a>
+    <a href="cours9.html" title="STL : algorithmes, foncteurs, lambdas">M9</a>
+    <a href="cours10.html" title="Variables statiques, exceptions, Python">M10</a>
+    <span class="sep"></span>
+    <a href="intra.html">Intra</a>
+    <a href="aide-memoire.html">Aide-mémoire</a>
+    <button class="theme-btn" type="button">Thème</button>
+  </nav>
+</header>
+
+<main class="layout">
+<aside class="toc"></aside>
+<article class="content">
+
+<div class="course-hero">
+  <div class="kicker">Module 9 - cours du 3 novembre (quiz 8) - matière du final</div>
+  <h1>STL : algorithmes, foncteurs et fonctions lambda</h1>
+  <p class="meta">Leçon Moodle « STL » (algorithmes) | Simulateur de hockey : exercice « Algorithmes STL et foncteurs » (éliminer toutes les boucles de Match) | Déjà utilisé au TP3 (<code>sommer</code> avec une lambda) ; central au TP4</p>
+  <p><span class="pill accent">&lt;algorithm&gt;, &lt;numeric&gt;</span><span class="pill accent">find_if, count_if, for_each</span><span class="pill accent">sort avec comparateur</span><span class="pill accent">transform, accumulate</span><span class="pill accent">erase-remove</span><span class="pill accent">Foncteur : operator()</span><span class="pill accent">Lambda et captures</span></p>
+</div>
+
+<h2>1. Les algorithmes : des boucles toutes faites</h2>
+<p>Un algorithme de la STL est une fonction générique qui travaille sur un intervalle d'itérateurs <code>[debut, fin[</code>, donc sur n'importe quel conteneur (et même sur un tableau C). Beaucoup prennent en plus une <em>fonction</em> (prédicat, opération, comparateur) qui décide quoi faire de chaque élément. Remplacer une boucle par un algorithme rend l'intention lisible (« compter », « chercher », « transformer ») et évite les erreurs d'indices.</p>
+<table>
+<thead><tr><th>Catégorie</th><th>Algorithmes</th><th>Retour</th></tr></thead>
+<tbody>
+<tr><td>Recherche et comptage (sans modification)</td><td><code>find(b, e, val)</code>, <code>find_if(b, e, pred)</code>, <code>count(b, e, val)</code>, <code>count_if(b, e, pred)</code>, <code>any_of</code> / <code>all_of</code> / <code>none_of(b, e, pred)</code>, <code>min_element</code> / <code>max_element(b, e[, comp])</code>, <code>equal(b, e, b2)</code></td><td>itérateur (<code>e</code> si absent), entier, booléen</td></tr>
+<tr><td>Parcours</td><td><code>for_each(b, e, f)</code></td><td>la fonction (utile pour un foncteur avec état)</td></tr>
+<tr><td>Modification</td><td><code>copy(b, e, dest)</code>, <code>copy_if(b, e, dest, pred)</code>, <code>transform(b, e, dest, f)</code>, <code>fill(b, e, val)</code>, <code>replace(b, e, old, nouveau)</code>, <code>replace_if</code>, <code>reverse(b, e)</code>, <code>swap_ranges</code>, <code>generate(b, e, f)</code></td><td>itérateur de fin de destination</td></tr>
+<tr><td>Suppression</td><td><code>remove(b, e, val)</code>, <code>remove_if(b, e, pred)</code>, <code>unique(b, e)</code></td><td>nouvelle fin logique (la taille ne change pas !)</td></tr>
+<tr><td>Tri et recherche binaire</td><td><code>sort(b, e[, comp])</code>, <code>stable_sort</code>, <code>partial_sort</code>, <code>binary_search(b, e, val)</code>, <code>lower_bound</code>, <code>upper_bound</code>, <code>equal_range</code>, <code>merge</code>, <code>partition(b, e, pred)</code></td><td>bool ou itérateur</td></tr>
+<tr><td>Numérique (<code>&lt;numeric&gt;</code>)</td><td><code>accumulate(b, e, init[, op])</code>, <code>inner_product</code>, <code>iota(b, e, debut)</code>, <code>partial_sum</code></td><td>valeur</td></tr>
+</tbody>
+</table>
+<script type="text/cpp">
+#include <algorithm>
+#include <numeric>
+vector<int> v = {5, 3, 8, 1};
+sort(v.begin(), v.end());                                   // 1 3 5 8 (operator<)
+sort(v.begin(), v.end(), greater<int>());                   // 8 5 3 1 (foncteur standard)
+auto it = find(v.begin(), v.end(), 5);                      // itérateur sur 5, ou v.end()
+if (it != v.end()) cout << "trouve a l'indice " << distance(v.begin(), it);
+int nbPairs = count_if(v.begin(), v.end(), [](int n) { return n % 2 == 0; });
+int somme = accumulate(v.begin(), v.end(), 0);              // 0 : valeur initiale ET type du résultat
+double moyenne = accumulate(v.begin(), v.end(), 0.0) / v.size();   // 0.0 sinon division entière
+transform(v.begin(), v.end(), v.begin(), [](int n) { return n * 2; });   // sur place
+vector<int> w;
+copy_if(v.begin(), v.end(), back_inserter(w), [](int n) { return n > 5; });   // back_inserter : push_back automatique
+copy(v.begin(), v.end(), ostream_iterator<int>(cout, " "));                   // affichage
+bool tousPositifs = all_of(v.begin(), v.end(), [](int n) { return n > 0; });
+auto plusGrand = max_element(v.begin(), v.end());           // itérateur
+</script>
+<div class="box warn"><span class="label">L'idiome erase-remove</span>
+<p><code>remove</code> et <code>remove_if</code> ne peuvent pas changer la taille d'un conteneur (ils ne connaissent que des itérateurs) : ils <em>compactent</em> les éléments à garder au début et retournent un itérateur sur la nouvelle fin logique. Les éléments après sont indéterminés. Il faut donc enchaîner avec <code>erase</code> :</p>
+<script type="text/cpp">
+v.erase(remove_if(v.begin(), v.end(), [](int n) { return n % 2 == 0; }), v.end());   // supprime vraiment les pairs
+v.erase(unique(v.begin(), v.end()), v.end());                                        // après un sort : doublons retirés
+// C++20 : std::erase_if(v, pred);   list : l.remove_if(pred);
+</script></div>
+
+<h2>2. Foncteurs : des objets qui s'appellent comme des fonctions</h2>
+<p>Un <strong>foncteur</strong> (objet-fonction) est un objet d'une classe qui surcharge <code>operator()</code>. On l'utilise comme une fonction, mais il peut avoir des <em>attributs</em> : un seuil, un compteur, un flux de sortie. C'est la façon classique de paramétrer un algorithme avec un état.</p>
+<script type="text/cpp">
+class PlusLourdQue {
+public:
+    PlusLourdQue(double seuil) : seuil_(seuil) {}
+    bool operator()(const shared_ptr<Composante>& c) const { return c->getMasseKg() > seuil_; }   // prédicat
+private:
+    double seuil_;
+};
+int n = count_if(composantes.begin(), composantes.end(), PlusLourdQue(2.0));   // objet temporaire passé à l'algorithme
+
+class Accumulateur {                                     // foncteur avec état modifié
+public:
+    void operator()(const Joueur& j) { total_ += j.getSalaire(); }
+    double getTotal() const { return total_; }
+private:
+    double total_ = 0;
+};
+Accumulateur resultat = for_each(joueurs.begin(), joueurs.end(), Accumulateur());   // for_each RETOURNE le foncteur
+cout << resultat.getTotal();            // le foncteur est passé par valeur : récupérer la copie retournée
+
+struct ParSalaire {                                      // comparateur pour sort, set, map, priority_queue
+    bool operator()(const Joueur* a, const Joueur* b) const { return a->getSalaire() < b->getSalaire(); }
+};
+sort(v.begin(), v.end(), ParSalaire());
+set<Joueur*, ParSalaire> tries;                          // le type du foncteur comme paramètre de template
+</script>
+<ul>
+  <li>Foncteurs standard de <code>&lt;functional&gt;</code> : <code>less&lt;T&gt;</code>, <code>greater&lt;T&gt;</code>, <code>plus&lt;T&gt;</code>, <code>minus&lt;T&gt;</code>, <code>multiplies&lt;T&gt;</code>, <code>equal_to&lt;T&gt;</code>, <code>logical_not&lt;T&gt;</code>. Exemple : <code>accumulate(b, e, 1, multiplies&lt;int&gt;())</code> pour un produit.</li>
+  <li>Un comparateur doit définir un ordre strict : <code>a &lt; b</code>, jamais <code>&lt;=</code> (sinon comportement indéfini de sort et des set).</li>
+  <li><code>operator()</code> est <code>const</code> pour un prédicat ou un comparateur (l'algorithme peut recevoir une copie constante) ; non const si le foncteur accumule.</li>
+</ul>
+
+<h3>Le simulateur de hockey sans boucles</h3>
+<script type="text/cpp">
+class AfficherElement {                                  // affiche un membre, avec son index
+public:
+    AfficherElement(ostream& out) : out_(out) {}
+    void operator()(const MembreEquipe* m) { out_ << "[" << index_++ << "] " << *m << endl; }
+private:
+    ostream& out_;
+    int index_ = 0;
+};
+for_each(membres_.begin(), membres_.end(), AfficherElement(cout));
+
+class FoncteurGetButs {                                  // collecte les buts par équipe
+public:
+    void operator()(const Joueur* j) { buts_[j->getEquipe() ? 1 : 0] += j->getButs(); }
+    int get(bool equipe) const { return buts_[equipe ? 1 : 0]; }
+private:
+    int buts_[2] = {0, 0};
+};
+FoncteurGetButs buts = for_each(joueurs_.begin(), joueurs_.end(), FoncteurGetButs());
+
+class FoncteurValider {                                  // vérifie le cap salarial d'une équipe
+public:
+    FoncteurValider(bool equipe) : equipe_(equipe) {}
+    void operator()(const MembreEquipe* m) { if (m->getEquipe() == equipe_) masse_ += m->getSalaire(); }
+    bool estValide() const { return masse_ <= 10000000; }
+private:
+    bool equipe_;
+    double masse_ = 0;
+};
+bool ok = for_each(membres_.begin(), membres_.end(), FoncteurValider(true)).estValide();
+</script>
+
+<h2>3. Fonctions lambda</h2>
+<p>Une <strong>lambda</strong> est un foncteur anonyme écrit sur place : le compilateur génère la classe (avec <code>operator()</code> et des attributs pour les captures) à votre place. Syntaxe : <code>[captures](paramètres) -&gt; type_de_retour { corps }</code>. Le type de retour est déduit s'il est omis.</p>
+<script type="text/cpp">
+auto estPair = [](int n) { return n % 2 == 0; };                       // lambda stockée dans une variable (auto obligatoire)
+cout << estPair(4);                                                      // appel direct
+
+int seuil = 5;
+int grands = count_if(v.begin(), v.end(), [seuil](int n) { return n > seuil; });      // capture par VALEUR (copie de seuil)
+double total = 0;
+for_each(v.begin(), v.end(), [&total](int n) { total += n; });                        // capture par RÉFÉRENCE (modifie total)
+sort(robots.begin(), robots.end(), [](const Robot& a, const Robot& b) { return a.getMasse() < b.getMasse(); });   // comparateur
+auto diviser = [](double a, double b) -> double { return a / b; };      // type de retour explicite
+auto compteur = [n = 0]() mutable { return ++n; };                      // capture avec initialisation, mutable pour la modifier
+
+// dans une méthode : capturer this pour utiliser les attributs
+bool Robot::possedeLourd(double seuil) const {
+    return any_of(composantes_.begin(), composantes_.end(), [this, seuil](const auto& c) { return c->getMasseKg() > seuil * facteur_; });
+}
+</script>
+<table>
+<thead><tr><th>Capture</th><th>Effet</th></tr></thead>
+<tbody>
+<tr><td><code>[]</code></td><td>aucune variable extérieure (seules les variables globales et les paramètres sont accessibles)</td></tr>
+<tr><td><code>[x]</code></td><td><code>x</code> copiée au moment de la création ; non modifiable dans la lambda sauf <code>mutable</code></td></tr>
+<tr><td><code>[&amp;x]</code></td><td><code>x</code> par référence : modifications visibles à l'extérieur ; <code>x</code> doit survivre à la lambda</td></tr>
+<tr><td><code>[=]</code> / <code>[&amp;]</code></td><td>toutes les variables utilisées, par valeur / par référence</td></tr>
+<tr><td><code>[this]</code></td><td>accès aux membres de l'objet courant (dans une méthode)</td></tr>
+<tr><td><code>[=, &amp;total]</code></td><td>mixte : tout par valeur sauf <code>total</code> par référence</td></tr>
+</tbody>
+</table>
+<ul>
+  <li>Chaque lambda a un type unique et anonyme : on la reçoit dans un paramètre générique (<code>template &lt;typename Fonction&gt;</code>, comme <code>sommer</code> au TP3) ou dans un <code>std::function&lt;bool(int)&gt;</code> (<code>&lt;functional&gt;</code>), qui peut aussi contenir une fonction ou un foncteur.</li>
+  <li>Lambda générique (C++14) : <code>[](const auto&amp; c) { ... }</code> : le paramètre est déduit, pratique pour les <code>shared_ptr</code>.</li>
+  <li>Quand choisir ? Lambda : court, local, à usage unique. Foncteur : réutilisable, nommé, avec état ou plusieurs méthodes. Pointeur de fonction : fonctions existantes sans état.</li>
+</ul>
+
+<div class="widget" data-widget="stl-lab">
+  <p class="w-title">Laboratoire d'algorithmes</p>
+  <p class="w-desc">Modifiez les valeurs, choisissez un algorithme et lisez le code C++ équivalent avec son résultat.</p>
+</div>
+
+<div class="widget" data-widget="guess-output">
+  <p class="w-title">Devinez l'affichage : foncteur passé par valeur, lambda et captures</p>
+<script type="text/cpp">
+class Compteur {
+public:
+    void operator()(int n) { if (n > 2) ++nb_; }
+    int get() const { return nb_; }
+private:
+    int nb_ = 0;
+};
+
+int main() {
+    vector<int> v = {1, 5, 3, 2, 8};
+    Compteur c;
+    for_each(v.begin(), v.end(), c);
+    cout << c.get() << endl;
+    Compteur r = for_each(v.begin(), v.end(), c);
+    cout << r.get() << endl;
+    int seuil = 2, total = 0;
+    for_each(v.begin(), v.end(), [seuil, &total](int n) { if (n > seuil) total += n; });
+    seuil = 100;
+    cout << total << endl;
+    v.erase(remove_if(v.begin(), v.end(), [](int n) { return n % 2 == 1; }), v.end());
+    sort(v.begin(), v.end(), greater<int>());
+    for (int n : v) cout << n << " ";
+    cout << endl;
+    return 0;
+}
+</script>
+<script type="text/plain" data-role="expected">
+0
+3
+16
+8 2
+</script>
+<div data-role="explain" class="box tip"><span class="label">Explication</span>
+<p><code>for_each</code> reçoit une <em>copie</em> de <code>c</code> : l'original reste à 0. La copie retournée par for_each contient le résultat (3 éléments &gt; 2). La lambda capture <code>seuil</code> par valeur (figé à 2) et <code>total</code> par référence : 5 + 3 + 8 = 16 ; changer <code>seuil</code> après coup n'a aucun effet. erase-remove retire les impairs, puis tri décroissant : 8 2.</p></div>
+</div>
+
+<h2>4. À retenir</h2>
+<ul class="summary-list">
+  <li>Algorithmes sur <code>[begin, end[</code> ; retour : itérateur (<code>end</code> si absent), nombre, booléen. <code>back_inserter</code> pour remplir un conteneur vide, <code>ostream_iterator</code> pour afficher.</li>
+  <li><code>remove</code> / <code>remove_if</code> / <code>unique</code> ne suppriment pas : <code>c.erase(remove..., c.end())</code>.</li>
+  <li>Foncteur = classe avec <code>operator()</code> ; peut avoir un état ; <code>for_each</code> le retourne. Comparateur : ordre strict, <code>const</code>, type passé en paramètre de template pour set / map / priority_queue.</li>
+  <li>Lambda <code>[captures](params) { corps }</code> ; par valeur (copie figée) ou par référence ; <code>[this]</code> dans une méthode ; <code>mutable</code> pour modifier une capture par valeur ; type unique → <code>auto</code>, template ou <code>std::function</code>.</li>
+</ul>
+
+<section class="quiz" data-quiz-id="c9" id="quiz-c9">
+<h2>Quiz rapide - Module 9</h2>
+
+<div class="q" data-answer="1">
+<p class="q-text">Que retourne <code>find(v.begin(), v.end(), 42)</code> si 42 est absent ?</p>
+<ul class="choices"><li>nullptr</li><li><code>v.end()</code></li><li>-1</li><li>Une exception</li></ul>
+<div class="explain">Toujours tester <code>if (it != v.end())</code> avant de déréférencer.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Après <code>remove_if(v.begin(), v.end(), pred)</code> seul, la taille de v :</p>
+<ul class="choices"><li>Diminue du nombre d'éléments retirés</li><li>Devient 0</li><li>Ne change pas : les éléments à garder sont compactés au début, il faut appeler erase avec l'itérateur retourné</li><li>Double</li></ul>
+<div class="explain">C'est l'idiome erase-remove.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Qu'est-ce qu'un foncteur ?</p>
+<ul class="choices"><li>Un objet d'une classe qui surcharge operator(), utilisable comme une fonction et pouvant avoir un état</li><li>Un pointeur de fonction</li><li>Une fonction générique</li><li>Une méthode statique</li></ul>
+<div class="explain">Exemples standard : greater&lt;int&gt;, less&lt;T&gt;, plus&lt;T&gt;.</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Pourquoi <code>Compteur c; for_each(v.begin(), v.end(), c); c.get();</code> retourne-t-il 0 même si des éléments ont été comptés ?</p>
+<ul class="choices"><li>for_each ne fonctionne pas avec des foncteurs</li><li>get() est const</li><li>operator() n'a pas été appelé</li><li>Le foncteur est passé par valeur : for_each travaille sur une copie, qu'il retourne ; il faut récupérer cette copie</li></ul>
+<div class="explain"><code>Compteur r = for_each(...); r.get();</code></div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Quelle lambda capture <code>total</code> de façon à le modifier ?</p>
+<ul class="choices"><li><code>[total](int n) { total += n; }</code></li><li><code>[&amp;total](int n) { total += n; }</code></li><li><code>[=](int n) { total += n; }</code></li><li><code>[](int n) { total += n; }</code></li></ul>
+<div class="explain">Par valeur, total est une copie constante (erreur de compilation sans mutable, et même avec mutable l'original ne change pas). Sans capture, total n'est pas accessible.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Que vaut <code>x</code> à la fin ? <code>int a = 1; auto f = [a]() { return a; }; a = 7; int x = f();</code></p>
+<ul class="choices"><li>7</li><li>Erreur de compilation</li><li>1 : la capture par valeur copie a au moment de la création de la lambda</li><li>0</li></ul>
+<div class="explain">Avec <code>[&amp;a]</code>, x vaudrait 7.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Quel comparateur est correct pour trier des robots par masse croissante ?</p>
+<ul class="choices"><li><code>[](const Robot&amp; a, const Robot&amp; b) { return a.getMasse() &lt; b.getMasse(); }</code></li><li><code>[](const Robot&amp; a, const Robot&amp; b) { return a.getMasse() &lt;= b.getMasse(); }</code></li><li><code>[](Robot a, Robot b) { return a &lt; b; }</code></li><li><code>[](const Robot&amp; a) { return a.getMasse(); }</code></li></ul>
+<div class="explain">Deux paramètres, ordre strict (jamais &lt;=), par référence constante pour ne pas copier.</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Que calcule <code>accumulate(v.begin(), v.end(), 0)</code> pour <code>vector&lt;double&gt; v = {0.5, 0.5}</code> ?</p>
+<ul class="choices"><li>1.0</li><li>Erreur de compilation</li><li>2</li><li>0 : la valeur initiale 0 est un int, les additions se font en int (troncature)</li></ul>
+<div class="explain">Écrire <code>accumulate(v.begin(), v.end(), 0.0)</code>.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">À quoi sert <code>back_inserter(w)</code> ?</p>
+<ul class="choices"><li>À insérer au début de w</li><li>À fournir un itérateur de sortie qui fait push_back dans w à chaque écriture (w peut être vide)</li><li>À trier w</li><li>À retirer le dernier élément de w</li></ul>
+<div class="explain">Sans lui, <code>copy(b, e, w.begin())</code> sur un w vide écrirait hors du conteneur.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Comment stocker une lambda dans un attribut de classe ?</p>
+<ul class="choices"><li><code>lambda f_;</code></li><li><code>auto f_;</code></li><li><code>std::function&lt;bool(int)&gt; f_;</code></li><li>Impossible</li></ul>
+<div class="explain">auto n'est pas permis pour un attribut non statique ; std::function accepte lambdas, foncteurs et fonctions de signature compatible.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Que fait <code>transform(v.begin(), v.end(), v.begin(), f)</code> ?</p>
+<ul class="choices"><li>Remplace chaque élément par f(élément), sur place</li><li>Trie v selon f</li><li>Retire les éléments pour lesquels f est faux</li><li>Copie v dans f</li></ul>
+<div class="explain">Le troisième argument est la destination ; ici le conteneur lui-même.</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Dans une méthode de Robot, une lambda a besoin de l'attribut <code>facteur_</code>. Quelle capture ?</p>
+<ul class="choices"><li><code>[facteur_]</code></li><li><code>[&amp;facteur_]</code></li><li>Aucune : les attributs sont toujours visibles</li><li><code>[this]</code> (ou <code>[=]</code> / <code>[&amp;]</code>, qui capturent this implicitement)</li></ul>
+<div class="explain">Un attribut n'est pas une variable locale : on capture l'objet courant.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Quel algorithme remplace cette boucle ? <code>bool ok = true; for (const auto&amp; m : membres) if (m-&gt;getSalaire() &gt; cap) ok = false;</code></p>
+<ul class="choices"><li><code>count(...)</code></li><li><code>bool ok = none_of(membres.begin(), membres.end(), [cap](const auto&amp; m) { return m-&gt;getSalaire() &gt; cap; });</code></li><li><code>find(...)</code></li><li><code>sort(...)</code></li></ul>
+<div class="explain">Ou <code>all_of</code> avec le prédicat inverse (<code>&lt;= cap</code>).</div>
+</div>
+</section>
+
+<h2 id="dev-c9">Exercices à développement</h2>
+<div class="exo-tools" data-scope="dev-c9-list">
+  <div class="progress-bar"><span></span></div><span class="progress-label small"></span>
+  <button class="btn secondary small" type="button" data-action="open-all">Déplier les solutions</button>
+  <button class="btn secondary small" type="button" data-action="close-all">Tout replier</button>
+</div>
+<div id="dev-c9-list">
+
+<article class="exo" data-exo-id="c9-d1">
+<header><span class="tag">Simulateur de hockey</span><span class="tag theme">Algorithmes</span><h4>Match sans aucune boucle</h4></header>
+<div class="enonce">
+<p>Match possède <code>list&lt;Joueur*&gt; joueurs_</code> et <code>list&lt;Arbitre*&gt; arbitres_</code>. Réécrivez sans boucle explicite : <code>simuler()</code> (fait jouer tous les patineurs), <code>int getButs(bool equipe) const</code>, <code>bool valider() const</code> (chaque équipe a exactement 3 joueurs), <code>void afficherEquipe(bool equipe) const</code> et <code>Joueur* meilleurButeur() const</code>.</p>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/cpp">
+void Match::simuler() {
+    for_each(joueurs_.begin(), joueurs_.end(), [](Joueur* j) { j->jouer(); });
+    for_each(arbitres_.begin(), arbitres_.end(), [](Arbitre* a) { a->jouer(); });
+}
+
+int Match::getButs(bool equipe) const {
+    return accumulate(joueurs_.begin(), joueurs_.end(), 0,
+                      [equipe](int total, const Joueur* j) { return j->getEquipe() == equipe ? total + j->getButs() : total; });
+}
+
+bool Match::valider() const {
+    auto nb = [this](bool equipe) { return count_if(joueurs_.begin(), joueurs_.end(), [equipe](const Joueur* j) { return j->getEquipe() == equipe; }); };
+    return nb(true) == 3 && nb(false) == 3;
+}
+
+void Match::afficherEquipe(bool equipe) const {
+    vector<const Joueur*> membres;
+    copy_if(joueurs_.begin(), joueurs_.end(), back_inserter(membres), [equipe](const Joueur* j) { return j->getEquipe() == equipe; });
+    sort(membres.begin(), membres.end(), [](const Joueur* a, const Joueur* b) { return a->getNumero() < b->getNumero(); });
+    for_each(membres.begin(), membres.end(), [](const Joueur* j) { cout << *j << endl; });
+}
+
+Joueur* Match::meilleurButeur() const {
+    auto it = max_element(joueurs_.begin(), joueurs_.end(), [](const Joueur* a, const Joueur* b) { return a->getButs() < b->getButs(); });
+    return it == joueurs_.end() ? nullptr : *it;
+}
+</script>
+<p>L'exercice original demande des foncteurs nommés (FoncteurJouer, FoncteurGetButs, FoncteurValider, AfficherElement) : chaque lambda ci-dessus se transpose en une classe avec <code>operator()</code> et les captures en attributs.</p>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="c9-d2">
+<header><span class="tag">Foncteurs</span><h4>Trois foncteurs</h4></header>
+<div class="enonce">
+<p>Écrivez : (1) <code>DansIntervalle</code>, prédicat vrai si une valeur est dans [min, max] ; (2) <code>Multiplier</code>, qui multiplie par un facteur (pour <code>transform</code>) ; (3) <code>Statistiques</code>, un foncteur avec état qui accumule somme, minimum et maximum (pour <code>for_each</code>), et montrez l'utilisation de chacun.</p>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/cpp">
+class DansIntervalle {
+public:
+    DansIntervalle(double min, double max) : min_(min), max_(max) {}
+    bool operator()(double x) const { return x >= min_ && x <= max_; }
+private:
+    double min_, max_;
+};
+
+class Multiplier {
+public:
+    explicit Multiplier(double facteur) : facteur_(facteur) {}
+    double operator()(double x) const { return x * facteur_; }
+private:
+    double facteur_;
+};
+
+class Statistiques {
+public:
+    void operator()(double x) {
+        somme_ += x;  ++n_;
+        if (n_ == 1 || x < min_) min_ = x;
+        if (n_ == 1 || x > max_) max_ = x;
+    }
+    double moyenne() const { return n_ ? somme_ / n_ : 0; }
+    double min() const { return min_; }
+    double max() const { return max_; }
+private:
+    double somme_ = 0, min_ = 0, max_ = 0;
+    int n_ = 0;
+};
+
+int dansPlage = count_if(v.begin(), v.end(), DansIntervalle(2, 8));
+transform(v.begin(), v.end(), v.begin(), Multiplier(1.5));
+Statistiques s = for_each(v.begin(), v.end(), Statistiques());
+cout << s.moyenne() << " " << s.min() << " " << s.max();
+</script>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="c9-d3">
+<header><span class="tag">Lambdas</span><span class="tag theme">TP3 / TP4</span><h4>Robot et algorithmes</h4></header>
+<div class="enonce">
+<p>Avec <code>vector&lt;shared_ptr&lt;Composante&gt;&gt; composantes_</code>, écrivez avec des algorithmes et des lambdas : (1) <code>double getMasse() const</code> ; (2) <code>shared_ptr&lt;Composante&gt; plusGourmande() const</code> (consommation maximale, nullptr si vide) ; (3) <code>vector&lt;string&gt; nomsLourds(double seuil) const</code> (noms des composantes dont la masse dépasse le seuil) ; (4) <code>void retirerInactifs()</code> qui retire les capteurs inactifs (utiliser <code>dynamic_pointer_cast</code>) ; (5) <code>bool contient(const string&amp; nom) const</code>.</p>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/cpp">
+double Robot::getMasse() const {
+    return accumulate(composantes_.begin(), composantes_.end(), 0.0,
+                      [](double total, const shared_ptr<Composante>& c) { return total + c->getMasseKg(); });
+}
+
+shared_ptr<Composante> Robot::plusGourmande() const {
+    auto it = max_element(composantes_.begin(), composantes_.end(),
+                          [](const auto& a, const auto& b) { return a->getConsommationW() < b->getConsommationW(); });
+    return it == composantes_.end() ? nullptr : *it;
+}
+
+vector<string> Robot::nomsLourds(double seuil) const {
+    vector<string> noms;
+    for_each(composantes_.begin(), composantes_.end(),
+             [&noms, seuil](const auto& c) { if (c->getMasseKg() > seuil) noms.push_back(c->getNom()); });
+    return noms;
+}
+
+void Robot::retirerInactifs() {
+    composantes_.erase(remove_if(composantes_.begin(), composantes_.end(), [](const auto& c) {
+                           auto capteur = dynamic_pointer_cast<Capteur>(c);
+                           return capteur != nullptr && !capteur->estActif();
+                       }), composantes_.end());
+}
+
+bool Robot::contient(const string& nom) const {
+    return any_of(composantes_.begin(), composantes_.end(), [&nom](const auto& c) { return c->getNom() == nom; });
+}
+</script>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="c9-d4">
+<header><span class="tag">Algorithmes</span><span class="tag theme">map</span><h4>Inventaire</h4></header>
+<div class="enonce">
+<p>Avec <code>map&lt;string, int&gt; stock</code> (article → quantité) : (1) affichez les articles en rupture (quantité 0) avec <code>for_each</code> ; (2) calculez le total des quantités avec <code>accumulate</code> ; (3) trouvez l'article le plus stocké avec <code>max_element</code> ; (4) construisez un <code>vector&lt;string&gt;</code> des articles dont la quantité est inférieure à un seuil, trié par quantité croissante.</p>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/cpp">
+using Entree = pair<const string, int>;             // type des éléments de la map
+
+for_each(stock.begin(), stock.end(), [](const Entree& e) { if (e.second == 0) cout << e.first << endl; });
+
+int total = accumulate(stock.begin(), stock.end(), 0, [](int t, const Entree& e) { return t + e.second; });
+
+auto it = max_element(stock.begin(), stock.end(), [](const Entree& a, const Entree& b) { return a.second < b.second; });
+if (it != stock.end()) cout << it->first;
+
+vector<Entree> faibles;
+copy_if(stock.begin(), stock.end(), back_inserter(faibles), [seuil](const Entree& e) { return e.second < seuil; });
+sort(faibles.begin(), faibles.end(), [](const Entree& a, const Entree& b) { return a.second < b.second; });
+vector<string> noms;
+transform(faibles.begin(), faibles.end(), back_inserter(noms), [](const Entree& e) { return e.first; });
+</script>
+<p>Détail : <code>vector&lt;Entree&gt;</code> avec une clé <code>const</code> ne se trie pas (les éléments ne sont pas affectables) : en pratique utiliser <code>pair&lt;string, int&gt;</code> pour le vecteur intermédiaire.</p>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="c9-d5">
+<header><span class="tag">Affichage</span><span class="tag theme">Captures</span><h4>Devinez l'affichage</h4></header>
+<div class="enonce">
+<div class="widget" data-widget="guess-output">
+  <p class="w-title">Vérifiez votre réponse</p>
+<script type="text/cpp">
+int main() {
+    vector<int> v = {4, 1, 3, 9, 6};
+    int k = 2;
+    auto parValeur = [k](int n) { return n * k; };
+    auto parRef = [&k](int n) { return n * k; };
+    k = 10;
+    cout << parValeur(3) << " " << parRef(3) << endl;
+    auto gen = [n = 0]() mutable { return n += 5; };
+    cout << gen() << " " << gen() << endl;
+    sort(v.begin(), v.end(), [](int a, int b) { return a > b; });
+    auto it = find_if(v.begin(), v.end(), [](int n) { return n < 5; });
+    cout << *it << " " << distance(v.begin(), it) << endl;
+    cout << count_if(v.begin(), v.end(), [](int n) { return n % 3 == 0; }) << " "
+         << accumulate(v.begin(), v.end(), 1, multiplies<int>()) << endl;
+    return 0;
+}
+</script>
+<script type="text/plain" data-role="expected">
+6 30
+5 10
+4 2
+3 648
+</script>
+<div data-role="explain" class="box tip"><span class="label">Explication</span>
+<p>Capture par valeur figée à 2 (3 x 2 = 6) ; par référence : 3 x 10. La lambda <code>mutable</code> garde son état n entre les appels : 5 puis 10. Tri décroissant : 9 6 4 3 1 ; premier élément &lt; 5 : 4, à l'indice 2. Multiples de 3 : 9, 6, 3 → 3 ; produit 9 x 6 x 4 x 3 x 1 = 648.</p></div>
+</div>
+</div>
+</article>
+
+</div>
+
+</article>
+</main>
+<footer class="footer">INF1010 - site d'étude personnel. Les documents officiels (Moodle, plan de cours, énoncés de TP) font foi.</footer>
+<script defer src="assets/app.js?v=3"></script>
+<script defer src="assets/widgets.js?v=2"></script>
+</body>
+</html>

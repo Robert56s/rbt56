@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 7 - Héritage multiple, fonctions et classes génériques | INF1010</title>
+<link rel="stylesheet" href="assets/style.css?v=3">
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="index.html">INF1010 <small>Programmation orientée objet</small></a>
+  <nav>
+    <a href="index.html">Accueil</a>
+    <a href="cours1.html" title="Concepts de base, allocation dynamique">M1</a>
+    <a href="cours2.html" title="Méthodes constantes, passage de paramètres, vecteurs">M2</a>
+    <a href="cours3.html" title="Pointeurs intelligents, composition et agrégation">M3</a>
+    <a href="cours4.html" title="Pointeur this, surcharge d'opérateurs, copie et affectation">M4</a>
+    <a href="cours5.html" title="Héritage et polymorphisme">M5</a>
+    <a href="cours6.html" title="Classes abstraites, conversion d'objets">M6</a>
+    <a href="cours7.html" title="Héritage multiple, fonctions et classes génériques">M7</a>
+    <a href="cours8.html" title="STL : conteneurs et itérateurs">M8</a>
+    <a href="cours9.html" title="STL : algorithmes, foncteurs, lambdas">M9</a>
+    <a href="cours10.html" title="Variables statiques, exceptions, Python">M10</a>
+    <span class="sep"></span>
+    <a href="intra.html">Intra</a>
+    <a href="aide-memoire.html">Aide-mémoire</a>
+    <button class="theme-btn" type="button">Thème</button>
+  </nav>
+</header>
+
+<main class="layout">
+<aside class="toc"></aside>
+<article class="content">
+
+<div class="course-hero">
+  <div class="kicker">Module 7 - cours du 6 octobre (quiz 6) - dernier module de l'intra</div>
+  <h1>Héritage multiple, fonctions et classes génériques</h1>
+  <p class="meta">Leçons Moodle « Héritage multiple », « Fonctions et classes génériques » | Mis en pratique au TP3 (<code>Liste&lt;T&gt;</code>, <code>sommer</code>, <code>filtrerParType&lt;Derivee&gt;</code>) et dans le simulateur de hockey (Joueur hérite de Patineur et de MembreEquipe)</p>
+  <p><span class="pill accent">Héritage multiple</span><span class="pill accent">Ambiguïté et Base::membre</span><span class="pill accent">Diamant et héritage virtuel</span><span class="pill accent">template &lt;typename T&gt;</span><span class="pill accent">Fonction générique</span><span class="pill accent">Classe générique</span><span class="pill accent">Définitions dans le .h</span></p>
+</div>
+
+<h2>1. Héritage multiple</h2>
+<p>Une classe peut hériter de plusieurs classes de base : <code>class Joueur : public Patineur, public MembreEquipe</code>. Elle reçoit tous les membres de chacune, et un Joueur peut être converti implicitement vers l'une ou l'autre (<code>Patineur*</code> ou <code>MembreEquipe*</code>). Usage le plus sain : hériter d'une classe concrète et d'une ou plusieurs <em>interfaces</em> (classes abstraites sans données).</p>
+<script type="text/cpp">
+class Patineur { public: Patineur(const string& nom, int vitesse); virtual void jouer(); /* ... */ };
+class MembreEquipe { public: virtual ~MembreEquipe() = default; virtual double getSalaire() const = 0; virtual bool getEquipe() const = 0; };
+
+class Joueur : public Patineur, public MembreEquipe {
+public:
+    Joueur(const string& nom, int vitesse, int habilete, bool equipe, double salaire)
+        : Patineur(nom, vitesse), MembreEquipe(),            // les bases dans l'ordre de la déclaration de la classe
+          habilete_(habilete), equipe_(equipe), salaire_(salaire) {}
+    double getSalaire() const override { return salaire_; }
+    bool getEquipe() const override { return equipe_; }
+private:
+    int habilete_;
+    bool equipe_;
+    double salaire_;
+};
+
+Joueur j("Koivu", 8, 9, true, 4000000);
+Patineur* p = &j;          // OK
+MembreEquipe* m = &j;      // OK : les deux conversions ascendantes sont implicites
+</script>
+<ul>
+  <li><strong>Ordre de construction</strong> : les classes de base dans l'ordre où elles apparaissent dans <code>class Joueur : public Patineur, public MembreEquipe</code> (pas l'ordre de la liste d'initialisation), puis les attributs, puis le corps. Destruction inverse.</li>
+  <li><strong>Ambiguïté</strong> : si deux bases ont un membre de même nom (<code>afficher()</code> dans Patineur et dans MembreEquipe), l'appel <code>j.afficher()</code> est ambigu : erreur de compilation. On précise la portée : <code>j.Patineur::afficher()</code>, ou on redéfinit <code>afficher()</code> dans Joueur (qui peut appeler les deux versions).</li>
+  <li>La <strong>taille</strong> de l'objet est la somme des parties ; un pointeur vers la seconde base pointe <em>à l'intérieur</em> de l'objet (le compilateur ajuste l'adresse lors des conversions : ne jamais convertir avec un cast « brut » de type C).</li>
+</ul>
+
+<h3>Le problème du diamant et l'héritage virtuel</h3>
+<p>Si Joueur hérite de Patineur et d'Employe, et que ces deux classes héritent de Personne, un Joueur contient <strong>deux</strong> sous-objets Personne (deux <code>nom_</code>) : <code>j.getNom()</code> est ambigu et les données sont dupliquées. Solution : déclarer l'héritage <em>virtuel</em> dans les classes intermédiaires, pour que la base commune ne soit présente qu'une fois.</p>
+<script type="text/cpp">
+class Personne { public: Personne(const string& nom) : nom_(nom) {} string nom_; };
+class Patineur : virtual public Personne { public: Patineur(const string& n) : Personne(n) {} };
+class Employe  : virtual public Personne { public: Employe(const string& n) : Personne(n) {} };
+class Joueur : public Patineur, public Employe {
+public:
+    Joueur(const string& n) : Personne(n), Patineur(n), Employe(n) {}   // la classe la plus dérivée construit la base virtuelle
+};
+Joueur j("Koivu");
+cout << j.nom_;        // un seul nom_, plus d'ambiguïté
+</script>
+<p>Avec une base virtuelle, c'est la classe <em>la plus dérivée</em> qui appelle le constructeur de la base commune (les appels faits par Patineur et Employe sont ignorés). Sans <code>virtual</code>, il faudrait écrire <code>j.Patineur::nom_</code>.</p>
+<div class="box tip"><span class="label">Conseil du cours</span>
+<p>L'héritage multiple de classes concrètes complique vite les choses (diamant, ambiguïtés, ordre de construction). Le cas d'usage courant et sans danger : une classe concrète + des interfaces. Quand deux bases concrètes partagent un ancêtre, pensez héritage virtuel, ou remplacez l'une des bases par une composition.</p></div>
+
+<h2>2. Fonctions génériques (templates)</h2>
+<p>Une fonction <strong>générique</strong> est un modèle de fonction paramétré par un ou plusieurs types. Le compilateur génère (instancie) une version de la fonction pour chaque type utilisé, en vérifiant que les opérations employées (<code>&lt;</code>, <code>+</code>, <code>==</code>...) existent pour ce type.</p>
+<script type="text/cpp">
+template <typename T>                 // ou template <class T> : même chose
+T maximum(const T& a, const T& b) {
+    return (a < b) ? b : a;           // T doit avoir operator<
+}
+
+maximum(3, 7);                        // T = int, déduit des arguments
+maximum(2.5, 1.0);                    // T = double
+maximum(string("a"), string("b"));    // T = string
+maximum(3, 2.5);                      // ERREUR : T ne peut pas être à la fois int et double
+maximum<double>(3, 2.5);              // OK : T précisé explicitement, 3 converti en double
+maximum(moteur1, moteur2);            // compile seulement si Moteur définit operator<
+
+template <typename T, typename U>     // plusieurs paramètres de type
+void afficherPaire(const T& a, const U& b) { cout << a << ", " << b << endl; }
+</script>
+<ul>
+  <li>Le type est <strong>déduit</strong> des arguments quand c'est possible ; sinon (type de retour seul, conversions) on le précise entre chevrons : <code>filtrerParType&lt;Pince&gt;(liste)</code>.</li>
+  <li>Les erreurs apparaissent à l'<em>instanciation</em>, souvent avec des messages longs : lisez la première ligne (« no match for operator&lt; ») et la ligne « required from » qui indique l'appel fautif.</li>
+  <li><strong>La définition va dans le fichier .h</strong> : le compilateur doit voir le code complet pour l'instancier dans chaque <code>.cpp</code> qui l'utilise. C'est l'exception à la règle « déclaration dans le .h, définition dans le .cpp » (énoncé des TP : « les définitions des classes et fonctions génériques restent dans les en-têtes »).</li>
+  <li>Une fonction générique peut recevoir une fonction en paramètre (pointeur de fonction, foncteur ou lambda, module 9) : <code>sommer(liste, propriete)</code> au TP3.</li>
+</ul>
+<div class="box exam"><span class="label">TP3 : sommer et filtrerParType</span>
+<script type="text/cpp" data-title="Algorithmes.h">
+#pragma once
+#include <memory>
+#include <vector>
+#include "Liste.h"
+
+// Additionne les valeurs produites par une fonction fournie par l'appelant ; liste vide -> 0
+template <typename T, typename Fonction>
+double sommer(const Liste<T>& liste, Fonction propriete) {
+    double total = 0.0;
+    for (std::size_t i = 0; i < liste.size(); ++i) total += propriete(liste[i]);
+    return total;
+}
+// utilisation : sommer(composantes_, [](const std::shared_ptr<Composante>& c) { return c->getMasseKg(); })
+
+// Retourne les objets compatibles avec Derivee, dans l'ordre, sans copier les objets
+template <typename Derivee, typename Base>
+std::vector<std::shared_ptr<Derivee>> filtrerParType(const Liste<std::shared_ptr<Base>>& liste) {
+    std::vector<std::shared_ptr<Derivee>> resultat;
+    for (std::size_t i = 0; i < liste.size(); ++i) {
+        std::shared_ptr<Derivee> converti = std::dynamic_pointer_cast<Derivee>(liste[i]);
+        if (converti != nullptr) resultat.push_back(converti);     // pointeurs nuls et conversions échouées ignorés
+    }
+    return resultat;
+}
+// utilisation : auto pinces = filtrerParType<Pince>(composantes_);   (Base déduit, Derivee précisé)
+</script></div>
+
+<h2>3. Classes génériques</h2>
+<p>Une classe générique est un modèle de classe : <code>Liste&lt;int&gt;</code>, <code>Liste&lt;string&gt;</code> et <code>Liste&lt;shared_ptr&lt;Composante&gt;&gt;</code> sont trois classes distinctes générées à partir du même code. C'est ainsi que sont écrits <code>vector&lt;T&gt;</code>, <code>shared_ptr&lt;T&gt;</code>, <code>map&lt;K, V&gt;</code>.</p>
+<script type="text/cpp" data-title="Liste.h (TP3)">
+#pragma once
+#include <vector>
+
+template <typename T>
+class Liste {                                    // conserve des valeurs distinctes selon operator== de T
+public:
+    int chercher(const T& valeur) const {        // indice, ou -1 si absente
+        for (std::size_t i = 0; i < elements_.size(); ++i)
+            if (elements_[i] == valeur) return static_cast<int>(i);
+        return -1;
+    }
+    Liste& operator+=(const T& valeur) {         // ajoute seulement une valeur absente
+        if (chercher(valeur) == -1) elements_.push_back(valeur);
+        return *this;
+    }
+    Liste& operator+=(const Liste& autre) {      // fusion sans doublons ; l'auto-ajout ne change rien
+        for (const T& v : autre.elements_) *this += v;   // (liste += liste : chaque valeur est déjà présente)
+        return *this;
+    }
+    Liste& operator-=(const T& valeur) {         // retire si présente, ordre conservé
+        int i = chercher(valeur);
+        if (i != -1) elements_.erase(elements_.begin() + i);
+        return *this;
+    }
+    Liste& operator-=(const Liste& autre) {      // retire les valeurs de l'autre ; l'auto-retrait vide la liste
+        std::vector<T> copie = autre.elements_;  // copie : si autre == *this, on modifie ce qu'on parcourt
+        for (const T& v : copie) *this -= v;
+        return *this;
+    }
+    bool operator==(const Liste& autre) const {  // mêmes contenus, ordre ignoré
+        if (size() != autre.size()) return false;
+        for (const T& v : elements_) if (autre.chercher(v) == -1) return false;
+        return true;
+    }
+    const T& operator[](std::size_t indice) const { return elements_[indice]; }   // précondition : indice < size()
+    std::size_t size() const { return elements_.size(); }
+    bool empty() const { return elements_.empty(); }
+private:
+    std::vector<T> elements_;
+};
+</script>
+<ul>
+  <li>Dans la classe, <code>Liste</code> seul désigne <code>Liste&lt;T&gt;</code>. Hors de la classe, une méthode définie séparément s'écrit <code>template &lt;typename T&gt; int Liste&lt;T&gt;::chercher(const T&amp; valeur) const { ... }</code>, toujours dans le .h.</li>
+  <li>Les exigences sur T sont implicites : <code>Liste&lt;T&gt;</code> ne compile que si <code>T</code> a <code>operator==</code>. Pour <code>shared_ptr</code>, <code>==</code> compare les adresses (même objet), ce qui est exactement la règle de doublon du TP3 (« un doublon désigne le même objet, non deux objets distincts portant le même nom »).</li>
+  <li>Paramètres non-types : <code>template &lt;typename T, int N&gt; class Tableau { T donnees_[N]; };</code> puis <code>Tableau&lt;double, 3&gt;</code>.</li>
+  <li>Valeur par défaut : <code>template &lt;typename T = int&gt;</code>.</li>
+  <li>Spécialisation : on peut fournir une version particulière pour un type donné (<code>template &lt;&gt; class Liste&lt;bool&gt;</code>), hors programme sauf mention en cours.</li>
+</ul>
+
+<div class="widget" data-widget="guess-output">
+  <p class="w-title">Devinez l'affichage : instanciation et exigences sur T</p>
+<script type="text/cpp">
+template <typename T>
+class Boite {
+public:
+    Boite(const T& v) : v_(v) { cout << "Boite(" << v_ << ")" << endl; }
+    T doubler() const { return v_ + v_; }
+    bool operator<(const Boite& autre) const { return v_ < autre.v_; }
+private:
+    T v_;
+};
+
+template <typename T>
+T plusGrand(const T& a, const T& b) { return (a < b) ? b : a; }
+
+int main() {
+    Boite<int> a(3);
+    Boite<string> b("ab");
+    cout << a.doubler() << " " << b.doubler() << endl;
+    cout << plusGrand(4, 9) << " " << plusGrand(string("x"), string("abc")) << endl;
+    Boite<int> c(5);
+    cout << (plusGrand(a, c) < c ? "oui" : "non") << endl;
+    return 0;
+}
+</script>
+<script type="text/plain" data-role="expected">
+Boite(3)
+Boite(ab)
+6 abab
+9 x
+non
+</script>
+<div data-role="explain" class="box tip"><span class="label">Explication</span>
+<p><code>v_ + v_</code> est une addition pour int et une concaténation pour string : le même code générique, deux instanciations. <code>plusGrand(string("x"), string("abc"))</code> compare lexicographiquement : « x » &gt; « abc ». <code>plusGrand(a, c)</code> retourne c (3 &lt; 5) et <code>c &lt; c</code> est faux. Si Boite n'avait pas <code>operator&lt;</code>, <code>plusGrand(a, c)</code> ne compilerait pas, mais <code>plusGrand(4, 9)</code> si : l'erreur n'apparaît qu'à l'instanciation fautive.</p></div>
+</div>
+
+<h2>4. À retenir</h2>
+<ul class="summary-list">
+  <li>Héritage multiple : <code>class D : public B1, public B2</code> ; bases construites dans l'ordre de la déclaration ; ambiguïté levée par <code>B1::membre</code> ; diamant résolu par <code>virtual public</code> (la classe la plus dérivée construit la base commune). Cas sain : une classe + des interfaces.</li>
+  <li><code>template &lt;typename T&gt;</code> devant une fonction ou une classe ; T déduit des arguments pour les fonctions, précisé entre chevrons pour les classes (<code>Liste&lt;int&gt;</code>) ou quand la déduction est impossible.</li>
+  <li>Les définitions génériques restent dans le .h ; les erreurs surgissent à l'instanciation ; T doit fournir les opérations utilisées.</li>
+</ul>
+
+<section class="quiz" data-quiz-id="c7" id="quiz-c7">
+<h2>Quiz rapide - Module 7</h2>
+
+<div class="q" data-answer="1">
+<p class="q-text">Dans <code>class Joueur : public Patineur, public MembreEquipe</code>, dans quel ordre les bases sont-elles construites ?</p>
+<ul class="choices">
+<li>Dans l'ordre de la liste d'initialisation du constructeur de Joueur</li>
+<li>Patineur puis MembreEquipe : l'ordre de la déclaration de la classe</li>
+<li>MembreEquipe puis Patineur</li>
+<li>Par ordre alphabétique</li>
+</ul>
+<div class="explain">Même règle que pour les attributs : l'ordre de déclaration, pas celui de la liste d'initialisation.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Patineur et MembreEquipe ont chacune une méthode <code>afficher()</code>. Que donne <code>j.afficher()</code> pour un Joueur qui n'a pas redéfini afficher ?</p>
+<ul class="choices">
+<li>La version de Patineur (première base)</li>
+<li>Les deux versions, l'une après l'autre</li>
+<li>Erreur de compilation : appel ambigu ; il faut écrire <code>j.Patineur::afficher()</code> ou redéfinir afficher dans Joueur</li>
+<li>La version de MembreEquipe (dernière base)</li>
+</ul>
+<div class="explain">Le compilateur ne choisit jamais arbitrairement entre deux bases.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Quel problème l'héritage virtuel résout-il ?</p>
+<ul class="choices">
+<li>La duplication de la base commune dans un diamant (deux sous-objets Personne dans un Joueur)</li>
+<li>L'impossibilité d'hériter de deux classes</li>
+<li>L'absence de destructeur virtuel</li>
+<li>Le découpage des objets</li>
+</ul>
+<div class="explain">Avec <code>class Patineur : virtual public Personne</code> et <code>class Employe : virtual public Personne</code>, un Joueur ne contient qu'une seule Personne.</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Avec une base virtuelle commune, qui appelle le constructeur de cette base ?</p>
+<ul class="choices">
+<li>La première classe intermédiaire</li>
+<li>Chaque classe intermédiaire, une fois chacune</li>
+<li>Personne : la base est construite par défaut obligatoirement</li>
+<li>La classe la plus dérivée, dans sa liste d'initialisation</li>
+</ul>
+<div class="explain">Les appels des classes intermédiaires sont ignorés quand elles ne sont pas la classe la plus dérivée.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Pourquoi la définition d'une fonction générique doit-elle être dans le fichier .h ?</p>
+<ul class="choices">
+<li>Parce que le .cpp ne peut pas contenir de template</li>
+<li>Parce que le compilateur doit voir le code complet pour générer une version par type utilisé dans chaque fichier qui l'appelle</li>
+<li>Parce que les templates ne sont pas compilés</li>
+<li>C'est une simple convention des TP</li>
+</ul>
+<div class="explain">Une fonction générique définie dans un .cpp séparé donne « symbole externe non résolu » à l'édition des liens pour les types instanciés ailleurs.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Avec <code>template &lt;typename T&gt; T maximum(const T&amp; a, const T&amp; b)</code>, l'appel <code>maximum(3, 2.5)</code> :</p>
+<ul class="choices">
+<li>Retourne 3</li>
+<li>Retourne 2.5</li>
+<li>Ne compile pas : T est déduit int d'un côté et double de l'autre</li>
+<li>Retourne 3.0</li>
+</ul>
+<div class="explain">Il faut lever l'ambiguïté : <code>maximum&lt;double&gt;(3, 2.5)</code> ou <code>maximum(3.0, 2.5)</code>.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Quand l'erreur « no match for operator&lt; » d'une fonction générique apparaît-elle ?</p>
+<ul class="choices">
+<li>À l'instanciation avec un type qui ne définit pas <code>&lt;</code></li>
+<li>À la définition du template</li>
+<li>À l'exécution</li>
+<li>Jamais : le compilateur génère un operator&lt; par défaut</li>
+</ul>
+<div class="explain">Le modèle lui-même n'est vérifié que syntaxiquement ; les exigences sur T sont testées pour chaque type réellement utilisé.</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Dans <code>filtrerParType&lt;Pince&gt;(composantes_)</code>, pourquoi faut-il écrire <code>&lt;Pince&gt;</code> ?</p>
+<ul class="choices">
+<li>Par convention</li>
+<li>Parce que les fonctions génériques exigent toujours les chevrons</li>
+<li>Pour accélérer la compilation</li>
+<li>Parce que Derivee n'apparaît pas dans les paramètres : il ne peut pas être déduit (Base, lui, est déduit de la liste)</li>
+</ul>
+<div class="explain">Le paramètre de type non déductible est placé en premier dans la liste du template pour pouvoir le préciser seul.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text"><code>Liste&lt;int&gt;</code> et <code>Liste&lt;string&gt;</code> sont :</p>
+<ul class="choices">
+<li>Le même type avec des contenus différents</li>
+<li>Deux classes distinctes générées à partir du même modèle</li>
+<li>Deux objets de la classe Liste</li>
+<li>Incompatibles avec vector</li>
+</ul>
+<div class="explain">On ne peut pas affecter l'une à l'autre ni passer l'une à une fonction attendant l'autre.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Pour <code>Liste&lt;shared_ptr&lt;Composante&gt;&gt;</code>, que compare <code>elements_[i] == valeur</code> ?</p>
+<ul class="choices">
+<li>Les noms des composantes</li>
+<li>Les contenus des objets (operator== de Composante)</li>
+<li>Les adresses : vrai si les deux shared_ptr pointent le même objet</li>
+<li>Les compteurs de références</li>
+</ul>
+<div class="explain">C'est la règle de doublon du TP3 : même objet, pas même nom.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Comment définir hors de la classe la méthode <code>size()</code> de <code>Liste&lt;T&gt;</code> ?</p>
+<ul class="choices">
+<li><code>template &lt;typename T&gt; size_t Liste&lt;T&gt;::size() const { return elements_.size(); }</code> dans Liste.h</li>
+<li><code>size_t Liste::size() const { ... }</code> dans Liste.cpp</li>
+<li><code>size_t Liste&lt;T&gt;::size() const { ... }</code> dans Liste.cpp</li>
+<li>Impossible : les méthodes génériques sont obligatoirement dans la classe</li>
+</ul>
+<div class="explain">Le préfixe template se répète et le nom de classe porte ses paramètres ; toujours dans l'en-tête.</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Quel est le cas d'usage de l'héritage multiple recommandé par le cours ?</p>
+<ul class="choices">
+<li>Hériter de plusieurs classes concrètes pour réutiliser leur code</li>
+<li>Remplacer la composition</li>
+<li>Créer des diamants</li>
+<li>Une classe concrète qui implémente une ou plusieurs interfaces (classes abstraites sans données)</li>
+</ul>
+<div class="explain">Pas de données dupliquées, pas d'ambiguïté : le contrat de chaque interface est honoré par la classe.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Dans <code>sommer(liste, propriete)</code> du TP3, le second paramètre est de type générique <code>Fonction</code>. Pourquoi ?</p>
+<ul class="choices">
+<li>Pour accepter uniquement des pointeurs de fonction</li>
+<li>Pour accepter n'importe quel objet appelable : fonction, foncteur ou lambda, chacun ayant son propre type</li>
+<li>Parce que double n'est pas un type valide de template</li>
+<li>Pour éviter d'inclure &lt;functional&gt;</li>
+</ul>
+<div class="explain">Chaque lambda a un type unique ; un paramètre de type générique les accepte toutes (module 9).</div>
+</div>
+</section>
+
+<h2 id="dev-c7">Exercices à développement</h2>
+<div class="exo-tools" data-scope="dev-c7-list">
+  <div class="progress-bar"><span></span></div><span class="progress-label small"></span>
+  <button class="btn secondary small" type="button" data-action="open-all">Déplier les solutions</button>
+  <button class="btn secondary small" type="button" data-action="close-all">Tout replier</button>
+</div>
+<div id="dev-c7-list">
+
+<article class="exo" data-exo-id="c7-d1">
+<header><span class="tag">Fonctions génériques</span><h4>Trois fonctions génériques</h4></header>
+<div class="enonce">
+<p>Écrivez les fonctions génériques : (1) <code>echanger(T&amp; a, T&amp; b)</code> ; (2) <code>compter(const vector&lt;T&gt;&amp; v, const T&amp; valeur)</code> qui retourne le nombre d'occurrences ; (3) <code>afficherTout(const vector&lt;T&gt;&amp; v, ostream&amp; out)</code> qui écrit les éléments séparés par des espaces. Quelles opérations chaque fonction exige-t-elle de T ?</p>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/cpp">
+template <typename T>
+void echanger(T& a, T& b) {           // exige : constructeur de copie et operator= (ou déplacement)
+    T temp = a;
+    a = b;
+    b = temp;
+}
+
+template <typename T>
+int compter(const vector<T>& v, const T& valeur) {     // exige : operator==
+    int n = 0;
+    for (const T& x : v) if (x == valeur) ++n;
+    return n;
+}
+
+template <typename T>
+void afficherTout(const vector<T>& v, ostream& out) {  // exige : operator<<(ostream&, const T&)
+    for (const T& x : v) out << x << " ";
+    out << endl;
+}
+</script>
+<p>Piège de déduction : <code>compter(noms, "Koivu")</code> avec <code>vector&lt;string&gt;</code> ne compile pas (T déduit string et const char[6]) ; écrire <code>compter(noms, string("Koivu"))</code> ou <code>compter&lt;string&gt;(noms, "Koivu")</code>.</p>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="c7-d2">
+<header><span class="tag">Classe générique</span><span class="tag theme">TP3</span><h4>Pile&lt;T&gt;</h4></header>
+<div class="enonce">
+<p>Écrivez une classe générique <code>Pile&lt;T&gt;</code> (dernier entré, premier sorti) construite sur un <code>vector&lt;T&gt;</code>, avec <code>empiler(const T&amp;)</code>, <code>depiler()</code> (retire et retourne le sommet ; précondition : pile non vide), <code>sommet() const</code>, <code>estVide() const</code>, <code>taille() const</code>, et un <code>operator&lt;&lt;</code> ami qui affiche du sommet vers le fond. Montrez une utilisation avec <code>Pile&lt;string&gt;</code>.</p>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/cpp" data-title="Pile.h">
+#pragma once
+#include <iostream>
+#include <vector>
+
+template <typename T>
+class Pile {
+public:
+    void empiler(const T& valeur) { elements_.push_back(valeur); }
+    T depiler() {                              // précondition : !estVide()
+        T sommet = elements_.back();
+        elements_.pop_back();
+        return sommet;
+    }
+    const T& sommet() const { return elements_.back(); }
+    bool estVide() const { return elements_.empty(); }
+    std::size_t taille() const { return elements_.size(); }
+
+    friend std::ostream& operator<<(std::ostream& out, const Pile& pile) {   // Pile = Pile<T> ici
+        for (std::size_t i = pile.elements_.size(); i > 0; --i) out << pile.elements_[i - 1] << " ";
+        return out;
+    }
+private:
+    std::vector<T> elements_;
+};
+
+// main.cpp
+Pile<std::string> p;
+p.empiler("a"); p.empiler("b"); p.empiler("c");
+std::cout << p << std::endl;          // c b a
+std::cout << p.depiler() << std::endl; // c
+</script>
+<p>La boucle descendante avec <code>size_t</code> évite le débordement de <code>i &gt;= 0</code> sur un entier non signé.</p>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="c7-d3">
+<header><span class="tag">Héritage multiple</span><span class="tag theme">Affichage</span><h4>Ordre de construction avec deux bases</h4></header>
+<div class="enonce">
+<div class="widget" data-widget="guess-output">
+  <p class="w-title">Devinez l'affichage</p>
+<script type="text/cpp">
+class A { public: A() { cout << "A "; } ~A() { cout << "~A "; } };
+class B { public: B() { cout << "B "; } ~B() { cout << "~B "; } };
+class X { public: X() { cout << "X "; } ~X() { cout << "~X "; } };
+class C : public B, public A {
+public:
+    C() : A(), B() { cout << "C "; }
+    ~C() { cout << "~C "; }
+private:
+    X x_;
+};
+int main() {
+    C c;
+    cout << "| ";
+    return 0;
+}
+</script>
+<script type="text/plain" data-role="expected">
+B A X C | ~C ~X ~A ~B
+</script>
+<div data-role="explain" class="box tip"><span class="label">Explication</span>
+<p>Les bases sont construites dans l'ordre de <code>class C : public B, public A</code> (B puis A), malgré la liste d'initialisation <code>A(), B()</code> (le compilateur avertit). Puis l'attribut <code>x_</code>, puis le corps. Destruction en ordre exactement inverse. Tout est sur une seule ligne, car aucun <code>endl</code>.</p></div>
+</div>
+</div>
+</article>
+
+<article class="exo" data-exo-id="c7-d4">
+<header><span class="tag">Héritage multiple</span><span class="tag theme">Conception</span><h4>Diamant : Personne, Patineur, Employe, Joueur</h4></header>
+<div class="enonce">
+<p>Personne a un nom ; Patineur et Employe héritent de Personne ; Joueur hérite de Patineur et d'Employe. (1) Sans héritage virtuel, que contient un Joueur et pourquoi <code>j.getNom()</code> ne compile-t-il pas ? Comment l'appeler quand même ? (2) Corrigez la hiérarchie avec l'héritage virtuel et écrivez les quatre constructeurs.</p>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<p>(1) Deux sous-objets Personne (un via Patineur, un via Employe), donc deux <code>nom_</code> et deux <code>getNom()</code> : l'appel est ambigu. Il faut préciser : <code>j.Patineur::getNom()</code> ou <code>static_cast&lt;Patineur&amp;&gt;(j).getNom()</code>.</p>
+<script type="text/cpp">
+class Personne {
+public:
+    Personne(const string& nom) : nom_(nom) {}
+    const string& getNom() const { return nom_; }
+private:
+    string nom_;
+};
+class Patineur : virtual public Personne {
+public:
+    Patineur(const string& nom, int vitesse) : Personne(nom), vitesse_(vitesse) {}
+private:
+    int vitesse_;
+};
+class Employe : virtual public Personne {
+public:
+    Employe(const string& nom, double salaire) : Personne(nom), salaire_(salaire) {}
+private:
+    double salaire_;
+};
+class Joueur : public Patineur, public Employe {
+public:
+    Joueur(const string& nom, int vitesse, double salaire)
+        : Personne(nom), Patineur(nom, vitesse), Employe(nom, salaire) {}   // la plus dérivée construit Personne
+};
+// Joueur j("Koivu", 8, 4000000);  j.getNom();   // un seul nom_ : OK
+</script>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="c7-d5">
+<header><span class="tag">TP3</span><span class="tag theme">Générique + polymorphisme</span><h4>getSourceEnergie et ajouterComposante</h4></header>
+<div class="enonce">
+<p>Avec <code>Liste&lt;shared_ptr&lt;Composante&gt;&gt; composantes_</code> et la fonction <code>filtrerParType</code> du cours, écrivez <code>shared_ptr&lt;SourceEnergie&gt; Robot::getSourceEnergie() const</code> (la source ou nullptr) et <code>bool Robot::ajouterComposante(const shared_ptr&lt;Composante&gt;&amp; c)</code> qui refuse un pointeur nul, un objet déjà présent, ou une seconde source d'énergie.</p>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/cpp">
+std::shared_ptr<SourceEnergie> Robot::getSourceEnergie() const {
+    std::vector<std::shared_ptr<SourceEnergie>> sources = filtrerParType<SourceEnergie>(composantes_);
+    return sources.empty() ? nullptr : sources[0];
+}
+
+bool Robot::ajouterComposante(const std::shared_ptr<Composante>& composante) {
+    if (composante == nullptr) return false;
+    if (composantes_.chercher(composante) != -1) return false;        // même objet déjà présent
+    bool estUneSource = std::dynamic_pointer_cast<SourceEnergie>(composante) != nullptr;
+    if (estUneSource && getSourceEnergie() != nullptr) return false;  // une seule source
+    composantes_ += composante;
+    return true;
+}
+</script>
+<p>Deux objets distincts de même nom peuvent coexister : <code>chercher</code> compare les shared_ptr (adresses).</p>
+</div></details>
+</article>
+
+</div>
+
+</article>
+</main>
+<footer class="footer">INF1010 - site d'étude personnel. Les documents officiels (Moodle, plan de cours, énoncés de TP) font foi.</footer>
+<script defer src="assets/app.js?v=3"></script>
+<script defer src="assets/widgets.js?v=2"></script>
+</body>
+</html>

@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 6 - Classes abstraites et conversion d'objets | INF1010</title>
+<link rel="stylesheet" href="assets/style.css?v=3">
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="index.html">INF1010 <small>Programmation orientée objet</small></a>
+  <nav>
+    <a href="index.html">Accueil</a>
+    <a href="cours1.html" title="Concepts de base, allocation dynamique">M1</a>
+    <a href="cours2.html" title="Méthodes constantes, passage de paramètres, vecteurs">M2</a>
+    <a href="cours3.html" title="Pointeurs intelligents, composition et agrégation">M3</a>
+    <a href="cours4.html" title="Pointeur this, surcharge d'opérateurs, copie et affectation">M4</a>
+    <a href="cours5.html" title="Héritage et polymorphisme">M5</a>
+    <a href="cours6.html" title="Classes abstraites, conversion d'objets">M6</a>
+    <a href="cours7.html" title="Héritage multiple, fonctions et classes génériques">M7</a>
+    <a href="cours8.html" title="STL : conteneurs et itérateurs">M8</a>
+    <a href="cours9.html" title="STL : algorithmes, foncteurs, lambdas">M9</a>
+    <a href="cours10.html" title="Variables statiques, exceptions, Python">M10</a>
+    <span class="sep"></span>
+    <a href="intra.html">Intra</a>
+    <a href="aide-memoire.html">Aide-mémoire</a>
+    <button class="theme-btn" type="button">Thème</button>
+  </nav>
+</header>
+
+<main class="layout">
+<aside class="toc"></aside>
+<article class="content">
+
+<div class="course-hero">
+  <div class="kicker">Module 6 - cours du 22 septembre (quiz 5)</div>
+  <h1>Polymorphisme (partie 2) et conversion d'objets</h1>
+  <p class="meta">Leçons Moodle « Polymorphisme », « Conversion d'objets », document « Conversion avec un pointeur brut et un shared_ptr » | Vidéo « Classe abstraite et fonction virtuelle pure » | Mis en pratique au TP3 (Composante et SourceEnergie abstraites, <code>dynamic_cast</code> dans rechargerBatterie, <code>dynamic_pointer_cast</code> dans filtrerParType)</p>
+  <p><span class="pill accent">Méthode virtuelle pure</span><span class="pill accent">Classe abstraite, interface</span><span class="pill accent">Collection hétérogène</span><span class="pill accent">Découpage (slicing)</span><span class="pill accent">Conversion ascendante et descendante</span><span class="pill accent">static_cast / dynamic_cast</span><span class="pill accent">dynamic_pointer_cast</span></p>
+</div>
+
+<h2>1. Méthodes virtuelles pures et classes abstraites</h2>
+<p>Une méthode <strong>virtuelle pure</strong> est déclarée avec <code>= 0</code> : la classe de base ne fournit aucune implémentation, elle impose seulement que chaque classe dérivée concrète en fournisse une. Une classe qui possède au moins une méthode virtuelle pure est <strong>abstraite</strong> : on ne peut pas créer d'objet de ce type (erreur « impossible d'instancier une classe abstraite »), mais on peut déclarer des pointeurs et des références vers elle, et c'est tout ce dont le polymorphisme a besoin.</p>
+<script type="text/cpp">
+class Composante {                                       // abstraite : modèle commun à toutes les pièces
+public:
+    Composante(const std::string& nom, double masseKg) : nom_(nom), masseKg_(masseKg) {}
+    virtual ~Composante() = default;                     // destructeur virtuel, toujours
+    virtual double getConsommationW() const = 0;         // pure : chaque pièce DOIT la définir
+    virtual std::ostream& afficher(std::ostream& out) const {   // virtuelle avec une version par défaut
+        return out << nom_ << " (" << masseKg_ << " kg)";
+    }
+    const std::string& getNom() const { return nom_; }
+private:
+    std::string nom_;
+    double masseKg_;
+};
+
+class Chassis : public Composante {                      // concrète : toutes les pures sont définies
+public:
+    Chassis(const std::string& nom, double masseKg, double longueurCm, double largeurCm)
+        : Composante(nom, masseKg), longueurCm_(longueurCm), largeurCm_(largeurCm) {}
+    double getConsommationW() const override { return 0.0; }    // obligatoire, même si trivial
+    std::ostream& afficher(std::ostream& out) const override {
+        Composante::afficher(out);
+        return out << ", dimensions=" << longueurCm_ << " x " << largeurCm_ << " cm";
+    }
+private:
+    double longueurCm_, largeurCm_;
+};
+
+Composante c("x", 1);                          // ERREUR : classe abstraite
+Composante* p = new Chassis("c", 2, 40, 30);   // OK : pointeur de base vers un objet concret
+std::unique_ptr<Composante> u = std::make_unique<Chassis>("c", 2, 40, 30);   // OK
+</script>
+<ul>
+  <li>Une dérivée qui ne redéfinit pas <em>toutes</em> les méthodes pures reste abstraite (par exemple <code>SourceEnergie</code> au TP3, qui ajoute sa propre méthode pure <code>consommer</code> et laisse Batterie, PanneauSolaire et Cable la définir).</li>
+  <li>Une méthode pure peut quand même avoir un corps (défini hors classe), que les dérivées appellent avec <code>Base::methode()</code> ; c'est rare.</li>
+  <li>Une <strong>interface</strong> est une classe abstraite qui ne contient que des méthodes virtuelles pures (et un destructeur virtuel) : elle décrit un contrat, sans données. Exemple du simulateur de hockey : <code>MembreEquipe</code> avec <code>getSalaire()</code> et <code>getEquipe()</code>.</li>
+  <li>Le destructeur virtuel d'une classe abstraite est obligatoire dès qu'on détruit via un pointeur de base, ce qui est le cas général.</li>
+</ul>
+<div class="box exam"><span class="label">Erreur de compilation classique (FAQ du cours)</span>
+<p>« erreur C2259 : impossible d'instancier une classe abstraite » apparaît quand (1) on déclare un objet d'une classe abstraite par valeur, y compris <code>vector&lt;Composante&gt;</code> ou un paramètre <code>Composante c</code> ; ou (2) une classe dérivée a oublié de redéfinir une méthode pure, ou l'a redéfinie avec une signature différente (un <code>const</code> manquant), ce qui en fait une autre méthode. <code>override</code> détecte le second cas.</p></div>
+
+<h3>Collection hétérogène et traitement polymorphe (TP3)</h3>
+<script type="text/cpp">
+class Robot {
+public:
+    double getConsommationW() const {
+        double total = 0;
+        for (const auto& c : composantes_) total += c->getConsommationW();   // appel virtuel, sans test de type
+        return total;
+    }
+    std::ostream& afficher(std::ostream& out) const {
+        for (const auto& c : composantes_) { c->afficher(out); out << "\n"; } // chaque pièce s'affiche à sa façon
+        return out;
+    }
+private:
+    Liste<std::shared_ptr<Composante>> composantes_;      // moteurs, capteurs, pince, châssis, source : un seul conteneur
+};
+</script>
+<p>L'énoncé du TP3 insiste : « le robot doit obtenir les affichages spécialisés par polymorphisme, sans tester chaque type de capteur ». Le test de type (<code>dynamic_cast</code>, <code>typeid</code>) est réservé aux cas où l'on a vraiment besoin d'une opération propre à une dérivée (recharger une Batterie, pas une source quelconque).</p>
+
+<h2>2. Découpage (slicing) : le polymorphisme a besoin d'un pointeur ou d'une référence</h2>
+<script type="text/cpp">
+Moteur m("roue", 2, 40);
+Composante c = m;              // copie : seule la partie Composante est copiée, m est "découpé"
+c.afficher(cout);              // version de Composante, même si afficher est virtuelle (c EST une Composante)
+
+Composante& r = m;             // référence : pas de copie, r désigne le Moteur
+r.afficher(cout);              // version de Moteur
+Composante* p = &m;            // pointeur : idem
+vector<Composante> v;          // ERREUR si Composante est abstraite ; sinon chaque push_back découpe
+vector<Composante*> w;         // OK : collection polymorphe (ou shared_ptr / unique_ptr)
+</script>
+<p>Passer un objet polymorphe <em>par valeur</em> à une fonction (<code>void f(Composante c)</code>) découpe aussi : toujours <code>const Composante&amp;</code> ou un pointeur.</p>
+
+<h2>3. Conversions entre classes de base et dérivées</h2>
+<table>
+<thead><tr><th>Conversion</th><th>Direction</th><th>Légalité</th><th>Syntaxe</th></tr></thead>
+<tbody>
+<tr><td>Ascendante (<em>upcast</em>)</td><td>dérivée → base (objet, pointeur, référence, shared_ptr)</td><td>toujours légale, implicite : un Moteur est une Composante</td><td><code>Composante* p = &amp;moteur;</code> <code>shared_ptr&lt;Composante&gt; s = make_shared&lt;Moteur&gt;(...);</code></td></tr>
+<tr><td>Descendante (<em>downcast</em>)</td><td>base → dérivée</td><td>jamais implicite ; légale seulement si l'objet est réellement de la classe dérivée</td><td><code>static_cast&lt;Moteur*&gt;(p)</code> (sans vérification), <code>dynamic_cast&lt;Moteur*&gt;(p)</code> (vérifiée à l'exécution)</td></tr>
+<tr><td>Objet base → objet dérivé</td><td>par valeur</td><td>erreur de compilation, sauf si la dérivée définit un constructeur prenant une base (<code>Moteur(const Composante&amp;)</code>)</td><td><code>Moteur m = c;</code> // erreur</td></tr>
+</tbody>
+</table>
+<h3>static_cast : conversion à la compilation</h3>
+<script type="text/cpp">
+Arme epee;
+// Upcast
+Equipement equipement = epee;                               // valide (découpage)
+Equipement* equipPtr = static_cast<Equipement*>(&epee);     // valide (le cast est même inutile)
+// Downcast
+Arme* armePtr = static_cast<Arme*>(&equipement);            // compile, mais equipement N'EST PAS une Arme : comportement indéfini
+equipPtr = &epee;                                           // equipPtr pointe maintenant une vraie Arme...
+armePtr = static_cast<Arme*>(equipPtr);                     // ...donc cette conversion est valide
+epee = equipement;                                          // erreur de compilation (sauf constructeur Arme(const Equipement&))
+</script>
+<p><code>static_cast</code> fait confiance au programmeur : il ne vérifie rien à l'exécution. À utiliser quand on <em>sait</em> que l'objet est du bon type (par exemple juste après l'avoir rangé dans un vecteur de pointeurs de base). Il sert aussi aux conversions numériques : <code>static_cast&lt;int&gt;(3.7)</code>.</p>
+<h3>dynamic_cast : conversion vérifiée à l'exécution</h3>
+<script type="text/cpp">
+Composante* p = /* ... */;
+Batterie* b = dynamic_cast<Batterie*>(p);      // nullptr si p ne pointe pas une Batterie
+if (b != nullptr) b->recharger(50);
+
+Composante& r = /* ... */;
+Batterie& rb = dynamic_cast<Batterie&>(r);     // lance std::bad_cast si r n'est pas une Batterie
+
+// Pointeurs intelligents : la version pour shared_ptr partage l'objet (use_count + 1)
+std::shared_ptr<Composante> sp = std::make_shared<Batterie>(/* ... */);
+std::shared_ptr<Batterie> sb = std::dynamic_pointer_cast<Batterie>(sp);   // shared_ptr nul si échec
+std::shared_ptr<Batterie> sc = std::static_pointer_cast<Batterie>(sp);    // sans vérification
+</script>
+<ul>
+  <li>Exige que la classe de base soit <strong>polymorphe</strong> (au moins une méthode virtuelle, en pratique le destructeur virtuel) : le type réel est lu dans l'objet (RTTI).</li>
+  <li>Résultat : le pointeur converti, ou <code>nullptr</code> ; avec une référence, exception <code>std::bad_cast</code>.</li>
+  <li><code>typeid(*p) == typeid(Batterie)</code> teste le type <em>exact</em> (faux pour une dérivée de Batterie), alors que <code>dynamic_cast</code> réussit aussi pour les dérivées. <code>typeid(*p).name()</code> donne un nom dépendant du compilateur.</li>
+  <li>Ne jamais reconstruire un pointeur intelligent à partir du pointeur brut obtenu par <code>dynamic_cast&lt;T*&gt;(sp.get())</code> (double propriété). Utiliser <code>dynamic_pointer_cast</code>.</li>
+</ul>
+<div class="widget" data-widget="cast">
+  <p class="w-title">Laboratoire de conversions</p>
+  <p class="w-desc">Pour chaque conversion entre Animal (base polymorphe) et Chien : compile ? résultat ? Choisissez et vérifiez.</p>
+</div>
+<div class="box exam"><span class="label">Usage au TP3</span>
+<script type="text/cpp">
+bool Robot::rechargerBatterie(double energieWh) {
+    if (energieWh < 0) return false;
+    std::shared_ptr<SourceEnergie> source = getSourceEnergie();
+    Batterie* batterie = dynamic_cast<Batterie*>(source.get());   // seule une Batterie se recharge
+    if (batterie == nullptr) return false;                         // panneau solaire, câble, ou aucune source
+    batterie->recharger(energieWh);
+    return true;
+}
+
+template <typename Derivee, typename Base>
+std::vector<std::shared_ptr<Derivee>> filtrerParType(const Liste<std::shared_ptr<Base>>& liste) {
+    std::vector<std::shared_ptr<Derivee>> resultat;
+    for (size_t i = 0; i < liste.size(); ++i) {
+        auto converti = std::dynamic_pointer_cast<Derivee>(liste[i]);   // nul si pas du bon type
+        if (converti) resultat.push_back(converti);                     // partagé, pas copié
+    }
+    return resultat;
+}
+// getSourceEnergie() : filtrerParType<SourceEnergie>(composantes_) puis le premier élément, ou nullptr
+</script></div>
+<div class="box warn"><span class="label">Bonne pratique</span>
+<p>Le document du simulateur de hockey le dit sans détour : utiliser <code>typeid</code> et <code>dynamic_cast</code> pour distinguer les types est « une très mauvaise pratique » quand une méthode virtuelle ferait le travail. Si vous écrivez une chaîne de <code>if (dynamic_cast&lt;A*&gt;(p)) ... else if (dynamic_cast&lt;B*&gt;(p)) ...</code>, demandez-vous si une méthode virtuelle <code>agir()</code> dans la base ne serait pas la bonne solution. Réservez le downcast aux opérations qui n'ont de sens que pour une dérivée précise.</p></div>
+
+<h2>4. À retenir</h2>
+<ul class="summary-list">
+  <li><code>virtual ... = 0;</code> : méthode pure ; classe abstraite = au moins une pure ; non instanciable, mais pointeurs et références autorisés. Une dérivée qui ne définit pas toutes les pures reste abstraite. Interface = que des pures.</li>
+  <li>Polymorphisme = collection de pointeurs (bruts ou intelligents) vers la base + méthodes virtuelles. La copie par valeur découpe l'objet.</li>
+  <li>Upcast implicite et toujours valide ; downcast jamais implicite : <code>static_cast</code> (sans vérification, comportement indéfini si faux) ou <code>dynamic_cast</code> (nullptr ou bad_cast si faux, base polymorphe requise) ; <code>dynamic_pointer_cast</code> pour shared_ptr.</li>
+  <li>Préférer une méthode virtuelle à un test de type.</li>
+</ul>
+
+<section class="quiz" data-quiz-id="c6" id="quiz-c6">
+<h2>Quiz rapide - Module 6</h2>
+
+<div class="q" data-answer="2">
+<p class="q-text">Qu'est-ce qu'une classe abstraite ?</p>
+<ul class="choices">
+<li>Une classe sans attributs</li>
+<li>Une classe dont toutes les méthodes sont virtuelles</li>
+<li>Une classe qui possède au moins une méthode virtuelle pure ; on ne peut pas l'instancier</li>
+<li>Une classe sans constructeur</li>
+</ul>
+<div class="explain">Elle peut avoir des attributs, un constructeur (appelé par les dérivées) et des méthodes ordinaires. Seule l'instanciation directe est interdite.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Comment déclare-t-on une méthode virtuelle pure ?</p>
+<ul class="choices">
+<li><code>virtual void f() const {}</code></li>
+<li><code>virtual void f() const = 0;</code></li>
+<li><code>void f() const = delete;</code></li>
+<li><code>abstract void f() const;</code></li>
+</ul>
+<div class="explain">Le <code>= 0</code> signifie « pas d'implémentation ici, obligatoire dans les dérivées concrètes ». <code>abstract</code> n'existe pas en C++.</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Composante est abstraite. Laquelle de ces lignes compile ?</p>
+<ul class="choices">
+<li><code>Composante c("x", 1);</code></li>
+<li><code>vector&lt;Composante&gt; v;</code> puis <code>v.push_back(Moteur(...));</code></li>
+<li><code>void f(Composante c);</code> appelée avec un Moteur</li>
+<li><code>shared_ptr&lt;Composante&gt; p = make_shared&lt;Moteur&gt;("m", 1, 10);</code></li>
+</ul>
+<div class="explain">Objets par valeur interdits (a, b, c : instanciation ou copie d'une classe abstraite) ; pointeurs et références autorisés.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Une classe dérivée d'une classe abstraite ne redéfinit qu'une des deux méthodes pures. Que se passe-t-il ?</p>
+<ul class="choices">
+<li>Elle est elle-même abstraite : on ne peut pas l'instancier</li>
+<li>Erreur de compilation à sa déclaration</li>
+<li>La méthode manquante est générée vide</li>
+<li>Elle compile et la méthode manquante lance une exception</li>
+</ul>
+<div class="explain">C'est le cas de SourceEnergie au TP3 : Composante abstraite → SourceEnergie encore abstraite → Batterie concrète.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Qu'affiche ce code ?</p>
+<script type="text/cpp">
+class Animal { public: virtual string cri() const { return "..."; } };
+class Chien : public Animal { public: string cri() const override { return "wouf"; } };
+Chien c;
+Animal a = c;
+Animal& r = c;
+cout << a.cri() << " " << r.cri();
+</script>
+<ul class="choices">
+<li>wouf wouf</li>
+<li>... ...</li>
+<li>... wouf</li>
+<li>Erreur de compilation</li>
+</ul>
+<div class="explain"><code>a</code> est une copie découpée : un pur Animal. <code>r</code> est une référence vers le Chien : liaison dynamique.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Quelle conversion est toujours légale et implicite ?</p>
+<ul class="choices">
+<li>Base* → Dérivée*</li>
+<li>Dérivée* → Base*</li>
+<li>Base → Dérivée (par valeur)</li>
+<li>Aucune conversion n'est implicite entre classes</li>
+</ul>
+<div class="explain">Conversion ascendante : une Dérivée est une Base, le compilateur l'accepte sans cast.</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Que retourne <code>dynamic_cast&lt;Chien*&gt;(p)</code> si <code>p</code> (de type Animal*) pointe un simple Animal ?</p>
+<ul class="choices">
+<li>Un pointeur vers un Chien vide</li>
+<li>Le même pointeur, réinterprété</li>
+<li>Une exception</li>
+<li>nullptr</li>
+</ul>
+<div class="explain">Avec un pointeur, l'échec se signale par nullptr ; avec une référence, par l'exception std::bad_cast.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Et <code>static_cast&lt;Chien*&gt;(p)</code> dans la même situation ?</p>
+<ul class="choices">
+<li>Compile et retourne un pointeur, mais l'utiliser est un comportement indéfini</li>
+<li>nullptr</li>
+<li>Erreur de compilation</li>
+<li>Exception bad_cast</li>
+</ul>
+<div class="explain">static_cast ne vérifie rien à l'exécution. C'est au programmeur de garantir le type réel.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Quelle condition la classe de base doit-elle remplir pour que <code>dynamic_cast</code> fonctionne ?</p>
+<ul class="choices">
+<li>Avoir un constructeur par défaut</li>
+<li>Être abstraite</li>
+<li>Être polymorphe : avoir au moins une méthode virtuelle (typiquement le destructeur)</li>
+<li>Ne pas avoir d'attributs privés</li>
+</ul>
+<div class="explain">Le type réel est stocké avec la table des méthodes virtuelles ; sans méthode virtuelle, il n'y a rien à consulter : erreur de compilation.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Pour convertir un <code>shared_ptr&lt;Composante&gt;</code> en <code>shared_ptr&lt;Batterie&gt;</code> avec vérification, on utilise :</p>
+<ul class="choices">
+<li><code>shared_ptr&lt;Batterie&gt;(dynamic_cast&lt;Batterie*&gt;(p.get()))</code></li>
+<li><code>dynamic_pointer_cast&lt;Batterie&gt;(p)</code></li>
+<li><code>static_cast&lt;shared_ptr&lt;Batterie&gt;&gt;(p)</code></li>
+<li><code>(shared_ptr&lt;Batterie&gt;) p</code></li>
+</ul>
+<div class="explain">La première crée un second propriétaire indépendant du même objet : double destruction. dynamic_pointer_cast partage le compteur.</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Quand un downcast est-il justifié plutôt qu'une méthode virtuelle ?</p>
+<ul class="choices">
+<li>Toujours : c'est plus rapide</li>
+<li>Jamais</li>
+<li>Quand la base est abstraite</li>
+<li>Quand l'opération n'a de sens que pour une dérivée précise (recharger une Batterie, pas une SourceEnergie quelconque)</li>
+</ul>
+<div class="explain">Si toutes les dérivées peuvent répondre (afficher, consommer), c'est une méthode virtuelle. Si une seule le peut, dynamic_cast est acceptable.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Qu'est-ce qu'une interface en C++ ?</p>
+<ul class="choices">
+<li>Une classe abstraite composée uniquement de méthodes virtuelles pures (et d'un destructeur virtuel)</li>
+<li>Un fichier .h</li>
+<li>Une classe sans méthodes</li>
+<li>Un mot-clé du langage</li>
+</ul>
+<div class="explain">Exemple : MembreEquipe avec getSalaire() et getEquipe() dans le simulateur de hockey. Joueur et Entraineur en héritent et l'implémentent.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Quelle différence entre <code>typeid(*p) == typeid(Batterie)</code> et <code>dynamic_cast&lt;Batterie*&gt;(p) != nullptr</code> ?</p>
+<ul class="choices">
+<li>Aucune</li>
+<li>typeid fonctionne sans méthodes virtuelles, dynamic_cast non ; les résultats sont identiques</li>
+<li>typeid teste le type exact ; dynamic_cast accepte aussi les classes dérivées de Batterie</li>
+<li>dynamic_cast teste le type exact ; typeid accepte les dérivées</li>
+</ul>
+<div class="explain">Pour une classe BatterieLithium : Batterie, typeid répond faux, dynamic_cast réussit.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Pourquoi <code>operator&lt;&lt;</code> du TP3 est-il écrit une seule fois pour Composante en déléguant à <code>afficher</code> ?</p>
+<ul class="choices">
+<li>Parce qu'on ne peut pas surcharger &lt;&lt; pour une dérivée</li>
+<li>Parce que <code>afficher</code> est virtuelle : <code>cout &lt;&lt; *p</code> affiche alors selon le type réel, sans un opérateur par classe</li>
+<li>Pour économiser de la mémoire</li>
+<li>Parce que &lt;&lt; est une fonction membre</li>
+</ul>
+<div class="explain">Un opérateur libre ne peut pas être virtuel ; il obtient le polymorphisme en appelant une méthode virtuelle.</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Qu'affiche ce code ?</p>
+<script type="text/cpp">
+class B { public: virtual ~B() {} };
+class D : public B {};
+B* p = new B;
+D* d = dynamic_cast<D*>(p);
+cout << (d == nullptr ? "nul" : "ok");
+</script>
+<ul class="choices">
+<li>ok</li>
+<li>Erreur de compilation : B n'a pas de méthode virtuelle</li>
+<li>Comportement indéfini</li>
+<li>nul</li>
+</ul>
+<div class="explain">B est polymorphe grâce à son destructeur virtuel ; l'objet n'est pas un D : nullptr, donc « nul ».</div>
+</div>
+</section>
+
+<h2 id="dev-c6">Exercices à développement</h2>
+<div class="exo-tools" data-scope="dev-c6-list">
+  <div class="progress-bar"><span></span></div><span class="progress-label small"></span>
+  <button class="btn secondary small" type="button" data-action="open-all">Déplier les solutions</button>
+  <button class="btn secondary small" type="button" data-action="close-all">Tout replier</button>
+</div>
+<div id="dev-c6-list">
+
+<article class="exo" data-exo-id="c6-d1">
+<header><span class="tag">TP3</span><span class="tag theme">Classes abstraites</span><h4>SourceEnergie, Batterie, PanneauSolaire, Cable</h4></header>
+<div class="enonce">
+<p>SourceEnergie hérite de Composante (abstraite) et reste abstraite : elle fournit une tension (strictement positive), et déclare les méthodes virtuelles pures <code>getCourantMaxA()</code>, <code>getCapaciteTotaleWh()</code>, <code>getCapaciteRestanteWh()</code> et <code>consommer(double energieWh)</code> (retourne <code>bool</code>). Sa consommation propre est nulle. Elle offre <code>getPuissanceMaxW()</code> = tension × courant max et <code>getTempsRestant(puissanceW)</code> : 0 si la puissance est négative ou dépasse le maximum, infini si elle est nulle, sinon énergie restante / puissance.</p>
+<p>Écrivez SourceEnergie, puis Batterie (capacité et courant max finis strictement positifs, commence pleine, <code>consommer</code> refuse si l'énergie manque, <code>recharger</code> plafonne à la capacité) et Cable (alimentation réseau : énergie illimitée, courant max donné).</p>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/cpp">
+class SourceEnergie : public Composante {
+public:
+    SourceEnergie(const std::string& nom, double masseKg, double tensionV)
+        : Composante(nom, masseKg), tensionV_(tensionV) {}
+    double getTensionV() const { return tensionV_; }
+    double getConsommationW() const override { return 0.0; }
+    virtual double getCourantMaxA() const = 0;
+    virtual double getCapaciteTotaleWh() const = 0;
+    virtual double getCapaciteRestanteWh() const = 0;
+    virtual bool consommer(double energieWh) = 0;
+    double getPuissanceMaxW() const { return tensionV_ * getCourantMaxA(); }   // appel virtuel
+    double getTempsRestant(double puissanceW) const {
+        if (puissanceW < 0 || puissanceW > getPuissanceMaxW()) return 0.0;
+        if (puissanceW == 0) return INFINITY;
+        return getCapaciteRestanteWh() / puissanceW;
+    }
+private:
+    double tensionV_;
+};
+
+class Batterie : public SourceEnergie {
+public:
+    Batterie(const std::string& nom, double masseKg, double tensionV, double capaciteWh, double courantMaxA)
+        : SourceEnergie(nom, masseKg, tensionV), capaciteWh_(capaciteWh), energieWh_(capaciteWh), courantMaxA_(courantMaxA) {}
+    double getCourantMaxA() const override { return courantMaxA_; }
+    double getCapaciteTotaleWh() const override { return capaciteWh_; }
+    double getCapaciteRestanteWh() const override { return energieWh_; }
+    bool consommer(double energieWh) override {
+        if (energieWh > energieWh_) return false;        // insuffisant : rien ne change
+        energieWh_ -= energieWh;
+        return true;
+    }
+    void recharger(double energieWh) { energieWh_ = std::min(capaciteWh_, energieWh_ + energieWh); }
+    std::ostream& afficher(std::ostream& out) const override {
+        Composante::afficher(out);
+        return out << ", batterie " << energieWh_ << "/" << capaciteWh_ << " Wh";
+    }
+private:
+    double capaciteWh_;
+    double energieWh_;
+    double courantMaxA_;
+};
+
+class Cable : public SourceEnergie {
+public:
+    Cable(const std::string& nom, double masseKg, double tensionV, double courantMaxA)
+        : SourceEnergie(nom, masseKg, tensionV), courantMaxA_(courantMaxA) {}
+    double getCourantMaxA() const override { return courantMaxA_; }
+    double getCapaciteTotaleWh() const override { return INFINITY; }
+    double getCapaciteRestanteWh() const override { return INFINITY; }
+    bool consommer(double) override { return true; }       // toujours disponible (paramètre non nommé : pas d'avertissement)
+private:
+    double courantMaxA_;
+};
+</script>
+<p>Remarque : <code>getPuissanceMaxW</code> est définie dans la base mais appelle une méthode pure : à l'exécution, c'est la version de l'objet réel (Batterie ou Cable) qui répond. Pour le panneau solaire : puissance disponible = nominale × ensoleillement, courant max = puissance / tension, capacité infinie si éclairé, énergie nulle dans le noir (une demande positive est alors refusée).</p>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="c6-d2">
+<header><span class="tag exam">Révision H2019</span><span class="tag theme">Conversions</span><h4>Valide, erreur de compilation ou comportement indéfini ?</h4></header>
+<div class="enonce">
+<p>Equipement est une classe de base polymorphe ; Arme en hérite publiquement. Pour chaque ligne, dites si elle est valide, si elle ne compile pas, ou si elle compile mais a un comportement indéfini.</p>
+<script type="text/cpp">
+Arme epee;
+Equipement equipement = epee;                               // 1
+equipement = static_cast<Equipement>(epee);                 // 2
+Equipement* equipptr = static_cast<Equipement*>(&epee);     // 3
+epee = equipement;                                          // 4
+epee = static_cast<Arme>(equipement);                       // 5
+Arme* epeeptr = static_cast<Arme*>(&equipement);            // 6
+equipptr = &epee;                                           // 7
+epeeptr = static_cast<Arme*>(equipptr);                     // 8
+epeeptr = dynamic_cast<Arme*>(&equipement);                 // 9
+</script>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<ol>
+  <li>Valide : conversion ascendante par copie (découpage).</li>
+  <li>Valide : même chose, cast explicite inutile.</li>
+  <li>Valide : upcast de pointeur.</li>
+  <li>Erreur de compilation : pas de conversion Equipement → Arme, sauf constructeur <code>Arme(const Equipement&amp;)</code>.</li>
+  <li>Erreur de compilation, même raison.</li>
+  <li>Compile, mais <code>equipement</code> est un simple Equipement : utiliser <code>epeeptr</code> est un comportement indéfini.</li>
+  <li>Valide : upcast.</li>
+  <li>Valide : <code>equipptr</code> pointe réellement une Arme (ligne 7), le downcast est correct.</li>
+  <li>Compile ; retourne <code>nullptr</code> car l'objet n'est pas une Arme (Equipement doit être polymorphe).</li>
+</ol>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="c6-d3">
+<header><span class="tag">Conception</span><span class="tag theme">Polymorphisme</span><h4>Remplacer les tests de type par du polymorphisme</h4></header>
+<div class="enonce">
+<p>Ce code fonctionne mais est mal conçu. Réécrivez-le avec une méthode virtuelle pour supprimer les <code>dynamic_cast</code>.</p>
+<script type="text/cpp">
+double consommationTotale(const vector<shared_ptr<Composante>>& composantes) {
+    double total = 0;
+    for (const auto& c : composantes) {
+        if (auto m = dynamic_pointer_cast<Moteur>(c)) total += m->getPuissanceW() * m->getCharge();
+        else if (auto p = dynamic_pointer_cast<Pince>(c)) total += p->estFermee() ? p->getPuissanceMaintienW() : 0;
+        else if (auto k = dynamic_pointer_cast<Capteur>(c)) total += k->estActif() ? k->getPuissanceW() : 0;
+    }
+    return total;
+}
+</script>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/cpp">
+// Dans Composante :  virtual double getConsommationW() const = 0;
+// Dans Moteur :      double getConsommationW() const override { return puissanceW_ * charge_; }
+// Dans Pince :       double getConsommationW() const override { return fermee_ ? puissanceMaintienW_ : 0.0; }
+// Dans Capteur :     double getConsommationW() const override { return actif_ ? puissanceW_ : 0.0; }
+
+double consommationTotale(const vector<shared_ptr<Composante>>& composantes) {
+    double total = 0;
+    for (const auto& c : composantes) total += c->getConsommationW();
+    return total;
+}
+</script>
+<p>Chaque classe connaît sa propre règle de consommation ; ajouter un type de pièce ne demande plus de modifier la fonction. Les pièces sans consommation (Chassis, sources) retournent 0.</p>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="c6-d4">
+<header><span class="tag">Affichage</span><span class="tag theme">Virtuel pur et conversions</span><h4>Devinez l'affichage</h4></header>
+<div class="enonce">
+<div class="widget" data-widget="guess-output">
+  <p class="w-title">Vérifiez votre réponse</p>
+<script type="text/cpp">
+class Forme {
+public:
+    virtual ~Forme() {}
+    virtual double aire() const = 0;
+    void decrire() const { cout << "aire " << aire() << endl; }
+};
+class Carre : public Forme {
+public:
+    Carre(double c) : c_(c) {}
+    double aire() const override { return c_ * c_; }
+    void special() const { cout << "carre" << endl; }
+private:
+    double c_;
+};
+class Disque : public Forme {
+public:
+    double aire() const override { return 3; }
+};
+int main() {
+    vector<unique_ptr<Forme>> formes;
+    formes.push_back(make_unique<Carre>(2));
+    formes.push_back(make_unique<Disque>());
+    for (const auto& f : formes) {
+        f->decrire();
+        Carre* c = dynamic_cast<Carre*>(f.get());
+        if (c) c->special();
+        else cout << "pas un carre" << endl;
+    }
+    return 0;
+}
+</script>
+<script type="text/plain" data-role="expected">
+aire 4
+carre
+aire 3
+pas un carre
+</script>
+<div data-role="explain" class="box tip"><span class="label">Explication</span>
+<p><code>decrire</code> n'est pas virtuelle mais appelle <code>aire()</code>, virtuelle pure : chaque objet répond avec sa version. Le <code>dynamic_cast</code> sur le pointeur brut d'observation (<code>get()</code>) réussit pour le Carre et vaut nullptr pour le Disque. On n'a pas créé de nouveau unique_ptr à partir de <code>c</code> : pas de double propriété.</p></div>
+</div>
+</div>
+</article>
+
+<article class="exo" data-exo-id="c6-d5">
+<header><span class="tag">Simulateur de hockey</span><span class="tag theme">Interface</span><h4>L'interface MembreEquipe</h4></header>
+<div class="enonce">
+<p>Définissez l'interface MembreEquipe (méthodes <code>getSalaire()</code> et <code>getEquipe()</code>). Joueur (déjà dérivée de Patineur) et Entraineur (nom, expérience, équipe, salaire) doivent l'implémenter. Puis écrivez <code>bool Match::valider() const</code> qui vérifie que la masse salariale de chaque équipe (<code>true</code> / <code>false</code>) ne dépasse pas 10 000 000, à partir d'un <code>vector&lt;shared_ptr&lt;MembreEquipe&gt;&gt; membres_</code>.</p>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/cpp">
+class MembreEquipe {                                  // interface : que des pures + destructeur virtuel
+public:
+    virtual ~MembreEquipe() = default;
+    virtual double getSalaire() const = 0;
+    virtual bool getEquipe() const = 0;
+};
+
+class Entraineur : public MembreEquipe {
+public:
+    Entraineur(const string& nom, int experience, bool equipe, double salaire)
+        : nom_(nom), experience_(experience), equipe_(equipe), salaire_(salaire) {}
+    double getSalaire() const override { return salaire_; }
+    bool getEquipe() const override { return equipe_; }
+private:
+    string nom_;
+    int experience_;
+    bool equipe_;
+    double salaire_;
+};
+
+class Joueur : public Patineur, public MembreEquipe {   // héritage multiple : module 7
+public:
+    double getSalaire() const override { return salaire_; }
+    bool getEquipe() const override { return equipe_; }
+    // ...
+};
+
+bool Match::valider() const {
+    double masse[2] = { 0, 0 };
+    for (const auto& m : membres_) masse[m->getEquipe() ? 1 : 0] += m->getSalaire();
+    return masse[0] <= 10000000 && masse[1] <= 10000000;
+}
+</script>
+</div></details>
+</article>
+
+</div>
+
+</article>
+</main>
+<footer class="footer">INF1010 - site d'étude personnel. Les documents officiels (Moodle, plan de cours, énoncés de TP) font foi.</footer>
+<script defer src="assets/app.js?v=3"></script>
+<script defer src="assets/widgets.js?v=2"></script>
+</body>
+</html>

@@ -89,6 +89,24 @@
 			</div>
 			<a class="btn" href="/ele2307/" rel="external">Open</a>
 		</li>
+		<li>
+			<span class="num">FR</span>
+			<div class="body">
+				<h2>INF1010 Study Site</h2>
+				<p>
+					Object-oriented programming in C++, modules 1 to 10: step-by-step execution demos, a quiz
+					per module, exam-style exercises with worked solutions, a midterm review and a printable
+					cheat sheet.
+				</p>
+				<ul class="tags">
+					<li>programming</li>
+					<li>c++</li>
+					<li>exercises</li>
+					<li class="state">live</li>
+				</ul>
+			</div>
+			<a class="btn" href="/inf1010/" rel="external">Open</a>
+		</li>
 	</ol>
 </section>
 
