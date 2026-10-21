@@ -126,6 +126,7 @@
     function compare(showAll) {
       const mine = ta.value.replace(/\r/g, '').split('\n').map(s => s.trim()).filter((s, idx, arr) => s.length || idx < arr.length - 1);
       while (mine.length && !mine[mine.length - 1].length) mine.pop();
+      while (mine.length && !mine[0].length) mine.shift();
       const n = Math.max(mine.length, expected.length);
       const table = h('table', { class: 'diff' });
       table.appendChild(h('thead', null, h('tr', null, h('th', null, '#'), h('th', null, 'Votre réponse'), h('th', null, 'Affichage réel'))));

@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Préparation au final | INF1010</title>
+<link rel="stylesheet" href="assets/style.css?v=3">
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="index.html">INF1010 <small>Programmation orientée objet</small></a>
+  <nav>
+    <a href="index.html">Accueil</a>
+    <a href="cours1.html" title="Concepts de base, allocation dynamique">M1</a>
+    <a href="cours2.html" title="Méthodes constantes, passage de paramètres, vecteurs">M2</a>
+    <a href="cours3.html" title="Pointeurs intelligents, composition et agrégation">M3</a>
+    <a href="cours4.html" title="Pointeur this, surcharge d'opérateurs, copie et affectation">M4</a>
+    <a href="cours5.html" title="Héritage et polymorphisme">M5</a>
+    <a href="cours6.html" title="Classes abstraites, conversion d'objets">M6</a>
+    <a href="cours7.html" title="Héritage multiple, fonctions et classes génériques">M7</a>
+    <a href="cours8.html" title="STL : conteneurs et itérateurs">M8</a>
+    <a href="cours9.html" title="STL : algorithmes, foncteurs, lambdas">M9</a>
+    <a href="cours10.html" title="Variables statiques, exceptions, Python">M10</a>
+    <span class="sep"></span>
+    <a href="intra.html">Intra</a>
+    <a href="final.html">Final</a>
+    <a href="aide-memoire.html">Aide-mémoire</a>
+    <button class="theme-btn" type="button">Thème</button>
+  </nav>
+</header>
+
+<main class="layout">
+<aside class="toc"></aside>
+<article class="content">
+
+<div class="course-hero">
+  <div class="kicker">Examen final - lundi 7 décembre 2026, 9h30</div>
+  <h1>Préparation au final</h1>
+  <p class="meta">40 % de la note | Sur Moodle Examen | Toute documentation permise, sur papier ou sur clé USB | Toute la matière du trimestre : modules 1 à 10 | « On y demande généralement d'analyser un ou des problèmes et de concevoir des programmes C++ » (plan de cours) | Rappel : les notes de TP ne comptent que si l'intra ou le final est réussi à 40 % ou plus</p>
+  <p><span class="pill accent">Stratégie : STL, foncteurs, lambdas, exceptions, Python</span><span class="pill accent">Quiz de révision (33 questions)</span><span class="pill accent">5 exercices de synthèse</span><span class="pill accent">Chronomètre</span><span class="pill accent">Liste de vérification</span></p>
+  <p class="small">Le final reprend tout ce que l'intra évaluait (classes, copie, opérateurs, héritage, polymorphisme, templates) et y ajoute les modules 8 à 10. Les questions longues combinent typiquement une hiérarchie polymorphe, un conteneur de la STL manipulé par des algorithmes et des lambdas, des exceptions pour les cas d'erreur, et parfois une variable de classe. La page <a href="intra.html">Intra</a> reste valable pour la première moitié de la matière.</p>
+</div>
+
+<h2>1. Préparer sa clé USB et ses feuilles</h2>
+<div class="box tip"><span class="label">À ajouter depuis l'intra</span>
+<ul>
+  <li>Le site complet (il fonctionne hors ligne) et l'<a href="aide-memoire.html">aide-mémoire</a> imprimé, sections 8 à 10 comprises : tableau des conteneurs, liste des algorithmes, syntaxe des lambdas, hiérarchie des exceptions, correspondances C++ / Python.</li>
+  <li>Les TP4 (STL) et TP5 (Python) corrigés : ce sont vos meilleurs modèles de code pour les algorithmes avec foncteurs et lambdas, et pour la syntaxe Python.</li>
+  <li>Le fichier d'exercices du simulateur de hockey (versions héritage, polymorphisme, conteneurs, algorithmes, exceptions) : l'examen puise souvent dans le même genre de scénario (équipes, joueurs, cap salarial).</li>
+  <li>Vérifiez sur place que la clé s'ouvre : aucun problème d'accès aux fichiers n'est pris en compte pendant l'examen.</li>
+</ul></div>
+
+<h2>2. Stratégie par type de question</h2>
+<h3>« Réécrivez sans boucle avec les algorithmes de la STL »</h3>
+<p>Identifiez le motif de la boucle, puis l'algorithme qui le porte. Les paramètres de la boucle deviennent les captures de la lambda.</p>
+<table>
+<thead><tr><th>La boucle fait...</th><th>Algorithme</th><th>Squelette</th></tr></thead>
+<tbody>
+<tr><td>appliquer une action à chaque élément</td><td><code>for_each</code></td><td><code>for_each(b, e, [&amp;](const T&amp; x) { ... });</code></td></tr>
+<tr><td>chercher le premier élément qui vérifie une condition</td><td><code>find_if</code> (ou <code>find</code> pour une valeur)</td><td><code>auto it = find_if(b, e, [seuil](const T&amp; x) { return ...; }); if (it != e) ...</code></td></tr>
+<tr><td>compter</td><td><code>count_if</code> / <code>count</code></td><td><code>int n = count_if(b, e, pred);</code></td></tr>
+<tr><td>additionner, cumuler</td><td><code>accumulate</code> (<code>&lt;numeric&gt;</code>)</td><td><code>double s = accumulate(b, e, 0.0, [](double t, const T&amp; x) { return t + x.val(); });</code></td></tr>
+<tr><td>tester « tous », « au moins un », « aucun »</td><td><code>all_of</code>, <code>any_of</code>, <code>none_of</code></td><td><code>bool ok = all_of(b, e, pred);</code></td></tr>
+<tr><td>garder les éléments qui vérifient une condition dans un autre conteneur</td><td><code>copy_if</code> + <code>back_inserter</code></td><td><code>copy_if(b, e, back_inserter(w), pred);</code></td></tr>
+<tr><td>retirer ceux qui vérifient une condition</td><td><code>erase</code> + <code>remove_if</code> (ou <code>list::remove_if</code>)</td><td><code>v.erase(remove_if(b, e, pred), e);</code></td></tr>
+<tr><td>transformer chaque élément</td><td><code>transform</code></td><td><code>transform(b, e, dest, f);</code></td></tr>
+<tr><td>trouver le plus grand ou le plus petit</td><td><code>max_element</code> / <code>min_element</code></td><td><code>auto it = max_element(b, e, comp);</code></td></tr>
+<tr><td>trier (les trois premiers suffisent)</td><td><code>sort</code> (<code>partial_sort</code>)</td><td><code>sort(b, e, [](const T&amp; a, const T&amp; c) { return a.x() &lt; c.x(); });</code></td></tr>
+<tr><td>afficher les éléments</td><td><code>copy</code> + <code>ostream_iterator</code>, ou <code>for_each</code></td><td><code>copy(b, e, ostream_iterator&lt;T&gt;(cout, "\n"));</code> (exige <code>operator&lt;&lt;</code>)</td></tr>
+</tbody>
+</table>
+<p>Après avoir écrit la lambda, vérifiez trois choses : chaque variable extérieure utilisée est capturée (par référence si on la modifie, sinon par valeur) ; dans une méthode, les attributs demandent <code>[this]</code> ; un comparateur reçoit deux paramètres par référence constante et retourne un ordre strict (<code>&lt;</code>, jamais <code>&lt;=</code>).</p>
+
+<h3>« Écrivez un foncteur qui ... »</h3>
+<p>Une classe dont <code>operator()</code> fait le travail d'une itération ; les valeurs fixées par l'appelant (seuil, équipe, flux) deviennent des attributs initialisés par le constructeur ; les résultats accumulés deviennent des attributs lus par un accesseur. Si l'énoncé impose « au plus deux foncteurs », un même foncteur peut servir de comparateur (pour <code>sort</code> ou <code>set</code>) et de prédicat selon la surcharge d'<code>operator()</code>. Rappelez-vous que <code>for_each</code> reçoit une copie : récupérez le foncteur retourné pour lire son état.</p>
+
+<h3>« Quel conteneur choisir ? Justifiez. »</h3>
+<p>Répondez avec le critère décisif : accès par indice (vector), insertion et retrait aux extrémités (deque), insertions au milieu sans invalider les itérateurs (list), unicité et tri automatique (set), association clé → valeur triée (map), plusieurs valeurs par clé (multimap), vitesse sans ordre (unordered_map), discipline LIFO / FIFO / priorité (stack, queue, priority_queue). Donnez la complexité de l'opération principale (O(1), O(log n), O(n)).</p>
+
+<h3>« Gérez les erreurs avec des exceptions »</h3>
+<ol class="steps">
+  <li>Une classe d'exception par cas d'erreur, dérivée de <code>std::exception</code> (via <code>runtime_error</code> ou <code>logic_error</code>, ou d'une base commune abstraite comme <code>ExceptionBase</code> avec une méthode virtuelle pure <code>get_erreur()</code>), qui porte les données utiles au message (équipe, masse, indice).</li>
+  <li><code>throw</code> à l'endroit où l'erreur est détectée, avant toute modification de l'objet (pas de mise à jour partielle).</li>
+  <li><code>try</code> autour de l'appel, <code>catch</code> par référence constante, dérivées avant bases, <code>catch (...)</code> en dernier ; reprendre le programme après le <code>catch</code> (menu réaffiché, valeur de retour <code>false</code>...).</li>
+  <li>Les ressources locales doivent être des objets qui se libèrent seuls (pointeurs intelligents, conteneurs) : pendant le dépilement, un <code>delete</code> placé après l'appel n'est jamais exécuté.</li>
+</ol>
+
+<h3>« Donnez l'affichage » : les nouveautés du final</h3>
+<ul>
+  <li><strong>Exceptions</strong> : dès le <code>throw</code>, le reste du bloc <code>try</code> (et des fonctions traversées) est abandonné ; les objets locaux de chaque fonction quittée sont détruits avant l'exécution du <code>catch</code> ; après le <code>catch</code>, l'exécution continue normalement.</li>
+  <li><strong>Lambdas</strong> : une capture par valeur est figée à la création de la lambda, pas à son appel ; une capture par référence suit la variable ; <code>mutable</code> conserve l'état entre les appels.</li>
+  <li><strong>Foncteurs</strong> : passé par valeur à un algorithme, l'original ne change pas.</li>
+  <li><strong>Variables de classe</strong> : une seule valeur partagée, incrémentée par chaque construction (y compris les copies si le constructeur de copie le fait), décrémentée par chaque destruction.</li>
+  <li><strong>Conteneurs</strong> : un <code>set</code> et une <code>map</code> s'affichent triés par clé, pas dans l'ordre d'insertion ; <code>m[k]</code> dans un affichage crée la clé ; <code>unique</code> ne retire que les doublons consécutifs.</li>
+</ul>
+
+<h3>« Écrivez en Python ... »</h3>
+<p>Indentation de 4 espaces, deux-points en fin de ligne d'en-tête, <code>self</code> en premier paramètre de chaque méthode, <code>__init__</code> pour le constructeur, <code>super().__init__(...)</code> pour la base, <code>__str__</code> pour l'affichage, pas de type ni de point-virgule, <code>True</code> / <code>False</code> / <code>None</code>, <code>and</code> / <code>or</code> / <code>not</code>, <code>raise</code> et <code>except X as e</code>, listes <code>[]</code> avec <code>append</code>, dictionnaires <code>{}</code> avec <code>get</code>, <code>len()</code>, <code>range()</code>, <code>sorted(..., key=lambda ...)</code>, compréhensions <code>[f(x) for x in v if c(x)]</code>. Relisez la table de correspondance du <a href="cours10.html">module 10</a> avant d'écrire.</p>
+
+<h2>3. Quiz de révision (modules 1 à 10)</h2>
+<section class="quiz" data-quiz-id="final" id="quiz-final">
+<h2>33 questions, sans ordre de module</h2>
+<p class="small">Les deux tiers portent sur les modules 8 à 10, le reste sur la matière de l'intra. Lisez les explications : elles donnent la justification attendue.</p>
+
+<div class="q" data-answer="2">
+<p class="q-text">Quel conteneur garde ses éléments uniques et triés automatiquement ?</p>
+<ul class="choices"><li><code>vector</code></li><li><code>list</code></li><li><code>set</code></li><li><code>deque</code></li></ul>
+<div class="explain">Arbre équilibré ordonné par operator&lt; ; insertion, recherche et suppression en O(log n). multiset accepte les doublons.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Que fait <code>v.erase(remove_if(v.begin(), v.end(), pred), v.end());</code> ?</p>
+<ul class="choices"><li>Retire le premier élément qui vérifie pred</li><li>Retire vraiment tous les éléments qui vérifient pred : remove_if les compacte en fin, erase coupe la queue</li><li>Vide le vecteur</li><li>Ne compile pas</li></ul>
+<div class="explain">L'idiome erase-remove. Avec remove_if seul, la taille ne change pas.</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Dans quel ordre écrire les blocs catch pour <code>out_of_range</code>, <code>logic_error</code> et <code>exception</code> ?</p>
+<ul class="choices"><li>exception, logic_error, out_of_range</li><li>L'ordre n'a pas d'importance</li><li>logic_error, exception, out_of_range</li><li>out_of_range, logic_error, exception : du plus dérivé au plus général</li></ul>
+<div class="explain">Le premier catch compatible gagne ; une base placée avant masque ses dérivées (avertissement du compilateur).</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Que vaut <code>x</code> ? <code>int k = 2; auto f = [k](int n) { return n * k; }; k = 5; int x = f(3);</code></p>
+<ul class="choices"><li>6 : k est copié à la création de la lambda</li><li>15</li><li>Erreur de compilation</li><li>0</li></ul>
+<div class="explain">Capture par valeur figée. Avec <code>[&amp;k]</code>, x vaudrait 15.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Sur une <code>map&lt;string, int&gt; m</code> vide, que fait <code>cout &lt;&lt; m["a"];</code> ?</p>
+<ul class="choices"><li>Lance out_of_range</li><li>Affiche rien</li><li>Insère la clé « a » avec la valeur 0 et affiche 0 ; m.size() vaut maintenant 1</li><li>Erreur de compilation</li></ul>
+<div class="explain">operator[] crée la clé absente. Pour tester sans insérer : find ou count ; pour lire avec vérification : at.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Une méthode statique peut :</p>
+<ul class="choices"><li>Accéder aux attributs non statiques de l'objet courant</li><li>Être appelée sans objet et n'accéder qu'aux membres statiques</li><li>Être virtuelle</li><li>Être const</li></ul>
+<div class="explain">Pas de this : elle appartient à la classe. Appel : <code>Classe::methode()</code>.</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Quel est l'affichage ?</p>
+<script type="text/cpp">
+class Compteur { public: void operator()(int n) { if (n > 1) ++nb_; } int nb_ = 0; };
+vector<int> v = {1, 2, 3};
+Compteur c;
+for_each(v.begin(), v.end(), c);
+Compteur r = for_each(v.begin(), v.end(), c);
+cout << c.nb_ << " " << r.nb_;
+</script>
+<ul class="choices"><li>2 4</li><li>2 2</li><li>0 4</li><li>0 2</li></ul>
+<div class="explain">for_each travaille sur une copie du foncteur et la retourne : c reste à 0, r reçoit une copie fraîche de c (0) incrémentée deux fois.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Pourquoi <code>sort(l.begin(), l.end())</code> ne compile-t-il pas pour <code>list&lt;int&gt; l</code> ?</p>
+<ul class="choices"><li>sort exige des itérateurs à accès aléatoire ; il faut <code>l.sort()</code></li><li>Les listes sont toujours triées</li><li>sort ne trie que des vector</li><li>Il manque un comparateur</li></ul>
+<div class="explain">Les itérateurs de list sont bidirectionnels (pas de it + n). list fournit sort, remove, unique, merge, splice.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Que se passe-t-il si une exception traverse une fonction qui a fait <code>Robot* r = new Robot;</code> sans pointeur intelligent ?</p>
+<ul class="choices"><li>r est libéré par le dépilement</li><li>Le programme plante</li><li>Le delete prévu après l'appel n'est jamais exécuté : fuite ; un unique_ptr aurait libéré l'objet</li><li>L'exception est annulée</li></ul>
+<div class="explain">Seuls les destructeurs des objets locaux s'exécutent pendant le dépilement (RAII).</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">En Python, après <code>a = [1, 2]; b = a; b.append(3)</code>, que vaut <code>a</code> ?</p>
+<ul class="choices"><li>[1, 2]</li><li>[1, 2, 3] : a et b désignent la même liste</li><li>Erreur</li><li>[3]</li></ul>
+<div class="explain">Affectation = partage de référence (comme un shared_ptr). Copie : <code>b = list(a)</code>.</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Que retourne <code>find_if(v.begin(), v.end(), pred)</code> quand aucun élément ne convient ?</p>
+<ul class="choices"><li>nullptr</li><li>-1</li><li>Une exception</li><li><code>v.end()</code></li></ul>
+<div class="explain">Toujours comparer à end() avant de déréférencer.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Où définit-on la variable de classe <code>static int Joueur::nombre_</code> ?</p>
+<ul class="choices"><li>Une seule fois, hors de la classe, dans Joueur.cpp : <code>int Joueur::nombre_ = 0;</code></li><li>Dans le constructeur</li><li>Dans main</li><li>Nulle part, la déclaration suffit</li></ul>
+<div class="explain">Sans définition : symbole externe non résolu. Alternative C++17 : <code>inline static int nombre_ = 0;</code> dans la classe.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Quel type permet de stocker une lambda dans un attribut de classe ?</p>
+<ul class="choices"><li><code>auto</code></li><li><code>lambda&lt;bool(int)&gt;</code></li><li><code>std::function&lt;bool(int)&gt;</code></li><li><code>void*</code></li></ul>
+<div class="explain">auto est interdit pour un attribut non statique ; std::function (en-tête functional) accepte lambda, foncteur ou fonction de signature compatible.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Que vaut <code>accumulate(v.begin(), v.end(), 0)</code> pour <code>vector&lt;double&gt; v = {1.5, 1.5}</code> ?</p>
+<ul class="choices"><li>3.0</li><li>2 : la valeur initiale 0 est un int, l'accumulation se fait en int</li><li>3</li><li>Erreur de compilation</li></ul>
+<div class="explain">1.5 ajouté à l'int 0 donne 1 (troncature), puis 2. Écrire 0.0.</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Dans la classe Python <code>class Camion(Vehicule):</code>, comment initialiser la partie Vehicule ?</p>
+<ul class="choices"><li>Automatiquement</li><li><code>Vehicule::__init__()</code></li><li><code>this.Vehicule(...)</code></li><li><code>super().__init__(immat, masse)</code> dans <code>__init__</code></li></ul>
+<div class="explain">Si la dérivée définit __init__, l'appel à la base n'est pas automatique.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Plusieurs joueurs peuvent avoir le même nombre de buts. Pour les classer par buts avec un conteneur associatif, on choisit :</p>
+<ul class="choices"><li><code>set&lt;int&gt;</code></li><li><code>map&lt;int, Joueur*&gt;</code></li><li><code>multimap&lt;int, Joueur*&gt;</code></li><li><code>unordered_set&lt;int&gt;</code></li></ul>
+<div class="explain">Une map écraserait les joueurs de même clé. multimap conserve toutes les paires, triées par clé.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Pourquoi un comparateur ne doit-il jamais retourner vrai pour deux éléments égaux (<code>&lt;=</code>) ?</p>
+<ul class="choices"><li>sort et les set exigent un ordre strict ; sinon comportement indéfini (boucles infinies, éléments perdus)</li><li>Parce que <code>&lt;=</code> n'est pas surchargeable</li><li>Pour la vitesse seulement</li><li>Le compilateur le refuse</li></ul>
+<div class="explain">Règle : « a avant b » strict. Un set avec <code>&lt;=</code> n'arrive plus à détecter les doublons.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Que se passe-t-il si aucun catch ne correspond, jusque dans main ?</p>
+<ul class="choices"><li>L'exception est ignorée et le programme continue</li><li><code>std::terminate()</code> arrête le programme</li><li>main retourne -1</li><li>Le catch le plus proche est pris quand même</li></ul>
+<div class="explain">D'où le <code>catch (...)</code> ou <code>catch (const exception&amp;)</code> de dernier recours dans main.</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Une fonction générique <code>template &lt;typename T&gt; T maximum(const T&amp;, const T&amp;)</code> est définie dans un fichier .cpp séparé. Symptôme ?</p>
+<ul class="choices"><li>Tout fonctionne</li><li>Erreur de syntaxe</li><li>Résultat faux à l'exécution</li><li>Erreur d'édition des liens (symbole non résolu) pour chaque type utilisé ailleurs : la définition doit être dans le .h</li></ul>
+<div class="explain">Le compilateur a besoin du code pour instancier le template dans chaque unité de compilation.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Après <code>auto it = v.begin(); v.push_back(x);</code> (vector), l'itérateur it :</p>
+<ul class="choices"><li>Reste valide</li><li>Désigne x</li><li>Peut être invalide si le vecteur a été réalloué</li><li>Devient end()</li></ul>
+<div class="explain">Toute insertion dans un vector peut déplacer tous les éléments. Les list, set et map n'invalident que l'élément supprimé.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Quelle lambda compte, dans une méthode de Robot, les composantes plus lourdes que l'attribut <code>seuil_</code> ?</p>
+<ul class="choices"><li><code>count_if(b, e, [this](const auto&amp; c) { return c-&gt;getMasseKg() &gt; seuil_; })</code></li><li><code>count_if(b, e, [seuil_](const auto&amp; c) { ... })</code></li><li><code>count_if(b, e, [](const auto&amp; c) { return c-&gt;getMasseKg() &gt; seuil_; })</code></li><li><code>count_if(b, e, [&amp;seuil_](const auto&amp; c) { ... })</code></li></ul>
+<div class="explain">Un attribut se capture via this ([=] et [&amp;] le capturent implicitement) ; <code>[seuil_]</code> ne compile pas.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Quelle affirmation sur <code>catch (const exception&amp; e)</code> est vraie ?</p>
+<ul class="choices"><li>Il n'attrape que les objets de type exactement exception</li><li>Il attrape exception et toutes ses dérivées (runtime_error, out_of_range, vos classes dérivées) ; <code>e.what()</code> donne le message de la dérivée grâce au polymorphisme</li><li>Il attrape aussi les int lancés</li><li>Il doit être placé en premier</li></ul>
+<div class="explain">Référence vers la base = polymorphisme. Par valeur, l'objet serait découpé.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Que vaut <code>[x * x for x in range(5) if x % 2 == 0]</code> ?</p>
+<ul class="choices"><li>[0, 1, 4, 9, 16]</li><li>[4, 16]</li><li>[0, 4, 16]</li><li>[1, 9]</li></ul>
+<div class="explain">range(5) donne 0 à 4 ; on garde les pairs 0, 2, 4 et on les élève au carré.</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Que retourne <code>pq.top()</code> pour <code>priority_queue&lt;int&gt; pq</code> contenant 3, 9, 1 ?</p>
+<ul class="choices"><li>3 (premier inséré)</li><li>1</li><li>Le dernier inséré</li><li>9 : le plus grand d'abord (ordre par défaut avec less)</li></ul>
+<div class="explain">Pour obtenir le plus petit d'abord : <code>priority_queue&lt;int, vector&lt;int&gt;, greater&lt;int&gt;&gt;</code>.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Quel est l'affichage ?</p>
+<script type="text/cpp">
+struct G { G(string n) : n_(n) { cout << "+" << n_; } ~G() { cout << "-" << n_; } string n_; };
+void f() { G a("a"); throw runtime_error("x"); G b("b"); }
+int main() { try { G m("m"); f(); } catch (const exception& e) { cout << "[" << e.what() << "]"; } cout << "."; }
+</script>
+<ul class="choices"><li>+m+a-a-m[x].</li><li>+m+a+b-b-a-m[x].</li><li>+m+a[x]-a-m.</li><li>+m+a-a[x]-m.</li></ul>
+<div class="explain">b n'est jamais construit. Le dépilement détruit a puis m (le bloc try est quitté) avant l'exécution du catch ; puis « . ».</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Dans <code>map&lt;string, int&gt;</code>, un élément parcouru par <code>for (auto&amp; e : m)</code> est de type :</p>
+<ul class="choices"><li><code>pair&lt;string, int&gt;</code></li><li><code>pair&lt;const string, int&gt;</code> : la clé est constante, la valeur modifiable (<code>e.second</code>)</li><li><code>int</code></li><li><code>string</code></li></ul>
+<div class="explain">Modifier une clé casserait l'arbre. <code>e.first</code> est en lecture seule.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Pour parcourir un vector en retirant certains éléments, le schéma correct est :</p>
+<ul class="choices"><li><code>for (auto it = v.begin(); it != v.end(); ++it) if (pred(*it)) v.erase(it);</code></li><li><code>for (size_t i = 0; i &lt; v.size(); ++i) if (pred(v[i])) v.erase(v.begin() + i);</code></li><li><code>for (auto it = v.begin(); it != v.end(); ) { if (pred(*it)) it = v.erase(it); else ++it; }</code></li><li><code>for (int x : v) if (pred(x)) v.erase(x);</code></li></ul>
+<div class="explain">erase invalide l'itérateur et retourne le suivant ; a et d utilisent un itérateur invalide, b saute l'élément qui glisse à l'indice i.</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Qu'est-ce qu'une classe d'exception bien conçue pour « cap salarial dépassé » ?</p>
+<ul class="choices"><li><code>int</code> lancé avec un code</li><li>Une <code>string</code> lancée</li><li>Une classe sans lien avec exception</li><li>Une classe dérivée de std::exception (ou d'une base commune du programme) qui mémorise la masse et l'équipe et construit le message dans <code>what()</code> ou <code>get_erreur()</code></li></ul>
+<div class="explain">Attrapable par la base (catch commun), porteuse des données utiles au message.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">En Python, l'équivalent de <code>count_if(v.begin(), v.end(), [](int n) { return n &gt; 5; })</code> est :</p>
+<ul class="choices"><li><code>len([n for n in v if n &gt; 5])</code> ou <code>sum(1 for n in v if n &gt; 5)</code></li><li><code>v.count_if(lambda n: n &gt; 5)</code></li><li><code>count(v, 5)</code></li><li><code>v.count(&gt; 5)</code></li></ul>
+<div class="explain">Pas d'algorithme count_if en Python : compréhension ou générateur.</div>
+</div>
+
+<div class="q" data-answer="1">
+<p class="q-text">Que fait <code>copy(v.begin(), v.end(), ostream_iterator&lt;Joueur&gt;(cout, "\n"))</code> ?</p>
+<ul class="choices"><li>Copie v dans un fichier</li><li>Affiche chaque joueur suivi d'un saut de ligne, en appelant operator&lt;&lt; pour Joueur</li><li>Ne compile jamais</li><li>Trie puis affiche</li></ul>
+<div class="explain">C'est l'affichage du menu du simulateur de hockey ; il exige une surcharge de &lt;&lt; pour le type.</div>
+</div>
+
+<div class="q" data-answer="2">
+<p class="q-text">Une lambda déclarée <code>mutable</code> :</p>
+<ul class="choices"><li>Peut modifier les variables capturées par référence (déjà possible sans mutable)</li><li>Est plus rapide</li><li>Peut modifier ses captures par valeur, qui conservent leur état entre deux appels de la même lambda</li><li>Capture tout par référence</li></ul>
+<div class="explain">Exemple : <code>auto gen = [n = 0]() mutable { return ++n; };</code> donne 1, 2, 3...</div>
+</div>
+
+<div class="q" data-answer="3">
+<p class="q-text">Combien d'objets Composante existent après ce code, selon le compteur statique ?</p>
+<script type="text/cpp">
+// Composante incrémente nombre_ dans tous ses constructeurs et le décrémente dans son destructeur
+vector<shared_ptr<Composante>> v;
+v.push_back(make_shared<Moteur>("a", 1, 1));
+auto c = v[0];
+v.push_back(make_shared<Capteur>("b", 1, 1));
+v.pop_back();
+v.clear();
+cout << Composante::getNombre();
+</script>
+<ul class="choices"><li>0</li><li>2</li><li>3</li><li>1 : le moteur survit grâce à c ; le capteur a été détruit par pop_back</li></ul>
+<div class="explain">pop_back détruit le dernier shared_ptr (compteur à 0 : ~Capteur). clear retire le shared_ptr du moteur mais c le garde vivant.</div>
+</div>
+
+<div class="q" data-answer="0">
+<p class="q-text">Quelle est la différence entre <code>unique</code> de la STL et la suppression des doublons ?</p>
+<ul class="choices"><li>unique ne retire que les doublons consécutifs et ne change pas la taille : trier d'abord, puis erase</li><li>unique retire tous les doublons du conteneur</li><li>unique trie le conteneur</li><li>unique ne fonctionne qu'avec set</li></ul>
+<div class="explain"><code>sort(b, e); v.erase(unique(b, e), e);</code></div>
+</div>
+</section>
+
+<h2 id="dev-final">4. Exercices de synthèse (format examen)</h2>
+<p class="small">Chaque exercice combine la matière de l'intra et celle du final. Écrivez le code en entier avant de regarder la solution.</p>
+<div class="exo-tools" data-scope="dev-final-list">
+  <div class="progress-bar"><span></span></div><span class="progress-label small"></span>
+  <button class="btn secondary small" type="button" data-action="open-all">Déplier les solutions</button>
+  <button class="btn secondary small" type="button" data-action="close-all">Tout replier</button>
+</div>
+<div id="dev-final-list">
+
+<article class="exo" data-exo-id="final-s1">
+<header><span class="tag exam">Synthèse</span><span class="tag theme">M5 + M6 + M8 + M9 + M10</span><h4>Bibliothèque : hiérarchie, algorithmes, map, exceptions, static</h4></header>
+<div class="enonce">
+<p>Un Document (abstrait) a un titre, une année et un état disponible / emprunté ; il connaît son <code>type()</code> (chaîne) et ses <code>fraisRetard(jours)</code>, tous deux virtuels purs. Un Livre ajoute un auteur (frais : 0,25 $ par jour) ; une Revue ajoute un numéro (frais : 0,10 $ par jour, plafonnés à 5 $). La classe Document compte le nombre de documents existants dans une variable de classe. <code>emprunter()</code> lance <code>DocumentIndisponible</code> (dérivée de <code>runtime_error</code>, message contenant le titre) si le document est déjà emprunté.</p>
+<p>Une Bibliotheque possède ses documents dans un <code>vector&lt;shared_ptr&lt;Document&gt;&gt;</code>. Écrivez, sans boucle explicite : <code>disponibles()</code> (vecteur des documents disponibles), <code>trierParTitre()</code>, <code>nombreDe(const string&amp; type)</code>, <code>parType()</code> qui retourne une <code>map&lt;string, vector&lt;shared_ptr&lt;Document&gt;&gt;&gt;</code>, <code>bool emprunter(const string&amp; titre)</code> (lance <code>invalid_argument</code> si le titre est inconnu, retourne false si le document est indisponible, true sinon), <code>fraisTotaux(int jours)</code> et <code>plusRecent()</code>.</p>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/cpp">
+class DocumentIndisponible : public std::runtime_error {
+public:
+    DocumentIndisponible(const std::string& titre) : std::runtime_error("document indisponible : " + titre) {}
+};
+
+class Document {
+public:
+    Document(const std::string& titre, int annee) : titre_(titre), annee_(annee), disponible_(true) { ++nombre_; }
+    virtual ~Document() { --nombre_; }
+    virtual std::string type() const = 0;
+    virtual double fraisRetard(int jours) const = 0;
+    const std::string& getTitre() const { return titre_; }
+    int getAnnee() const { return annee_; }
+    bool estDisponible() const { return disponible_; }
+    void emprunter() {
+        if (!disponible_) throw DocumentIndisponible(titre_);     // avant toute modification
+        disponible_ = false;
+    }
+    void retourner() { disponible_ = true; }
+    static int getNombre() { return nombre_; }
+private:
+    std::string titre_;
+    int annee_;
+    bool disponible_;
+    static int nombre_;
+};
+int Document::nombre_ = 0;                                           // dans le .cpp
+
+class Livre : public Document {
+public:
+    Livre(const std::string& titre, int annee, const std::string& auteur) : Document(titre, annee), auteur_(auteur) {}
+    std::string type() const override { return "livre"; }
+    double fraisRetard(int jours) const override { return 0.25 * jours; }
+private:
+    std::string auteur_;
+};
+
+class Revue : public Document {
+public:
+    Revue(const std::string& titre, int annee, int numero) : Document(titre, annee), numero_(numero) {}
+    std::string type() const override { return "revue"; }
+    double fraisRetard(int jours) const override { return std::min(5.0, 0.10 * jours); }
+private:
+    int numero_;
+};
+
+class Bibliotheque {
+public:
+    void ajouter(std::shared_ptr<Document> d) { if (d) docs_.push_back(d); }
+
+    std::vector<std::shared_ptr<Document>> disponibles() const {
+        std::vector<std::shared_ptr<Document>> r;
+        std::copy_if(docs_.begin(), docs_.end(), std::back_inserter(r), [](const auto& d) { return d->estDisponible(); });
+        return r;
+    }
+    void trierParTitre() {
+        std::sort(docs_.begin(), docs_.end(), [](const auto& a, const auto& b) { return a->getTitre() < b->getTitre(); });
+    }
+    int nombreDe(const std::string& type) const {
+        return std::count_if(docs_.begin(), docs_.end(), [&type](const auto& d) { return d->type() == type; });
+    }
+    std::map<std::string, std::vector<std::shared_ptr<Document>>> parType() const {
+        std::map<std::string, std::vector<std::shared_ptr<Document>>> r;
+        std::for_each(docs_.begin(), docs_.end(), [&r](const auto& d) { r[d->type()].push_back(d); });   // [] crée la clé
+        return r;
+    }
+    bool emprunter(const std::string& titre) {
+        auto it = std::find_if(docs_.begin(), docs_.end(), [&titre](const auto& d) { return d->getTitre() == titre; });
+        if (it == docs_.end()) throw std::invalid_argument("titre inconnu : " + titre);
+        try {
+            (*it)->emprunter();
+            return true;
+        } catch (const DocumentIndisponible&) {       // cas attendu : signalé par false
+            return false;
+        }
+    }
+    double fraisTotaux(int jours) const {
+        return std::accumulate(docs_.begin(), docs_.end(), 0.0,
+                               [jours](double total, const auto& d) { return total + d->fraisRetard(jours); });
+    }
+    std::shared_ptr<Document> plusRecent() const {
+        auto it = std::max_element(docs_.begin(), docs_.end(), [](const auto& a, const auto& b) { return a->getAnnee() < b->getAnnee(); });
+        return it == docs_.end() ? nullptr : *it;
+    }
+private:
+    std::vector<std::shared_ptr<Document>> docs_;
+};
+</script>
+<p>Points de barème habituels : classe abstraite avec destructeur virtuel ; <code>override</code> ; exception dérivée de la hiérarchie standard, lancée avant modification ; captures correctes (<code>&amp;type</code>, <code>jours</code>, <code>&amp;r</code>) ; <code>accumulate</code> avec <code>0.0</code> ; test de <code>end()</code> ; variable de classe définie hors de la classe.</p>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="final-s2">
+<header><span class="tag exam">Synthèse</span><span class="tag theme">Simulateur de hockey complet</span><h4>Match : interface, foncteur validateur, exceptions, index statique</h4></header>
+<div class="enonce">
+<p>MembreEquipe est une interface (<code>getSalaire()</code>, <code>getEquipe()</code>, <code>getNumero()</code>, <code>afficher(ostream&amp;)</code>). Joueur (nom, numéro, équipe, salaire, buts) et Entraineur (nom, équipe, salaire ; numéro 0) l'implémentent ; chaque Joueur reçoit à sa construction un index unique croissant à partir de 0, mémorisé dans une variable de classe. Match conserve ses membres dans une <code>list&lt;shared_ptr&lt;MembreEquipe&gt;&gt;</code>.</p>
+<p>Écrivez : la hiérarchie d'exceptions ExceptionBase (abstraite, <code>get_erreur()</code>), ExceptionNombreJoueur et ExceptionMasseSalariale ; le foncteur FoncteurValider (construit avec l'équipe) qui, appliqué à la liste, lance ExceptionNombreJoueur si l'équipe n'a pas exactement 3 joueurs et 1 entraîneur, et ExceptionMasseSalariale si sa masse salariale dépasse 10 000 000 ; puis les méthodes de Match sans boucle explicite : <code>valider()</code>, <code>masseSalariale(bool equipe)</code>, <code>afficherEquipe(bool equipe)</code> (membres de l'équipe par numéro croissant) et <code>afficherTroisEtoiles()</code> (les trois joueurs ayant le plus de buts). Montrez enfin le code du menu qui appelle <code>valider()</code> et affiche le message d'erreur.</p>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/cpp">
+class MembreEquipe {
+public:
+    virtual ~MembreEquipe() = default;
+    virtual double getSalaire() const = 0;
+    virtual bool getEquipe() const = 0;
+    virtual int getNumero() const = 0;
+    virtual void afficher(std::ostream& out) const = 0;
+};
+std::ostream& operator<<(std::ostream& out, const MembreEquipe& m) { m.afficher(out); return out; }
+
+class Joueur : public MembreEquipe {
+public:
+    Joueur(const std::string& nom, int numero, bool equipe, double salaire)
+        : nom_(nom), numero_(numero), equipe_(equipe), salaire_(salaire), buts_(0), index_(prochainIndex_++) {}
+    double getSalaire() const override { return salaire_; }
+    bool getEquipe() const override { return equipe_; }
+    int getNumero() const override { return numero_; }
+    int getButs() const { return buts_; }
+    void afficher(std::ostream& out) const override { out << "[" << index_ << "] " << numero_ << " " << nom_ << " " << salaire_; }
+private:
+    std::string nom_;
+    int numero_;
+    bool equipe_;
+    double salaire_;
+    int buts_;
+    int index_;
+    static int prochainIndex_;
+};
+int Joueur::prochainIndex_ = 0;
+
+class Entraineur : public MembreEquipe {
+public:
+    Entraineur(const std::string& nom, bool equipe, double salaire) : nom_(nom), equipe_(equipe), salaire_(salaire) {}
+    double getSalaire() const override { return salaire_; }
+    bool getEquipe() const override { return equipe_; }
+    int getNumero() const override { return 0; }
+    void afficher(std::ostream& out) const override { out << "coach " << nom_ << " " << salaire_; }
+private:
+    std::string nom_;
+    bool equipe_;
+    double salaire_;
+};
+
+class ExceptionBase : public std::exception {
+public:
+    virtual std::string get_erreur() const = 0;
+};
+class ExceptionNombreJoueur : public ExceptionBase {
+public:
+    ExceptionNombreJoueur(bool equipe) : equipe_(equipe) {}
+    std::string get_erreur() const override { return "Mauvais nombre de joueurs/entraineurs pour l'equipe " + std::to_string(equipe_); }
+private:
+    bool equipe_;
+};
+class ExceptionMasseSalariale : public ExceptionBase {
+public:
+    ExceptionMasseSalariale(double masse, bool equipe) : masse_(masse), equipe_(equipe) {}
+    std::string get_erreur() const override { return "Cap salarial de " + std::to_string(masse_) + " depassee par l'equipe " + std::to_string(equipe_); }
+private:
+    double masse_;
+    bool equipe_;
+};
+
+class FoncteurValider {
+public:
+    FoncteurValider(bool equipe) : equipe_(equipe) {}
+    void operator()(const std::list<std::shared_ptr<MembreEquipe>>& membres) const {
+        auto deLEquipe = [this](const auto& m) { return m->getEquipe() == equipe_; };
+        int joueurs = std::count_if(membres.begin(), membres.end(),
+            [&](const auto& m) { return deLEquipe(m) && std::dynamic_pointer_cast<Joueur>(m) != nullptr; });
+        int coachs = std::count_if(membres.begin(), membres.end(),
+            [&](const auto& m) { return deLEquipe(m) && std::dynamic_pointer_cast<Entraineur>(m) != nullptr; });
+        if (joueurs != 3 || coachs != 1) throw ExceptionNombreJoueur(equipe_);
+        double masse = std::accumulate(membres.begin(), membres.end(), 0.0,
+            [&](double t, const auto& m) { return deLEquipe(m) ? t + m->getSalaire() : t; });
+        if (masse > 10000000) throw ExceptionMasseSalariale(masse, equipe_);
+    }
+private:
+    bool equipe_;
+};
+
+class Match {
+public:
+    void ajouter(std::shared_ptr<MembreEquipe> m) { if (m) membres_.push_back(m); }
+
+    void valider() const {
+        FoncteurValider(false)(membres_);
+        FoncteurValider(true)(membres_);
+    }
+    double masseSalariale(bool equipe) const {
+        return std::accumulate(membres_.begin(), membres_.end(), 0.0,
+            [equipe](double t, const auto& m) { return m->getEquipe() == equipe ? t + m->getSalaire() : t; });
+    }
+    void afficherEquipe(bool equipe) const {
+        std::vector<std::shared_ptr<MembreEquipe>> v;
+        std::copy_if(membres_.begin(), membres_.end(), std::back_inserter(v), [equipe](const auto& m) { return m->getEquipe() == equipe; });
+        std::sort(v.begin(), v.end(), [](const auto& a, const auto& b) { return a->getNumero() < b->getNumero(); });
+        std::for_each(v.begin(), v.end(), [](const auto& m) { std::cout << *m << std::endl; });
+    }
+    void afficherTroisEtoiles() const {
+        std::vector<std::shared_ptr<Joueur>> joueurs;
+        std::for_each(membres_.begin(), membres_.end(), [&joueurs](const auto& m) {
+            if (auto j = std::dynamic_pointer_cast<Joueur>(m)) joueurs.push_back(j);
+        });
+        size_t n = std::min<size_t>(3, joueurs.size());
+        std::partial_sort(joueurs.begin(), joueurs.begin() + n, joueurs.end(),
+            [](const auto& a, const auto& b) { return a->getButs() > b->getButs(); });
+        std::for_each(joueurs.begin(), joueurs.begin() + n, [](const auto& j) { std::cout << *j << std::endl; });
+    }
+private:
+    std::list<std::shared_ptr<MembreEquipe>> membres_;
+};
+
+// Menu : option « Jouez! »
+try {
+    match.valider();
+    match.simuler();
+} catch (const ExceptionBase& e) {
+    std::cout << e.get_erreur() << std::endl;    // appel virtuel : message de la dérivée
+}                                                 // puis le menu se réaffiche
+</script>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="final-s3">
+<header><span class="tag exam">Synthèse</span><span class="tag theme">Affichage</span><h4>Devinez l'affichage : exceptions, lambdas, static</h4></header>
+<div class="enonce">
+<div class="widget" data-widget="guess-output">
+  <p class="w-title">Vérifiez votre réponse</p>
+<script type="text/cpp">
+class Ressource {
+public:
+    Ressource(string n) : n_(n) { ++actives_; cout << "+" << n_ << " (" << actives_ << ")" << endl; }
+    ~Ressource() { --actives_; cout << "-" << n_ << " (" << actives_ << ")" << endl; }
+    static int actives() { return actives_; }
+private:
+    string n_;
+    static int actives_;
+};
+int Ressource::actives_ = 0;
+
+int traiter(const vector<int>& v, int seuil) {
+    Ressource r("traiter");
+    auto grand = [seuil](int n) { return n > seuil; };
+    int nb = count_if(v.begin(), v.end(), grand);
+    if (nb == 0) throw invalid_argument("aucun");
+    auto it = find_if(v.begin(), v.end(), grand);
+    return *it;
+}
+
+int main() {
+    Ressource principale("main");
+    vector<int> v = {3, 9, 4};
+    for (int seuil : {5, 20}) {
+        try {
+            int r = traiter(v, seuil);
+            cout << "resultat " << r << endl;
+        } catch (const exception& e) {
+            cout << "erreur " << e.what() << " (" << Ressource::actives() << ")" << endl;
+        }
+    }
+    cout << "fin (" << Ressource::actives() << ")" << endl;
+    return 0;
+}
+</script>
+<script type="text/plain" data-role="expected">
++main (1)
++traiter (2)
+-traiter (1)
+resultat 9
++traiter (2)
+-traiter (1)
+erreur aucun (1)
+fin (1)
+-main (0)
+</script>
+<div data-role="explain" class="box tip"><span class="label">Explication</span>
+<p>Seuil 5 : la lambda retient 5 ; un élément (9) dépasse, <code>find_if</code> le trouve. La variable locale <code>r</code> de <code>traiter</code> est détruite à la sortie de la fonction, avant l'affichage du résultat. Seuil 20 : aucun élément, <code>throw</code> ; le dépilement détruit <code>r</code> (« -traiter (1) ») avant que le <code>catch</code> n'affiche le message, avec le compteur revenu à 1. Après la boucle, « fin (1) », puis <code>principale</code> est détruite à la fin de main.</p></div>
+</div>
+</div>
+</article>
+
+<article class="exo" data-exo-id="final-s4">
+<header><span class="tag exam">Synthèse</span><span class="tag theme">M7 + M8 + M9 + M10</span><h4>Classe générique Registre&lt;K, V&gt; avec map, lambdas et exceptions</h4></header>
+<div class="enonce">
+<p>Écrivez une classe générique <code>Registre&lt;K, V&gt;</code> construite sur une <code>map&lt;K, V&gt;</code> avec : <code>definir(cle, valeur)</code> (ajoute ou remplace), <code>const V&amp; obtenir(cle) const</code> qui lance <code>CleInexistante</code> (dérivée de <code>out_of_range</code>, message avec la clé) si la clé est absente, <code>contient(cle)</code>, <code>taille()</code>, une méthode générique <code>clesOu(pred)</code> qui retourne le vecteur des clés dont la valeur vérifie le prédicat, une méthode générique <code>pourChaque(f)</code> qui appelle <code>f(cle, valeur)</code> sur chaque entrée, et un <code>operator&lt;&lt;</code> ami qui affiche « cle = valeur » par ligne. Montrez l'utilisation avec un <code>Registre&lt;string, double&gt;</code> de prix : clés dont le prix dépasse 10, somme des prix via <code>pourChaque</code>, et traitement de <code>CleInexistante</code>.</p>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/cpp" data-title="Registre.h">
+#pragma once
+#include <iostream>
+#include <map>
+#include <sstream>
+#include <stdexcept>
+#include <vector>
+
+class CleInexistante : public std::out_of_range {
+public:
+    CleInexistante(const std::string& cle) : std::out_of_range("cle inexistante : " + cle) {}
+};
+
+template <typename K, typename V>
+class Registre {
+public:
+    void definir(const K& cle, const V& valeur) { donnees_[cle] = valeur; }
+
+    const V& obtenir(const K& cle) const {
+        auto it = donnees_.find(cle);                    // find : ne crée rien (obligatoire dans une méthode const)
+        if (it == donnees_.end()) {
+            std::ostringstream oss;  oss << cle;         // la clé peut être un int ou une string
+            throw CleInexistante(oss.str());
+        }
+        return it->second;
+    }
+    bool contient(const K& cle) const { return donnees_.count(cle) > 0; }
+    std::size_t taille() const { return donnees_.size(); }
+
+    template <typename Pred>
+    std::vector<K> clesOu(Pred pred) const {
+        std::vector<K> cles;
+        for (const auto& [cle, valeur] : donnees_)
+            if (pred(valeur)) cles.push_back(cle);
+        return cles;
+    }
+    template <typename F>
+    void pourChaque(F f) const {
+        for (const auto& [cle, valeur] : donnees_) f(cle, valeur);
+    }
+
+    friend std::ostream& operator<<(std::ostream& out, const Registre& r) {
+        for (const auto& [cle, valeur] : r.donnees_) out << cle << " = " << valeur << "\n";
+        return out;
+    }
+private:
+    std::map<K, V> donnees_;
+};
+</script>
+<script type="text/cpp" data-title="main.cpp">
+Registre<std::string, double> prix;
+prix.definir("pomme", 2.5);
+prix.definir("fromage", 12.0);
+prix.definir("vin", 25.0);
+
+std::vector<std::string> chers = prix.clesOu([](double p) { return p > 10; });       // {"fromage", "vin"} (ordre des clés)
+double total = 0;
+prix.pourChaque([&total](const std::string&, double p) { total += p; });              // 39.5
+std::cout << prix << "total " << total << std::endl;
+
+try {
+    std::cout << prix.obtenir("poire") << std::endl;
+} catch (const CleInexistante& e) {
+    std::cout << e.what() << std::endl;                                              // cle inexistante : poire
+}
+</script>
+<p>Tout le code générique reste dans le .h, y compris les méthodes génériques <code>clesOu</code> et <code>pourChaque</code>, dont le type du prédicat est déduit à l'appel (une lambda différente à chaque fois). La liaison structurée <code>const auto&amp; [cle, valeur]</code> remplace <code>it-&gt;first</code> / <code>it-&gt;second</code>.</p>
+</div></details>
+</article>
+
+<article class="exo" data-exo-id="final-s5">
+<header><span class="tag exam">Synthèse</span><span class="tag theme">Python</span><h4>Flotte de véhicules en Python</h4></header>
+<div class="enonce">
+<p>Traduisez en Python la hiérarchie de l'exercice de synthèse 2 de la page intra : Vehicule (immatriculation, masse, <code>taxe()</code> non implémentée, <code>__str__</code>), Voiture (places ; taxe = masse × 0,1), Camion (charge ; taxe = (masse + charge) × 0,2), et Flotte qui possède une liste de véhicules avec <code>ajouter</code>, <code>taxe_totale()</code>, <code>nombre_de(classe)</code>, <code>par_type()</code> (dictionnaire nom de classe → liste), <code>afficher_par_taxe()</code> (du plus taxé au moins taxé) et <code>trouver(immat)</code> qui lance une exception <code>VehiculeInconnu</code>. Comptez les véhicules créés dans une variable de classe. Montrez un programme principal qui attrape l'exception.</p>
+</div>
+<details class="sol"><summary>Solution</summary><div class="body">
+<script type="text/py">
+class VehiculeInconnu(Exception):
+    def __init__(self, immat):
+        super().__init__(f"vehicule inconnu : {immat}")
+        self.immat = immat
+
+
+class Vehicule:
+    nombre = 0                                   # variable de classe
+
+    def __init__(self, immat, masse):
+        self.immat = immat
+        self.masse = masse
+        Vehicule.nombre += 1
+
+    def taxe(self):
+        raise NotImplementedError                # "virtuelle pure"
+
+    def __str__(self):
+        return f"{self.immat} ({self.masse} kg) taxe {self.taxe():.2f}"
+
+
+class Voiture(Vehicule):
+    def __init__(self, immat, masse, places):
+        super().__init__(immat, masse)
+        self.places = places
+
+    def taxe(self):
+        return self.masse * 0.1
+
+
+class Camion(Vehicule):
+    def __init__(self, immat, masse, charge):
+        super().__init__(immat, masse)
+        self.charge = charge
+
+    def taxe(self):
+        return (self.masse + self.charge) * 0.2
+
+
+class Flotte:
+    def __init__(self):
+        self.vehicules = []
+
+    def ajouter(self, v):
+        self.vehicules.append(v)
+
+    def taxe_totale(self):
+        return sum(v.taxe() for v in self.vehicules)
+
+    def nombre_de(self, classe):
+        return sum(1 for v in self.vehicules if isinstance(v, classe))
+
+    def par_type(self):
+        groupes = {}
+        for v in self.vehicules:
+            groupes.setdefault(type(v).__name__, []).append(v)     # crée la liste si la clé est absente
+        return groupes
+
+    def afficher_par_taxe(self):
+        for v in sorted(self.vehicules, key=lambda v: v.taxe(), reverse=True):
+            print(v)
+
+    def trouver(self, immat):
+        for v in self.vehicules:
+            if v.immat == immat:
+                return v
+        raise VehiculeInconnu(immat)
+
+
+flotte = Flotte()
+flotte.ajouter(Voiture("ABC 123", 1200, 5))
+flotte.ajouter(Camion("XYZ 789", 8000, 12000))
+flotte.afficher_par_taxe()
+print(flotte.taxe_totale(), flotte.nombre_de(Camion), Vehicule.nombre)
+print({t: len(l) for t, l in flotte.par_type().items()})
+try:
+    flotte.trouver("ZZZ 000")
+except VehiculeInconnu as e:
+    print(e)
+</script>
+<p>Correspondances utilisées : classe abstraite → <code>raise NotImplementedError</code> ; <code>static</code> → attribut de classe ; <code>dynamic_cast</code> → <code>isinstance</code> ; <code>map</code> → <code>dict</code> avec <code>setdefault</code> ; <code>sort</code> + comparateur → <code>sorted(..., key=lambda ...)</code> ; <code>accumulate</code> → <code>sum</code> d'un générateur ; exception dérivée de <code>Exception</code> avec <code>super().__init__(message)</code>.</p>
+</div></details>
+</article>
+
+</div>
+
+<h2>5. Chronomètre d'entraînement</h2>
+<div class="widget" id="chrono">
+  <p class="w-title">2 h 30, la durée habituelle d'un final (à confirmer sur Moodle)</p>
+  <p class="w-desc">Faites les cinq exercices de synthèse d'un trait, puis relisez : captures des lambdas, <code>end()</code> testé, ordre des catch, définition des variables statiques, <code>override</code>, indentation du Python.</p>
+  <div class="btn-row">
+    <button class="btn small" type="button" id="chrono-start">Démarrer (150 min)</button>
+    <button class="btn secondary small" type="button" id="chrono-stop">Arrêter</button>
+    <span class="readout" style="margin:0"><span class="stat"><span class="k">Temps restant</span> <span class="v" id="chrono-val">2:30:00</span></span></span>
+  </div>
+</div>
+
+<h2>6. Liste de vérification</h2>
+<div class="two-col">
+<div class="box tip"><span class="label">La semaine avant</span>
+<ul>
+  <li>Quiz des modules 8, 9 et 10 refaits jusqu'à 12 / 15, puis ceux des modules 1 à 7 une fois chacun.</li>
+  <li>Les « Devinez l'affichage » des modules 8 à 10 et de cette page refaits sans regarder.</li>
+  <li>Le laboratoire d'algorithmes du module 9 : pour chaque algorithme, réécrire la ligne de code de mémoire.</li>
+  <li>Les cinq exercices de synthèse, chronomètre en marche ; puis les quatre de la page intra.</li>
+  <li>Clé USB : site, aide-mémoire, TP1 à TP5, énoncés, exercices du simulateur de hockey.</li>
+</ul></div>
+<div class="box exam"><span class="label">Pendant l'examen</span>
+<ul>
+  <li>Lire l'énoncé en entier ; souligner les contrats (valeurs de retour, exceptions à lancer, « sans boucle », « au plus deux foncteurs »).</li>
+  <li>Pour chaque conteneur : justifier le choix en un mot (indice, tri, unicité, clé, priorité).</li>
+  <li>Pour chaque algorithme : intervalle <code>begin / end</code>, lambda avec ses captures, résultat testé contre <code>end()</code>, <code>erase</code> après <code>remove_if</code>.</li>
+  <li>Pour chaque exception : classe dérivée, <code>throw</code> avant modification, <code>catch</code> par référence constante dans le bon ordre, reprise du programme.</li>
+  <li>Pour chaque classe : liste d'initialisation, <code>const</code>, <code>override</code>, destructeur virtuel, <code>static</code> défini hors classe, <code>std::</code> dans l'en-tête, code générique dans le .h.</li>
+  <li>En Python : indentation, <code>self</code>, <code>super().__init__</code>, <code>__str__</code>, <code>raise</code> / <code>except ... as e</code>.</li>
+</ul></div>
+</div>
+
+</article>
+</main>
+<footer class="footer">INF1010 - site d'étude personnel. Les documents officiels (Moodle, plan de cours, énoncés de TP) font foi.</footer>
+<script defer src="assets/app.js?v=3"></script>
+<script defer src="assets/widgets.js?v=3"></script>
+<script>
+(function () {
+  var total = 150 * 60, left = total, timer = null;
+  var val = document.getElementById('chrono-val');
+  function fmt(s) { var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60; return h + ':' + (m < 10 ? '0' : '') + m + ':' + (sec < 10 ? '0' : '') + sec; }
+  function tick() { left--; if (left <= 0) { left = 0; clearInterval(timer); timer = null; val.textContent = 'Terminé'; return; } val.textContent = fmt(left); }
+  document.getElementById('chrono-start').addEventListener('click', function () { if (timer) return; left = total; val.textContent = fmt(left); timer = setInterval(tick, 1000); });
+  document.getElementById('chrono-stop').addEventListener('click', function () { if (timer) { clearInterval(timer); timer = null; } });
+})();
+</script>
+</body>
+</html>
