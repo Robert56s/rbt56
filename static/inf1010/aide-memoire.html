@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Aide-mémoire C++ | INF1010</title>
-<link rel="stylesheet" href="assets/style.css?v=3">
+<link rel="stylesheet" href="assets/style.css?v=4">
 </head>
 <body>
 <header class="site-header">
@@ -94,16 +94,18 @@ delete[] a;   a = b;   taille = nouvelleTaille;
 <h2>2. const, passage de paramètres, vector</h2>
 <table class="formulaire">
 <tr><th class="notion">Méthode const</th><td class="f"><p><code>double get() const;</code> : ne modifie pas <code>*this</code>, ne peut appeler que des méthodes const, ne retourne pas de <code>T&amp;</code> vers un attribut. Seules les méthodes const sont appelables sur un objet const ou une <code>const T&amp;</code>.</p><p>Le const fait partie de la signature : à répéter dans le .cpp. Surcharge possible : <code>T&amp; operator[](size_t)</code> et <code>const T&amp; operator[](size_t) const</code>.</p></td><td class="rem">Accesseurs, affichage, calculs, comparaisons : const.</td></tr>
-<tr><th class="notion">Paramètres</th><td class="f">
-<table>
-<tr><th>Mode</th><th>Syntaxe</th><th>Copie</th><th>Modifie l'original</th><th>Usage</th></tr>
+<tr><th class="notion">Paramètres</th><td class="f" colspan="2">
+<table class="avoid">
+<thead><tr><th>Mode</th><th>Syntaxe</th><th>Copie</th><th>Modifie l'original</th><th>Usage</th></tr></thead>
+<tbody>
 <tr><td>valeur</td><td><code>f(T x)</code></td><td>oui</td><td>non</td><td>int, double, bool, copie voulue</td></tr>
 <tr><td>référence</td><td><code>f(T&amp; x)</code></td><td>non</td><td>oui</td><td>sortie, swap, flux</td></tr>
 <tr><td>réf. constante</td><td><code>f(const T&amp; x)</code></td><td>non</td><td>non</td><td><strong>défaut pour les objets</strong></td></tr>
 <tr><td>pointeur</td><td><code>f(T* x)</code></td><td>adresse</td><td>oui</td><td>nullptr possible, propriété, tableaux</td></tr>
 <tr><td>unique_ptr par valeur</td><td><code>f(unique_ptr&lt;T&gt; x)</code></td><td>transfert</td><td>-</td><td>appel : <code>f(std::move(p))</code></td></tr>
+</tbody>
 </table>
-<p>Retour : par valeur (toujours sûr) ; <code>const T&amp;</code> pour un attribut ; <code>T&amp;</code> = <code>*this</code> pour le chaînage ; jamais une référence vers une variable locale.</p></td><td class="rem">Surcharge résolue à la compilation par les types des arguments ; <code>f(T&amp;)</code> et <code>f(T)</code> sont ambiguës entre elles. <code>new T[n]</code> est un <code>T*</code>, <code>new T*[n]</code> un <code>T**</code>.</td></tr>
+<p>Retour : par valeur (toujours sûr) ; <code>const T&amp;</code> pour un attribut ; <code>T&amp;</code> = <code>*this</code> pour le chaînage ; jamais une référence vers une variable locale.</p><p class="note">Surcharge résolue à la compilation par les types des arguments ; <code>f(T&amp;)</code> et <code>f(T)</code> sont ambiguës entre elles. <code>new T[n]</code> est un <code>T*</code>, <code>new T*[n]</code> un <code>T**</code>.</p></td></tr>
 <tr><th class="notion">std::vector</th><td class="f">
 <script type="text/cpp">
 #include <vector>
@@ -120,16 +122,18 @@ for (const Robot& r : robots) ...   for (Robot& r : robots) ...   for (int n : v
 <section class="form-section">
 <h2>3. Composition, agrégation, pointeurs intelligents</h2>
 <table class="formulaire">
-<tr><th class="notion">Reconnaître la relation</th><td class="f">
-<table>
-<tr><th>Attribut</th><th>Relation</th><th>Qui détruit</th></tr>
+<tr><th class="notion">Reconnaître la relation</th><td class="f" colspan="2">
+<table class="avoid">
+<thead><tr><th>Attribut</th><th>Relation</th><th>Qui détruit</th></tr></thead>
+<tbody>
 <tr><td><code>B b_;</code></td><td>composition</td><td>automatique</td></tr>
 <tr><td><code>B* b_;</code> + <code>new</code> dans la classe</td><td>composition par pointeur</td><td>le destructeur de la classe (<code>delete</code>)</td></tr>
 <tr><td><code>B* b_;</code> reçu de l'extérieur</td><td>agrégation</td><td>l'extérieur</td></tr>
 <tr><td><code>B&amp; b_;</code> (liste d'init. obligatoire)</td><td>agrégation</td><td>l'extérieur</td></tr>
 <tr><td><code>unique_ptr&lt;B&gt;</code></td><td>composition exclusive</td><td>automatique</td></tr>
 <tr><td><code>shared_ptr&lt;B&gt;</code></td><td>partage</td><td>automatique au dernier propriétaire</td></tr>
-</table></td><td class="rem">Composition : « possède », durée de vie liée, pas de partage. Agrégation : « utilise », indépendant, partageable. Héritage : « est un ».</td></tr>
+</tbody>
+</table><p class="note">Composition : « possède », durée de vie liée, pas de partage. Agrégation : « utilise », indépendant, partageable. Héritage : « est un ».</p></td></tr>
 <tr><th class="notion">unique_ptr</th><td class="f">
 <script type="text/cpp">
 #include <memory>
@@ -196,7 +200,10 @@ private:
 Robot::Robot(const Robot& a)
     : nom_(a.nom_), batterie_(a.batterie_ ? std::make_unique<Batterie>(*a.batterie_) : nullptr), moteurs_(a.moteurs_) {}
 Robot& Robot::operator=(const Robot& a) {
-    if (this != &a) { Robot copie(a); std::swap(nom_, copie.nom_); std::swap(batterie_, copie.batterie_); std::swap(moteurs_, copie.moteurs_); }
+    if (this != &a) {
+        Robot copie(a);
+        std::swap(nom_, copie.nom_);  std::swap(batterie_, copie.batterie_);  std::swap(moteurs_, copie.moteurs_);
+    }
     return *this;
 }
 </script></td><td class="rem">unique_ptr dupliqué (copie profonde), shared_ptr copiés (partage).</td></tr>
@@ -236,13 +243,15 @@ std::ostream& operator<<(std::ostream& out, const Composante& c) { return c.affi
 </script></td><td class="rem">Héritage public = « est un ». Sans appel explicite, le constructeur par défaut de la base est utilisé. Seule la base directe dans la liste. Constructeurs, destructeurs, operator= non hérités.</td></tr>
 <tr><th class="notion">Liaison</th><td class="f"><p><strong>Non virtuelle</strong> : choisie à la compilation d'après le type déclaré du pointeur ou de la référence (liaison statique). <strong>Virtuelle</strong> : choisie à l'exécution d'après le type réel (liaison dynamique), uniquement via pointeur ou référence. Copie par valeur dans le type de base = découpage (slicing), version de la base.</p><p>Appel virtuel dans un constructeur/destructeur : version de la classe en cours. <code>override</code> : vérifie la redéfinition (signature et const identiques). <code>final</code> : interdit de redéfinir.</p></td><td class="rem">Collection polymorphe : <code>vector&lt;shared_ptr&lt;Base&gt;&gt;</code> ou <code>unique_ptr</code> ; jamais <code>vector&lt;Base&gt;</code>.</td></tr>
 <tr><th class="notion">Abstraite / interface</th><td class="f"><p>Au moins une méthode <code>= 0</code> → non instanciable (ni par valeur, ni en paramètre par valeur, ni dans <code>vector&lt;Base&gt;</code>). Une dérivée qui ne définit pas toutes les pures reste abstraite. Interface = que des pures + destructeur virtuel.</p></td><td class="rem">Erreur « impossible d'instancier une classe abstraite » : pure non redéfinie ou signature différente.</td></tr>
-<tr><th class="notion">Accès</th><td class="f">
-<table>
-<tr><th>Membre de Base</th><th>Dans Derivee</th><th>Depuis main via Derivee</th></tr>
+<tr><th class="notion">Accès</th><td class="f" colspan="2">
+<table class="avoid">
+<thead><tr><th>Membre de Base</th><th>Dans Derivee</th><th>Depuis main via Derivee</th></tr></thead>
+<tbody>
 <tr><td>public</td><td>oui</td><td>oui</td></tr>
 <tr><td>protected</td><td>oui</td><td>non</td></tr>
 <tr><td>private</td><td>non</td><td>non</td></tr>
-</table></td><td class="rem">Héritage protected / private : abaisse les niveaux (public devient protected / private).</td></tr>
+</tbody>
+</table><p class="note">Héritage protected / private : abaisse les niveaux (public devient protected / private).</p></td></tr>
 </table>
 </section>
 
@@ -274,14 +283,18 @@ public:
     double getSalaire() const override;                     // implémente l'interface
 };
 j.Patineur::afficher();                                     // lever une ambiguïté
-class Patineur : virtual public Personne { ... };           // diamant : base virtuelle, construite par la classe la plus dérivée
+class Patineur : virtual public Personne { ... };           // diamant : base virtuelle
 </script></td><td class="rem">Cas sain : une classe concrète + des interfaces.</td></tr>
 <tr><th class="notion">Fonction générique</th><td class="f">
 <script type="text/cpp">
 template <typename T>
 T maximum(const T& a, const T& b) { return (a < b) ? b : a; }   // T déduit ; maximum<double>(3, 2.5) si ambigu
 template <typename T, typename Fonction>
-double sommer(const Liste<T>& liste, Fonction propriete) { double s = 0; for (size_t i = 0; i < liste.size(); ++i) s += propriete(liste[i]); return s; }
+double sommer(const Liste<T>& liste, Fonction propriete) {
+    double s = 0;
+    for (size_t i = 0; i < liste.size(); ++i) s += propriete(liste[i]);
+    return s;
+}
 template <typename Derivee, typename Base>                 // Derivee non déductible : en premier
 std::vector<std::shared_ptr<Derivee>> filtrerParType(const Liste<std::shared_ptr<Base>>& liste);
 </script></td><td class="rem">Définition dans le .h. Erreurs à l'instanciation (T sans l'opérateur requis). Appel : <code>filtrerParType&lt;Pince&gt;(liste)</code>.</td></tr>
@@ -307,9 +320,10 @@ Liste<int> a;  Liste<std::shared_ptr<Composante>> b;   // deux classes distincte
 <section class="form-section">
 <h2>8. STL : conteneurs et itérateurs (final)</h2>
 <table class="formulaire">
-<tr><th class="notion">Conteneurs</th><td class="f">
+<tr><th class="notion">Conteneurs</th><td class="f" colspan="2">
 <table>
-<tr><th>Conteneur</th><th>Propriétés</th><th>Opérations clés</th></tr>
+<thead><tr><th>Conteneur</th><th>Propriétés</th><th>Opérations clés</th></tr></thead>
+<tbody>
 <tr><td><code>vector&lt;T&gt;</code></td><td>contigu, accès [i] O(1), insertion fin amortie O(1)</td><td>push_back, pop_back, [], at, insert, erase</td></tr>
 <tr><td><code>deque&lt;T&gt;</code></td><td>comme vector + insertion/suppression au début</td><td>push_front, pop_front</td></tr>
 <tr><td><code>list&lt;T&gt;</code></td><td>doublement chaînée, pas de [i], insertion/suppression O(1) partout</td><td>push_front/back, insert(it), erase(it), sort(), remove(v), splice</td></tr>
@@ -318,7 +332,8 @@ Liste<int> a;  Liste<std::shared_ptr<Composante>> b;   // deux classes distincte
 <tr><td><code>unordered_map / unordered_set</code></td><td>table de hachage, non trié, O(1) moyen</td><td>idem map / set</td></tr>
 <tr><td><code>stack</code>, <code>queue</code>, <code>priority_queue</code></td><td>adaptateurs</td><td>push, pop, top / front, back</td></tr>
 <tr><td><code>pair&lt;A, B&gt;</code></td><td>deux valeurs</td><td>first, second, make_pair</td></tr>
-</table></td><td class="rem"><code>m[k]</code> crée la clé si absente (valeur par défaut) ; <code>find</code> ne crée rien.</td></tr>
+</tbody>
+</table><p class="note"><code>m[k]</code> crée la clé si absente (valeur par défaut) ; <code>find</code> ne crée rien.</p></td></tr>
 <tr><th class="notion">Itérateurs</th><td class="f">
 <script type="text/cpp">
 for (vector<int>::iterator it = v.begin(); it != v.end(); ++it) *it *= 2;   // != et non <
@@ -406,9 +421,10 @@ try {
   catch (const std::exception& e) { cout << e.what(); }
   catch (...) { cout << "inconnue"; throw; }            // attrape tout ; throw; relance
 </script></td><td class="rem">Le reste du bloc try est abandonné ; catch essayés dans l'ordre ; les objets locaux sont détruits (pointeurs intelligents libérés, pointeurs bruts fuient). Non attrapée : <code>std::terminate</code>. Hiérarchie : exception → logic_error (invalid_argument, out_of_range, length_error) et runtime_error (overflow_error, range_error) ; bad_alloc, bad_cast. <code>noexcept</code> : ne lance pas. Un destructeur ne lance jamais.</td></tr>
-<tr><th class="notion">Python vs C++</th><td class="f">
+<tr><th class="notion">Python vs C++</th><td class="f" colspan="2">
 <table>
-<tr><th>C++</th><th>Python</th></tr>
+<thead><tr><th>C++</th><th>Python</th></tr></thead>
+<tbody>
 <tr><td><code>int x = 5; double y = 2.5; string s = "a"; bool b = true;</code></td><td><code>x = 5; y = 2.5; s = "a"; b = True</code> (typage dynamique)</td></tr>
 <tr><td><code>if (x &gt; 3) { ... } else if (...) { ... } else { ... }</code></td><td><code>if x &gt; 3:</code> / <code>elif ...:</code> / <code>else:</code> (indentation)</td></tr>
 <tr><td><code>for (int i = 0; i &lt; n; ++i)</code> ; <code>for (int v : vec)</code></td><td><code>for i in range(n):</code> ; <code>for v in liste:</code></td></tr>
@@ -421,7 +437,8 @@ try {
 <tr><td><code>try { } catch (const E&amp; e) { }</code> ; <code>throw E();</code></td><td><code>try:</code> / <code>except E as e:</code> ; <code>raise E()</code></td></tr>
 <tr><td><code>cout &lt;&lt; x &lt;&lt; endl;</code> ; <code>cin &gt;&gt; x;</code></td><td><code>print(x)</code> ; <code>x = input()</code></td></tr>
 <tr><td><code>// commentaire</code> ; <code>x++</code> ; <code>&amp;&amp; || !</code></td><td><code># commentaire</code> ; <code>x += 1</code> ; <code>and or not</code></td></tr>
-</table></td><td class="rem">Python : pas de types déclarés, pas d'accolades, pas de surcharge de fonctions, polymorphisme par défaut (méthodes « virtuelles »), <code>self</code> explicite, pas de private strict (préfixe <code>_</code> par convention, <code>__</code> pour le masquage).</td></tr>
+</tbody>
+</table><p class="note">Python : pas de types déclarés, pas d'accolades, pas de surcharge de fonctions, polymorphisme par défaut (méthodes « virtuelles »), <code>self</code> explicite, pas de private strict (préfixe <code>_</code> par convention, <code>__</code> pour le masquage).</p></td></tr>
 </table>
 </section>
 
