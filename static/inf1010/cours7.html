@@ -222,10 +222,11 @@ Boite(3)
 Boite(ab)
 6 abab
 9 x
+Boite(5)
 non
 </script>
 <div data-role="explain" class="box tip"><span class="label">Explication</span>
-<p><code>v_ + v_</code> est une addition pour int et une concaténation pour string : le même code générique, deux instanciations. <code>plusGrand(string("x"), string("abc"))</code> compare lexicographiquement : « x » &gt; « abc ». <code>plusGrand(a, c)</code> retourne c (3 &lt; 5) et <code>c &lt; c</code> est faux. Si Boite n'avait pas <code>operator&lt;</code>, <code>plusGrand(a, c)</code> ne compilerait pas, mais <code>plusGrand(4, 9)</code> si : l'erreur n'apparaît qu'à l'instanciation fautive.</p></div>
+<p><code>v_ + v_</code> est une addition pour int et une concaténation pour string : le même code générique, deux instanciations. <code>plusGrand(string("x"), string("abc"))</code> compare lexicographiquement : « x » &gt; « abc ». La construction de <code>c</code> affiche « Boite(5) ». <code>plusGrand(a, c)</code> retourne une copie de c (3 &lt; 5) faite par le constructeur de copie implicite, qui n'affiche rien ; puis <code>c &lt; c</code> est faux. Si Boite n'avait pas <code>operator&lt;</code>, <code>plusGrand(a, c)</code> ne compilerait pas, mais <code>plusGrand(4, 9)</code> si : l'erreur n'apparaît qu'à l'instanciation fautive.</p></div>
 </div>
 
 <h2>4. À retenir</h2>

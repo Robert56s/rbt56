@@ -438,10 +438,10 @@ int main() {
 <script type="text/plain" data-role="expected">
 16 6
 42 23 16 10 4 1
-4 42 3
+4 42 4
 </script>
 <div data-role="explain" class="box tip"><span class="label">Explication</span>
-<p><code>it</code> désigne 15 ; <code>insert</code> met 10 avant 15 (l = 4 8 10 15 16 23 42) ; <code>erase(it)</code> retire 15 et retourne l'itérateur sur 16 ; taille 6. Après <code>push_front(1)</code> et <code>remove(8)</code> : 1 4 10 16 23 42, affiché à l'envers. Le vecteur construit à partir de la liste : v[1] = 4, dernier = 42, 23 est à l'indice 3.</p></div>
+<p><code>it</code> désigne 15 ; <code>insert</code> met 10 avant 15 (l = 4 8 10 15 16 23 42) ; <code>erase(it)</code> retire 15 et retourne l'itérateur sur 16 ; taille 6. Après <code>push_front(1)</code> et <code>remove(8)</code> : 1 4 10 16 23 42, affiché à l'envers. Le vecteur construit à partir de la liste (1 4 10 16 23 42) : v[1] = 4, dernier = 42, 23 est à l'indice 4.</p></div>
 </div>
 </div>
 </article>
