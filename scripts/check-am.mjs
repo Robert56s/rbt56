@@ -18,7 +18,7 @@ import { channelConductance, compareTopologies, conductanceDepth, designJfetModu
 import { buildDemodElements, buildDiodeElements, buildElements as buildModElements, generateDemodSchematic, generateDiodeNetlist, generateDiodeSchematic, generateNetlist as modNetlist, generateSchematic as modSchematic } from '../src/lib/modulation/spice.js';
 import { designDiodeMixerModulator } from '../src/lib/modulation/diodeMixerModulator.js';
 import { DIODE_MODELS } from '../src/lib/modulation/diodeLaw.js';
-import { designEnvelopeLowPass } from '../src/lib/modulation/envelopeFilter.js';
+import { designEnvelopeLowPass, designEnvelopeStage } from '../src/lib/modulation/envelopeFilter.js';
 import { designHalfWaveRectifier, designPrecisionRectifier, recoveredEnvelope } from '../src/lib/modulation/rectifier.js';
 import { explainDiodeModulator } from '../src/lib/modulation/explain.js';
 import { designOscillator } from '../src/lib/oscillator/topologies.js';
@@ -1578,6 +1578,494 @@ const sameAsNetlist = (wanted, asc) => {
 			out.includes('WHAT COMES OUT (a 4 V carrier') && out.includes('output mean -2.5465 V') && out.includes('op-amp swing needed 7.700 V') && out.includes('fits') && out.includes('power in the earphones') && !out.startsWith('CRASH'),
 			out.startsWith('CRASH') ? out : out.split(String.fromCharCode(10)).find((l) => l.startsWith('op-amp swing')) ?? 'no swing line'
 		);
+	}
+}
+
+/* --------------------- a limit on the pairs (the stock picker's "up to N pairs") */
+{
+	const { LAB_KIT } = await import('../src/lib/filter/eseries.js');
+	const { componentOptions } = await import('../src/lib/stock.js');
+	const { pairedNames, pairSubsets, seriesPair } = await import('../src/lib/modulation/eseries.js');
+	const L = await import('../src/lib/modulation/pairLimit.js');
+	const { generateDemodScript, generateDiodeScript, generateJfetScript } = await import('../src/lib/modulation/codegen.js');
+	const { execFileSync } = await import('node:child_process');
+	const { mkdtempSync, writeFileSync } = await import('node:fs');
+	const { tmpdir } = await import('node:os');
+	const { join } = await import('node:path');
+	const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+	const inList = (v, list) => list.some((x) => Math.abs(x / v - 1) < 1e-9);
+	const kit = [...LAB_KIT.capacitors, 10e-6];
+	const rows = ['-0.5 0.2 0.0026 1000', '-1.0 0.2 0.0029 1000', '-1.5 0.2 0.0031 1000', '-2.0 0.2 0.0034 1000', '-2.5 0.2 0.0037 1000', '-3.0 0.2 0.0041 1000'];
+	const measured = fitModel(parseMeasurements(rows.join(String.fromCharCode(10))), { low: -7, high: 0 });
+	const lists = {
+		lab: LAB_KIT.resistors,
+		custom: componentOptions('custom', '1k 2.2k 4.7k 10k 22k 47k 100k 220k 470k 1M', '').resistorSeries,
+		sparse: componentOptions('custom', '10 22 47 100 220 470 1k 2.2k 4.7k 10k 22k 47k 100k 220k 470k 1M', '').resistorSeries
+	};
+	// a list that builds the 50 kHz carrier only with pairs (not in the sweeps below)
+	const shortListOnly = componentOptions('custom', '10, 22, 47, 100, 150, 220, 470, 1k, 2.2k, 4.7k, 10k, 22k, 47k, 100k', '').resistorSeries;
+	let seed = 20261025;
+	const rand = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+
+	// One circuit under every limit from 0 to one past its count: the pairs
+	// kept never pass the limit, the measure never gets worse while the limit
+	// is under the count, the count or more gives the design with pairs where
+	// they help, 0 gives single parts, and each design is the designer's own
+	// for the whitelist it keeps, its pairs all inside that whitelist. With
+	// `order` (every name the whitelist takes) and `measure`, a limit under the
+	// count also gives the design an exhaustive search finds: every whitelist
+	// of the names the circuit has a resistor for, paired or not with pairs
+	// where they help, holding the limit or fewer, the lowest measure, a tie
+	// to fewer names, then to the earlier ones. `searched` counts those limits.
+	const allSubsets = (names) => Array.from({ length: names.length + 1 }, (_, m) => pairSubsets(names, m)).flat();
+	const searched = { limits: 0, gained: 0 };
+	const sweep = (tag, { limitOf, design, single, parts, list, real, order, measure }, bad) => {
+		const full = limitOf(null);
+		if (!same(full.design, design(true))) bad.push(`${tag}: no limit is not the design with pairs where they help`);
+		const count = pairedNames(parts(full.design), list).length;
+		const fullNames = pairedNames(parts(full.design), list);
+		let every = null;
+		if (order && count > 0) {
+			const has = new Set([full.design, single].flatMap((d) => (d ? parts(d) : [])).map(([name]) => name));
+			every = allSubsets(order.filter((name) => has.has(name))).map((w) => {
+				const d = design(w);
+				return { w, d, m: measure(d) };
+			});
+		}
+		let prev = Infinity;
+		for (let n = 0; n <= count + 1; n++) {
+			const r = limitOf(n);
+			if (every && n < count) {
+				let best = null;
+				for (const o of every) {
+					if (o.w.length > n) continue;
+					if (!best || o.m < best.m - 1e-9 * Math.max(Math.abs(o.m), Math.abs(best.m))) best = o;
+				}
+				searched.limits++;
+				if (!same(r.design, best.d)) bad.push(`${tag} N=${n}: [${pairedNames(parts(r.design), list)}] ${r.measure} where the whitelist [${best.w}] gives ${best.m}`);
+				if (pairedNames(parts(r.design), list).some((name) => !fullNames.includes(name))) searched.gained++;
+			}
+			const kept = pairedNames(parts(r.design), list);
+			if (kept.length > n) bad.push(`${tag} N=${n}: ${kept.length} pairs`);
+			if (n >= count && !same(r.design, full.design)) bad.push(`${tag} N=${n}: not the design with pairs where they help`);
+			if (n === 0 && !same(r.design, single)) bad.push(`${tag} N=0: not single parts`);
+			if (n < count) {
+				if (r.measure > prev + 1e-12 * Math.max(1, Math.abs(prev))) bad.push(`${tag} N=${n}: measure up from ${prev} to ${r.measure}`);
+				prev = r.measure;
+			}
+			if (r.pairs !== true && !kept.every((name) => r.pairs.includes(name))) bad.push(`${tag} N=${n}: a pair outside the whitelist`);
+			if (!same(design(r.pairs), r.design)) bad.push(`${tag} N=${n}: the whitelist does not give the design back`);
+			if (r.design && !parts(r.design).every(([, v]) => inList(v, list) || seriesPair(v, list))) bad.push(`${tag} N=${n}: a resistor neither on the list nor two of it`);
+			if (r.design && real && !real(r.design)) bad.push(`${tag} N=${n}: the figures do not follow from the parts`);
+		}
+		return count;
+	};
+
+	// the JFET modulator: its figures from its own parts
+	const realJfet = (d) => {
+		const s = d.conditioning.summer;
+		const c = d.carrier;
+		return (
+			near(s.gainActual, s.rf / s.rac, 1e-12) &&
+			near(s.biasActual, -(s.rf * d.conditioning.vcc) / s.rbias, 1e-9) &&
+			(d.rb === null || (near(d.x, d.rb / d.r1AtCenter, 1e-12) && near(d.modulationIndex, (d.gDepth * d.x) / (1 + d.x), 1e-12))) &&
+			near(c.ac, (c.sourceAmplitude * c.divider.bottom) / (c.divider.top + c.divider.bottom), 1e-12) &&
+			(!d.postGain?.needed || near(d.postGain.kActual, 1 + d.postGain.rtop / d.postGain.rbottom, 1e-12))
+		);
+	};
+	const ALL_JFET = ['Rac', 'Rbias', 'Rb', 'Rdt', 'Rtop'];
+	{
+		const bad = [];
+		let designs = 0;
+		let limitedCases = 0;
+		for (let i = 0; i < 90; i++) {
+			const [ln, list] = Object.entries(lists)[i % 3];
+			const vp = -(0.5 + 9.5 * rand());
+			const model = i % 4 === 3 ? measured : rand() < 0.5 ? modelFromIdss(vp, 1e-3 * (0.5 + 40 * rand())) : modelFromRdsOn(vp, 10 + 500 * rand());
+			const swingFraction = 0.4 + 0.6 * rand();
+			const set = {
+				model,
+				topology: i % 3 === 1 ? 'inverting' : 'noninverting',
+				outputStage: i % 2 === 0,
+				targetOutputAmplitude: 0.5 + 3 * rand(),
+				swingFraction,
+				targetModulationIndex: (0.2 + 0.75 * rand()) * swingFraction,
+				sourceAmplitude: 0.2 + 2 * rand(),
+				vcc: 5 + 12 * rand(),
+				fp: 10000 + 90000 * rand(),
+				fmMin: 20 + 200 * rand(),
+				opampSwing: 3 + 10.5 * rand(),
+				carrierSourceAmplitude: [0.6, 1, 5][i % 3],
+				carrierMargin: 0.15,
+				resistorSeries: list,
+				capacitors: i % 2 ? kit : null
+			};
+			const single = designJfetModulator({ ...set, pairs: false });
+			if (!single) continue;
+			designs++;
+			if (!same(designJfetModulator({ ...set, pairs: ALL_JFET }), designJfetModulator({ ...set, pairs: true })) || !same(designJfetModulator({ ...set, pairs: [] }), single)) bad.push(`jfet ${ln} ${i}: a whitelist of every name, or of none, is not pairs on, or off`);
+			const count = sweep(
+				`jfet ${ln} ${i}`,
+				{ limitOf: (n) => L.limitJfetPairs({ ...set, pairs: true }, n), design: (pairs) => designJfetModulator({ ...set, pairs }), single, parts: L.jfetPairParts, list, real: realJfet, order: ALL_JFET, measure: L.jfetPairMeasure },
+				bad
+			);
+			if (count >= 2) limitedCases++;
+		}
+		check(`pair limit: ${designs} random JFET modulators on three lists, both cells, every limit from 0 to past the count: never more pairs than the limit, the measure never up below the count, the full design from the count on, single parts at 0, each a real design of its whitelist`, bad.length === 0 && limitedCases > 10, bad.length ? bad.slice(0, 3).join('; ') : `${limitedCases} with two pairs or more`);
+		check(
+			'pair limit: on that sweep every limit under the count gives the design an exhaustive search over every whitelist of the modulator\'s resistors finds, not only of its pairs where they help',
+			bad.length === 0 && searched.limits > 100,
+			`${searched.limits} limits, ${searched.gained} with a pair that pairs where they help leave single`
+		);
+	}
+
+	// an inverting cell on the lab kit whose pairs where they help are R_ac,
+	// R_bias and R_top: with 2 pairs, R_ac and the carrier divider's top land
+	// it three times closer than any two of those three
+	{
+		const set = {
+			model: modelFromIdss(-1.5006623715162277, 1e-3 * (0.5 + 40 * 0.45957204699516296)),
+			topology: 'inverting',
+			outputStage: true,
+			targetOutputAmplitude: 3.171481341123581,
+			swingFraction: 0.4210147142410279,
+			targetModulationIndex: 0.15397919181816266,
+			sourceAmplitude: 1.5389917016029357,
+			vcc: 14.88405179977417,
+			fp: 95654.14547920227,
+			fmMin: 161.662335395813,
+			opampSwing: 10.958154022693634,
+			carrierSourceAmplitude: 0.6,
+			carrierMargin: 0.15,
+			resistorSeries: lists.lab,
+			capacitors: LAB_KIT.capacitors,
+			pairs: true
+		};
+		const fullNames = pairedNames(L.jfetPairParts(designJfetModulator(set)), lists.lab);
+		const two = L.limitJfetPairs(set, 2);
+		const subsets = pairSubsets(fullNames, 2).map((w) => L.jfetPairMeasure(designJfetModulator({ ...set, pairs: w })));
+		check(
+			'pair limit: a JFET modulator whose pairs where they help are R_ac, R_bias and R_top keeps R_ac and the divider top with 2 pairs, closer than any two of those',
+			same(fullNames, ['Rac', 'Rbias', 'Rtop']) && same(two.kept, ['Rac', 'Rdt']) && same(two.added, ['Rdt']) && two.measure < 2e-3 && subsets.every((m) => m > 3 * two.measure),
+			`${two.kept.join('+')} ${two.measure.toExponential(3)}; best of the full design's pairs ${Math.min(...subsets).toExponential(3)}`
+		);
+	}
+
+	// the JFET modulator with the Wien carrier on the board, under one limit for both
+	const works = (o) => Boolean(o && o.starts && o.limiter.regulates && o.opamp.swingOk);
+	const carrierCase = (base, list, caps, amplitude) => {
+		const osc = { topology: 'wien', stabilizer: 'diodes', frequency: base.fp, amplitude, gbw: base.gbw, slewRate: base.slewRate, opampSwing: base.opampSwing };
+		const designCarrier = (pairs) => {
+			const own = designOscillator({ ...osc, resistorSeries: list, capacitors: caps, pairs });
+			if (works(own)) return own;
+			const fallback = designOscillator({ ...osc, resistorSeries: 'E24', capacitors: null, pairs: false });
+			return works(fallback) || !own ? fallback && { ...fallback, stockShortfall: true } : own;
+		};
+		const carrierOf = (o) => (works(o) && o.limiter.amplitudeActual ? o.limiter.amplitudeActual : amplitude);
+		return { designCarrier, carrierOf, options: L.carrierPairOptions(designCarrier, list) };
+	};
+	const bench = { model: measured, topology: 'noninverting', swingFraction: 0.9, targetModulationIndex: 0.75, sourceAmplitude: 1, fmMin: 100, fp: 50000, vcc: 15, opampSwing: 13.5, gbw: 4e6, slewRate: 16e6, carrierMargin: 0.15, resistorSeries: LAB_KIT.resistors, capacitors: LAB_KIT.capacitors, pairs: true };
+	const carrierPairs = (o, list) => (o && !o.stockShortfall ? [o.r, o.r, o.parts.rf1, o.parts.rf2].filter((v) => seriesPair(v, list)).length : 0);
+	{
+		const bad = [];
+		const counts = [];
+		const shortFallbacks = [];
+		let slowest = 0;
+		const cases = [
+			['bench', bench, LAB_KIT.resistors, LAB_KIT.capacitors, 1],
+			['bench inverting', { ...bench, topology: 'inverting' }, LAB_KIT.resistors, LAB_KIT.capacitors, 1],
+			['bench 0.6 V, output stage', { ...bench, outputStage: true, targetOutputAmplitude: 2 }, LAB_KIT.resistors, kit, 0.6],
+			// no modulator from single parts on this list: under a limit too low, no design either
+			['custom 20 kHz', { ...bench, fp: 20000, resistorSeries: lists.custom }, lists.custom, LAB_KIT.capacitors, 1],
+			['sparse 80 kHz', { ...bench, fp: 80000, targetModulationIndex: 0.5, resistorSeries: lists.sparse, capacitors: kit }, lists.sparse, kit, 2],
+			// the modulator's full design misses by more than a subset of it once the oscillator holds some pairs
+			['lab 20 kHz, 2 V carrier', { ...bench, model: modelFromIdss(-1.5, 0.005), fp: 20000, targetModulationIndex: 0.5 }, LAB_KIT.resistors, LAB_KIT.capacitors, 2],
+			['lab 20 kHz, 2 V carrier, inverting', { ...bench, model: modelFromIdss(-1.5, 0.005), fp: 20000, targetModulationIndex: 0.5, topology: 'inverting' }, LAB_KIT.resistors, LAB_KIT.capacitors, 2],
+			// single parts from this list build no carrier that starts and holds: it needs pairs
+			['short list 50 kHz', { ...bench, resistorSeries: shortListOnly }, shortListOnly, LAB_KIT.capacitors, 1]
+		];
+		let scriptLists = 0;
+		let flatChecked = 0;
+		for (const [tag, params, list, caps, amplitude] of cases) {
+			const { designCarrier, carrierOf, options } = carrierCase(params, list, caps, amplitude);
+			const fullOsc = designCarrier(true);
+			// every carrier whitelist the oscillator tool would weigh, by what it takes from the limit
+			const slots = fullOsc.stockShortfall ? [] : ['R', 'Rf1', 'Rf2'];
+			const carriers = [...allSubsets(slots).slice(0, -1).map((w) => ({ w, o: designCarrier(w.length ? w : false) })), { w: true, o: fullOsc }]
+				.filter((c) => c.w === true || carrierPairs(c.o, list) === 0 || ['R', 'Rf1', 'Rf2'].every((slot) => c.w.includes(slot) || !seriesPair(slot === 'R' ? c.o.r : slot === 'Rf1' ? c.o.parts.rf1 : c.o.parts.rf2, list)))
+				.map((c) => ({ ...c, cost: c.w === true ? carrierPairs(c.o, list) : c.w.reduce((k, slot) => k + (slot === 'R' ? 2 : 1), 0), m: L.carrierPairMeasure(c.o) }));
+			const fullCell = designJfetModulator({ ...params, carrierSourceAmplitude: carrierOf(fullOsc) });
+			const total = carrierPairs(fullOsc, list) + pairedNames(L.jfetPairParts(fullCell), list).length;
+			counts.push(`${tag} ${total}`);
+			let prev = Infinity;
+			for (let n = 0; n <= total + 1; n++) {
+				const t0 = performance.now();
+				const r = L.limitJfetWithCarrier(params, n, options, carrierOf);
+				slowest = Math.max(slowest, performance.now() - t0);
+				const pairsIn = carrierPairs(r.oscillator, list) + pairedNames(L.jfetPairParts(r.design), list).length;
+				if (pairsIn > n || pairsIn !== r.count) bad.push(`${tag} N=${n}: ${pairsIn} pairs (says ${r.count})`);
+				if (n >= total && (!same(r.oscillator, fullOsc) || !same(r.design, fullCell))) bad.push(`${tag} N=${n}: not the full designs`);
+				if (n === 0 && (!same(r.oscillator, designCarrier(false)) || !same(r.design, designJfetModulator({ ...params, pairs: false, carrierSourceAmplitude: carrierOf(designCarrier(false)) })))) bad.push(`${tag} N=0: not single parts`);
+				if (n < total) {
+					if (r.measure > prev + 1e-12 * Math.max(1, prev)) bad.push(`${tag} N=${n}: measure up from ${prev} to ${r.measure}`);
+					prev = r.measure;
+				}
+				// the modulator alone under its share, on that carrier, or with the
+				// whitelist the section hands the script: what the downloaded script makes
+				if (r.scriptPairs ? !same(designJfetModulator({ ...params, carrierSourceAmplitude: r.carrier, pairs: r.scriptPairs }), r.design) : r.budget !== null && !same(L.limitJfetPairs({ ...params, carrierSourceAmplitude: r.carrier }, r.budget).design, r.design)) bad.push(`${tag} N=${n}: the modulator under its share is another design`);
+				if (r.scriptPairs) scriptLists++;
+				// every whitelist of the oscillator's R, Rf1 and Rf2 whose resistors fit
+				// (its pairs where they help counted by their count), each with every
+				// whitelist of the modulator's resistors in what it leaves, or its full
+				// design where that fits: the lowest sum of the two measures
+				if (n < total) {
+					let best = Infinity;
+					for (const c of carriers) {
+						if (c.cost > n) continue;
+						const on = { ...params, carrierSourceAmplitude: carrierOf(c.o) };
+						const cellFull = designJfetModulator(on);
+						const cellSingle = designJfetModulator({ ...on, pairs: false });
+						const has = new Set([cellFull, cellSingle].flatMap((d) => L.jfetPairParts(d)).map(([name]) => name));
+						let cell = cellFull && pairedNames(L.jfetPairParts(cellFull), list).length <= n - c.cost ? L.jfetPairMeasure(cellFull) : Infinity;
+						for (const w of allSubsets(ALL_JFET.filter((name) => has.has(name)))) if (w.length <= n - c.cost) cell = Math.min(cell, L.jfetPairMeasure(designJfetModulator({ ...on, pairs: w })));
+						best = Math.min(best, c.m + cell);
+					}
+					flatChecked++;
+					if (Math.abs(r.measure - best) > 1e-9 * Math.max(Math.abs(best), 1e-12)) bad.push(`${tag} N=${n}: ${r.measure} where an exhaustive search gives ${best}`);
+				}
+				if (r.carrier !== carrierOf(r.oscillator) || (r.design && !near(r.design.carrier.sourceAmplitude, r.carrier, 0))) bad.push(`${tag} N=${n}: the modulator is not on the oscillator's carrier`);
+				if (r.carrierPairs !== true && r.carrierPairs !== false && !r.carrierKept.every((slot) => r.carrierPairs.includes(slot))) bad.push(`${tag} N=${n}: an oscillator pair outside its whitelist`);
+				// an oscillator on E24 and E6 only when none the list builds fits, with a modulator in what it leaves
+				if (r.oscillator?.stockShortfall) {
+					const fits = options.find((o) => o.count <= n && o.oscillator && !o.oscillator.stockShortfall && Number.isFinite(L.limitJfetPairs({ ...params, carrierSourceAmplitude: carrierOf(o.oscillator) }, n - o.count).measure));
+					if (fits) bad.push(`${tag} N=${n}: the oscillator is on E24 though [${fits.slots}] from the list fits`);
+				}
+				if (tag === 'short list 50 kHz' && n > 0 && n < total && r.oscillator?.stockShortfall) shortFallbacks.push(n);
+			}
+		}
+		// the short list's carrier is on E24 without pairs, and from the list with them
+		const shortCase = carrierCase({ ...bench, resistorSeries: shortListOnly }, shortListOnly, LAB_KIT.capacitors, 1);
+		if (!shortCase.designCarrier(false)?.stockShortfall || shortCase.designCarrier(true)?.stockShortfall) bad.push('short list 50 kHz: the carrier is not on E24 with single parts and on the list with pairs');
+		check(`pair limit: the JFET modulator and its Wien carrier share one limit (${counts.join(', ')} pairs in all): never more than the limit, the measure never up below the count, the full designs from the count on, single parts at 0, the modulator what its share gives, the oscillator on E24 and E6 only when none from the list fits`, bad.length === 0, bad.length ? bad.slice(0, 3).join('; ') : `slowest ${slowest.toFixed(0)} ms; short list on E24 at N = ${shortFallbacks.join(', ') || 'none'}`);
+		check(
+			'pair limit: there every limit under the count gives what an exhaustive search over every whitelist of the oscillator and of the modulator finds, the script getting the whitelist where no share of its own gives it',
+			bad.length === 0 && flatChecked > 30,
+			`${flatChecked} limits, ${scriptLists} with the whitelist in the script`
+		);
+	}
+
+	// the diode modulator
+	{
+		const bad = [];
+		let limitedCases = 0;
+		const realDiode = (d) => near(d.summer.drive, (d.summer.rf / d.summer.rp) * d.carrierAmplitude, 1e-12) && near(d.summer.um, (d.summer.rf / d.summer.rm) * d.modAmplitude, 1e-12);
+		const sets = [
+			{ fp: 40000, fmMax: 1000, targetModulationIndex: 0.93, carrierDrive: 1.7 },
+			{ fp: 40000, fmMax: 1000 },
+			{ fp: 55000, fmMax: 3000, targetModulationIndex: 0.6 },
+			{ fp: 120000, fmMax: 5000, targetModulationIndex: 0.7, carrierDrive: 3, diode: 'BAT54' },
+			{ fp: 25000, fmMax: 800, targetModulationIndex: 0.85, carrierDrive: 1.3, inductance: 1e-2 }
+		];
+		sets.forEach((s, i) => {
+			for (const [ln, list] of Object.entries(lists)) {
+				const set = { ...s, resistorSeries: list, capacitorStock: i % 2 ? LAB_KIT.capacitors : null };
+				const single = designDiodeMixerModulator({ ...set, pairs: false });
+				if (!single) continue;
+				if (!same(designDiodeMixerModulator({ ...set, pairs: ['Rp', 'Rm'] }), designDiodeMixerModulator({ ...set, pairs: true })) || !same(designDiodeMixerModulator({ ...set, pairs: [] }), single)) bad.push(`diode ${ln} ${i}: a whitelist of both, or of none, is not pairs on, or off`);
+				const count = sweep(
+					`diode ${ln} ${i}`,
+					{ limitOf: (n) => L.limitDiodePairs({ ...set, pairs: true }, n), design: (pairs) => designDiodeMixerModulator({ ...set, pairs }), single, parts: L.diodePairParts, list, real: realDiode, order: ['Rp', 'Rm'], measure: L.diodePairMeasure },
+					bad
+				);
+				if (count >= 2) limitedCases++;
+			}
+		});
+		check('pair limit: diode modulators on three lists, every limit: never more pairs than the limit, the measure never up below the count, the full design from the count on, single parts at 0, each a real design of its whitelist', bad.length === 0 && limitedCases >= 1, bad.length ? bad.slice(0, 3).join('; ') : `${limitedCases} with R_p and R_m both pairs`);
+	}
+
+	// the envelope low-pass, every stage counted
+	const realStage = (st) => {
+		const c = st.components;
+		if (st.topology === 'mfb') {
+			const a = (1 / c.C1) * (2 / c.R1 + 1 / c.R2);
+			const b = 1 / (c.R1 * c.R2 * c.C1 * c.C2);
+			return c.R1 === c.R3 && near(st.actual.wn, Math.sqrt(b), 1e-9 * Math.sqrt(b)) && near(st.actual.q, Math.sqrt(b) / a, 1e-12);
+		}
+		return c.R1 === c.R2 && near(st.actual.wn, 1 / (c.R1 * Math.sqrt(c.Ctop * c.Cbottom)), 1e-9 * st.actual.wn);
+	};
+	const envelopeParts = (design) => (design.realized ?? []).flatMap((stage, k) => L.envelopePairParts(stage, k));
+	{
+		const bad = [];
+		let stagesSeen = 0;
+		let limitedCases = 0;
+		const allNames = [1, 2, 3, 4].flatMap((k) => [`R1${k}`, `R2${k}`, `R3${k}`]);
+		let envelopeSearched = 0;
+		for (let i = 0; i < 90; i++) {
+			const [ln, list] = Object.entries(lists)[i % 3];
+			const fm = 100 + 5000 * rand();
+			const spec = { response: i % 2 ? 'chebyshev' : 'butterworth', topology: i % 3 === 0 ? 'sallenKey' : 'mfb', amaxDb: 0.5 + rand(), aminDb: 20 + 40 * rand(), fp: fm, fs: fm * (5 + 60 * rand()), order: i % 5 === 0 ? 6 : null, maxOrder: 8, resistorSeries: list, capacitors: i % 3 === 2 ? LAB_KIT.capacitors : null };
+			const single = designEnvelopeLowPass({ ...spec, pairs: false });
+			if (single.tooHigh) continue;
+			stagesSeen += single.realized.length;
+			if (!same(designEnvelopeLowPass({ ...spec, pairs: allNames }), designEnvelopeLowPass({ ...spec, pairs: true })) || !same(designEnvelopeLowPass({ ...spec, pairs: [] }), single)) bad.push(`envelope ${ln} ${i}: a whitelist of every name, or of none, is not pairs on, or off`);
+			const count = sweep(
+				`envelope ${ln} ${i}`,
+				{ limitOf: (n) => L.limitEnvelopePairs({ ...spec, pairs: true }, n), design: (pairs) => designEnvelopeLowPass({ ...spec, pairs }), single, parts: envelopeParts, list, real: (d) => d.realized.every(realStage) },
+				bad
+			);
+			if (count >= 3) limitedCases++;
+			// every whitelist of every stage's resistors, the stages' lists holding the limit or fewer in all: the lowest sum of the stage misses
+			const full = designEnvelopeLowPass({ ...spec, pairs: true });
+			const per = full.realized.map((st, k) =>
+				allSubsets(L.envelopePairParts(st, k).map(([name]) => name)).map((w) => ({ size: w.length, m: L.envelopeStageMeasure(full.stages[k], designEnvelopeStage(full.stages[k], k, { topology: spec.topology, resistorSeries: list, capacitors: spec.capacitors, pairs: w })) }))
+			);
+			for (let n = 0; n < count; n++) {
+				let best = Infinity;
+				const walk = (k, used, m) => {
+					if (k === per.length) best = Math.min(best, m);
+					else for (const o of per[k]) if (used + o.size <= n) walk(k + 1, used + o.size, m + o.m);
+				};
+				walk(0, 0, 0);
+				envelopeSearched++;
+				const got = L.limitEnvelopePairs({ ...spec, pairs: true }, n).measure;
+				if (Math.abs(got - best) > 1e-9 * Math.max(best, 1e-12)) bad.push(`envelope ${ln} ${i} N=${n}: ${got} where an exhaustive search gives ${best}`);
+			}
+		}
+		check(`pair limit: random envelope low-passes on three lists (${stagesSeen} stages, Sallen-Key and MFB), every limit: never more pairs than the limit over all stages, the summed stage misses never up below the count, the full design from the count on, single parts at 0, each stage a real design`, bad.length === 0 && limitedCases > 10, bad.length ? bad.slice(0, 3).join('; ') : `${limitedCases} with three pairs or more`);
+		check('pair limit: the diode modulators and envelope low-passes give what an exhaustive search over every whitelist of their resistors finds, stage by stage for the filters', bad.length === 0 && envelopeSearched > 50, `${envelopeSearched} envelope limits, ${searched.limits} limits in all`);
+	}
+
+	// the LTspice files note the pairs a limit kept, and only those
+	{
+		const { generateDemodNetlist } = await import('../src/lib/modulation/spice.js');
+		const problems = [];
+		const stock = { resistorSeries: LAB_KIT.resistors, pairs: true };
+		const notesOf = (text) => [...text.matchAll(/([A-Z][A-Z0-9]*) = \S+ \+ \S+ in series \((?:their sum is used below|drawn as their sum)\)/g)].map((m) => m[1]);
+		const { carrierOf, options } = carrierCase(bench, LAB_KIT.resistors, LAB_KIT.capacitors, 1);
+		const seen = [];
+		for (const n of [1, 2, 3]) {
+			const r = L.limitJfetWithCarrier(bench, n, options, carrierOf);
+			const osc = works(r.oscillator) ? r.oscillator : null;
+			const wanted = [...r.kept.map((k) => ({ Rac: 'RAC', Rbias: 'RBIAS', Rb: 'RB', Rdt: 'RDT', Rtop: 'RPT' })[k]), ...r.carrierKept.flatMap((slot) => ({ R: ['RSO', 'RPO'], Rf1: ['RF1O'], Rf2: ['RF2O'] })[slot])].sort();
+			for (const [kind, text] of [['cir', modNetlist({ design: r.design, fmPreview: 1000, oscillator: osc, ...stock })], ['asc', modSchematic({ design: r.design, fmPreview: 1000, oscillator: osc, ...stock })]]) {
+				const got = notesOf(text).sort();
+				if (!same(got, wanted)) problems.push(`jfet N=${n} ${kind}: ${got.join(' ')} for ${wanted.join(' ')}`);
+			}
+			seen.push(`N=${n} ${wanted.join(' ')}`);
+		}
+		const dr = L.limitDiodePairs({ fp: 40000, fmMax: 1000, targetModulationIndex: 0.93, carrierDrive: 1.7, resistorSeries: LAB_KIT.resistors, capacitorStock: LAB_KIT.capacitors, pairs: true }, 1);
+		const dGot = notesOf(generateDiodeNetlist({ design: dr.design, ...stock })).sort();
+		if (!same(dGot, dr.kept.map((k) => k.toUpperCase()).sort())) problems.push(`diode: ${dGot.join(' ')} for ${dr.kept.join(' ')}`);
+		const er = L.limitEnvelopePairs({ response: 'butterworth', amaxDb: 1, aminDb: 60, fp: 1000, fs: 99000, order: 6, topology: 'mfb', resistorSeries: LAB_KIT.resistors, capacitors: LAB_KIT.capacitors, pairs: true, maxOrder: 8 }, 4);
+		const dm = { rectifierType: 'full', rectifier: designPrecisionRectifier({ resistorSeries: LAB_KIT.resistors }), envelope: er.design, fp: 50000, fm: 1000, index: 0.75, ...stock };
+		for (const [kind, text] of [['cir', generateDemodNetlist(dm)], ['asc', generateDemodSchematic(dm)]]) {
+			const got = notesOf(text).sort();
+			if (!same(got, [...er.kept].sort())) problems.push(`demod ${kind}: ${got.join(' ')} for ${er.kept.join(' ')}`);
+		}
+		check('pair limit: the .cir and .asc note exactly the pairs a limit kept (the JFET modulator with its oscillator, the diode modulator, the envelope stages)', problems.length === 0, problems.length ? problems.slice(0, 3).join('; ') : `${seen.join('; ')}; diode ${dGot.join(' ')}; demod ${er.kept.join(' ')}`);
+	}
+
+	// what the page says when a limit took pairs away
+	{
+		const a = L.pairLimitNote({ limit: 1, kept: ['Rdt'], dropped: ['Rb', 'carrier Rf1'] });
+		const b = L.pairLimitNote({ limit: 1, kept: [], dropped: ['R11', 'R21'], together: true });
+		const c = L.pairLimitNote({ limit: 3, kept: ['R21', 'R12', 'R32'], dropped: ['R11', 'R31', 'R22'] });
+		const texts = [a, b, c];
+		check(
+			'pair limit: one note says which pairs a limit kept and which became single parts, in clean text, and none when nothing was taken away',
+			a === "At most 1 pair: the carrier divider's top stays two in series. R_b and the oscillator's Rf1 are single parts, though two in series would bring them closer." &&
+				b === 'At most 1 pair: every resistor is a single part here. R1 and R2 of stage 1 are single parts, though two in series would bring them closer. Equal resistors pair together or not at all, and each one counts.' &&
+				c.startsWith('At most 3 pairs: R2 of stage 1 and R1 and R3 of stage 2 stay two in series. R1 and R3 of stage 1 and R2 of stage 2 are single parts') &&
+				L.pairLimitNote({ limit: 2, kept: ['Rb'], dropped: [] }) === null &&
+				L.pairLimitNote({ limit: 2, kept: ['carrier R'], dropped: ['Rb'] }).includes("the oscillator's two R stay two in series") &&
+				texts.every((t) => !/\byou(r)?\b|[–—]|undefined|NaN/i.test(t)),
+			c
+		);
+		// a pair the limit adds where pairs where they help leave a single part is said to become one
+		const added = L.pairLimitNote({ limit: 2, kept: ['Rac', 'Rdt'], dropped: ['Rbias', 'Rtop'], added: ['Rdt'] });
+		const onlyAdded = L.pairLimitNote({ limit: 1, kept: ['Rdt'], dropped: ['Rb'], added: ['Rdt'] });
+		check(
+			'pair limit: the note says which pairs stay, which become pairs where pairs where they help leave single parts, and which became single parts',
+			added === "At most 2 pairs: R_ac stays two in series, and the carrier divider's top becomes two in series too. R_bias and the post-gain stage's R_top are single parts, though two in series would bring them closer." &&
+				onlyAdded === "At most 1 pair: the carrier divider's top becomes two in series. R_b is a single part, though two in series would bring it closer.",
+			added
+		);
+	}
+
+	// the downloaded scripts make the page's choice
+	{
+		const dir = mkdtempSync(join(tmpdir(), 'rbt56-am-limit-'));
+		const run = (name, code) => {
+			const file = join(dir, name);
+			writeFileSync(file, code);
+			try {
+				return execFileSync(process.execPath, [file], { encoding: 'utf8', stdio: 'pipe' });
+			} catch (e) {
+				return `CRASH ${String(e.stderr || e.message).split(String.fromCharCode(10)).slice(0, 3).join(' / ')}`;
+			}
+		};
+		const r6 = (x) => Number(x.toPrecision(6));
+		const label = (v, list) => {
+			const pair = seriesPair(v, list);
+			return pair ? `${r6(v)} ohm (${r6(pair[0])} + ${r6(pair[1])} in series)` : `${r6(v)} ohm`;
+		};
+		const problems = [];
+		// the JFET modulator with its carrier: the script gets the modulator's share and the carrier the oscillator settles at
+		const { carrierOf, options } = carrierCase(bench, LAB_KIT.resistors, LAB_KIT.capacitors, 1);
+		const jfetScript = (limit, carrier, extra = {}) =>
+			generateJfetScript({ mode: 'measured', vp: measured.vp, idss: measured.idss, rdsOn: measured.rdsOn, measurements: measured.points.map((pt) => [pt.vgs, pt.rds]), windowLow: -7, windowHigh: 0, topology: 'noninverting', targetOutputAmplitude: 1, carrierBuffer: true, swingFraction: 0.9, targetModulationIndex: 0.75, rb: null, sourceAmplitude: 1, fmMin: 100, vcc: 15, fp: 50000, carrierSourceAmplitude: carrier, carrierMargin: 0.15, opampSwing: 13.5, gbw: 4e6, slewRate: 16e6, resistorSeries: LAB_KIT.resistors, capacitors: LAB_KIT.capacitors, pairs: true, pairLimit: limit, carrierNote: null, ...extra });
+		const shown = [];
+		for (const n of [1, 2, 3]) {
+			const r = L.limitJfetWithCarrier(bench, n, options, carrierOf);
+			const out = run(`jfet-${n}.js`, jfetScript(r.budget, r.carrier));
+			const s = r.design.conditioning.summer;
+			const want = [`Rac = ${label(s.rac, LAB_KIT.resistors)}:`, `Rbias = ${label(s.rbias, LAB_KIT.resistors)}:`, `Rb = ${label(r.design.rb, LAB_KIT.resistors)}`, `carrier divider: ${label(r.design.carrier.divider.top, LAB_KIT.resistors)} /`, `modulation index n = ${r.design.modulationIndex.toFixed(3)},`];
+			if (r.cellCount < pairedNames(L.jfetPairParts(designJfetModulator({ ...bench, carrierSourceAmplitude: r.carrier })), LAB_KIT.resistors).length) want.push(`at most ${r.budget} ${r.budget === 1 ? 'pair' : 'pairs'}: ${r.kept.length ? 'kept ' + r.kept.join(', ') : 'none kept'}; single, though two in series would help: `);
+			for (const w of want) if (!out.includes(w)) problems.push(`jfet N=${n}: no "${w}" (${out.startsWith('CRASH') ? out : 'printed'})`);
+			shown.push(`N=${n}: modulator ${r.kept.join('+') || 'none'} of ${r.budget}, oscillator ${r.carrierKept.join('+') || 'none'}`);
+		}
+		// a limit at or past the count prints what no limit prints, and the line is there either way
+		const fullOut = run('jfet-null.js', jfetScript(null, 1));
+		if (run('jfet-9.js', jfetScript(9, 1)) !== fullOut) problems.push('jfet: a limit past the count prints something else than no limit');
+		if (!/\nconst RESISTOR_PAIR_LIMIT = null; /.test(jfetScript(null, 1)) || !/\nconst RESISTOR_PAIR_LIMIT = 2; /.test(jfetScript(2, 1)) || !/\nconst RESISTOR_PAIR_LIMIT = null; /.test(jfetScript(2, 1, { pairs: false }))) problems.push('jfet: the RESISTOR_PAIR_LIMIT line');
+		const noted = jfetScript(1, 1, { pairLimitNote: "the page's Wien bridge holds 2 of the 3 pairs allowed, so the modulator below may have 1" });
+		if (!noted.includes("\n// the page's Wien bridge holds 2 of the 3 pairs allowed, so the modulator below may have 1\nconst RESISTOR_PAIR_LIMIT = 1; ")) problems.push('jfet: the note above the limit');
+
+		// the sparse list at 80 kHz under 4 pairs: the oscillator holds Rf1 and
+		// Rf2, and the modulator does best with R_bias and R_b, more names than
+		// its own pairs where they help (R_b alone), which no limit of its own
+		// gives: the script gets that whitelist as RESISTOR_PAIRS
+		{
+			const sparse = { ...bench, fp: 80000, targetModulationIndex: 0.5, resistorSeries: lists.sparse, capacitors: kit };
+			const sc = carrierCase(sparse, lists.sparse, kit, 2);
+			const r = L.limitJfetWithCarrier(sparse, 4, sc.options, sc.carrierOf);
+			const code = jfetScript(null, r.carrier, { fp: 80000, targetModulationIndex: 0.5, resistorSeries: lists.sparse, capacitors: kit, pairs: r.scriptPairs ?? true });
+			const out = run('jfet-sparse-4.js', code);
+			const s = r.design?.conditioning.summer;
+			const want = s ? [`Rac = ${label(s.rac, lists.sparse)}:`, `Rbias = ${label(s.rbias, lists.sparse)}:`, `Rb = ${label(r.design.rb, lists.sparse)}`, `modulation index n = ${r.design.modulationIndex.toFixed(3)},`] : ['a design'];
+			if (!same(r.scriptPairs, ['Rbias', 'Rb']) || r.budget !== null || !code.includes('\nconst RESISTOR_PAIRS = ["Rbias","Rb"]; ') || !code.includes('\nconst RESISTOR_PAIR_LIMIT = null; ')) problems.push(`jfet sparse N=4: the script's whitelist ${JSON.stringify(r.scriptPairs)}, limit ${r.budget}`);
+			for (const w of want) if (!out.includes(w)) problems.push(`jfet sparse N=4: no "${w}" (${out.startsWith('CRASH') ? out : 'printed'})`);
+			shown.push(`sparse N=4: modulator ${r.kept.join('+')} as RESISTOR_PAIRS, oscillator ${r.carrierKept.join('+')}`);
+		}
+
+		// the diode modulator where R_p and R_m both pair, held to one
+		const dset = { fp: 40000, fmMax: 1000, sidebandMargin: 3, inductance: 1e-3, carrierAmplitude: 1, modAmplitude: 1, targetModulationIndex: 0.93, carrierDrive: 1.7, vcc: 12, opampSwing: 10.5, diode: '1N4148', resistorSeries: LAB_KIT.resistors, capacitorStock: LAB_KIT.capacitors, pairs: true };
+		const dr = L.limitDiodePairs(dset, 1);
+		const dOut = run('diode-1.js', generateDiodeScript({ ...dset, capacitors: LAB_KIT.capacitors, pairLimit: 1 }));
+		for (const w of [`Rp = ${label(dr.design.summer.rp, LAB_KIT.resistors)}:`, `Rm = ${label(dr.design.summer.rm, LAB_KIT.resistors)}:`, `index ${dr.design.modulationIndex.toFixed(4)} for a slow message`, `at most 1 pair: kept ${dr.kept.join(', ')}; single, though two in series would help: ${dr.dropped.join(', ')}`])
+			if (!dOut.includes(w)) problems.push(`diode: no "${w}" (${dOut.startsWith('CRASH') ? dOut : 'printed'})`);
+		if (!dr.limited) problems.push('diode: the case is not limited');
+
+		// an order-6 MFB envelope held to four pairs
+		const espec = { rectifierType: 'full', fpCarrier: 50000, fmMax: 1000, amaxDb: 1, aminDb: 60, order: 6, response: 'butterworth', topology: 'mfb', index: 0.75, resistorSeries: LAB_KIT.resistors, capacitors: LAB_KIT.capacitors, pairs: true };
+		const er = L.limitEnvelopePairs({ response: 'butterworth', amaxDb: 1, aminDb: 60, fp: 1000, fs: 99000, order: 6, topology: 'mfb', resistorSeries: LAB_KIT.resistors, capacitors: LAB_KIT.capacitors, pairs: true, maxOrder: 8 }, 4);
+		const eOut = run('demod-4.js', generateDemodScript({ ...espec, pairLimit: 4 }));
+		const rText = (st, v) => (st.stockShortfall ? `${v} ohm (E24: the list cannot build this stage)` : label(v, LAB_KIT.resistors));
+		const eWant = er.design.realized.map((st) => `  R1 = R3 = ${rText(st, st.components.R1)}, R2 = ${rText(st, st.components.R2)},`);
+		if (er.limited) eWant.push(`at most 4 pairs: kept ${er.kept.join(', ')} (R1k, R2k, R3k: stage k); single, though two in series would help: ${er.dropped.join(', ')}`);
+		for (const w of eWant) if (!eOut.includes(w)) problems.push(`demod: no "${w}" (${eOut.startsWith('CRASH') ? eOut : 'printed'})`);
+		if (!er.limited || er.count > 4) problems.push(`demod: the case keeps ${er.count} pairs`);
+		check('pair limit: the downloaded scripts take RESISTOR_PAIR_LIMIT and print the parts the page chose (the JFET modulator with the share its oscillator leaves), and a limit past the count prints what no limit does', problems.length === 0, problems.length ? problems.slice(0, 3).join('; ') : shown.join('; '));
 	}
 }
 

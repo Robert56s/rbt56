@@ -24,6 +24,10 @@
 //    circuit or stock can land, the narrow band-pass with the TL082, the
 //    op-amp count, the explanation and the downloadable script, which
 //    without an op-amp stays as it was.
+// 11. A limit on the pairs (the stock picker's "Up to N pairs"): the
+//    designers' lists of names, the plan on whole filters for every N
+//    against every combination of lists, the downloadable script with
+//    RESISTOR_PAIR_LIMIT, the LTspice notes and the Start here panel.
 // Exits non-zero on any failure.
 
 import { execFileSync } from 'node:child_process';
@@ -45,7 +49,7 @@ import { designMfbLowPass, designMfbLowPassFromCaps } from '../src/lib/filter/mf
 import { designMfbHighPass, designMfbHighPassFromCap } from '../src/lib/filter/mfbHighPass.js';
 import { designSallenKeyLowPass, designSallenKeyLowPassFromCaps } from '../src/lib/filter/sallenKey.js';
 import { designSallenKeyHighPass, designSallenKeyHighPassFromCap } from '../src/lib/filter/sallenKeyHighPass.js';
-import { LAB_KIT, pairedResistor, seriesPair } from '../src/lib/filter/eseries.js';
+import { LAB_KIT, pairedResistor, pairSubsets, seriesPair } from '../src/lib/filter/eseries.js';
 import { TOW_THOMAS_SENSITIVITY } from '../src/lib/filter/sensitivity.js';
 import { generateNetlist, generateSchematic, spiceValue } from '../src/lib/filter/spice.js';
 import { bandCentre, bandStopbandRatio, designBandPass, designBandStop, designHighPass, designLowPass, minimumOrder as minimumOrderOf, notchOptions } from '../src/lib/filter/stages.js';
@@ -55,7 +59,9 @@ import { bandBoctorDesign, chooseBandMethod, mfbBandPassFeasible, opampCount, pl
 import { designMfbBandPass, designMfbBandPassFromCaps, mfbBandPassActual, mfbBandPassEffective, mfbBandPassResponse } from '../src/lib/filter/mfbBandPass.js';
 import { OPAMP_GBW } from '../src/lib/spice/opamps.js';
 import { explainBandTransform, explainMfbBp, explainTowThomasBp, explainTransformedOrder, explainTransformedStage } from '../src/lib/filter/explain.js';
-import { BAND_SPECS, BAND_SPEC_NAMES, RESPONSE_KEYS, designTransformed, hasZeros, realizeTransformed, targetStage, transformedMenus } from './lib-band.mjs';
+import { BAND_SPECS, BAND_SPEC_NAMES, RESPONSE_KEYS, designTransformed, hasZeros, realizeBandStage, realizeTransformed, targetStage, transformedMenus } from './lib-band.mjs';
+import { filterPairCount, filterPairGroups, filterPairLimitSentence, filterPairPlanSummary, filterStageMeasure, planFilterPairs } from '../src/lib/filter/pairPlan.js';
+import { filterBasics } from '../src/lib/filter/basics.js';
 
 let fails = 0;
 const check = (label, ok, detail) => {
@@ -1707,8 +1713,10 @@ const PAIR_STOCKS = {
 				}
 			}
 		}
-		// taken from codegen.js before OPAMP_GBW existed
-		const SCRIPTS_BEFORE = '11ceb5cbb9adf563';
+		// taken from codegen.js before OPAMP_GBW existed, then moved once on
+		// purpose: the next-steps note now gives the Tow-Thomas Q law,
+		// Q / (1 - 4 Q f0 / f_T), and 400 Q f0 instead of "a few hundred"
+		const SCRIPTS_BEFORE = 'ba48a189d84c14de';
 		const print = createHash('sha256').update(texts.join('\n')).digest('hex').slice(0, 16);
 		check(`downloadable script without an op-amp: all ${texts.length} scripts exactly as before around the engine`, print === SCRIPTS_BEFORE && !texts.some((t) => /OPAMP_GBW/.test(t)), `${print}, expected ${SCRIPTS_BEFORE}`);
 
@@ -1746,6 +1754,482 @@ const PAIR_STOCKS = {
 		const none = run('narrow-none', noneCode);
 		if (!/^\s*actual f0 = /m.test(none) || /with the op-amp/.test(none) || !/: OK$/.test(none.trim())) problems.push('OPAMP_GBW = null does not give the plain stages');
 		check('downloadable script with OPAMP_GBW: the narrow band-pass built for the TL082 gives the page\'s response and meets its spec; the LM741 cannot be built (loop gain); null builds the plain stages', problems.length === 0, problems.slice(0, 2).join('; '));
+	}
+}
+
+/* ------------------------------------------------ 11. a limit on the pairs */
+// The stock picker's "Up to N pairs" (pairPlan.js). Every designer takes,
+// besides true and false, a list of the names allowed to pair; the plan
+// starts from the design with pairs where they help and, when that holds
+// more than N resistors built as two in series, keeps the ones that bring
+// the whole filter closest to its targets (the squared stage misses,
+// summed), every other resistor a single part.
+{
+	const kit = LAB_KIT.resistors;
+	const LIMIT_GBW = OPAMP_GBW.TL082;
+	const ALL_NAMES = ['R', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'Ra', 'Rd', 'Rz', 'Rtop', 'Rbottom'];
+	const rel = (a, b) => Math.abs(a / b - 1) < 1e-9;
+	const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+	const resistors = (d) => Object.entries(d?.components ?? {}).filter(([n]) => /^R/.test(n));
+
+	// the designers of the transformation and Boctor, over a small grid; section 8's sweep covers the rest
+	const sweepOthers = (opts) => {
+		const rows = [];
+		for (const f0 of [480, 10000, 49000]) {
+			const wn = 2 * Math.PI * f0;
+			for (const q of [0.7071, 2, 5]) {
+				const at = `${f0} Hz Q ${q}`;
+				for (const gbw of [null, LIMIT_GBW]) rows.push([`mfbBp ${gbw} ${at}`, designMfbBandPass(wn, q, { ...opts, gain: 2.03, gbw })]);
+				rows.push([`towThomasBp ${at}`, designTowThomasBandPass(wn, q, { ...opts, gain: 0.4 })]);
+				rows.push([`notch at a gain ${at}`, designTowThomasNotch(wn, q, wn * 1.6, { ...opts, gain: 1.3 })]);
+				rows.push([`boctor ${at}`, designBoctorNotch(wn, q, wn * 2, { ...opts, lowSide: true })]);
+				if (q < 1) rows.push([`boctorHp ${at}`, designBoctorNotch(wn, q, wn / 2, { ...opts, lowSide: false })]);
+			}
+		}
+		return rows;
+	};
+
+	// (a) with true or false nothing moved (section 8 and the band pins above
+	// still hold), and a list naming every resistor is true, an empty one false
+	{
+		const lab = PAIR_STOCKS.lab;
+		const both = (pairs) => fingerprint([...sweepDesigns({ ...lab, pairs }), ...sweepOthers({ ...lab, pairs })]);
+		const on = both(true);
+		const off = both(false);
+		const lists = [both(ALL_NAMES), both(new Set(ALL_NAMES)), both([]), both(new Set())];
+		check(
+			'pair limit: every designer takes a list of names to pair; naming every resistor gives the design of true, an empty list that of false',
+			lists[0] === on && lists[1] === on && lists[2] === off && lists[3] === off && on !== off,
+			`${on} / ${off}`
+		);
+	}
+
+	// (b) a list builds a real design: only the named parts pair, every part
+	// is a kit value or two of them, the parts one value sets stay equal, and
+	// the actual figures are the formulas on the parts
+	{
+		const formula = (d) => {
+			const c = d.components;
+			switch (d.topology) {
+				case 'firstOrder':
+				case 'firstOrderHp':
+					return { tau: c.R * c.C };
+				case 'mfb': {
+					const a = (1 / c.C1) * (1 / c.R1 + 1 / c.R2 + 1 / c.R3);
+					const b = 1 / (c.R2 * c.R3 * c.C1 * c.C2);
+					return { wn: Math.sqrt(b), q: Math.sqrt(b) / a };
+				}
+				case 'mfbHp': {
+					const a = (c.C1 + c.C2 + c.C3) / (c.R2 * c.C2 * c.C3);
+					const b = 1 / (c.R1 * c.R2 * c.C2 * c.C3);
+					return { wn: Math.sqrt(b), q: Math.sqrt(b) / a };
+				}
+				case 'sallenKey':
+					return { wn: 1 / Math.sqrt(c.R1 * c.R2 * c.Ctop * c.Cbottom), q: Math.sqrt(c.R1 * c.R2 * c.Ctop * c.Cbottom) / (c.Cbottom * (c.R1 + c.R2)) };
+				case 'sallenKeyHp':
+					return { wn: 1 / Math.sqrt(c.Rtop * c.Rbottom * c.C1 * c.C2), q: Math.sqrt(c.Rtop * c.Rbottom * c.C1 * c.C2) / (c.Rtop * (c.C1 + c.C2)) };
+				case 'mfbBp':
+					return Number.isFinite(d.actual.gbw) ? mfbBandPassEffective(c, d.actual.gbw) : mfbBandPassActual(c);
+				case 'boctor':
+				case 'boctorHp': {
+					const a = boctorActual(c, d.lowSide);
+					return { wn: a.wn, q: a.q, wz: a.wz };
+				}
+				default: {
+					const out = { wn: 1 / Math.sqrt(c.C1 * c.C2 * c.Ra * c.Rb), q: c.Rd * Math.sqrt(c.C1 / (c.C2 * c.Ra * c.Rb)) };
+					if (d.topology === 'towThomasNotch') out.wz = 1 / Math.sqrt(c.Cin * c.C2 * c.Ra * c.Rz);
+					if (d.topology === 'towThomasBp') out.gain = -c.Rd / c.R1;
+					return out;
+				}
+			}
+		};
+		const EQUAL = { mfb: [['R1', 'R3']], sallenKey: [['R1', 'R2']], towThomas: [['R1', 'Ra', 'Rb']], towThomasHp: [['Ra', 'Rb']], towThomasNotch: [['Ra', 'Rb']], towThomasBp: [['Ra', 'Rb']] };
+		const NAMES = {
+			firstOrder: ['R'],
+			mfb: ['R1', 'R2'],
+			mfbHp: ['R1', 'R2'],
+			sallenKey: ['R1'],
+			sallenKeyHp: ['Rtop', 'Rbottom'],
+			towThomas: ['Ra', 'Rd'],
+			towThomasHp: ['Ra', 'Rd'],
+			towThomasNotch: ['Ra', 'Rd', 'Rz'],
+			towThomasBp: ['Ra', 'Rd', 'R1'],
+			mfbBp: ['R1', 'R2', 'R3'],
+			boctor: ['R1', 'R2', 'R3', 'R4', 'R5', 'R6']
+		};
+		// the parts a name lets pair
+		const GROUP = { mfb: { R1: ['R1', 'R3'] }, sallenKey: { R1: ['R1', 'R2'] }, towThomas: { Ra: ['R1', 'Ra', 'Rb'] }, towThomasHp: { Ra: ['Ra', 'Rb'] }, towThomasNotch: { Ra: ['Ra', 'Rb'] }, towThomasBp: { Ra: ['Ra', 'Rb'] } };
+		const MAKERS = {
+			firstOrder: (wn, q, o) => designFirstOrderLowPass(1 / wn, o),
+			mfb: (wn, q, o) => designMfbLowPass(wn, q, o),
+			mfbHp: (wn, q, o) => designMfbHighPass(wn, q, o),
+			sallenKey: (wn, q, o) => designSallenKeyLowPass(wn, q, o),
+			sallenKeyHp: (wn, q, o) => designSallenKeyHighPass(wn, q, o),
+			towThomas: (wn, q, o) => designTowThomasLowPass(wn, q, o),
+			towThomasHp: (wn, q, o) => designTowThomasHighPass(wn, q, o),
+			towThomasNotch: (wn, q, o) => designTowThomasNotch(wn, q, wn * 1.6, { ...o, lowSide: true }),
+			towThomasBp: (wn, q, o) => designTowThomasBandPass(wn, q, { ...o, gain: 0.7 }),
+			mfbBp: (wn, q, o) => designMfbBandPass(wn, q, { ...o, gain: 1.4, gbw: q > 1 ? LIMIT_GBW : null }),
+			boctor: (wn, q, o) => designBoctorNotch(wn, q, wn * 2, { ...o, lowSide: true })
+		};
+		const problems = [];
+		let built = 0;
+		let paired = 0;
+		for (const [kind, make] of Object.entries(MAKERS)) {
+			const names = NAMES[kind];
+			const lists = [...names.map((n) => [n]), ...names.flatMap((a, i) => names.slice(i + 1).map((b) => [a, b]))];
+			for (const f0 of [480, 3300, 32260]) {
+				for (const q of [0.5412, 1.3066, 3]) {
+					const wn = 2 * Math.PI * f0;
+					for (const stock of [PAIR_STOCKS.lab, PAIR_STOCKS.labR]) {
+						for (const list of lists) {
+							const d = make(wn, q, { ...stock, pairs: list });
+							if (!d) continue;
+							built++;
+							const label = `${kind} ${f0} Hz Q ${q} [${list}]`;
+							const allowedParts = new Set(list.flatMap((n) => GROUP[kind]?.[n] ?? [n]));
+							for (const [part, v] of resistors(d)) {
+								const pair = seriesPair(v, kit);
+								if (pair) paired++;
+								if (pair && !allowedParts.has(part)) problems.push(`${label}: ${part} pairs`);
+								if (!pair && !kit.some((x) => rel(x, v))) problems.push(`${label}: ${part} = ${v} is neither a kit value nor two`);
+							}
+							for (const group of EQUAL[kind] ?? []) if (!group.every((p) => d.components[p] === d.components[group[0]])) problems.push(`${label}: ${group.join(' = ')} broken`);
+							const f = formula(d);
+							for (const [k, v] of Object.entries(f)) if (!rel(v, d.actual[k])) problems.push(`${label}: ${k} ${d.actual[k]} against ${v}`);
+						}
+					}
+				}
+			}
+		}
+		check('pair limit: a list of names builds a real design: only those parts pair, equal parts stay equal, the actual figures are the formulas on the parts', problems.length === 0 && paired > 100, problems.length ? problems.slice(0, 3).join('; ') : `${built} designs, ${paired} paired resistors`);
+	}
+
+	// (c) the plan on whole filters, built as the page builds them (a stage
+	// the stock cannot build takes the full grid, flagged), for every N
+	const fullGrid = { resistorSeries: 'E24', capacitors: null };
+	const shown = (make) => (o) => make(o) ?? ((d) => d && { ...d, stockShortfall: true })(make(fullGrid));
+	const cascadeStage = (stage, menu, o) => {
+		if (Number.isFinite(stage.wz)) {
+			const how = notchOptions(stage);
+			return menu === 'boctor' ? designBoctorNotch(stage.wn, stage.q, stage.wz, { ...o, lowSide: how.boctorLowSide }) : designTowThomasNotch(stage.wn, stage.q, stage.wz, { ...o, ...how.towThomas });
+		}
+		const hp = stage.filterType === 'highpass';
+		if (stage.order === 1) return (hp ? designFirstOrderHighPass : designFirstOrderLowPass)(stage.tau, o);
+		if (menu === 'towThomas' || menu === 'boctor') return (hp ? designTowThomasHighPass : designTowThomasLowPass)(stage.wn, stage.q, o);
+		if (menu === 'sallenKey') return (hp ? designSallenKeyHighPass : designSallenKeyLowPass)(stage.wn, stage.q, o);
+		return (hp ? designMfbHighPass : designMfbLowPass)(stage.wn, stage.q, o);
+	};
+	const narrow = BAND_SPECS.narrowBp;
+	const narrowArgs = { filterType: 'bandpass', response: 'butterworth', topology: 'mfb', amaxDb: 3, aminDb: 40, amaxDbHp: 3, amaxDbLp: 3, aminDbHp: narrow.aminDbLow, aminDbLp: narrow.aminDbHigh, fl: narrow.fl, fh: narrow.fh, fsl: narrow.fsl, fsh: narrow.fsh, bandMethod: 'transformed', topologyBand: 'mfb', topologyNotch: 'boctor', opampGbw: LIMIT_GBW };
+	const lab = PAIR_STOCKS.lab;
+	const labR = PAIR_STOCKS.labR;
+	const cascadeCase = (label, design, menu, stock, script) => ({ label, stages: design.stages, build: (i, pairs) => shown((o) => cascadeStage(design.stages[i], menu, o))({ ...stock, pairs }), script });
+	const bandCase = (label, design, menus, stock, script) => ({ label, stages: design.stages, build: (i, pairs) => realizeBandStage(design.stages[i], menus, { ...stock, pairs }), script });
+	const lowpass = (response, amaxDb, aminDb, fp, fs) => designLowPass({ response, amaxDb, aminDb, fp, fs, order: null });
+	const scriptStock = { resistorStock: kit, capacitorStock: LAB_KIT.capacitors, resistorPairs: true };
+	const cases = [
+		cascadeCase('Butterworth low-pass, MFB, lab kit', lowpass('butterworth', 3, 40, 10000, 35000), 'mfb', lab, { filterType: 'lowpass', response: 'butterworth', topology: 'mfb', amaxDb: 3, aminDb: 40, fp: 10000, fs: 35000 }),
+		cascadeCase('Chebyshev low-pass, Tow-Thomas, lab kit', lowpass('chebyshev', 1, 60, 10000, 20000), 'towThomas', lab, { filterType: 'lowpass', response: 'chebyshev', topology: 'towThomas', amaxDb: 1, aminDb: 60, fp: 10000, fs: 20000 }),
+		cascadeCase('elliptic low-pass, Boctor, lab kit', lowpass('elliptic', 0.5, 60, 10000, 13000), 'boctor', lab, { filterType: 'lowpass', response: 'elliptic', topology: 'boctor', amaxDb: 0.5, aminDb: 60, fp: 10000, fs: 13000 }),
+		cascadeCase('elliptic low-pass, Tow-Thomas, lab resistors', lowpass('elliptic', 0.5, 60, 10000, 13000), 'towThomas', labR, null),
+		cascadeCase('Butterworth high-pass, Sallen-Key, lab kit', designHighPass({ response: 'butterworth', amaxDb: 3, aminDb: 50, fp: 10000, fs: 3000, order: null }), 'sallenKey', lab, null),
+		cascadeCase('Bessel band-pass cascade, MFB, lab kit', designBandPass({ response: 'bessel', amaxDb: 3, aminDb: 30, fl: 1000, fh: 10000, fsl: 200, fsh: 50000, orderLow: null, orderHigh: null }), 'mfb', lab, null),
+		bandCase('narrow band-pass transformed, MFB for the TL082, lab kit', designTransformed(narrow, 'butterworth'), { ...transformedMenus('mfb', 'boctor'), gbw: LIMIT_GBW }, lab, narrowArgs),
+		bandCase('band-stop transformed, Boctor else Tow-Thomas, lab kit', designTransformed(BAND_SPECS.defaultBs, 'butterworth'), transformedMenus('mfb', 'boctor'), lab, null),
+		bandCase('elliptic band-pass transformed, Tow-Thomas, lab resistors', designTransformed(narrow, 'elliptic'), transformedMenus('towThomas', 'towThomas'), labR, null)
+	];
+	const plans = new Map();
+	// every group of parts one value sets, by topology, as the component tables list them
+	const ALL_GROUPS = {
+		firstOrder: [{ name: 'R', parts: ['R'] }],
+		firstOrderHp: [{ name: 'R', parts: ['R'] }],
+		mfb: [{ name: 'R1', parts: ['R1', 'R3'] }, { name: 'R2', parts: ['R2'] }],
+		mfbHp: [{ name: 'R1', parts: ['R1'] }, { name: 'R2', parts: ['R2'] }],
+		sallenKey: [{ name: 'R1', parts: ['R1', 'R2'] }],
+		sallenKeyHp: [{ name: 'Rtop', parts: ['Rtop'] }, { name: 'Rbottom', parts: ['Rbottom'] }],
+		towThomas: [{ name: 'Ra', parts: ['R1', 'Ra', 'Rb'] }, { name: 'Rd', parts: ['Rd'] }],
+		towThomasHp: [{ name: 'Ra', parts: ['Ra', 'Rb'] }, { name: 'Rd', parts: ['Rd'] }],
+		towThomasNotch: [{ name: 'Rz', parts: ['Rz'] }, { name: 'Ra', parts: ['Ra', 'Rb'] }, { name: 'Rd', parts: ['Rd'] }],
+		towThomasBp: [{ name: 'R1', parts: ['R1'] }, { name: 'Ra', parts: ['Ra', 'Rb'] }, { name: 'Rd', parts: ['Rd'] }],
+		mfbBp: ['R1', 'R2', 'R3'].map((n) => ({ name: n, parts: [n] }))
+	};
+	{
+		const problems = [];
+		const rows = [];
+		const texts = [];
+		let bruteChecked = 0;
+		for (const c of cases) {
+			// every build once, as the page keeps them
+			const memo = new Map();
+			const build = (i, pairs) => {
+				const key = `${i} ${JSON.stringify(pairs)}`;
+				if (!memo.has(key)) memo.set(key, c.build(i, pairs));
+				return memo.get(key);
+			};
+			const single = c.stages.map((_, i) => build(i, false));
+			const full = c.stages.map((_, i) => build(i, true));
+			const top = planFilterPairs(c.stages, build, kit, null);
+			const total = top.total;
+			const byN = [];
+			// N: pairs kept / measure, for the record
+			rows.push(`${c.label}:`);
+			for (let n = 0; n <= total + 1; n++) byN.push(planFilterPairs(c.stages, build, kit, n));
+			byN.push(planFilterPairs(c.stages, build, kit, 20));
+			plans.set(c.label, { build, byN, top });
+			if (total < 3) problems.push(`${c.label}: only ${total} pairs where they help`);
+			if (!same(top.stages.map((s) => s.design), full) || top.limited) problems.push(`${c.label}: no limit is not pairs where they help`);
+			byN.forEach((plan, k) => {
+				const n = k <= total + 1 ? k : 20;
+				const designs = plan.stages.map((s) => s.design);
+				// the pairs as the tables print them: every R part of a stage that did not fall back
+				const counted = designs.reduce((sum, d) => sum + (d.stockShortfall ? 0 : resistors(d).filter(([, v]) => seriesPair(v, kit)).length), 0);
+				if (counted !== plan.count || counted > Math.max(n, 0)) problems.push(`${c.label} N=${n}: ${counted} pairs built, plan says ${plan.count}`);
+				if (n === 0 && !same(designs, single)) problems.push(`${c.label}: N=0 is not single parts`);
+				if (n >= total && (plan.limited || !same(designs, full))) problems.push(`${c.label} N=${n}: not the design with pairs where they help`);
+				if (n > 0 && n < total && plan.measure > byN[n - 1].measure * (1 + 1e-9)) problems.push(`${c.label} N=${n}: measure ${plan.measure} worse than ${byN[n - 1].measure} at N=${n - 1}`);
+				// each stage is its designer rerun with the list it keeps, and only listed parts pair
+				plan.stages.forEach((s, i) => {
+					if (!same(s.design, build(i, s.option))) problems.push(`${c.label} N=${n} stage ${i + 1}: not the design of its list`);
+					if (Array.isArray(s.option) && s.kept.some((g) => !s.option.includes(g.name))) problems.push(`${c.label} N=${n} stage ${i + 1}: ${s.kept.map((g) => g.name)} pair outside [${s.option}]`);
+				});
+				texts.push(filterPairPlanSummary(plan), ...plan.stages.map((s) => filterPairLimitSentence(s, n)));
+				if (k <= total) rows.push(`${n}:${plan.count}/${plan.measure.toExponential(2)}`);
+			});
+			// against every way to give each stage a list holding N resistors or
+			// fewer: the sum of the pairs built at most N, a list that builds no
+			// pair counting only as single parts. A list may name any resistor of
+			// a stage built from the kit, not only those pairs where they help made
+			// pairs (one given up can leave another needing two in series), but a
+			// Boctor stage's six (64 lists, each a search over every capacitor)
+			// keep to those
+			const opened = full.map((d) => (!d || !d.components || d.stockShortfall ? [] : /^boctor/.test(d.topology) ? filterPairGroups(d, kit) : ALL_GROUPS[d.topology] ?? []));
+			const options = opened.map((groups, i) => {
+				const names = groups.map((g) => g.name);
+				const out = [];
+				for (let m = 0; m <= names.length; m++) {
+					for (const list of pairSubsets(names, m)) {
+						const weight = list.reduce((sum, name) => sum + groups.find((g) => g.name === name).parts.length, 0);
+						const design = m === names.length && m > 0 ? full[i] : build(i, list);
+						out.push({ empty: m === 0, weight, count: filterPairCount(design, kit), measure: filterStageMeasure(c.stages[i], design, full[i]) });
+					}
+				}
+				return out;
+			});
+			const combos = options.reduce((n, o) => n * o.length, 1);
+			if (combos <= 20000) {
+				for (let n = 1; n < total; n++) {
+					let best = Infinity;
+					const walk = (i, used, measure) => {
+						if (i === options.length) {
+							best = Math.min(best, measure);
+							return;
+						}
+						for (const o of options[i]) {
+							if (o.empty) walk(i + 1, used, measure + o.measure);
+							else if (o.count > 0 && o.weight <= n && used + o.count <= n) walk(i + 1, used + o.count, measure + o.measure);
+						}
+					};
+					walk(0, 0, 0);
+					bruteChecked++;
+					if (!(Math.abs(byN[n].measure - best) <= 1e-9 * Math.max(best, 1e-12))) problems.push(`${c.label} N=${n}: plan ${byN[n].measure}, best list ${best}`);
+				}
+			}
+			rows.push('|');
+		}
+		const wordBad = texts.filter((t) => /undefined|NaN|\byou(r)?\b|[–—]/.test(t));
+		check(
+			`pair limit: ${cases.length} filters, N from 0 past the count of pairs where they help: at most N pairs built, N = 0 is single parts, N at or past the count is the design with pairs where they help, the measure never grows below it, every stage its designer rerun with its list, the best lists found (${bruteChecked} limits against every combination)`,
+			problems.length === 0 && wordBad.length === 0 && bruteChecked > 10,
+			problems.length ? problems.slice(0, 3).join('; ') : wordBad.length ? wordBad[0] : rows.join(' ').slice(0, 400)
+		);
+	}
+
+	// (d) the downloaded script: RESISTOR_PAIR_LIMIT only when the page has a
+	// limit, and then the stages it prints are the page's choice; set to null
+	// it prints the design with pairs where they help
+	{
+		const dir = mkdtempSync(join(tmpdir(), 'rbt56-pair-limit-'));
+		const base = { amaxDb: 3, aminDb: 40, fp: 10000, fs: 35000, fl: 1000, fh: 10000, fsl: 300, fsh: 30000, order: null, orderHp: null, orderLp: null, capOverrides: {} };
+		const run = (name, code) => {
+			const file = join(dir, `${name}.js`);
+			writeFileSync(file, code);
+			try {
+				return execFileSync(process.execPath, [file], { encoding: 'utf8', stdio: 'pipe' });
+			} catch (e) {
+				return `ERROR ${e.stderr || e.message}`;
+			}
+		};
+		// the resistor lines a script prints, and the same from the page's designs
+		const printedParts = (out) =>
+			[...out.matchAll(/^ {2}(R\w*|r) = ([\d.]+) ohm( \(([\d.]+) \+ ([\d.]+) in series\))?/gm)].map((m) => `${m[1]} = ${Math.round(Number(m[2]))}${m[3] ? ` (${m[4]} + ${m[5]})` : ''}`);
+		const expectedParts = (designs) =>
+			designs.flatMap((d) =>
+				Object.entries(d.components)
+					.filter(([name]) => /^[Rr]/.test(name))
+					.map(([name, v]) => {
+						const pair = d.stockShortfall ? null : seriesPair(v, kit);
+						return { text: `${name} = ${Math.round(v)}${pair ? ` (${Number(pair[0].toPrecision(6))} + ${Number(pair[1].toPrecision(6))})` : ''}`, loose: !!d.stockShortfall };
+					})
+			);
+		// a stage on the full grid prints any pair the kit happens to sum to; the page shows none
+		const sameParts = (got, want) => got.length === want.length && want.every((w, k) => (w.loose ? got[k].replace(/ \(.*\)$/, '') === w.text : got[k] === w.text));
+		const firstOff = (got, want) => {
+			const k = want.findIndex((w, j) => !sameParts([got[j] ?? ''], [w]));
+			return k < 0 ? `${got.length} lines against ${want.length}` : `${got[k]} against ${want[k].text}`;
+		};
+		const problems = [];
+		let compared = 0;
+		for (const c of cases.filter((x) => x.script)) {
+			const { byN, top } = plans.get(c.label);
+			const spec = { ...base, ...c.script, ...scriptStock };
+			if (/RESISTOR_PAIR_LIMIT/.test(generateScript(spec))) problems.push(`${c.label}: RESISTOR_PAIR_LIMIT without a limit`);
+			for (const n of [1, 2, 3]) {
+				const code = generateScript({ ...spec, resistorPairLimit: n });
+				if (!new RegExp(`^const RESISTOR_PAIR_LIMIT = ${n};`, 'm').test(code)) problems.push(`${c.label} N=${n}: no RESISTOR_PAIR_LIMIT line`);
+				const out = run(`${c.script.filterType}-${c.script.topology}-${n}`, code);
+				const got = printedParts(out);
+				const want = expectedParts(byN[n].stages.map((s) => s.design));
+				compared++;
+				if (!sameParts(got, want)) problems.push(`${c.label} N=${n}: ${firstOff(got, want)}`);
+				if (!out.includes(filterPairPlanSummary(byN[n]))) problems.push(`${c.label} N=${n}: the summary is not the page's`);
+				if (n === 2) {
+					const off = run(`${c.script.filterType}-${c.script.topology}-null`, code.replace(/^const RESISTOR_PAIR_LIMIT = 2;/m, 'const RESISTOR_PAIR_LIMIT = null;'));
+					compared++;
+					if (!sameParts(printedParts(off), expectedParts(top.stages.map((s) => s.design)))) problems.push(`${c.label}: RESISTOR_PAIR_LIMIT = null is not pairs where they help`);
+				}
+			}
+		}
+		check('pair limit, downloadable script: RESISTOR_PAIR_LIMIT only with a limit; the stages it prints are the page\'s choice for N = 1, 2, 3, its summary the page\'s, and null gives pairs where they help', problems.length === 0 && compared === 16, problems.length ? problems.slice(0, 2).join('; ') : `${compared} runs`);
+	}
+
+	// (e) LTspice: the notes follow the parts built, so they name the kept pairs only
+	{
+		const c = cases[0];
+		const plan = plans.get(c.label).byN[2];
+		const realized = plan.stages.map((s) => s.design);
+		const opts = { realizedStages: realized, topology: 'mfb', lpCount: 0, combinerMode: 'sum', combinerR: 10000, combinerResistors: null, filterType: 'lowpass', response: 'butterworth', amaxDb: 3, aminDb: 40, fp: 10000, fs: 35000, resistorStock: kit, pairs: true };
+		const notes = generateNetlist(opts).split('\n').filter((l) => /in series/.test(l));
+		const kept = plan.stages.flatMap((s, k) => s.kept.flatMap((g) => g.parts.map((p) => `stage ${k + 1} ${p}${k + 1} =`)));
+		check('pair limit, LTspice: one note per kept pair, none for the dropped ones', notes.length === plan.count && kept.every((k) => notes.some((l) => l.includes(k))), notes.join(' | '));
+	}
+
+	// (f) the Start here panel says how many may pair
+	{
+		const d = lowpass('butterworth', 3, 40, 10000, 35000);
+		const plan = plans.get(cases[0].label).byN[2];
+		const args = { filterType: 'lowpass', response: 'butterworth', topology: 'mfb', order: d.n, stages: d.stages.length, fp: 10000, fs: 35000, amaxDb: 3, aminDb: 40, design: d, realizedStages: plan.stages.map((s) => s.design), stock: 'lab', pairs: true };
+		const words = (blocks) => JSON.stringify(blocks);
+		const limited = words(filterBasics({ ...args, pairLimit: 2 }));
+		const open = words(filterBasics(args));
+		check('pair limit, Start here: the rounding sentence gives the limit, and without one stays as it was', /for up to 2 of them in the whole filter, to two resistors in series/.test(limited) && !/for up to/.test(open) && /\(or to two resistors in series where no single one comes close\)/.test(open));
+	}
+
+	// (g) a list too short to build some stages from single parts: a stage
+	// the list builds with the pairs a limit leaves it is never shown on the
+	// full E24 and E6 grids instead (their finer values would land it closer,
+	// so a plain miss would pick them), and the script makes the same choice
+	{
+		const shortList = [1000, 2200, 4700, 10000, 22000, 47000];
+		const stock = { resistorSeries: shortList, capacitors: [1e-9, 1e-8, 1e-7] };
+		const d = designTransformed(BAND_SPECS.defaultBp, 'chebyshev');
+		const menus = { ...transformedMenus('mfb', 'boctor'), gbw: LIMIT_GBW };
+		const memo = new Map();
+		const build = (i, pairs) => {
+			const key = `${i} ${JSON.stringify(pairs)}`;
+			if (!memo.has(key)) memo.set(key, realizeBandStage(d.stages[i], menus, { ...stock, pairs }));
+			return memo.get(key);
+		};
+		const full = d.stages.map((_, i) => build(i, true));
+		const total = planFilterPairs(d.stages, build, shortList, null).total;
+		const problems = [];
+		const rows = [];
+		// every list each stage can take: the pairs it builds, the resistors it names, whether it stays on the list
+		const options = full.map((fd, i) => {
+			const groups = filterPairGroups(fd, shortList);
+			const out = [];
+			for (let m = 0; m <= groups.length; m++) {
+				for (const list of pairSubsets(groups.map((g) => g.name), m)) {
+					const design = m === groups.length && m > 0 ? fd : build(i, list);
+					out.push({ empty: m === 0, weight: list.reduce((n, name) => n + groups.find((g) => g.name === name).parts.length, 0), count: filterPairCount(design, shortList), fell: Boolean(design?.stockShortfall) });
+				}
+			}
+			return out;
+		});
+		const meaningful = full.some((fd, i) => !fd.stockShortfall && build(i, []).stockShortfall);
+		for (let n = 1; n < total; n++) {
+			const plan = planFilterPairs(d.stages, build, shortList, n);
+			const fell = plan.stages.filter((s) => s.design.stockShortfall).length;
+			// the fewest stages on the full grids that any lists within n leave
+			let fewest = Infinity;
+			const walk = (i, used, f) => {
+				if (i === options.length) {
+					fewest = Math.min(fewest, f);
+					return;
+				}
+				for (const o of options[i]) {
+					if (o.empty) walk(i + 1, used, f + Number(o.fell));
+					else if (o.count > 0 && o.weight <= n && used + o.count <= n) walk(i + 1, used + o.count, f + Number(o.fell));
+				}
+			};
+			walk(0, 0, 0);
+			if (fell !== fewest) problems.push(`N=${n}: ${fell} stages on the full grids, ${fewest} would do`);
+			if (plan.count > n) problems.push(`N=${n}: ${plan.count} pairs`);
+			const summary = filterPairPlanSummary(plan);
+			const shortSet = plan.stages.flatMap((s, i) => (s.short ? [i + 1] : []));
+			if (shortSet.length && !/more pairs than that to be built from the list, so (it is|they are) shown with the full E24 and E6 grids\./.test(summary)) problems.push(`N=${n}: the summary does not say why stages ${shortSet} are on the full grids`);
+			if (!shortSet.length && /full E24/.test(summary)) problems.push(`N=${n}: the summary names the full grids for no stage`);
+			plan.stages.forEach((s, i) => {
+				if (s.short && !/too few pairs to be built from the list/.test(filterPairLimitSentence(s, n))) problems.push(`N=${n} stage ${i + 1}: the stage sentence`);
+			});
+			rows.push(`${n}:${plan.count} pairs, ${fell} on the grids`);
+		}
+		// the script prints the stages the page shows, the full-grid ones flagged
+		const dir = mkdtempSync(join(tmpdir(), 'rbt56-pair-short-'));
+		const spec = { filterType: 'bandpass', response: 'chebyshev', topology: 'mfb', amaxDb: 3, aminDb: 40, amaxDbHp: 3, amaxDbLp: 3, aminDbHp: 40, aminDbLp: 40, fl: 1000, fh: 10000, fsl: 300, fsh: 30000, fp: 10000, fs: 35000, order: null, orderHp: null, orderLp: null, capOverrides: {}, bandMethod: 'transformed', topologyBand: 'mfb', topologyNotch: 'boctor', opampGbw: LIMIT_GBW, resistorStock: shortList, capacitorStock: stock.capacitors, resistorPairs: true };
+		for (const n of [1, total - 1]) {
+			const file = join(dir, `short-${n}.js`);
+			writeFileSync(file, generateScript({ ...spec, resistorPairLimit: n }));
+			let out;
+			try {
+				out = execFileSync(process.execPath, [file], { encoding: 'utf8', stdio: 'pipe' });
+			} catch (e) {
+				out = `ERROR ${e.stderr || e.message}`;
+			}
+			const plan = planFilterPairs(d.stages, build, shortList, n);
+			const got = [...out.matchAll(/^ {2}(R\w*) = ([\d.]+) ohm/gm)].map((m) => `${m[1]} = ${Math.round(Number(m[2]))}`);
+			const want = plan.stages.flatMap((s) => Object.entries(s.design.components).filter(([name]) => /^R/.test(name)).map(([name, v]) => `${name} = ${Math.round(v)}`));
+			if (got.join() !== want.join()) problems.push(`script N=${n}: ${got.join(' ')} against ${want.join(' ')}`);
+			if (!out.includes(filterPairPlanSummary(plan))) problems.push(`script N=${n}: the summary is not the page's`);
+		}
+		check(
+			'pair limit, a short list: a stage the list builds with the pairs left is never shown on the full grids instead (the fewest such stages any lists give, for every N), the notes say why one is, and the script makes the same choice',
+			problems.length === 0 && meaningful && total >= 3,
+			problems.length ? problems.slice(0, 3).join('; ') : `${total} pairs where they help; ${rows.join(', ')}`
+		);
+	}
+
+	// (h) a stage may gain a pair that pairs where they help leave single: a
+	// part solved from one given up can need two in series where it did not.
+	// A Chebyshev high-pass in Tow-Thomas stages on the lab kit (1 dB, 40 dB,
+	// 3 kHz from 1 kHz) pairs Ra and Rd of stage 1 and Ra of stage 2 where they
+	// help; with one pair, stage 2's Rd alone lands it closest, and with four,
+	// stage 1's two groups and stage 2's Rd
+	{
+		const d = designHighPass({ response: 'chebyshev', amaxDb: 1, aminDb: 40, fp: 3000, fs: 1000, order: null });
+		const memo = new Map();
+		const build = (i, pairs) => {
+			const key = `${i} ${JSON.stringify(pairs)}`;
+			if (!memo.has(key)) memo.set(key, shown((o) => cascadeStage(d.stages[i], 'towThomas', o))({ ...lab, pairs }));
+			return memo.get(key);
+		};
+		const groupsOf = (plan) => plan.stages.map((st) => st.kept.map((g) => g.name).join('+') || '-').join(' ');
+		const [top, single, one, four] = [null, 0, 1, 4].map((n) => planFilterPairs(d.stages, build, kit, n));
+		check(
+			"pair limit: a stage may gain a pair that pairs where they help leave single: a Chebyshev Tow-Thomas high-pass on the lab kit keeps stage 2's Rd with one pair, closer than single parts",
+			groupsOf(top) === 'Ra+Rd Ra' && groupsOf(one) === '- Rd' && one.measure < 0.98 * single.measure && groupsOf(four) === 'Ra+Rd Rd' && four.count === 4,
+			`N=1 ${groupsOf(one)} ${one.measure.toExponential(3)} against single parts ${single.measure.toExponential(3)}; N=4 ${groupsOf(four)} ${four.measure.toExponential(3)}`
+		);
 	}
 }
 

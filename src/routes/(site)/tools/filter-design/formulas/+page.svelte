@@ -515,12 +515,14 @@
 				actual component values, only on the topology.
 			</p>
 			<Equation
-				tex={`S_R^Q = -2, \\qquad S_{C_{top}}^Q = -\\dfrac{1}{2}, \\qquad S_{C_{bottom}}^Q = -\\dfrac{3}{2}`}
+				tex={`Q = \\tfrac{1}{2}\\sqrt{C_{top}/C_{bottom}} \\;\\Rightarrow\\; S_R^Q = 0, \\qquad S_{C_{top}}^Q = +\\dfrac{1}{2}, \\qquad S_{C_{bottom}}^Q = -\\dfrac{1}{2}`}
 			/>
 			<p class="note">
 				<strong>How to use:</strong> multiply each by the component tolerance (in percent) and
-				combine with the root-sum-square formula. The resistor sensitivity dominates, which is
-				why Sallen-Key gets impractical at high Q.
+				combine with the root-sum-square formula. With equal resistors Q follows the capacitor
+				ratio alone, so a 5 % capacitor moves Q by 2.5 %. What makes Sallen-Key impractical at
+				high Q is that ratio, 4Q², not its sensitivity. Since ωn/Q is the s coefficient divided by
+				the s² coefficient, skipping that division gives S_R^Q = -2, which is wrong.
 			</p>
 		</div>
 
@@ -1057,7 +1059,7 @@
 				above the design value when the op-amps are slow (Q enhancement), so the gain-bandwidth
 				product has to be well above Q times f0.
 			</p>
-			<Equation tex={`\\dfrac{Q_{real} - Q}{Q} \\approx 2\\,Q\\,\\dfrac{f_0}{f_T} \\qquad \\Rightarrow \\qquad f_T \\gtrsim 200\\,Q\\,f_0 \\ \\text{ for a 1\\% error}`} />
+			<Equation tex={`Q_{real} = \\dfrac{Q}{1 - 4\\,Q\\,f_0/f_T} \\approx Q\\left(1 + 4\\,Q\\,\\dfrac{f_0}{f_T}\\right) \\qquad \\Rightarrow \\qquad f_T \\gtrsim 400\\,Q\\,f_0 \\ \\text{ for a 1\\% error}`} />
 			<p class="note">
 				<strong>How to use:</strong> reach for the Tow-Thomas when Q is high (past about 5 the
 				one-op-amp ratios stop being buildable), when the filter has to be tuned on the bench, or

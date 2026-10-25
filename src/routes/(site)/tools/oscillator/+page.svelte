@@ -13,11 +13,11 @@
 	import { formatFarads, formatHz, formatOhms, formatVolts } from '$lib/modulation/format';
 	import { oscillatorBasics } from '$lib/oscillator/basics';
 	import { buildAgcDiagram, buildClampDiagram, buildLimiterDiagram, buildOscillatorDiagram, hasLimiterDiagram } from '$lib/oscillator/circuits';
-	import { amplitudeRemark, explainBarkhausen, explainOpampLimit, explainStabilizer, explainTopology } from '$lib/oscillator/explain';
+	import { amplitudeRemark, explainBarkhausen, explainOpampLimit, explainStabilizer, explainTopology, pairLimitNote } from '$lib/oscillator/explain';
 	import { DIODES, JFETS } from '$lib/oscillator/limiter';
 	import { generateNetlist, generateSchematic } from '$lib/oscillator/spice';
 	import { DEFAULT_OPAMP, OPAMP_MODELS } from '$lib/spice/opamps';
-	import { compareOscillators, designOscillator, STABILIZERS, TOPOLOGIES } from '$lib/oscillator/topologies';
+	import { compareOscillators, designOscillator, oscillatorIsMemoized, STABILIZERS, TOPOLOGIES } from '$lib/oscillator/topologies';
 	import { componentOptions, defaultStock, isRestricted, loadStock, saveStock } from '$lib/stock';
 
 	let topology = $state('wien');
@@ -39,14 +39,16 @@
 	// lab drawer or the user's own list, the same setting as the filter and
 	// AM tools (src/lib/stock.js), kept in this browser. With a list, `pairs`
 	// lets the resistors that set the frequency, the start and the amplitude
-	// be two in series.
+	// be two in series, and `pairLimit` caps how many (null: no cap; R counts
+	// once for each place it sits, see designOscillator).
 	const initialStock = defaultStock();
 	let stock = $state(initialStock.stock);
 	let resistorText = $state(initialStock.resistorText);
 	let capacitorText = $state(initialStock.capacitorText);
 	let pairs = $state(initialStock.pairs);
+	let pairLimit = $state(initialStock.pairLimit);
 	let stockLoaded = $state(false);
-	const parts = $derived(componentOptions(stock, resistorText, capacitorText, pairs));
+	const parts = $derived(componentOptions(stock, resistorText, capacitorText, pairs, pairLimit));
 	const restricted = $derived(isRestricted(stock));
 	onMount(() => {
 		const saved = loadStock();
@@ -55,11 +57,12 @@
 			if (saved.resistorText !== undefined) resistorText = saved.resistorText;
 			if (saved.capacitorText !== undefined) capacitorText = saved.capacitorText;
 			if (saved.pairs !== undefined) pairs = saved.pairs;
+			if (saved.pairLimit !== undefined) pairLimit = saved.pairLimit;
 		}
 		stockLoaded = true;
 	});
 	$effect(() => {
-		const state = { stock, resistorText, capacitorText, pairs };
+		const state = { stock, resistorText, capacitorText, pairs, pairLimit };
 		if (stockLoaded) saveStock(state);
 	});
 
@@ -83,20 +86,50 @@
 	// to E24 and the usual capacitors, one resistor per part, flagged, rather
 	// than showing nothing
 	const works = (d) => d && d.starts && d.limiter.regulates !== false && d.opamp.swingOk;
-	const design = $derived.by(() => {
-		if (!valid) return null;
+	function designFor({ params, topology, restricted }) {
 		const own = designOscillator({ ...params, topology });
 		if (!restricted || works(own)) return own;
 		const fallback = designOscillator({ ...params, topology, resistorSeries: 'E24', capacitors: null, pairs: false });
 		if (!fallback) return own;
 		if (own && !works(fallback)) return own;
 		return { ...fallback, stockShortfall: true };
+	}
+
+	// Everything the designs below are made from, as one request. The page
+	// shows the designs of `shown`: the request itself, at once, except when
+	// resistors may be pairs, where a change designs every topology twice or
+	// more (single parts, pairs, and under "up to N pairs" several
+	// whitelists) and takes a third to a half of a second. There the designs
+	// already shown stay, whole, until the typing pauses for 200 ms, and only
+	// then is the new request designed; one whose designs were made before (a
+	// value seen already, in the memo of topologies.js) is shown at once.
+	const request = $derived(valid ? { params, topology, restricted } : null);
+	const ready = $derived(!request || !request.params.pairs || TOPOLOGIES.every((t) => oscillatorIsMemoized({ ...request.params, topology: t.id })));
+	let held = $state.raw(null);
+	const shown = $derived(ready ? request : (held ?? request));
+	$effect(() => {
+		if (ready) {
+			held = request;
+			return;
+		}
+		const next = request;
+		const timer = setTimeout(() => (held = next), 200);
+		return () => clearTimeout(timer);
 	});
+	const pending = $derived(shown !== request);
+	const view = $derived(shown ? { design: designFor(shown), rows: compareOscillators(shown.params) } : { design: null, rows: [] });
+	const design = $derived(view.design);
+	const rows = $derived(view.rows);
+	// the inputs the designs shown were made from: the fields can be ahead of them while the next ones wait
+	const at = $derived(
+		shown
+			? { frequency: shown.params.frequency, amplitude: shown.params.amplitude, stabilizer: shown.params.stabilizer, topology: shown.topology, pairs: shown.params.pairs, pairLimit: shown.params.pairLimit }
+			: { frequency, amplitude, stabilizer, topology, pairs: parts.pairs, pairLimit: parts.pairLimit }
+	);
 	// what to say when the limiter holds another amplitude than the one asked for
 	const remark = $derived(design ? amplitudeRemark(design) : null);
-	const rows = $derived(valid ? compareOscillators(params) : []);
 	const wienRow = $derived(rows.find((r) => r.id === 'wien'));
-	const currentRow = $derived(rows.find((r) => r.id === topology));
+	const currentRow = $derived(rows.find((r) => r.id === at.topology));
 	const stabLabel = $derived(
 		!design ? '' : design.limiter.kind === 'diodes' ? 'diode limiting' : design.limiter.kind === 'lamp' ? 'incandescent lamp' : design.limiter.kind === 'jfet' ? 'JFET gain control' : 'diode clamp on the second integrator'
 	);
@@ -128,7 +161,7 @@
 		a.remove();
 		setTimeout(() => URL.revokeObjectURL(url), 10000);
 	}
-	const stem = $derived(`${topology}-oscillator`);
+	const stem = $derived(`${at.topology}-oscillator`);
 </script>
 
 <svelte:head>
@@ -154,7 +187,7 @@
 		<div class="panel-head">
 			<span class="num">01</span>
 			<h2>Specification</h2>
-			<span class="hint">{design ? `runs at ${formatHz(design.f0)}` : 'check the values'}</span>
+			<span class="hint">{pending ? 'updating the design' : design ? `runs at ${formatHz(design.f0)}` : 'check the values'}</span>
 		</div>
 		<div class="grid">
 			<div class="field">
@@ -227,25 +260,28 @@
 				<input id="swing" type="number" min="0.5" step="0.5" bind:value={opampSwing} />
 			</div>
 		</div>
-		<StockPicker id="stock" bind:stock bind:resistorText bind:capacitorText bind:pairs />
+		<StockPicker id="stock" bind:stock bind:resistorText bind:capacitorText bind:pairs bind:pairLimit />
 		{#if restricted}
 			<p class="note">
 				{stock === 'labR'
-					? `Every resistor below is rounded to the lab resistors${parts.pairs ? ' (or two of them in series)' : ''}, the capacitors to the usual values,`
-					: `Every resistor and capacitor below is rounded to those values ${parts.pairs ? '(or, for a resistor, to two of them in series)' : 'only'},`} and the loop is
+					? `Every resistor below is rounded to the lab resistors${parts.pairs ? (parts.pairLimit === null ? ' (or two of them in series)' : ` (or, for up to ${parts.pairLimit} of them, two in series)`) : ''}, the capacitors to the usual values,`
+					: `Every resistor and capacitor below is rounded to those values ${parts.pairs ? (parts.pairLimit === null ? '(or, for a resistor, to two of them in series)' : `(or, for up to ${parts.pairLimit} ${parts.pairLimit === 1 ? 'resistor' : 'resistors'}, to two of them in series)`) : 'only'},`} and the loop is
 				solved again with the rounded parts, so the frequency and amplitude shown are what they give.
 			</p>
+		{/if}
+		{#if design?.pairLimit && !design.stockShortfall}
+			<p class="note">{pairLimitNote(design)}</p>
 		{/if}
 		{#if design?.stockShortfall}
 			<p class="flag warn">
 				The parts on hand cannot build this oscillator so that it starts and holds its amplitude, so it is shown with E24
-				resistors and E6 capacitors instead. Add values near the ones below, {parts.pairs ? '' : 'allow two resistors in series, '}or pick another topology.
+				resistors and E6 capacitors instead. Add values near the ones below, {at.pairs ? (at.pairLimit !== null ? 'allow more pairs, ' : '') : 'allow two resistors in series, '}or pick another topology.
 			</p>
 		{/if}
 		<p class="note">{TOPOLOGIES.find((t) => t.id === topology)?.summary}</p>
 		{#if !valid}
 			<p class="flag bad">Frequency, amplitude, the excess gain and the op-amp figures all have to be positive.</p>
-		{:else if !design}
+		{:else if !design && !pending}
 			<p class="flag bad">No sensible component pair for this frequency with this op-amp: either the resistors would fall outside 1 k to 1 M, or the loop cannot be made to balance at all. Try another frequency, a faster op-amp or another topology.</p>
 		{/if}
 	</section>
@@ -258,7 +294,7 @@
 			minutes={9}
 		/>
 
-		<section class="panel">
+		<section class="panel" class:stale={pending} aria-busy={pending}>
 			<div class="panel-head">
 				<span class="num">02</span>
 				<h2>Circuit</h2>
@@ -267,7 +303,7 @@
 			<DiagramView diagram={buildOscillatorDiagram(design)} label="{design.topo.label} oscillator" />
 			<table>
 				<tbody>
-					<tr><td>Frequency: wanted / predicted with this op-amp</td><td>{formatHz(frequency)} / {formatHz(design.f0)} ({pct(design.f0Error, 2)})</td></tr>
+					<tr><td>Frequency: wanted / predicted with this op-amp</td><td>{formatHz(at.frequency)} / {formatHz(design.f0)} ({pct(design.f0Error, 2)})</td></tr>
 					<tr><td>R (each)</td><td>{ohms(design.r)}</td></tr>
 					<tr><td>C (each)</td><td>{formatFarads(design.c)}</td></tr>
 					<tr><td>Textbook frequency of these R and C</td><td>{formatHz(design.fIdeal)}: retuned {pct(design.retunePercent)} so the op-amp's lag lands the loop on target</td></tr>
@@ -294,7 +330,7 @@
 			<MathPanel blocks={[...explainBarkhausen(design), ...explainTopology(design)]} summary="Show the math for the loop" />
 		</section>
 
-		<section class="panel">
+		<section class="panel" class:stale={pending} aria-busy={pending}>
 			<div class="panel-head">
 				<span class="num">03</span>
 				<h2>Amplitude stabilization</h2>
@@ -334,13 +370,13 @@
 				<table>
 					<tbody>
 						<tr><td>Rf</td><td>{ohms(design.limiter.rf)}</td></tr>
-						<tr><td>Lamp resistance needed, hot / cold</td><td>{formatOhms(design.limiter.rHot)} at {formatVolts(amplitude / design.requiredGain)} peak across it / about {formatOhms(design.limiter.rCold)}</td></tr>
+						<tr><td>Lamp resistance needed, hot / cold</td><td>{formatOhms(design.limiter.rHot)} at {formatVolts(at.amplitude / design.requiredGain)} peak across it / about {formatOhms(design.limiter.rCold)}</td></tr>
 						<tr><td>Gain at switch-on, cold</td><td>{design.limiter.gainStart.toFixed(1)}, falling to {design.requiredGain.toFixed(2)} as the filament warms</td></tr>
 					</tbody>
 				</table>
 				<p class="flag ok">
-					A lamp whose hot resistance is {formatOhms(design.limiter.rHot)} at {formatVolts(amplitude / design.requiredGain)} peak
-					sets the amplitude to {formatVolts(amplitude)}; the LTspice file carries a lamp that heats up, tuned to exactly that,
+					A lamp whose hot resistance is {formatOhms(design.limiter.rHot)} at {formatVolts(at.amplitude / design.requiredGain)} peak
+					sets the amplitude to {formatVolts(at.amplitude)}; the LTspice file carries a lamp that heats up, tuned to exactly that,
 					with a thermal time constant of {design.limiter.tau >= 1 ? `${design.limiter.tau.toFixed(1)} s` : `${(1000 * design.limiter.tau).toFixed(1)} ms`} so the run settles quickly.
 				</p>
 			{:else if design.limiter.kind === 'jfet'}
@@ -354,9 +390,9 @@
 							<tr><td>Gain at switch-on</td><td>{design.limiter.gainStart.toFixed(2)}, against {design.requiredGain.toFixed(2)} needed</td></tr>
 						</tbody>
 					</table>
-					{#if Math.abs(design.limiter.amplitudeActual / amplitude - 1) > 0.03}
+					{#if Math.abs(design.limiter.amplitudeActual / at.amplitude - 1) > 0.03}
 						<p class="flag warn">
-							The amplitude settles at about {formatVolts(design.limiter.amplitudeActual)} peak rather than the {formatVolts(amplitude)} asked:
+							The amplitude settles at about {formatVolts(design.limiter.amplitudeActual)} peak rather than the {formatVolts(at.amplitude)} asked:
 							just above this JFET's minimum, no standard series resistor leaves the channel where the detector can hold it. A slightly
 							larger amplitude lands where it is asked.
 						</p>
@@ -368,7 +404,7 @@
 					{/if}
 				{:else}
 					<p class="flag bad">
-						This JFET cannot be controlled at {formatVolts(amplitude)} peak. The detector only delivers the output's negative peak, and
+						This JFET cannot be controlled at {formatVolts(at.amplitude)} peak. The detector only delivers the output's negative peak, and
 						squeezing the channel far enough to hold the gain, while leaving the loop enough gain to start, takes at least
 						{formatVolts(design.limiter.minAmplitude)} peak at the output with this part. Ask for that much, or pick a JFET with a smaller
 						pinch-off voltage.
@@ -394,12 +430,12 @@
 				{/if}
 			{/if}
 			{#if design.topology === 'wien'}
-				<p class="note">{STABILIZERS.find((s) => s.id === stabilizer)?.summary}</p>
+				<p class="note">{STABILIZERS.find((s) => s.id === at.stabilizer)?.summary}</p>
 			{/if}
 			<MathPanel blocks={explainStabilizer(design)} summary="Show the math for the amplitude control" />
 		</section>
 
-		<section class="panel">
+		<section class="panel" class:stale={pending} aria-busy={pending}>
 			<div class="panel-head">
 				<span class="num">04</span>
 				<h2>What the op-amp does to the loop</h2>
@@ -421,7 +457,7 @@
 				</p>
 			{:else if design.limiter.kind === 'jfet' && !design.limiter.regulates}
 				<p class="note">
-					The op-amp is not what stops this design: the JFET cannot be controlled at {formatVolts(amplitude)} peak (see the amplitude
+					The op-amp is not what stops this design: the JFET cannot be controlled at {formatVolts(at.amplitude)} peak (see the amplitude
 					control above), so there is no start-up gain for the op-amp to hold yet. The lag and slew figures above are what this op-amp
 					would see once the amplitude is at least {formatVolts(design.limiter.minAmplitude)}.
 				</p>
@@ -444,14 +480,14 @@
 			{/if}
 			{#if !design.opamp.swingOk}
 				<p class="flag bad">
-					{amplitude > design.opamp.opampSwing ? 'The amplitude asked for is' : `The amplitude these parts would hold, about ${formatVolts(design.amplitudeHeld)} peak, is`}
+					{at.amplitude > design.opamp.opampSwing ? 'The amplitude asked for is' : `The amplitude these parts would hold, about ${formatVolts(design.amplitudeHeld)} peak, is`}
 					beyond the op-amp's output swing on this supply.
 				</p>
 			{/if}
 			<MathPanel blocks={explainOpampLimit(design)} summary="Show the math for the op-amp in the loop" />
 		</section>
 
-		<section class="panel">
+		<section class="panel" class:stale={pending} aria-busy={pending}>
 			<div class="panel-head">
 				<span class="num">05</span>
 				<h2>Which one to build</h2>
@@ -474,7 +510,7 @@
 				</thead>
 				<tbody>
 					{#each rows as r (r.id)}
-						<tr class:current={r.id === topology}>
+						<tr class:current={r.id === at.topology}>
 							<td>{r.label}</td>
 							<td>{r.ok ? `${r.gain.toFixed(2)}${Math.abs(r.gain - r.idealGain) > 0.05 ? ` (${r.idealGain.toFixed(0)})` : ''}` : '-'}</td>
 							<td>{r.ok ? r.opamps : '-'}</td>
@@ -527,7 +563,7 @@
 			{/if}
 		</section>
 
-		<section class="panel">
+		<section class="panel" class:stale={pending} aria-busy={pending}>
 			<div class="panel-head">
 				<span class="num">06</span>
 				<h2>Download</h2>
@@ -540,7 +576,7 @@
 			{#if exportError}
 				<p class="flag bad">
 					Nothing to export: {design.limiter.kind === 'jfet' && !design.limiter.regulates
-						? `the JFET control cannot be sized at ${formatVolts(amplitude)} peak, so its parts do not exist yet. From ${formatVolts(design.limiter.minAmplitude)} the download is available.`
+						? `the JFET control cannot be sized at ${formatVolts(at.amplitude)} peak, so its parts do not exist yet. From ${formatVolts(design.limiter.minAmplitude)} the download is available.`
 						: `the amplitude control could not be sized for this design (${exportError.replace(/^no export: /, '')}).`}
 				</p>
 			{/if}
@@ -616,5 +652,11 @@
 
 	.formula-link {
 		margin-top: 0.6rem;
+	}
+
+	/* the designs of the inputs before the last change, kept on screen while the next ones wait */
+	.stale {
+		opacity: 0.6;
+		transition: opacity 0.15s;
 	}
 </style>

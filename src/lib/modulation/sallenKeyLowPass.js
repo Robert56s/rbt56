@@ -1,4 +1,4 @@
-import { capacitorCandidates, nearestCapacitor, nearestResistor, pairedResistor } from './eseries';
+import { capacitorCandidates, nearestCapacitor, nearestResistor, pairAllowed, pairedResistor } from './eseries';
 
 /**
  * Sallen-Key low-pass, unity-gain simplified form: two equal resistors R, a
@@ -44,13 +44,14 @@ export function designSallenKeyLowPass(wn, q, { resistorSeries = 'E24', capacito
 	// R sets f0 alone, so with `pairs` on and a list it may be two in series
 	// where no single value comes within 2 % (both R, since they are equal),
 	// kept only if the stage then lands no further from its f0 and Q than
-	// with one resistor each.
+	// with one resistor each. A whitelist (the stage's names: 'R1', 'R2')
+	// lets R pair only when it names both, since the two stay equal.
 	const Ctop = nearestCapacitor(best.Ctarget, capacitors);
 	const Rsolved = 1 / (wn * Math.sqrt(Ctop * best.Cbottom));
 	const qActual = 0.5 * Math.sqrt(Ctop / best.Cbottom);
 	const stageMiss = (r) => Math.max(Math.abs(Math.log(1 / (r * Math.sqrt(Ctop * best.Cbottom)) / wn)), Math.abs(Math.log(qActual / q)));
 	const single = nearestResistor(Rsolved, resistorSeries);
-	const paired = pairedResistor(Rsolved, resistorSeries, pairs);
+	const paired = pairedResistor(Rsolved, resistorSeries, pairAllowed(pairs, 'R1') && pairAllowed(pairs, 'R2'));
 	const R = paired !== single && stageMiss(paired) <= stageMiss(single) ? paired : single;
 	const wnActual = 1 / (R * Math.sqrt(Ctop * best.Cbottom));
 

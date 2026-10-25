@@ -75,6 +75,30 @@ function drawSallenKey(sheet, [s1, s2, sh, over, U], p) {
 	return run(sheet, OUT, 'right', 48);
 }
 
+/**
+ * Non-inverting amplifier: [R1 (- input to ground), R2 (- input to the
+ * output), U]. The op-amp sits as a follower does, its + input on the
+ * line; the - input's node drops under the body, R2 runs from it across
+ * to the output's column and R1 hangs from it to ground.
+ */
+function drawNonInverting(sheet, [R1, R2, U], p) {
+	const inPlus = run(sheet, p, 'right', 128);
+	const u = sheet.placeOpamp(U, { x: inPlus.x + 64, y: inPlus.y + 16 }, { flip: true, labels: 'above' });
+	const OUT = run(sheet, u.pins[2], 'right', 64);
+	const inMinus = u.pins[1];
+	const M = { x: inMinus.x - 64, y: inMinus.y + 96 };
+	sheet.route(inMinus, { x: M.x, y: inMinus.y }, M);
+	shunt(sheet, R1, M);
+	const r2End = series(sheet, R2, M, 'right', { labels: 'below' });
+	sheet.route(r2End, { x: OUT.x, y: M.y }, OUT);
+	return run(sheet, OUT, 'right', 48);
+}
+
+/** Inverting amplifier: [R1 (input), R2 (feedback), U], an integrator's layout with R2 over the top. */
+function drawInverting(sheet, [R1, R2, U], p) {
+	return run(sheet, integrator(sheet, R1, [R2], U, p).OUT, 'right', 48);
+}
+
 /** First-order low-pass or high-pass: [series, shunt, U]. */
 function drawFirstOrder(sheet, [s, sh, U], p) {
 	const A = run(sheet, series(sheet, s, p, 'right'), 'right', 48);
@@ -253,7 +277,10 @@ const DRAW = {
 	towThomas: (sheet, parts, p) => drawTowThomas(sheet, parts, p, false),
 	towThomasHp: (sheet, parts, p) => drawTowThomas(sheet, parts, p, true),
 	towThomasBp: (sheet, parts, p) => drawTowThomas(sheet, parts, p, true),
-	towThomasNotch: drawTowThomasNotch
+	towThomasNotch: drawTowThomasNotch,
+	gainInv: drawInverting,
+	gainDivider: drawFirstOrder,
+	gainNonInv: drawNonInverting
 };
 
 /**

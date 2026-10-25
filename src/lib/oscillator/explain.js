@@ -331,7 +331,16 @@ export function amplitudeRemark(design) {
 	if (limiter.kind !== 'diodes' && limiter.kind !== 'clamp') return null;
 	const actual = limiter.amplitudeActual;
 	if (!(actual > 0) || limiter.regulates === false) return null;
-	const pairsHint = Array.isArray(design.resistorSeries) && !design.pairs ? '; two resistors in series get closer' : '';
+	// with pairs off, two in series would get closer; with a limit that gave
+	// up a pair on the part that sets the amplitude, a higher limit would
+	const amplitudeParts = limiter.kind === 'clamp' ? ['Rd1'] : ['Rf1', 'Rf2'];
+	const pairsHint = design.pairLimit
+		? design.pairLimit.dropped.some((name) => amplitudeParts.includes(name))
+			? '; allowing more pairs gets closer'
+			: ''
+		: Array.isArray(design.resistorSeries) && !design.pairs
+			? '; two resistors in series get closer'
+			: '';
 	let exact = '';
 	if (limiter.kind === 'clamp') {
 		if (limiter.rd1Target > 0) exact = ` Rd1 = ${formatOhms(limiter.rd1Target)} would land on it${pairsHint}.`;
@@ -354,4 +363,51 @@ export function amplitudeRemark(design) {
 	// more asked than the op-amp swings: said here, since the parts as rounded stay inside it
 	const beyond = amplitude > opamp.opampSwing ? ` The ${formatVolts(amplitude)} asked is itself past the ${formatVolts(opamp.opampSwing)} the op-amp can swing.` : '';
 	return { kind: 'rounding', level: 'warn', text: `${lead}: ${why}${exact}${beyond}` };
+}
+
+/* ------------------------------------------------- a limit on the pairs */
+
+/** A resistor that may be two in series, as a sentence names it: R with where it sits. */
+function pairPartLabel(design, name) {
+	if (name === 'R') {
+		if (design.topology === 'wien') return 'R (both arms)';
+		if (design.topology === 'quadrature') return 'R (both integrators)';
+		return `R (all ${design.topo.ladder.sections} sections)`;
+	}
+	return name === 'Rser' ? 'the series resistor' : name;
+}
+
+/**
+ * One sentence for a design whose pairs a limit cut down (design.pairLimit,
+ * from designOscillator): which resistors stay two in series, which become
+ * two in series where pairs where they help leave one part, and which went
+ * back to single parts. Null when the limit took nothing away.
+ */
+export function pairLimitNote(design) {
+	const lim = design?.pairLimit;
+	if (!lim) return null;
+	const list = (names) => {
+		const labels = names.map((name) => pairPartLabel(design, name));
+		return labels.length < 2 ? labels.join('') : `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`;
+	};
+	const most = `With at most ${lim.limit} ${lim.limit === 1 ? 'pair' : 'pairs'}`;
+	if (!lim.kept.length) {
+		// R stands for several resistors (both arms, every section): alone it can take more pairs than the limit
+		const cost = (name) => (name !== 'R' ? 1 : design.topo?.ladder ? design.topo.ladder.sections : 2);
+		if (lim.dropped.every((name) => cost(name) > lim.limit)) {
+			return `${most}, every resistor is a single part: ${list(lim.dropped)} only ${lim.dropped.length === 1 ? 'helps' : 'help'} with more pairs than that.`;
+		}
+		return `${most}, every resistor is a single part: none of the pairs that fit brings the oscillator closer to its targets.`;
+	}
+	const inAll = lim.count > lim.kept.length ? `, ${lim.count} pairs in all` : '';
+	// a pair the limit adds where pairs where they help leave one part: the
+	// parts solved after a pair given up can call for one
+	const added = lim.added ?? [];
+	const stay = lim.kept.filter((name) => !added.includes(name));
+	const said = [];
+	if (stay.length) said.push(`${list(stay)} ${stay.length === 1 ? 'stays' : 'stay'} two resistors in series`);
+	if (added.length) said.push(`${list(added)} ${added.length === 1 ? 'becomes' : 'become'} two ${stay.length ? 'in series too' : 'resistors in series'}`);
+	const kept = `${said.join(' and ')}${inAll}`;
+	const dropped = `${list(lim.dropped)} ${lim.dropped.length === 1 ? 'is a single part' : 'are single parts'}`;
+	return `${most}, ${kept}; ${dropped}.`;
 }

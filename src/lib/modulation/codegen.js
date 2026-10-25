@@ -9,6 +9,7 @@ import jfetModulatorSrc from './jfetModulator.js?raw';
 import mfbLowPassSrc from './mfbLowPass.js?raw';
 import orderSrc from './order.js?raw';
 import outputCouplingSrc from './outputCoupling.js?raw';
+import pairLimitSrc from './pairLimit.js?raw';
 import rectifierSrc from './rectifier.js?raw';
 import sallenKeyLowPassSrc from './sallenKeyLowPass.js?raw';
 
@@ -25,6 +26,17 @@ function inline(src) {
 		.join('\n')
 		.replace(/^export\s+/gm, '')
 		.trim();
+}
+
+/**
+ * The RESISTOR_PAIR_LIMIT line, under RESISTOR_PAIRS: null (a pair wherever
+ * one helps, the scripts from before the limit) or the most resistors of
+ * the circuit that may be two in series, the same choice the page makes
+ * (pairLimit.js). p.pairLimitNote is a comment line above it, when given.
+ */
+function pairLimitLine(p) {
+	const limit = p.pairs && Number.isInteger(p.pairLimit) && p.pairLimit >= 0 ? p.pairLimit : null;
+	return `${p.pairLimitNote ? `// ${p.pairLimitNote}\n` : ''}const RESISTOR_PAIR_LIMIT = ${limit === null ? 'null' : limit}; // with RESISTOR_PAIRS true: null lets every resistor pair where it helps; a number caps how many resistors in the circuit may be two in series\n`;
 }
 
 const header = (file) => `/**
@@ -75,9 +87,20 @@ ${p.carrierNote ? `// ${p.carrierNote}\n` : ''}// The values the parts are round
 // an array of the resistors on hand in ohms; CAPACITORS is null for the usual
 // values, or an array of the capacitors on hand in farads.
 const RESISTOR_SERIES = ${JSON.stringify(p.resistorSeries ?? 'E24')};
-const RESISTOR_PAIRS = ${p.pairs ? 'true' : 'false'}; // true lets a resistor that sets a figure be two from the list in series (no effect with 'E24' or 'E96')
-const CAPACITORS = ${JSON.stringify(p.capacitors ?? null)};
+${jfetPairsLine(p)}
+${pairLimitLine(p)}const CAPACITORS = ${JSON.stringify(p.capacitors ?? null)};
 `;
+}
+
+/**
+ * The JFET script's RESISTOR_PAIRS line: true or false, or, where the page
+ * shares a limit with its oscillator and the modulator does best with a
+ * whitelist no limit of its own gives (scriptPairs in pairLimit.js), that
+ * whitelist of names.
+ */
+function jfetPairsLine(p) {
+	if (Array.isArray(p.pairs)) return `const RESISTOR_PAIRS = ${JSON.stringify(p.pairs)}; // true lets a resistor that sets a figure be two from the list in series (no effect with 'E24' or 'E96'); a list of names lets only those: 'Rac', 'Rbias', 'Rb', 'Rdt' (the carrier divider's top), 'Rtop'`;
+	return `const RESISTOR_PAIRS = ${p.pairs ? 'true' : 'false'}; // true lets a resistor that sets a figure be two from the list in series (no effect with 'E24' or 'E96')`;
 }
 
 function jfetReportBlock() {
@@ -111,14 +134,16 @@ console.log(\`bias point VC = ${'$'}{jfetModel.vc.toFixed(3)} V, half-range ${'$
 console.log();
 
 let failure = null;
-const design = designJfetModulator({
-	onFail: (reason) => (failure = reason),
+const jfetOptions = {
 	model: jfetModel, topology: TOPOLOGY, targetOutputAmplitude: TARGET_OUTPUT_AMPLITUDE, outputStage: OUTPUT_STAGE, carrierBuffer: CARRIER_BUFFER, swingFraction: SWING_FRACTION,
 	targetModulationIndex: TARGET_MODULATION_INDEX, rb: RB,
 	sourceAmplitude: SOURCE_AMPLITUDE, fmMin: FM_MIN, vcc: VCC,
 	fp: FP, carrierSourceAmplitude: CARRIER_SOURCE_AMPLITUDE, carrierMargin: CARRIER_MARGIN,
 	opampSwing: OPAMP_SWING, gbw: GBW, slewRate: SLEW_RATE, resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS, pairs: RESISTOR_PAIRS
-});
+};
+// at most RESISTOR_PAIR_LIMIT pairs: the whitelist the page keeps, then the design redone with it
+const pairLimited = RESISTOR_PAIRS && RESISTOR_PAIR_LIMIT !== null ? limitJfetPairs(jfetOptions, RESISTOR_PAIR_LIMIT) : null;
+const design = designJfetModulator({ onFail: (reason) => (failure = reason), ...jfetOptions, pairs: pairLimited ? pairLimited.pairs : RESISTOR_PAIRS });
 if (!design) {
 	const ceiling = conductanceDepth(jfetModel, SWING_FRACTION);
 	const onList = Array.isArray(RESISTOR_SERIES) ? ', or add resistors near the ones the gate drive needs' : '';
@@ -128,6 +153,10 @@ if (!design) {
 			: 'The target modulation index cannot exceed the conductance depth s = ' + ceiling.toFixed(3) + ' for this swing: lower TARGET_MODULATION_INDEX or widen the swing' + onList + '.'
 	);
 } else {
+	if (pairLimited && pairLimited.limited) {
+		console.log(\`at most \${RESISTOR_PAIR_LIMIT} \${RESISTOR_PAIR_LIMIT === 1 ? 'pair' : 'pairs'}: \${pairLimited.kept.length ? 'kept ' + pairLimited.kept.join(', ') : 'none kept'}; single, though two in series would help: \${pairLimited.dropped.join(', ')}\`);
+		console.log();
+	}
 	console.log('='.repeat(72));
 	console.log('GAIN CELL (' + TOPOLOGY + ')');
 	console.log('='.repeat(72));
@@ -202,7 +231,7 @@ const DIODE = ${JSON.stringify(p.diode ?? '1N4148')};           // '1N4148' or '
 // values, or an array of the capacitors on hand in farads.
 const RESISTOR_SERIES = ${JSON.stringify(p.resistorSeries ?? 'E24')};
 const RESISTOR_PAIRS = ${p.pairs ? 'true' : 'false'}; // true lets a resistor that sets a figure be two from the list in series (no effect with 'E24' or 'E96')
-const CAPACITORS = ${JSON.stringify(p.capacitors ?? null)};
+${pairLimitLine(p)}const CAPACITORS = ${JSON.stringify(p.capacitors ?? null)};
 `;
 }
 
@@ -218,17 +247,24 @@ const ohmsLabel = (v) => {
 	return pair ? \`\${r(v)} ohm (\${r(pair[0])} + \${r(pair[1])} in series)\` : \`\${r(v)} ohm\`;
 };
 
-const design = designDiodeMixerModulator({
+const diodeOptions = {
 	fp: FP, fmMax: FM_MAX, sidebandMargin: SIDEBAND_MARGIN, inductance: INDUCTANCE,
 	carrierAmplitude: CARRIER_AMPLITUDE, modAmplitude: MOD_AMPLITUDE, targetModulationIndex: TARGET_MODULATION_INDEX,
 	carrierDrive: CARRIER_DRIVE, vcc: VCC, opampSwing: OPAMP_SWING, diode: DIODE, resistorSeries: RESISTOR_SERIES, capacitorStock: CAPACITORS, pairs: RESISTOR_PAIRS
-});
+};
+// at most RESISTOR_PAIR_LIMIT pairs: the same choice the page makes
+const pairLimited = RESISTOR_PAIRS && RESISTOR_PAIR_LIMIT !== null ? limitDiodePairs(diodeOptions, RESISTOR_PAIR_LIMIT) : null;
+const design = pairLimited ? pairLimited.design : designDiodeMixerModulator(diodeOptions);
 const inputsOk = FP > 0 && FM_MAX > 0 && FP - SIDEBAND_MARGIN * FM_MAX > FM_MAX && INDUCTANCE > 0 && SIDEBAND_MARGIN > 0 && CARRIER_AMPLITUDE > 0 && MOD_AMPLITUDE > 0 && CARRIER_DRIVE > 0 && VCC > 0 && TARGET_MODULATION_INDEX > 0 && TARGET_MODULATION_INDEX <= 1;
 if (!inputsOk) {
 	console.log('No design: FP must sit above (SIDEBAND_MARGIN + 1) x FM_MAX so the tank band stays clear of the message, every amplitude, INDUCTANCE and VCC positive, and 0 < TARGET_MODULATION_INDEX <= 1.');
 } else if (!design) {
 	console.log('No design: no bias and message gain reach TARGET_MODULATION_INDEX at this CARRIER_DRIVE. Raise CARRIER_DRIVE or lower the target.');
 } else {
+	if (pairLimited && pairLimited.limited) {
+		console.log(\`at most \${RESISTOR_PAIR_LIMIT} \${RESISTOR_PAIR_LIMIT === 1 ? 'pair' : 'pairs'}: \${pairLimited.kept.length ? 'kept ' + pairLimited.kept.join(', ') : 'none kept'}; single, though two in series would help: \${pairLimited.dropped.join(', ')}\`);
+		console.log();
+	}
 	const s = design.summer;
 	console.log('='.repeat(72));
 	console.log('SUMMER (inverting: carrier through Rp, message through Rm, bias from -VCC through Rb)');
@@ -282,7 +318,7 @@ const FM_MIN = ${p.fmMin ?? 100};                 // Hz, the lowest message freq
 // values, or an array of the capacitors on hand in farads.
 const RESISTOR_SERIES = ${JSON.stringify(p.resistorSeries ?? 'E24')};
 const RESISTOR_PAIRS = ${p.pairs ? 'true' : 'false'}; // true lets a resistor that sets a figure be two from the list in series (no effect with 'E24' or 'E96')
-const CAPACITORS = ${JSON.stringify(p.capacitors ?? null)};
+${pairLimitLine(p)}const CAPACITORS = ${JSON.stringify(p.capacitors ?? null)};
 `;
 }
 
@@ -316,7 +352,10 @@ console.log();
 console.log('='.repeat(72));
 console.log('ENVELOPE LOW-PASS FILTER');
 console.log('='.repeat(72));
-const design = designEnvelopeLowPass({ response: RESPONSE, amaxDb: AMAX_DB, aminDb: AMIN_DB, fp: FM_MAX, fs: rippleHz - FM_MAX, order: ORDER, topology: FILTER_TOPOLOGY, resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS, pairs: RESISTOR_PAIRS, maxOrder: 8 });
+const envelopeSpec = { response: RESPONSE, amaxDb: AMAX_DB, aminDb: AMIN_DB, fp: FM_MAX, fs: rippleHz - FM_MAX, order: ORDER, topology: FILTER_TOPOLOGY, resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS, pairs: RESISTOR_PAIRS, maxOrder: 8 };
+// at most RESISTOR_PAIR_LIMIT pairs over all the stages: the same choice the page makes
+const pairLimited = RESISTOR_PAIRS && RESISTOR_PAIR_LIMIT !== null ? limitEnvelopePairs(envelopeSpec, RESISTOR_PAIR_LIMIT) : null;
+const design = pairLimited ? pairLimited.design : designEnvelopeLowPass(envelopeSpec);
 console.log(\`k = fp/fs = \${design.k.toFixed(4)} (fs = \${rippleHz - FM_MAX} Hz, the ripple's lowest sideband), minimum order >= \${design.minOrder.toFixed(2)} -> n = \${design.n}\`);
 if (design.tooHigh) {
 	console.log('That is past order 8, more stages than a demodulator should carry: lower AMIN_DB, raise AMAX_DB or FP_CARRIER.');
@@ -332,6 +371,7 @@ design.realized.forEach((r, i) => {
 	else console.log(\`  R1 = R2 = \${rText(r.components.R1)}, Ctop = \${r.components.Ctop.toExponential(4)} F, Cbottom = \${r.components.Cbottom.toExponential(4)} F\`);
 	console.log(\`  actual f0 = \${f0Actual.toFixed(1)} Hz (\${(100 * (f0Actual - f0Target) / f0Target).toFixed(2)}%), Q = \${r.actual.q.toFixed(4)}\`);
 });
+if (pairLimited && pairLimited.limited) console.log(\`at most \${RESISTOR_PAIR_LIMIT} \${RESISTOR_PAIR_LIMIT === 1 ? 'pair' : 'pairs'}: \${pairLimited.kept.length ? 'kept ' + pairLimited.kept.join(', ') : 'none kept'} (R1k, R2k, R3k: stage k); single, though two in series would help: \${pairLimited.dropped.join(', ')}\`);
 
 console.log();
 console.log('='.repeat(72));
@@ -376,7 +416,8 @@ const ENGINE = [
 	diodeMixerModulatorSrc,
 	rectifierSrc,
 	outputCouplingSrc,
-	amMathSrc
+	amMathSrc,
+	pairLimitSrc
 ]
 	.map(inline)
 	.join('\n\n');

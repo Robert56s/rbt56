@@ -67,7 +67,23 @@ export function formatStock(values, kind) {
 
 /** What a fresh visit starts with: E24, the lab drawer in the boxes as a starting list, one resistor per part. */
 export function defaultStock() {
-	return { stock: 'E24', resistorText: formatStock(LAB_KIT.resistors, 'resistor'), capacitorText: formatStock(LAB_KIT.capacitors, 'capacitor'), pairs: false };
+	return { stock: 'E24', resistorText: formatStock(LAB_KIT.resistors, 'resistor'), capacitorText: formatStock(LAB_KIT.capacitors, 'capacitor'), pairs: false, pairLimit: null };
+}
+
+/** The most pairs the "up to N pairs" choice offers. */
+export const PAIR_LIMIT_MAX = 20;
+
+/**
+ * A cap on the pairs as the setting keeps it: null for no cap, otherwise a
+ * whole number from 1 to PAIR_LIMIT_MAX (a number or a numeric string is
+ * rounded and brought into that range; anything else is no cap).
+ */
+export function normalizePairLimit(value) {
+	if (typeof value !== 'number' && typeof value !== 'string') return null;
+	if (typeof value === 'string' && !value.trim()) return null;
+	const n = Math.round(Number(value));
+	if (!Number.isFinite(n)) return null;
+	return Math.min(PAIR_LIMIT_MAX, Math.max(1, n));
 }
 
 /**
@@ -76,17 +92,25 @@ export function defaultStock() {
  * `pairs` lets the parts that set a design's figures be two resistors in
  * series (pairedResistor in the eseries modules); it only means something
  * with a list, since a full series already has a close value everywhere.
+ * `pairLimit` caps how many resistors of the whole circuit may be pairs
+ * (limitPairs in the eseries modules): null for as many as help, or a
+ * whole number from 1 up. It comes back null unless pairs are on with a
+ * list. The three ways the picker offers:
+ *   pairs false                      single resistors
+ *   pairs true, pairLimit null       pairs where they help
+ *   pairs true, pairLimit N          up to N pairs
  */
-export function componentOptions(stock, resistorText, capacitorText, pairs = false) {
+export function componentOptions(stock, resistorText, capacitorText, pairs = false, pairLimit = null) {
 	const paired = Boolean(pairs) && isRestricted(stock);
-	if (stock === 'lab') return { resistorSeries: LAB_KIT.resistors, capacitors: LAB_KIT.capacitors, pairs: paired };
-	if (stock === 'labR') return { resistorSeries: LAB_KIT.resistors, capacitors: null, pairs: paired };
+	const limit = paired ? normalizePairLimit(pairLimit) : null;
+	if (stock === 'lab') return { resistorSeries: LAB_KIT.resistors, capacitors: LAB_KIT.capacitors, pairs: paired, pairLimit: limit };
+	if (stock === 'labR') return { resistorSeries: LAB_KIT.resistors, capacitors: null, pairs: paired, pairLimit: limit };
 	if (stock === 'custom') {
 		const resistors = parseStock(resistorText, 'resistor');
 		const capacitors = parseStock(capacitorText, 'capacitor');
-		return { resistorSeries: resistors.length ? resistors : LAB_KIT.resistors, capacitors: capacitors.length ? capacitors : LAB_KIT.capacitors, pairs: paired };
+		return { resistorSeries: resistors.length ? resistors : LAB_KIT.resistors, capacitors: capacitors.length ? capacitors : LAB_KIT.capacitors, pairs: paired, pairLimit: limit };
 	}
-	return { resistorSeries: stock === 'E96' ? 'E96' : 'E24', capacitors: null, pairs: false };
+	return { resistorSeries: stock === 'E96' ? 'E96' : 'E24', capacitors: null, pairs: false, pairLimit: null };
 }
 
 /** Whether the setting narrows the search to a list rather than a full series. */
@@ -109,6 +133,9 @@ export function loadStock() {
 		if (typeof saved.resistorText === 'string') out.resistorText = saved.resistorText;
 		if (typeof saved.capacitorText === 'string') out.capacitorText = saved.capacitorText;
 		if (typeof saved.pairs === 'boolean') out.pairs = saved.pairs;
+		// a record from before the cap has no pairLimit: it loads as before
+		if (saved.pairLimit === null) out.pairLimit = null;
+		else if (typeof saved.pairLimit === 'number') out.pairLimit = normalizePairLimit(saved.pairLimit);
 		return out;
 	} catch {
 		return null;
@@ -116,9 +143,9 @@ export function loadStock() {
 }
 
 /** Keeps the setting for the next visit; blocked storage just means it is not kept. */
-export function saveStock({ stock, resistorText, capacitorText, pairs = false }) {
+export function saveStock({ stock, resistorText, capacitorText, pairs = false, pairLimit = null }) {
 	try {
-		localStorage.setItem(STOCK_KEY, JSON.stringify({ stock, resistorText, capacitorText, pairs }));
+		localStorage.setItem(STOCK_KEY, JSON.stringify({ stock, resistorText, capacitorText, pairs, pairLimit: normalizePairLimit(pairLimit) }));
 	} catch {
 		// private window or storage blocked
 	}

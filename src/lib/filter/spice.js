@@ -178,6 +178,24 @@ export function stageElements(stage, i, nIn, nOut) {
 			const A = n('a');
 			return [C('', nIn, A, c.C), R('', A, '0', c.R), op('', A, nOut, nOut)];
 		}
+		// The gain stages of a filter designed by hand (handDesign.js), each
+		// R1 and R2 as the method names them:
+		case 'gainInv': {
+			// inverting amplifier, -R2/R1: R1 in to the virtual ground, R2 back from the output
+			const M = n('n');
+			return [R('1', nIn, M, c.R1), R('2', M, nOut, c.R2), op('', '0', M, nOut)];
+		}
+		case 'gainDivider': {
+			// R2 in series, R1 to ground, then a follower: R1/(R1 + R2), the
+			// order of a first-order stage, so drawFirstOrder draws it
+			const A = n('a');
+			return [R('2', nIn, A, c.R2), R('1', A, '0', c.R1), op('', A, nOut, nOut)];
+		}
+		case 'gainNonInv': {
+			// non-inverting amplifier, 1 + R2/R1: R1 from the - input to ground, R2 back from the output
+			const M = n('n');
+			return [R('1', M, '0', c.R1), R('2', M, nOut, c.R2), op('', nIn, M, nOut)];
+		}
 		default:
 			return [];
 	}
@@ -415,7 +433,7 @@ export function generateNetlist(opts) {
 	});
 }
 
-const TOPOLOGY_LABEL = { mfb: 'multiple feedback', sallenKey: 'Sallen-Key', towThomas: 'Tow-Thomas', boctor: 'Boctor notch', mfbBp: 'multiple feedback band-pass', towThomasBp: 'Tow-Thomas band-pass' };
+const TOPOLOGY_LABEL = { mfb: 'multiple feedback', sallenKey: 'Sallen-Key', towThomas: 'Tow-Thomas', boctor: 'Boctor notch', mfbBp: 'multiple feedback band-pass', towThomasBp: 'Tow-Thomas band-pass', gainInv: 'inverting gain', gainDivider: 'divider gain', gainNonInv: 'non-inverting gain' };
 
 /** The stage circuits actually on the sheet: the chosen topology, the notch stages, the band-pass stages, or several. */
 function stagesText({ topology, realizedStages = [] }) {

@@ -9,6 +9,7 @@ import mfbSrc from './mfb.js?raw';
 import mfbBandPassSrc from './mfbBandPass.js?raw';
 import mfbHighPassSrc from './mfbHighPass.js?raw';
 import orderSrc from './order.js?raw';
+import pairPlanSrc from './pairPlan.js?raw';
 import sallenKeySrc from './sallenKey.js?raw';
 import sallenKeyHighPassSrc from './sallenKeyHighPass.js?raw';
 import sensitivitySrc from './sensitivity.js?raw';
@@ -89,7 +90,16 @@ const OPAMP_GBW = ${gbw ?? null};
 `;
 }
 
-function paramsBlock({ amaxDb, aminDb, amaxDbHp, aminDbHp, amaxDbLp, aminDbLp, fp, fs, fl, fh, fsl, fsh, filterType, response, responseHp, responseLp, topology, topologyHp, topologyLp, order, orderHp, orderLp, capOverrides, resistorStock, resistorPairs, capacitorStock, transformed = false, topologyBand, topologyNotch, orderBand, opampGbw }) {
+/**
+ * The cap on two in series, in a script the page writes with one: at most
+ * that many resistors in the whole filter, shared out as the page does.
+ */
+function pairLimitParam(limit) {
+	return `const RESISTOR_PAIR_LIMIT = ${limit};   // with RESISTOR_PAIRS: at most this many resistors in the whole filter are two in series, the ones that bring it closest to its targets; null for every pair that helps
+`;
+}
+
+function paramsBlock({ amaxDb, aminDb, amaxDbHp, aminDbHp, amaxDbLp, aminDbLp, fp, fs, fl, fh, fsl, fsh, filterType, response, responseHp, responseLp, topology, topologyHp, topologyLp, order, orderHp, orderLp, capOverrides, resistorStock, resistorPairs, capacitorStock, transformed = false, topologyBand, topologyNotch, orderBand, opampGbw, pairLimit = null }) {
 	const hasOverrides = capOverrides && Object.keys(capOverrides).length > 0;
 	return `// =====================================================================
 // PARAMETERS - the only block meant to be edited
@@ -122,7 +132,7 @@ const RESISTOR_SERIES = ${JSON.stringify(resistorStock ?? 'E24')};
 // 'E24' or 'E96' for a full preferred series, or an explicit array of
 // ohm values to design against only what is actually in the drawer.
 const RESISTOR_PAIRS = ${resistorPairs ? 'true' : 'false'};   // with an array above: a resistor that sets f0, Q or a zero may be two in series
-const CAPACITORS = ${JSON.stringify(capacitorStock ?? null)};
+${pairLimit !== null ? pairLimitParam(pairLimit) : ''}const CAPACITORS = ${JSON.stringify(capacitorStock ?? null)};
 // null for the usual E6/E12 capacitor grids, or an array of farad values.
 const SUMMING_R = 10000;          // ohms, band-stop's summing amplifier (any equal value works)
 
@@ -285,14 +295,14 @@ const BAND_PRINT_GBW = `		if (Number.isFinite(r.actual.gbw)) {
 `;
 
 /** One stage of a transformed design, by the realization rules the page follows; g: the script carries OPAMP_GBW. */
-const bandRealize = (g) => `// A stage of a transformed design, built as the page builds it:
+const bandRealize = (g, L = false) => `// A stage of a transformed design, built as the page builds it:
 // plannedTopology picks the circuit (Boctor only where its search finds
 // parts, a Tow-Thomas notch otherwise), notchOptions the notch's gain, and a
 // band-pass stage gets the gain at its own centre that leaves it at 1 at f0.
 // As on the page, the stock is tried first, the capacitors in CAP_OVERRIDES
 // before the automatic search, and a stage neither can build takes the
 // full E24/E6 grid, tried the same way.${g ? '\n// An MFB band-pass stage is built for the op-amp OPAMP_GBW names.' : ''}
-function realizeBandStage(stage, i, ov) {
+function realizeBandStage(stage, i, ov${L ? ', OPTS' : ''}) {
 	const plan = plannedTopology(stage, BAND_MENUS);
 	if (plan.unavailable) throw new Error(\`Stage \${i + 1}: \${plan.unavailable}. Set TOPOLOGY_BAND = 'towThomas', ${g ? 'a faster op-amp in OPAMP_GBW, ' : ''}or BAND_METHOD = 'cascade', or change the specification.\`);
 	const f0 = stage.wn / (2 * Math.PI);
@@ -306,7 +316,7 @@ function realizeBandStage(stage, i, ov) {
 		note = null;
 		const r2 = build({ resistorSeries: 'E24', capacitors: null });
 		if (r2) console.log('  Stock cannot realize this section; using the full E24/E6 grid, as on the page.');
-		return r2;
+		return r2${L ? ' && { ...r2, stockShortfall: true }' : ''};
 	};
 	let r;
 	if (stage.filterType === 'bandpass') {
@@ -384,7 +394,39 @@ const BAND_LEVEL = `if (BAND_TRANSFORMED) {
 const BAND_RESPONSE_GBW = `if (BAND_TRANSFORMED && OPAMP_GBW !== null && realized.some((r) => r.topology === 'mfbBp')) console.log(\`  (the MFB band-pass stages with the single-pole op-amp they are built for, GBW = \${formatHz(OPAMP_GBW)})\`);
 `;
 
-function reportBlock(t = false, g = false) {
+/**
+ * A script with RESISTOR_PAIR_LIMIT builds its stages through realizeStage
+ * (the loop body of every other script, the same text), so that the plan
+ * can build each stage quietly for every subset of its pairs first.
+ */
+const PAIR_PLAN_RUN = `
+// RESISTOR_PAIR_LIMIT: the pairs shared out over the stages as the page
+// does it (planFilterPairs above). Each stage is built quietly with every
+// subset of its pairs, then built and printed with the ones kept.
+const quietly = (build) => {
+	const log = console.log;
+	console.log = () => {};
+	try {
+		return build();
+	} catch {
+		return null;
+	} finally {
+		console.log = log;
+	}
+};
+const PAIR_PLAN =
+	RESISTOR_PAIRS && RESISTOR_PAIR_LIMIT !== null
+		? planFilterPairs(design.stages, (i, pairs) => quietly(() => realizeStage(design.stages[i], i, { ...OPTS, pairs })), RESISTOR_SERIES, RESISTOR_PAIR_LIMIT)
+		: null;
+if (PAIR_PLAN) console.log(filterPairPlanSummary(PAIR_PLAN));
+const realized = design.stages.map((stage, i) => {
+	const r = realizeStage(stage, i, PAIR_PLAN ? { ...OPTS, pairs: PAIR_PLAN.stages[i].option } : OPTS);
+	const cut = PAIR_PLAN && PAIR_PLAN.limited ? filterPairLimitSentence(PAIR_PLAN.stages[i], RESISTOR_PAIR_LIMIT) : '';
+	if (cut) console.log(\`  \${cut}\`);
+	return r;
+});`;
+
+function reportBlock(t = false, g = false, L = false) {
 	return `// =====================================================================
 // REPORT
 // =====================================================================
@@ -463,10 +505,10 @@ const printParts = (r) => {
 		console.log(\`  \${name} = \${isR ? ohms(value) : value.toExponential(4) + ' F'}\`);
 	}
 };
-${t ? bandRealize(g) : ''}const realized = design.stages.map((stage, i) => {
+${t ? bandRealize(g, L) : ''}${L ? 'function realizeStage(stage, i, OPTS) {' : 'const realized = design.stages.map((stage, i) => {'}
 	const ov = CAP_OVERRIDES[i];
 
-${t ? '\tif (BAND_TRANSFORMED) return realizeBandStage(stage, i, ov);\n' : ''}	if (stage.order === 1) {
+${t ? `\tif (BAND_TRANSFORMED) return realizeBandStage(stage, i, ov${L ? ', OPTS' : ''});\n` : ''}	if (stage.order === 1) {
 		let r;
 		if (stage.filterType === 'highpass') {
 			r = ov && ov.C ? designFirstOrderHighPassFromCap(stage.tau, ov.C, OPTS) : designFirstOrderHighPass(stage.tau, OPTS);
@@ -490,14 +532,14 @@ ${t ? '\tif (BAND_TRANSFORMED) return realizeBandStage(stage, i, ov);\n' : ''}	i
 		let notchOpts = { ...OPTS, lowSide };
 		let auto = notch(stage.wn, stage.q, stage.wz, notchOpts);
 		if (!auto && topologyOf(stage.filterType) === 'boctor') {
-			notchOpts = { resistorSeries: 'E24', capacitors: null, lowSide };
+			notchOpts = { resistorSeries: 'E24', capacitors: null, lowSide${L ? ', shortfall: true' : ''} };
 			auto = notch(stage.wn, stage.q, stage.wz, notchOpts);
 			if (auto) console.log('  Stock cannot realize this section; using the full E24/E6 grid, as on the page.');
 		}
 		const edited = ov && ov.C ? fromCap(stage.wn, stage.q, stage.wz, ov.C, notchOpts) : null;
 		const r = edited && edited.ok !== false ? edited : auto;
 		if (!r) throw new Error('This Boctor section is not realizable. Select Tow-Thomas or change the specification.');
-		printParts(r);
+${L ? '\t\tif (notchOpts.shortfall) r.stockShortfall = true;\n' : ''}		printParts(r);
 		const f0Actual = r.actual.wn / (2 * Math.PI);
 		const fzActual = r.actual.wz / (2 * Math.PI);
 		console.log(
@@ -560,7 +602,7 @@ ${t ? '\tif (BAND_TRANSFORMED) return realizeBandStage(stage, i, ov);\n' : ''}	i
 		console.log(\`  Q sensitivity to 1% component error: \${worstCaseQError(SALLEN_KEY_SENSITIVITY, 1).toFixed(2)}% (root-sum-square, fixed for this topology)\`);
 	}
 	return r;
-});
+${L ? `}\n${PAIR_PLAN_RUN}` : '});'}
 
 // the band-stop's two branches and how the combiner weighs them
 let branches = null;
@@ -626,7 +668,7 @@ export const NEXT_STEPS = [
 	{
 		title: 'Simulate before building',
 		detail:
-			"Every number above comes from an ideal op-amp: infinite gain-bandwidth, no slew rate limit. The LTspice download runs the design with the op-amp picked next to it (a TL082 or LM741 model, or the single-pole one), so run its AC sweep with the part that will be built. That part's gain-bandwidth should be well above the sharpest stage's needs: at least 100 times its Q times its f0 as a rule, a few hundred times for a Tow-Thomas stage (the topology note in panel 04 gives the figure for this design). Below that it rolls off before the filter does, and the passband and stopband figures stop holding."
+			"Every number above comes from an ideal op-amp: infinite gain-bandwidth, no slew rate limit. The LTspice download runs the design with the op-amp picked next to it (a TL082 or LM741 model, or the single-pole one), so run its AC sweep with the part that will be built. That part's gain-bandwidth should be well above the sharpest stage's needs: at least 100 times its Q times its f0 as a rule, 400 times for a Tow-Thomas stage, whose Q rises as Q / (1 - 4 Q f0 / f_T) (the topology note in panel 04 gives the figure for this design). Below that it rolls off before the filter does, and the passband and stopband figures stop holding."
 	},
 	{
 		title: 'Build and test one stage at a time',
@@ -661,7 +703,7 @@ export function nextSteps(gbw = null) {
 	return [
 		{
 			...NEXT_STEPS[0],
-			detail: `The multiple feedback band-pass stages are built for a single-pole op-amp of ${mhz} MHz, so their numbers above include it. Every other number comes from an ideal op-amp: infinite gain-bandwidth, no slew rate limit. The LTspice download runs the design with the op-amp picked next to it (a TL082 or LM741 model, or the single-pole one), so run its AC sweep with the part that will be built. A real part is not a single pole, and its gain-bandwidth varies from part to part: a corrected stage with a low loop gain at f0 moves the most. For any other stage, the part's gain-bandwidth should be well above the stage's needs: at least 100 times its Q times its f0 as a rule, a few hundred times for a Tow-Thomas stage. Below that it rolls off before the filter does, and the passband and stopband figures stop holding.`
+			detail: `The multiple feedback band-pass stages are built for a single-pole op-amp of ${mhz} MHz, so their numbers above include it. Every other number comes from an ideal op-amp: infinite gain-bandwidth, no slew rate limit. The LTspice download runs the design with the op-amp picked next to it (a TL082 or LM741 model, or the single-pole one), so run its AC sweep with the part that will be built. A real part is not a single pole, and its gain-bandwidth varies from part to part: a corrected stage with a low loop gain at f0 moves the most. For any other stage, the part's gain-bandwidth should be well above the stage's needs: at least 100 times its Q times its f0 as a rule, 400 times for a Tow-Thomas stage, whose Q rises as Q / (1 - 4 Q f0 / f_T). Below that it rolls off before the filter does, and the passband and stopband figures stop holding.`
 		},
 		...NEXT_STEPS.slice(1)
 	];
@@ -709,7 +751,10 @@ function wrapComment(text, width) {
  * A transformed band-pass may also take `opampGbw`, the single-pole
  * gain-bandwidth (Hz) its MFB band-pass stages are built for, or null for
  * an ideal op-amp: the script then carries it as OPAMP_GBW. Left out, the
- * script is exactly what it was.
+ * script is exactly what it was. So with `resistorPairLimit`, the most
+ * resistors that may be two in series in the whole filter (the stock
+ * picker's "Up to N pairs"): the script carries it as RESISTOR_PAIR_LIMIT
+ * and shares the pairs out as the page does (pairPlan.js).
  */
 export function generateScript({
 	amaxDb,
@@ -742,13 +787,16 @@ export function generateScript({
 	topologyBand = 'mfb',
 	topologyNotch = 'boctor',
 	orderBand = null,
-	opampGbw = undefined
+	opampGbw = undefined,
+	resistorPairLimit = null
 }) {
 	// only a band filter built by transformation carries the method's
 	// parameters and code, every other script stays exactly what it was
 	const transformed = bandMethod === 'transformed' && (filterType === 'bandpass' || filterType === 'bandstop');
 	// the op-amp only for a transformed band-pass, and only when given
 	const gbw = transformed && filterType === 'bandpass' && opampGbw !== undefined;
+	// a cap on the pairs only when one is given: without it the script is what it was
+	const limited = resistorPairLimit !== null && resistorPairLimit !== undefined;
 	const chunks = [
 		header(filterType),
 		paramsBlock({
@@ -782,7 +830,8 @@ export function generateScript({
 			topologyBand,
 			topologyNotch,
 			orderBand,
-			opampGbw: gbw ? opampGbw : undefined
+			opampGbw: gbw ? opampGbw : undefined,
+			pairLimit: limited ? resistorPairLimit : null
 		}),
 		'// ===================================================================== \n// ENGINE - same code the web tool runs\n// =====================================================================\n',
 		inline(eseriesSrc),
@@ -800,9 +849,10 @@ export function generateScript({
 		...(transformed ? [inline(bandMethodSrc)] : []),
 		inline(firstOrderSrc),
 		inline(firstOrderHighPassSrc),
+		...(limited ? [inline(pairPlanSrc)] : []),
 		inline(bodeSrc),
 		inline(sensitivitySrc),
-		reportBlock(transformed, gbw),
+		reportBlock(transformed, gbw, limited),
 		// its MFB band-pass stages built for the op-amp: the closing steps say so
 		nextStepsComment(gbw && topologyBand === 'mfb' ? opampGbw : null)
 	];

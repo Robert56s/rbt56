@@ -1,6 +1,7 @@
 import { seriesPair } from '../filter/eseries';
 import { opampModel, opampPhrase } from '../spice/opamps';
 import { renderNetlist, spiceValue } from '../spice/core';
+import { pairLimitNote } from './explain';
 import { DIODES, JFETS } from './limiter';
 import { drawOscillator } from './schematic';
 
@@ -174,6 +175,8 @@ function meta(design, opampChoice = 'ideal') {
 			`output about ${amp.toFixed(2)} V peak; the loop needs a gain of ${design.requiredGain.toFixed(2)} and the amplifier is set to ${Number.isFinite(design.startGain) ? design.startGain.toFixed(2) : '?'} so it starts`,
 			`expected distortion around ${(100 * thd).toFixed(2)} %`,
 			...(inSeries.length ? ['', ...inSeries] : []),
+			// a limit on the pairs that gave some up: which stayed
+			...(design.pairLimit ? [...(inSeries.length ? [] : ['']), pairLimitNote(design)] : []),
 			...(limiter.regulates === false
 				? real
 					? ['', 'WARNING: with these parts the amplitude control cannot bring the loop gain back', 'to 1, so the output grows until it clips on the op-amp rails.']

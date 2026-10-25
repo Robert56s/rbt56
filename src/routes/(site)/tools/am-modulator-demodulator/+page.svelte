@@ -48,6 +48,7 @@
 	import { designDiodeMixerModulator } from '$lib/modulation/diodeMixerModulator';
 	import { DIODE_MODELS } from '$lib/modulation/diodeLaw';
 	import { designEnvelopeLowPass, envelopeGainDb } from '$lib/modulation/envelopeFilter';
+	import { carrierPairOptions, limitDiodePairs, limitEnvelopePairs, limitJfetPairs, limitJfetWithCarrier, pairLimitNote } from '$lib/modulation/pairLimit';
 	import { couplingGainAt, designOutputCoupling } from '$lib/modulation/outputCoupling';
 	import { pairDiagramLabel, pairLabel } from '$lib/modulation/eseries';
 	import { formatFarads, formatHenries, formatHz, formatOhms, formatVolts } from '$lib/modulation/format';
@@ -82,14 +83,16 @@
 	// Which values every part is rounded to, for the three circuits alike: a
 	// series, the lab drawer or the user's own list, shared with the filter
 	// tool and kept in this browser (src/lib/stock.js); with a list, the
-	// parts that set a figure may be two resistors in series (pairs)
+	// parts that set a figure may be two resistors in series (pairs), up to
+	// pairLimit of them in the circuit (null: no cap)
 	const initialStock = defaultStock();
 	let stock = $state(initialStock.stock);
 	let resistorText = $state(initialStock.resistorText);
 	let capacitorText = $state(initialStock.capacitorText);
 	let pairs = $state(initialStock.pairs);
+	let pairLimit = $state(initialStock.pairLimit);
 	let stockLoaded = $state(false);
-	const parts = $derived(componentOptions(stock, resistorText, capacitorText, pairs));
+	const parts = $derived(componentOptions(stock, resistorText, capacitorText, pairs, pairLimit));
 	const E24_PARTS = { resistorSeries: 'E24', capacitors: null, pairs: false };
 	const restricted = $derived(isRestricted(stock));
 	onMount(() => {
@@ -99,16 +102,21 @@
 			if (saved.resistorText !== undefined) resistorText = saved.resistorText;
 			if (saved.capacitorText !== undefined) capacitorText = saved.capacitorText;
 			if (saved.pairs !== undefined) pairs = saved.pairs;
+			if (saved.pairLimit !== undefined) pairLimit = saved.pairLimit;
 		}
 		stockLoaded = true;
 	});
 	$effect(() => {
-		const state = { stock, resistorText, capacitorText, pairs };
+		const state = { stock, resistorText, capacitorText, pairs, pairLimit };
 		if (stockLoaded) saveStock(state);
 	});
 	// a resistor as the tables print it: its value, then the two in series
 	// it is built from when it is a pair. `own` is false for a part shown
 	// from the E24 fallback, whose values say nothing about the list
+	// "up to N pairs": the most resistors of a circuit that may be two in
+	// series, each circuit on its own (src/lib/modulation/pairLimit.js); null
+	// for no cap: single resistors, or pairs where they help
+	const pairCap = $derived(parts.pairs ? parts.pairLimit : null);
 	const ohms = (value, own = true) => pairLabel(value, parts.resistorSeries, formatOhms, parts.pairs && own);
 	// the schematics' version, handed to the diagram builders: a pair by its
 	// two parts in short form ("56k + 8.2k"), under the same `own` rule
@@ -225,7 +233,10 @@
 		presetNote = `${name} datasheet limits: V_P between ${pr.vpRange[0]} V and ${pr.vpRange[1]} V (set to the middle, ${vp} V), I_DSS at least ${pr.idssMin * 1000} mA, r_DS(on) at most ${pr.rdsOnMax} Ω (set to that maximum). A real part is usually better than these limits, and V_P in particular has to be measured.`;
 	}
 
-	const jfetParams = $derived({
+	// the modulator's inputs, without the carrier it is fed: that comes from
+	// the on-board oscillator when there is one, which the pairs limit may
+	// redesign, so it is settled with the modulator (jfetSection below)
+	const jfetInputs = $derived({
 		model: jfetModel,
 		topology,
 		targetOutputAmplitude,
@@ -237,20 +248,11 @@
 		fmMin,
 		vcc,
 		fp,
-		carrierSourceAmplitude: carrierIn,
 		carrierMargin,
 		opampSwing,
 		gbw: gbwMhz * 1e6,
 		slewRate: slewRateVus * 1e6,
 		...parts
-	});
-	const jfetDesign = $derived.by(() => (jfetValid ? designJfetModulator(jfetParams) : null));
-	// why the rounded parts leave no design: the gate reaching V_P, or a depth short of n
-	const jfetFailure = $derived.by(() => {
-		if (!jfetValid || jfetDesign) return null;
-		let reason = null;
-		designJfetModulator({ ...jfetParams, onFail: (r) => (reason = r) });
-		return reason;
 	});
 
 	// an oscillator that starts and holds its amplitude, inside what the
@@ -258,15 +260,90 @@
 	const oscillatorWorks = (o) => Boolean(o && o.starts && o.limiter.regulates && o.opamp.swingOk);
 	// when the carrier is generated on board, it is designed at the same
 	// frequency and amplitude the modulator expects to be fed; a restricted
-	// stock that cannot build it falls back to E24 and E6, flagged
-	const carrierOscillator = $derived.by(() => {
-		if (!(carrierFrom === 'wien' && jfetValid)) return null;
-		const osc = (p) => designOscillator({ topology: 'wien', stabilizer: 'diodes', frequency: fp, amplitude: carrierSourceAmplitude, gbw: gbwMhz * 1e6, slewRate: slewRateVus * 1e6, opampSwing, ...p });
-		const own = osc(parts);
-		if (!restricted || oscillatorWorks(own)) return own;
-		const fallback = osc(E24_PARTS);
-		return oscillatorWorks(fallback) || !own ? fallback && { ...fallback, stockShortfall: true } : own;
+	// stock that cannot build it falls back to E24 and E6, flagged. `pairs`
+	// is the stock's setting, or a whitelist of its R, Rf1 and Rf2 under a
+	// limit; the oscillator's own limit is left out, since the limit counts
+	// the oscillator and the modulator together
+	const carrierMemo = new Map();
+	function carrierFor(pairs) {
+		const base = { topology: 'wien', stabilizer: 'diodes', frequency: fp, amplitude: carrierSourceAmplitude, gbw: gbwMhz * 1e6, slewRate: slewRateVus * 1e6, opampSwing };
+		const own = { resistorSeries: parts.resistorSeries, capacitors: parts.capacitors, pairs };
+		const key = JSON.stringify([base, own, restricted]);
+		if (carrierMemo.has(key)) return carrierMemo.get(key);
+		const osc = (p) => designOscillator({ ...base, ...p });
+		const mine = osc(own);
+		let out = mine;
+		if (restricted && !oscillatorWorks(mine)) {
+			const fallback = osc(E24_PARTS);
+			out = oscillatorWorks(fallback) || !mine ? fallback && { ...fallback, stockShortfall: true } : mine;
+		}
+		if (carrierMemo.size > 60) carrierMemo.delete(carrierMemo.keys().next().value);
+		carrierMemo.set(key, out);
+		return out;
+	}
+	// the carrier the divider gets: what the on-board oscillator's limiter
+	// settles at, which is not quite the amplitude asked of it, or the generator
+	const carrierOf = (o) => (carrierFrom === 'wien' && oscillatorWorks(o) && o.limiter.amplitudeActual ? o.limiter.amplitudeActual : carrierSourceAmplitude);
+
+	// the modulator and its carrier oscillator, designed together: with no
+	// cap on the pairs, the oscillator from the stock and the modulator on
+	// the carrier it gives; under "up to N pairs", the N shared between the
+	// two (limitJfetWithCarrier), or all the modulator's with a generator
+	function jfetSectionFor(cell) {
+		const params = { ...jfetInputs, topology: cell };
+		if (pairCap === null) {
+			const oscillator = carrierFrom === 'wien' ? carrierFor(parts.pairs) : null;
+			const carrier = carrierOf(oscillator);
+			return { design: designJfetModulator({ ...params, carrierSourceAmplitude: carrier }), oscillator, carrier, pairs: parts.pairs, budget: null, limited: false };
+		}
+		if (carrierFrom !== 'wien') {
+			const cellOnly = limitJfetPairs({ ...params, carrierSourceAmplitude }, pairCap);
+			return { ...cellOnly, oscillator: null, carrier: carrierSourceAmplitude, carrierKept: [], carrierDropped: [], carrierAdded: [], carrierCount: 0, budget: pairCap };
+		}
+		return limitJfetWithCarrier(params, pairCap, carrierPairOptions(carrierFor, parts.resistorSeries), carrierOf);
+	}
+	const jfetSection = $derived.by(() => (jfetValid ? jfetSectionFor(topology) : null));
+	const jfetParams = $derived({ ...jfetInputs, carrierSourceAmplitude: carrierIn, pairs: jfetSection ? jfetSection.pairs : parts.pairs });
+	const jfetDesign = $derived(jfetSection?.design ?? null);
+	// why the rounded parts leave no design: the gate reaching V_P, or a depth short of n
+	const jfetFailure = $derived.by(() => {
+		if (!jfetValid || jfetDesign) return null;
+		let reason = null;
+		designJfetModulator({ ...jfetParams, onFail: (r) => (reason = r) });
+		return reason;
 	});
+	// under a limit with no design: whether pairs where they help would build one
+	const jfetBuildsWithPairs = $derived(pairCap !== null && jfetValid && !jfetDesign && Boolean(designJfetModulator({ ...jfetParams, pairs: true })));
+	// what a limit kept, in a sentence; null when it took no pair away
+	const jfetLimitNote = $derived.by(() => {
+		const sec = jfetSection;
+		if (!sec?.limited) return null;
+		const carrierName = (slot) => `carrier ${slot}`;
+		// the oscillator's two R pair together: one pair left over cannot take them
+		const together = pairCap - sec.count === 1 && sec.carrierDropped.includes('R');
+		// an oscillator on E24 and E6 has no list parts to speak of: its flag says why
+		const carrierDropped = sec.oscillator?.stockShortfall ? [] : sec.carrierDropped;
+		return pairLimitNote({ limit: pairCap, kept: [...sec.kept, ...sec.carrierKept.map(carrierName)], dropped: [...sec.dropped, ...carrierDropped.map(carrierName)], added: [...(sec.added ?? []), ...(sec.carrierAdded ?? []).map(carrierName)], together });
+	});
+	// an oscillator on E24 and E6 that the list builds with more pairs than the limit leaves it
+	const carrierShortByLimit = $derived(pairCap !== null && Boolean(jfetSection?.oscillator?.stockShortfall) && carrierFrom === 'wien' && !carrierFor(parts.pairs)?.stockShortfall);
+
+	// the comment above the script's RESISTOR_PAIR_LIMIT: how the page's limit
+	// became the modulator's share, what the oscillator holds taken out, and
+	// fewer still where the modulator does best with fewer than all its pairs
+	const jfetBudgetNote = $derived.by(() => {
+		const sec = jfetSection;
+		if (pairCap === null || carrierFrom !== 'wien' || !sec) return null;
+		const left = pairCap - sec.carrierCount;
+		const holds = sec.carrierCount > 0 ? `the page's Wien bridge holds ${sec.carrierCount} of the ${pairCap} pairs allowed` : null;
+		// a whitelist no limit of the modulator's own gives: the script gets it as RESISTOR_PAIRS
+		if (sec.scriptPairs) return `${holds ? `${holds}; with the ${left} left` : `with the ${pairCap} pairs allowed`}, the modulator below comes closest to its targets when only the resistors RESISTOR_PAIRS names may pair`;
+		if (sec.budget === null || sec.budget === undefined) return null;
+		if (sec.budget >= left) return holds ? `${holds}, so the modulator below may have ${sec.budget}` : null;
+		return `${holds ? `${holds}; of the ${left} left` : `of the ${pairCap} pairs allowed`}, the modulator below comes closest to its targets with at most ${sec.budget}`;
+	});
+
+	const carrierOscillator = $derived(jfetSection?.oscillator ?? null);
 	// the oscillator the files and the divider really get: one that starts and holds its amplitude
 	const workingOscillator = $derived(oscillatorWorks(carrierOscillator) ? carrierOscillator : null);
 	// what to say when its limiter holds another amplitude than the one asked for
@@ -282,33 +359,34 @@
 			? designJfetModulator({ ...jfetParams, gbw: 1e6, slewRate: 0.5e6, rb: jfetDesign.rb ?? undefined, r2: jfetDesign.r2 ?? undefined })
 			: null
 	);
-	// the carrier the divider gets: what the on-board oscillator's limiter
-	// settles at, which is not quite the amplitude asked of it, or the generator
-	const carrierIn = $derived(carrierFrom === 'wien' && workingOscillator?.limiter.amplitudeActual ? workingOscillator.limiter.amplitudeActual : carrierSourceAmplitude);
+	const carrierIn = $derived(jfetSection ? jfetSection.carrier : carrierSourceAmplitude);
 
-	// both cells on the same JFET, carrier and op-amp, for the side-by-side table
-	const topologyRows = $derived.by(() =>
-		jfetValid
-			? compareTopologies({
-					model: jfetModel,
-					targetOutputAmplitude,
-					outputStage,
-					carrierBuffer,
-					swingFraction,
-					targetModulationIndex: targetN,
-					sourceAmplitude,
-					fmMin,
-					vcc,
-					fp,
-					carrierSourceAmplitude: carrierIn,
-					carrierMargin,
-					opampSwing,
-					gbw: gbwMhz * 1e6,
-					slewRate: slewRateVus * 1e6,
-					...parts
-				})
-			: []
-	);
+	// both cells on the same JFET, carrier and op-amp, for the side-by-side
+	// table; under a pairs limit each cell is what the page designs when it
+	// is picked, the limit shared with the oscillator as above
+	const topologyRows = $derived.by(() => {
+		if (!jfetValid) return [];
+		const params = {
+			model: jfetModel,
+			targetOutputAmplitude,
+			outputStage,
+			carrierBuffer,
+			swingFraction,
+			targetModulationIndex: targetN,
+			sourceAmplitude,
+			fmMin,
+			vcc,
+			fp,
+			carrierSourceAmplitude: carrierIn,
+			carrierMargin,
+			opampSwing,
+			gbw: gbwMhz * 1e6,
+			slewRate: slewRateVus * 1e6,
+			...parts
+		};
+		if (pairCap === null) return compareTopologies(params);
+		return compareTopologies(params, (cell) => (cell === topology ? jfetDesign : jfetSectionFor(cell).design));
+	});
 	// the largest voltage any of the modulator's op-amps puts out
 	const jfetPeakOut = $derived(
 		jfetDesign ? Math.max(jfetDesign.carrier.envelopeMax, jfetDesign.postGain?.envelopeMax ?? 0, Math.abs(jfetDesign.conditioning.summer.outMin), workingOscillator?.limiter.amplitudeActual ?? 0) : 0
@@ -364,6 +442,11 @@
 				gbw: gbwMhz * 1e6,
 				slewRate: slewRateVus * 1e6,
 				...parts,
+				// under a limit, the modulator's share of it: what the oscillator leaves,
+				// or the whitelist itself where no share gives the modulator kept
+				...(jfetSection.scriptPairs ? { pairs: jfetSection.scriptPairs } : {}),
+				pairLimit: jfetSection.scriptPairs ? null : jfetSection.budget,
+				pairLimitNote: jfetBudgetNote,
 				carrierNote: workingOscillator
 					? `the carrier comes from the page's Wien bridge (R ${oscOhms(workingOscillator.r)}, C ${formatFarads(workingOscillator.c)}, Rf1 ${oscOhms(workingOscillator.parts.rf1)}, Rf2 ${oscOhms(workingOscillator.parts.rf2)}, Rg ${oscOhms(workingOscillator.rg)}), which settles at the CARRIER_SOURCE_AMPLITUDE below`
 					: null
@@ -407,10 +490,15 @@
 		capacitorStock: parts.capacitors,
 		pairs: parts.pairs
 	});
+	// the design from the stock, under the pairs limit when there is one
+	const diodeOwn = $derived.by(() => {
+		if (!diodeValid) return null;
+		return pairCap === null ? { design: designDiodeMixerModulator(diodeParams), limited: false } : limitDiodePairs(diodeParams, pairCap);
+	});
 	// a restricted stock that reaches no design falls back to E24 and E12, flagged
 	const diodeDesign = $derived.by(() => {
-		if (!diodeValid) return null;
-		const own = designDiodeMixerModulator(diodeParams);
+		if (!diodeOwn) return null;
+		const own = diodeOwn.design;
 		if (!restricted || (own && own.indexOk)) return own;
 		const fallback = designDiodeMixerModulator({ ...diodeParams, resistorSeries: 'E24', capacitorStock: null, pairs: false });
 		// the E24 design only when it does better than the stock's own
@@ -420,10 +508,11 @@
 	const diodePreview = $derived.by(() => (diodeDesign ? amSignal(fpDiode, fmMaxDiode, diodeDesign.carrierOut, diodeDesign.indexAtFmMax, 4 / fmMaxDiode) : null));
 	// pairs only mean something for the design built from the list itself
 	const diodePairs = $derived(parts.pairs && !diodeDesign?.stockShortfall);
+	const diodeLimitNote = $derived(diodeOwn?.limited && diodeDesign && !diodeDesign.stockShortfall ? pairLimitNote({ limit: pairCap, kept: diodeOwn.kept, dropped: diodeOwn.dropped, added: diodeOwn.added }) : null);
 
 	function downloadDiode() {
 		if (!diodeDesign) return;
-		const stockUsed = diodeDesign.stockShortfall ? { resistorSeries: 'E24', capacitorStock: null, capacitors: null, pairs: false } : { capacitors: parts.capacitors };
+		const stockUsed = diodeDesign.stockShortfall ? { resistorSeries: 'E24', capacitorStock: null, capacitors: null, pairs: false, pairLimit: null } : { capacitors: parts.capacitors, pairLimit: pairCap };
 		download(generateDiodeScript({ ...diodeParams, ...stockUsed }), 'diode-tank-am-modulator.js');
 	}
 
@@ -456,11 +545,21 @@
 		fmMaxDemod > 0 && fmMaxDemod < fpCarrierDemod && rippleHz - fmMaxDemod > fmMaxDemod && amaxDb > 0 && aminDb > amaxDb && demoModIndex > 0 && demoModIndex <= 1 && demodAmplitude > 0 && demodOpampSwing > 0
 	);
 	const ENVELOPE_MAX_ORDER = 8;
-	const envelopeRaw = $derived.by(() =>
-		demodValid
-			? designEnvelopeLowPass({ response, amaxDb, aminDb, fp: fmMaxDemod, fs: rippleHz - fmMaxDemod, order: orderOverride, topology: envelopeTopology, maxOrder: ENVELOPE_MAX_ORDER, ...parts })
-			: null
-	);
+	// the filter from the stock, under the pairs limit when there is one (the
+	// rectifier's resistors are always single, so the filter holds them all)
+	const envelopeOwn = $derived.by(() => {
+		if (!demodValid) return null;
+		const spec = { response, amaxDb, aminDb, fp: fmMaxDemod, fs: rippleHz - fmMaxDemod, order: orderOverride, topology: envelopeTopology, maxOrder: ENVELOPE_MAX_ORDER, ...parts };
+		return pairCap === null ? { design: designEnvelopeLowPass(spec), limited: false } : limitEnvelopePairs(spec, pairCap);
+	});
+	const envelopeRaw = $derived(envelopeOwn?.design ?? null);
+	const envelopeLimitNote = $derived.by(() => {
+		const own = envelopeOwn;
+		if (!own?.limited || !envelopeDesign) return null;
+		// a stage's equal resistors (a Sallen-Key's R1 = R2, an MFB's R1 = R3) pair together: one pair left over cannot take them
+		const together = pairCap - own.count === 1 && own.dropped.some((name) => name.startsWith('R1'));
+		return pairLimitNote({ limit: pairCap, kept: own.kept, dropped: own.dropped, added: own.added, together });
+	});
 	const envelopeDesign = $derived(envelopeRaw && !envelopeRaw.tooHigh ? envelopeRaw : null);
 	// what the rounded parts do at the tone and at the ripple's nearest sideband, and the sharpest stage
 	const envelopeCheck = $derived.by(() => {
@@ -917,13 +1016,16 @@
 					{/if}
 				{/if}
 			</div>
-			<StockPicker id="stockJfet" bind:stock bind:resistorText bind:capacitorText bind:pairs />
+			<StockPicker id="stockJfet" bind:stock bind:resistorText bind:capacitorText bind:pairs bind:pairLimit />
 			{#if restricted}
 				<p class="note">
 					{stock === 'labR'
-						? `Every resistor below is rounded to the lab resistors${parts.pairs ? ' (or two of them in series)' : ''}, the capacitors to the usual values,`
-						: `Every resistor and capacitor below is rounded to those values ${parts.pairs ? '(or, for a resistor, to two of them in series)' : 'only'},`} and the figures are worked out from the rounded parts.
+						? `Every resistor below is rounded to the lab resistors${parts.pairs ? (pairCap === null ? ' (or two of them in series)' : ` (or, for up to ${pairCap} of them, two in series)`) : ''}, the capacitors to the usual values,`
+						: `Every resistor and capacitor below is rounded to those values ${parts.pairs ? (pairCap === null ? '(or, for a resistor, to two of them in series)' : `(or, for up to ${pairCap} ${pairCap === 1 ? 'resistor' : 'resistors'}, to two of them in series)`) : 'only'},`} and the figures are worked out from the rounded parts.
 				</p>
+				{#if jfetLimitNote}
+					<p class="note">{jfetLimitNote}</p>
+				{/if}
 			{/if}
 			<p class="note">
 				The output swing is what the op-amp reaches on this supply, about Vcc minus 1.5 V for a
@@ -1116,7 +1218,9 @@
 						<h2>Carrier oscillator</h2>
 						<span class="hint">Wien bridge at {formatHz(carrierOscillator.f0)}</span>
 					</div>
-					{#if carrierOscillator.stockShortfall}
+					{#if carrierOscillator.stockShortfall && carrierShortByLimit}
+						<p class="flag warn">With at most {pairCap} {pairCap === 1 ? 'pair' : 'pairs'} for the modulator and its oscillator together, the parts on hand cannot build this oscillator so that it starts and holds its amplitude, so it is shown with E24 resistors and E6 capacitors instead. Allow more pairs, or add values near the ones below.</p>
+					{:else if carrierOscillator.stockShortfall}
 						<p class="flag warn">The parts on hand cannot build this oscillator so that it starts and holds its amplitude, so it is shown with E24 resistors and E6 capacitors instead. Add values near the ones below.</p>
 					{/if}
 					<DiagramView diagram={buildOscillatorDiagram(carrierOscillator)} label="Wien bridge carrier oscillator with its diode limiter" />
@@ -1277,6 +1381,7 @@
 					{jfetFailure === 'pinchoff'
 						? `With the parts rounded, the gate drive swings V_GS down to V_P or past it, which pinches the channel off: lower the swing fraction${restricted ? ', or add resistors near the ones the gate drive needs' : ''}.`
 						: `With the parts rounded, the gate drive leaves the conductance depth below the target n: lower n or widen the swing${restricted ? ', or add resistors near the ones the gate drive needs' : ''}.`}
+					{jfetBuildsWithPairs ? ` With more pairs allowed, or pairs where they help, the parts on hand build it.` : ''}
 				</p>
 			</section>
 		{/if}
@@ -1332,7 +1437,7 @@
 					</select>
 				</div>
 			</div>
-			<StockPicker id="stockDiode" bind:stock bind:resistorText bind:capacitorText bind:pairs />
+			<StockPicker id="stockDiode" bind:stock bind:resistorText bind:capacitorText bind:pairs bind:pairLimit />
 			{#if !diodeValid}
 				<p class="flag bad">
 					The carrier has to sit far enough above the highest message frequency that the tank's band, the margin times that
@@ -1348,6 +1453,9 @@
 					With the parts on hand the index lands at {diodeDesign.modulationIndex.toFixed(2)} for the {targetNDiode} asked{diodeDesign.modulationIndex > 1 ? ', past 1: the carrier is overmodulated' : ''}.
 					Values closer to the ones R_p and R_m need would bring it back.
 				</p>
+			{/if}
+			{#if diodeLimitNote}
+				<p class="note">{diodeLimitNote}</p>
 			{/if}
 			<p class="note">
 				At a volt or so the diode is not a gentle curve but a switch: the summer brings the carrier to it
@@ -1584,7 +1692,10 @@
 					</div>
 				{/if}
 			</div>
-			<StockPicker id="stockDemod" bind:stock bind:resistorText bind:capacitorText bind:pairs />
+			<StockPicker id="stockDemod" bind:stock bind:resistorText bind:capacitorText bind:pairs bind:pairLimit />
+			{#if envelopeLimitNote}
+				<p class="note">{envelopeLimitNote}</p>
+			{/if}
 			<p class="note">
 				Residual ripple sits at {formatHz(rippleHz)} ({rectifierType === 'full' ? '2 x fp, full-wave' : 'fp, half-wave'}), and the
 				message it carries puts its nearest sideband at {formatHz(rippleHz - fmMaxDemod)}: that is where the filter's stopband starts.

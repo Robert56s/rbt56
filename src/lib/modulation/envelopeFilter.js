@@ -1,3 +1,4 @@
+import { pairAllowed } from './eseries';
 import { designMfbLowPass } from './mfbLowPass';
 import { butterworthOrder, butterworthStages, chebyshevOrder, chebyshevStages, transitionRatio } from './order';
 import { designSallenKeyLowPass } from './sallenKeyLowPass';
@@ -25,6 +26,10 @@ import { designSallenKeyLowPass } from './sallenKeyLowPass';
  * Amin + Amax under that peak (aminSized), which is Amin under DC, so the
  * ripple ends up at least Amin under every part of the message. An order past
  * maxOrder is only reported (tooHigh), with no stages built.
+ *
+ * `pairs` is true, false, or a whitelist of the resistors that may be two
+ * in series, named as the LTspice files name them: R1k, R2k and, for an
+ * MFB stage, R3k, k the stage's number from 1 (see envelopeStagePairs).
  */
 export function designEnvelopeLowPass({ response, amaxDb, aminDb, fp, fs, order, topology = 'sallenKey', resistorSeries = 'E24', capacitors = null, pairs = false, maxOrder = Infinity }) {
 	const k = transitionRatio(fp, fs);
@@ -51,18 +56,34 @@ export function designEnvelopeLowPass({ response, amaxDb, aminDb, fp, fs, order,
 		normalized: s
 	}));
 
-	// a stage the parts on hand cannot build is built from E24 and the E6/E12
-	// capacitors instead (single resistors), and flagged, rather than dropped
-	const build = topology === 'mfb' ? designMfbLowPass : designSallenKeyLowPass;
-	const realized = stages.map((stage) => {
-		const r = build(stage.wn, stage.q, { resistorSeries, capacitors, pairs });
-		if (r) return r;
-		const fallback = build(stage.wn, stage.q);
-		return fallback && { ...fallback, stockShortfall: true };
-	});
+	const realized = stages.map((stage, k) => designEnvelopeStage(stage, k, { topology, resistorSeries, capacitors, pairs }));
 	const shortfallStages = realized.flatMap((r, i) => (r?.stockShortfall ? [i + 1] : []));
 
 	return { k, minOrder, n, wc, wcScale, eps, beta: proto.beta, filterType: 'lowpass', stages, realized, shortfallStages, response, topology, amaxDb, aminDb, aminSized, fp, fs };
+}
+
+/**
+ * The `pairs` a stage's designer takes: true or false as they are, a
+ * whitelist of the filter's names (R11, R21, R12, ...) as the stage's own
+ * (R1, R2, R3) for stage k (from 0).
+ */
+export function envelopeStagePairs(pairs, k) {
+	if (!(Array.isArray(pairs) || pairs instanceof Set)) return pairs;
+	return ['R1', 'R2', 'R3'].filter((name) => pairAllowed(pairs, `${name}${k + 1}`));
+}
+
+/**
+ * One stage of the envelope low-pass, stage k (from 0) of the filter's
+ * `stages`, on the parts on hand. A stage the parts on hand cannot build
+ * is built from E24 and the E6/E12 capacitors instead (single resistors),
+ * and flagged, rather than dropped.
+ */
+export function designEnvelopeStage(stage, k, { topology = 'sallenKey', resistorSeries = 'E24', capacitors = null, pairs = false } = {}) {
+	const build = topology === 'mfb' ? designMfbLowPass : designSallenKeyLowPass;
+	const r = build(stage.wn, stage.q, { resistorSeries, capacitors, pairs: envelopeStagePairs(pairs, k) });
+	if (r) return r;
+	const fallback = build(stage.wn, stage.q);
+	return fallback && { ...fallback, stockShortfall: true };
 }
 
 /**

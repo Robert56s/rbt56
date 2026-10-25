@@ -1,4 +1,4 @@
-import { capacitorCandidates, nearestCapacitor, pairedResistor, smallCapPenalty } from './eseries';
+import { anyPairAllowed, capacitorCandidates, nearestCapacitor, pairAllowed, pairedResistor, smallCapPenalty } from './eseries';
 
 /**
  * Multiple-feedback (MFB) high-pass, the standard equal-capacitor layout:
@@ -43,19 +43,20 @@ function scoreMfbHpResistors(R1, R2) {
  * each may be two resistors in series, kept only when that leaves the
  * stage no further off than single parts, as in roundMfb (mfb.js). Here it
  * never has to refuse: f0 and Q share R1 and R2 evenly, so the stage's
- * larger miss is the mean of the two parts' own.
+ * larger miss is the mean of the two parts' own. A list of names in
+ * `pairs` (pairAllowed in eseries.js) takes 'R1' and 'R2'.
  */
 function roundMfbHp(R1, R2, C, wn, q, resistorSeries, pairs) {
 	const round = (p) => {
-		const R1n = pairedResistor(R1, resistorSeries, p);
-		const R2n = pairedResistor(R2, resistorSeries, p);
+		const R1n = pairedResistor(R1, resistorSeries, pairAllowed(p, 'R1'));
+		const R2n = pairedResistor(R2, resistorSeries, pairAllowed(p, 'R2'));
 		const aActual = 3 / (R2n * C);
 		const bActual = 1 / (R1n * R2n * C * C);
 		return { R1n, R2n, wn: Math.sqrt(bActual), q: Math.sqrt(bActual) / aActual };
 	};
 	const single = round(false);
-	if (!pairs) return single;
-	const paired = round(true);
+	if (!anyPairAllowed(pairs)) return single;
+	const paired = round(pairs);
 	const miss = (r) => Math.max(Math.abs(Math.log(r.wn / wn)), Math.abs(Math.log(r.q / q)));
 	return miss(paired) <= miss(single) ? paired : single;
 }

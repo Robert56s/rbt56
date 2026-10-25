@@ -952,3 +952,162 @@ export function buildSummingAmpDiagram(R, values = {}) {
 	const width = Vout.x + 40 + 60;
 	return { svg: parts.join(''), viewBox: `0 60 ${width} 280` };
 }
+
+/*
+ * The gain stages of a filter designed by hand (handDesign.js), with R1
+ * and R2 named as the method names them.
+ */
+
+/**
+ * Inverting amplifier, H = -R2/R1: R1 from the input to the inverting
+ * input X, R2 from X back to Vout over a rail above the triangle, the
+ * non-inverting input grounded. The op-amp sits so its inverting input is
+ * at X's height, as in the MFB low-pass.
+ */
+export function buildGainInvDiagram(components, { ohms = formatOhms } = {}) {
+	const y0 = 220;
+	const Vin = { x: MARGIN, y: y0 };
+	// R1's label ends 10px short of X; a long one moves R1 right
+	const r1Text = `R1 ${ohms(components.R1)}`;
+	const R1 = placeClear((dx) => placeSymbol('resistor_right', Vin.x + 90 + dx, y0, SCALE), r1Text, 10, VIN_END);
+	const X = R1.ports['2'];
+
+	const opamp = placeSymbol('opamp_no_power_right', X.x + 90, y0 - 0.09 * SCALE, SCALE);
+	const gndPlusX = opamp.ports.inp1.x - 35;
+	const gndPlus = placeSymbol('ground_down', gndPlusX - 0.01 * SCALE, opamp.ports.inp1.y + 40 + 0.29 * SCALE, SCALE);
+
+	// R2's label starts over its left pin; a long one pushes the output column right
+	const r2Text = `R2 ${ohms(components.R2)}`;
+	const half = placeSymbol('resistor_right', 0, 0, SCALE).ports['2'].x;
+	const Vout = { x: Math.max(opamp.ports.out.x + 90, X.x + 2 * (textWidth(r2Text) + 8 - half)), y: opamp.ports.out.y };
+	const railY = 130;
+	const R2 = placeSymbol('resistor_right', (X.x + Vout.x) / 2, railY, SCALE);
+
+	const net = createNet();
+	net.wire(Vin, R1.ports['1']);
+	net.wire(X, opamp.ports.inp2);
+	net.elbow(opamp.ports.inp1, gndPlus.ports['1'], 'h');
+	net.wire(X, { x: X.x, y: railY });
+	net.wire({ x: X.x, y: railY }, R2.ports['1']);
+	net.wire(R2.ports['2'], { x: Vout.x, y: railY });
+	net.wire({ x: Vout.x, y: railY }, Vout);
+	net.wire(opamp.ports.out, Vout);
+	net.wire(Vout, { x: Vout.x + 40, y: Vout.y });
+
+	const parts = [
+		R1.svg,
+		opamp.svg,
+		gndPlus.svg,
+		R2.svg,
+		net.svg(),
+		net.dots(portPoints(R1, opamp, gndPlus, R2)),
+		label('Vin', Vin.x, Vin.y - 12, { anchor: 'start' }),
+		label('Vout', Vout.x + 48, Vout.y + 5, { anchor: 'start' }),
+		label(r1Text, X.x - 10, y0 - 22, { anchor: 'end' }),
+		label(r2Text, R2.ports['1'].x, railY - 12, { anchor: 'start' })
+	];
+
+	const width = Vout.x + 40 + 60;
+	const top = railY - 40;
+	return { svg: parts.join(''), viewBox: `0 ${top} ${width} ${gndPlus.ports['1'].y + 50 - top}` };
+}
+
+/**
+ * Non-inverting amplifier, H = 1 + R2/R1: the input straight into the
+ * non-inverting input, R1 from the inverting input to ground, R2 from it
+ * back to Vout along a rail under the triangle.
+ */
+export function buildGainNonInvDiagram(components, { ohms = formatOhms } = {}) {
+	const y0 = 160;
+	const opamp = placeSymbol('opamp_no_power_right', MARGIN + 160, y0, SCALE);
+	const Vin = { x: MARGIN, y: opamp.ports.inp1.y };
+	const negNode = opamp.ports.inp2;
+
+	const R1 = placeSymbol('resistor_down', negNode.x - 50, negNode.y + 80, SCALE);
+	const gnd = placeSymbol('ground_down', R1.ports['2'].x - 0.01 * SCALE, R1.ports['2'].y + 0.29 * SCALE, SCALE);
+
+	// R2 sits midway along the feedback rail with its label starting over
+	// its left pin; a long label pushes the output column right
+	const r2Text = `R2 ${ohms(components.R2)}`;
+	const half = placeSymbol('resistor_right', 0, 0, SCALE).ports['2'].x;
+	const Vout = { x: Math.max(opamp.ports.out.x + 80, negNode.x + 2 * (textWidth(r2Text) + 5 - half)), y: opamp.ports.out.y };
+	const loopY = R1.ports['2'].y + 40;
+	const R2 = placeSymbol('resistor_right', (negNode.x + Vout.x) / 2, loopY, SCALE);
+
+	const net = createNet();
+	net.wire(Vin, opamp.ports.inp1);
+	// R1 up its own column then across into the - input node
+	net.wire(R1.ports['1'], { x: R1.ports['1'].x, y: negNode.y });
+	net.wire({ x: R1.ports['1'].x, y: negNode.y }, negNode);
+	net.wire(R1.ports['2'], gnd.ports['1']);
+	// R2: down from the - input node, along the rail, up to the output
+	net.elbow(negNode, R2.ports['1'], 'v');
+	net.wire(R2.ports['2'], { x: Vout.x, y: loopY });
+	net.wire({ x: Vout.x, y: loopY }, Vout);
+	net.wire(opamp.ports.out, Vout);
+	net.wire(Vout, { x: Vout.x + 30, y: Vout.y });
+
+	const parts = [
+		opamp.svg,
+		R1.svg,
+		gnd.svg,
+		R2.svg,
+		net.svg(),
+		net.dots(portPoints(opamp, R1, gnd, R2)),
+		label('Vin', Vin.x, Vin.y - 12, { anchor: 'start' }),
+		label('Vout', Vout.x + 34, Vout.y + 5, { anchor: 'start' }),
+		label(r2Text, R2.ports['1'].x, loopY - 12, { anchor: 'start' }),
+		label(`R1 ${ohms(components.R1)}`, R1.ports['1'].x - 12, (R1.ports['1'].y + R1.ports['2'].y) / 2, { anchor: 'end' })
+	];
+
+	const width = Vout.x + 30 + 60;
+	// from just over the Vin label to just under R2's rail
+	const top = Vin.y - 40;
+	const height = loopY + 30 - top;
+	// the R1 label reads left of its resistor, so the box starts left of the margin
+	const left = Math.min(-16, Math.floor(R1.ports['1'].x - 12 - textWidth(`R1 ${ohms(components.R1)}`) - 8));
+	return { svg: parts.join(''), viewBox: `${left} ${top} ${width - left} ${height}` };
+}
+
+/**
+ * Divider and follower, H = R1/(R1 + R2) = 1/(1 + R2/R1): R2 in series,
+ * R1 from the node to ground, then the unity-gain follower that keeps the
+ * next stage from loading the divider.
+ */
+export function buildGainDividerDiagram(components, { ohms = formatOhms } = {}) {
+	const y0 = 160;
+	const Vin = { x: MARGIN, y: y0 };
+	const r2Text = `R2 ${ohms(components.R2)}`;
+	const R2 = placeSymbol('resistor_right', Vin.x + 90, y0, SCALE);
+	const node = R2.ports['2'];
+	const R1 = placeSymbol('resistor_down', node.x, node.y + HANG.resistor_down * SCALE, SCALE);
+	const gnd = placeSymbol('ground_down', R1.ports['2'].x - 0.01 * SCALE, R1.ports['2'].y + 0.29 * SCALE, SCALE);
+
+	const net = createNet();
+	const parts = [R2.svg, R1.svg, gnd.svg];
+	const ports = portPoints(R2, R1, gnd);
+	net.wire(Vin, R2.ports['1']);
+	net.wire(R1.ports['2'], gnd.ports['1']);
+	// R1's label, beside it, and R2's, over it, both end short of the
+	// buffer and its note; a long one moves the buffer right
+	const r1Text = `R1 ${ohms(components.R1)}`;
+	const r1X = R1.ports['1'].x + 12;
+	const noteStart = followerOpamp(node).ports.out.x - 24 - textWidth(BUFFER_NOTE) / 2;
+	const dx = Math.max(clearance(r1X + textWidth(r1Text) - followerOpamp(node).ports.inp2.x), clearance(R2.ports['1'].x + textWidth(r2Text) - noteStart));
+	const { opamp, Vout, loopY } = followerAfter(net, node, parts, ports, dx);
+
+	parts.push(
+		net.svg(),
+		net.dots(ports),
+		label('Vin', Vin.x, Vin.y - 12, { anchor: 'start' }),
+		label('Vout', Vout.x + 36, Vout.y + 5, { anchor: 'start' }),
+		label(r2Text, R2.ports['1'].x, R2.ports['1'].y - 24, { anchor: 'start' }),
+		label(r1Text, r1X, (R1.ports['1'].y + R1.ports['2'].y) / 2, { anchor: 'start' }),
+		label(BUFFER_NOTE, opamp.ports.out.x - 24, node.y - 26, { anchor: 'middle', cls: 'lbl note' })
+	);
+
+	const width = Vout.x + 30 + 60;
+	// from just over the labels above the line to just under the ground and the follower's loop
+	const top = y0 - 50;
+	return { svg: parts.join(''), viewBox: `0 ${top} ${width} ${Math.max(loopY, gnd.ports['1'].y + 20) + 34 - top}` };
+}

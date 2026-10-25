@@ -221,3 +221,192 @@ export function pairDiagramLabel(value, option, format, pairs = true) {
 	const pair = pairs ? seriesPair(value, option) : null;
 	return pair ? `${shortOhms(pair[0])} + ${shortOhms(pair[1])}` : format(value);
 }
+
+
+/* --------------------------------------------- a limit on the pair count */
+
+/**
+ * The stock picker can also cap how many resistors of a circuit are pairs:
+ * none, up to N, or as many as help. A designer's `pairs` option then
+ * takes, besides true and false, a whitelist: an array or a Set of the
+ * names of the resistors that may pair. With true or false nothing changes.
+ *
+ * "Up to N pairs" starts from the design with pairs where they help. When
+ * it holds N pairs or fewer, it is the answer as it stands. Otherwise the
+ * subsets of its pairs are tried, stage by stage, each one a real design
+ * (the designer rerun with that whitelist), and the N pairs that bring the
+ * circuit closest to its targets are kept, every other resistor a single
+ * part. A tie goes to fewer pairs, then to the earlier stage, then to the
+ * parts the tool lists first.
+ */
+
+/** Whether the resistor `name` may be two in series: true lets every one, false or null none, an array or Set of names those only. */
+export function pairAllowed(pairs, name) {
+	if (pairs === true) return true;
+	if (!pairs) return false;
+	if (pairs instanceof Set) return pairs.has(name);
+	if (Array.isArray(pairs)) return pairs.includes(name);
+	return true;
+}
+
+/** Whether a `pairs` option lets any resistor pair at all: true, or a whitelist that is not empty. */
+export function anyPairAllowed(pairs) {
+	if (pairs instanceof Set) return pairs.size > 0;
+	if (Array.isArray(pairs)) return pairs.length > 0;
+	return Boolean(pairs);
+}
+
+/**
+ * The resistors of a design that are two in series, in the order given:
+ * `parts` maps names to ohms, as an object or as [name, ohms] entries, and
+ * holds the resistors only.
+ */
+export function pairedNames(parts, option) {
+	const entries = Array.isArray(parts) ? parts : Object.entries(parts ?? {});
+	return entries.filter(([, v]) => typeof v === 'number' && seriesPair(v, option)).map(([name]) => name);
+}
+
+/** Every subset of `names` with `size` members, each in the order of `names`; the subsets that hold the earlier names come first. */
+export function pairSubsets(names, size) {
+	const out = [];
+	const pick = [];
+	const walk = (start) => {
+		if (pick.length === size) {
+			out.push(pick.slice());
+			return;
+		}
+		for (let i = start; i <= names.length - (size - pick.length); i++) {
+			pick.push(names[i]);
+			walk(i + 1);
+			pick.pop();
+		}
+	};
+	if (size >= 0 && size <= names.length) walk(0);
+	return out;
+}
+
+/**
+ * Measures closer than this, relative to the larger, count as a tie, so
+ * rounding noise in a sum never decides between two designs.
+ */
+const PAIR_TIE = 1e-9;
+
+/** A measure as the comparisons take it: a number, or Infinity for a design that cannot be built. */
+function pairMeasureOf(value) {
+	return typeof value === 'number' && !Number.isNaN(value) ? value : Infinity;
+}
+
+/** Whether measure a is clearly below measure b (not a tie). */
+function pairMeasureLess(a, b) {
+	if (a === b || a === Infinity) return false;
+	if (b === Infinity) return true;
+	return a < b - PAIR_TIE * Math.max(Math.abs(a), Math.abs(b));
+}
+
+/** Of two plans with the same number of pairs, whether `a` wins: a lower measure, or on a tie its pairs in the earlier stages. */
+function pairPlanBetter(a, b) {
+	if (pairMeasureLess(a.measure, b.measure)) return true;
+	if (pairMeasureLess(b.measure, a.measure)) return false;
+	for (let i = 0; i < a.counts.length; i++) {
+		if (a.counts[i] !== b.counts[i]) return a.counts[i] > b.counts[i];
+	}
+	return false;
+}
+
+/**
+ * The best design of one stage (or of a whole circuit) for each number of
+ * pairs m, from 0 up to the length of `names` or `maxCount`, whichever is
+ * smaller.
+ *   names     the resistors that are pairs in the design with pairs where
+ *             they help, in the order the tool lists its parts
+ *   build     (allowed) => the design with `pairs` set to that whitelist,
+ *             an array of names ([] gives single parts)
+ *   measure   (design) => how far the design lands from its targets, lower
+ *             is better; Infinity (or null) for one that cannot be built
+ *   full      the design with pairs where they help, the entry for every
+ *             name, so a stage that keeps all its pairs is that design; left
+ *             out, it is built like the others
+ * rows[m] = { count: m, allowed, design, measure }, of the subsets of m
+ * names the one with the lowest measure, a tie to the earlier names. Each
+ * subset is built once; m = 0 is always build([]), single parts.
+ */
+export function pairCountTable(names, build, measure, full = undefined, maxCount = names.length) {
+	const top = Math.min(names.length, Math.max(0, Math.floor(maxCount)));
+	const rows = [];
+	for (let m = 0; m <= top; m++) {
+		if (m > 0 && m === names.length && full !== undefined) {
+			rows.push({ count: m, allowed: names.slice(), design: full, measure: pairMeasureOf(measure(full)) });
+			continue;
+		}
+		let best = null;
+		for (const allowed of pairSubsets(names, m)) {
+			const design = build(allowed);
+			const value = pairMeasureOf(measure(design));
+			if (!best || pairMeasureLess(value, best.measure)) best = { count: m, allowed, design, measure: value };
+		}
+		rows.push(best);
+	}
+	return rows;
+}
+
+/**
+ * Spreads a budget of `limit` pairs over the stages of a circuit. tables[s]
+ * holds pairCountTable's rows for stage s; the result is, for each stage,
+ * the number of pairs it keeps (an index into its rows), the counts summing
+ * to `limit` or less and the stage measures to the least. A tie goes to
+ * fewer pairs in all, then to the earlier stages. Dynamic programming over
+ * the stages, by the number of pairs used so far.
+ */
+export function allocatePairs(tables, limit) {
+	const cap = Math.max(0, Math.floor(limit));
+	let plans = [{ measure: 0, counts: [] }];
+	for (const rows of tables) {
+		const next = [];
+		plans.forEach((plan, used) => {
+			if (!plan) return;
+			rows.forEach((row, m) => {
+				if (!row || used + m > cap) return;
+				const plan2 = { measure: plan.measure + row.measure, counts: [...plan.counts, m] };
+				if (!next[used + m] || pairPlanBetter(plan2, next[used + m])) next[used + m] = plan2;
+			});
+		});
+		plans = next;
+	}
+	let best = null;
+	for (const plan of plans) {
+		if (plan && (!best || pairMeasureLess(plan.measure, best.measure))) best = plan;
+	}
+	return best ? best.counts : tables.map(() => 0);
+}
+
+/**
+ * "Up to `limit` pairs" for a whole circuit: stages[s] = { names, full,
+ * build, measure } as pairCountTable takes them (one entry for a circuit
+ * that is not split in stages), and optionally `candidates`: every name of
+ * the stage that may pair, in the tool's order, when the whitelists tried
+ * are to be all their subsets and not only those of `names` (a part solved
+ * from one given up can call for two in series where it did not before).
+ * With no limit (null), or when the full designs hold `limit` pairs or
+ * fewer in all, every stage is its full design; otherwise allocatePairs
+ * shares the pairs out. Returns
+ *   stages    per stage { count, allowed, dropped, design, measure }:
+ *             the whitelist it was built with and the names it gave up
+ *   count     the pairs allowed in all
+ *   measure   the stage measures summed
+ *   limited   whether the limit took pairs away
+ */
+export function limitPairs(stages, limit) {
+	const total = stages.reduce((n, s) => n + s.names.length, 0);
+	const sum = (list) => list.reduce((n, s) => n + s.measure, 0);
+	if (limit === null || limit === undefined || total <= limit) {
+		const kept = stages.map((s) => ({ count: s.names.length, allowed: s.names.slice(), dropped: [], design: s.full, measure: pairMeasureOf(s.measure(s.full)) }));
+		return { stages: kept, count: total, measure: sum(kept), limited: false };
+	}
+	const tables = stages.map((s) => (s.candidates ? pairCountTable(s.candidates, s.build, s.measure, undefined, limit) : pairCountTable(s.names, s.build, s.measure, s.full, limit)));
+	const counts = allocatePairs(tables, limit);
+	const chosen = counts.map((m, i) => {
+		const row = tables[i][m];
+		return { ...row, dropped: stages[i].names.filter((name) => !row.allowed.includes(name)) };
+	});
+	return { stages: chosen, count: chosen.reduce((n, s) => n + s.count, 0), measure: sum(chosen), limited: true };
+}

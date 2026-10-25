@@ -3,6 +3,8 @@
 	import { explainBoctor } from '$lib/filter/explainBoctor';
 	import { onMount, untrack } from 'svelte';
 	import BasicsPanel from '$lib/components/BasicsPanel.svelte';
+	import BuildPanel from '$lib/components/BuildPanel.svelte';
+	import { stockWords } from '$lib/filter/handDesign';
 	import OrderOnSpecDemo from '$lib/components/basics/OrderOnSpecDemo.svelte';
 	import RcOnSpecDemo from '$lib/components/basics/RcOnSpecDemo.svelte';
 	import StagesMultiplyDemo from '$lib/components/basics/StagesMultiplyDemo.svelte';
@@ -89,6 +91,7 @@
 	import { branchDcGain, branchOrder, branchSign, combinerChoice, combinerDesign, magnitudePhaseAt, sweep, magnitudePhaseAtParallelSum, sweepParallelSum } from '$lib/filter/bode';
 	import { buildDifferenceAmpDiagram, buildSummingAmpDiagram } from '$lib/filter/circuits';
 	import { C_FLOOR, nearestResistor, pairDiagramLabel, pairLabel } from '$lib/filter/eseries';
+	import { filterPairLimitSentence, filterPairPlanSummary, planFilterPairs } from '$lib/filter/pairPlan';
 	import { componentOptions, defaultStock, isRestricted, loadStock, saveStock } from '$lib/stock';
 
 	const SUMMING_R = 10_000; // ohms, the summing amplifier's three equal resistors
@@ -157,18 +160,24 @@
 	// cost shows up in the f0/Q error columns rather than in the maths. The
 	// setting is the site's (src/lib/stock.js): the AM tool shares it, and it
 	// is kept in this browser. With a list, `pairs` lets the resistors that
-	// set f0, Q or a zero be two in series (pairedResistor in eseries.js).
+	// set f0, Q or a zero be two in series (pairedResistor in eseries.js),
+	// and `pairLimit` caps how many in the whole filter (null: no cap).
 	const initialStock = defaultStock();
 	let stock = $state(initialStock.stock); // 'E24' | 'E96' | 'lab' | 'labR' | 'custom'
 	let resistorText = $state(initialStock.resistorText);
 	let capacitorText = $state(initialStock.capacitorText);
 	let pairs = $state(initialStock.pairs);
+	let pairLimit = $state(initialStock.pairLimit);
 	let stockLoaded = $state(false);
 	const restrictedStock = $derived(isRestricted(stock));
-	const componentOpts = $derived(componentOptions(stock, resistorText, capacitorText, pairs));
+	const componentOpts = $derived(componentOptions(stock, resistorText, capacitorText, pairs, pairLimit));
 	const stockPhrase = $derived(
 		(stock === 'E96' ? 'the E96 series' : stock === 'lab' ? 'the lab kit' : stock === 'labR' ? 'the lab resistors' : stock === 'custom' ? 'the list on hand' : 'the E24 series') +
-			(componentOpts.pairs ? ' (two in series allowed)' : '')
+			(componentOpts.pairs
+				? componentOpts.pairLimit !== null
+					? ` (two in series for up to ${componentOpts.pairLimit} resistor${componentOpts.pairLimit === 1 ? '' : 's'})`
+					: ' (two in series allowed)'
+				: '')
 	);
 	const combinerR = $derived(restrictedStock ? nearestResistor(SUMMING_R, componentOpts.resistorSeries) : SUMMING_R);
 
@@ -181,12 +190,13 @@
 			if (saved.resistorText !== undefined) resistorText = saved.resistorText;
 			if (saved.capacitorText !== undefined) capacitorText = saved.capacitorText;
 			if (saved.pairs !== undefined) pairs = saved.pairs;
+			if (saved.pairLimit !== undefined) pairLimit = saved.pairLimit;
 		}
 		stockLoaded = true;
 	});
 
 	$effect(() => {
-		const state = { stock, resistorText, capacitorText, pairs };
+		const state = { stock, resistorText, capacitorText, pairs, pairLimit };
 		if (stockLoaded) saveStock(state);
 	});
 
@@ -785,17 +795,42 @@
 	const boctorUnavailable = $derived(
 		transformed ? [] : (design?.stages.flatMap((s, i) => (topologyFor(s) === 'boctor' && Number.isFinite(s.wz) && !boctorFeasible(s.wn, s.q, s.wz, s.filterType === 'lowpass') ? [i + 1] : [])) ?? [])
 	);
+	/** A stage as the page shows it: built from the stock, or from the full grid, flagged, when the stock cannot build it. */
+	function realizeStage(stage, i, opts) {
+		const built = buildStage(stage, i, opts);
+		if (built) return built;
+		// the chosen stock cannot realize this stage at all: fall back to
+		// the full E24/E6 grid and flag it, rather than dropping the stage
+		const fallback = buildStage(stage, i, { resistorSeries: 'E24', capacitors: null });
+		return fallback && { ...fallback, stockShortfall: true };
+	}
+
+	// "Up to N pairs" builds each stage again for every subset of its pairs
+	// (pairPlan.js). The stages stay the same objects until the spec moves,
+	// so those builds are kept per stage, keyed by everything else
+	// buildStage reads: changing N, or going back to an earlier stock, only
+	// shares the pairs out again.
+	const pairBuilds = new WeakMap();
+	function realizeCached(stage, i, opts) {
+		let memo = pairBuilds.get(stage);
+		if (!memo) pairBuilds.set(stage, (memo = new Map()));
+		const key = JSON.stringify([i, capOverrides[i] ?? null, topologyFor(stage), transformed, topologyBand, topologyNotch, mfbGbw, opts.resistorSeries, opts.capacitors, opts.pairs]);
+		if (!memo.has(key)) {
+			if (memo.size >= 2000) memo.clear();
+			memo.set(key, realizeStage(stage, i, opts));
+		}
+		return memo.get(key);
+	}
+	/** The pairs the cap keeps, stage by stage (planFilterPairs), or null without a cap. */
+	const pairPlan = $derived.by(() => {
+		if (!design || !componentOpts.pairs || componentOpts.pairLimit === null) return null;
+		const opts = componentOpts;
+		return planFilterPairs(design.stages, (i, pairs) => realizeCached(design.stages[i], i, { ...opts, pairs }), opts.resistorSeries, opts.pairLimit);
+	});
 	const stageResults = $derived.by(() => {
 		if (!design) return [];
-		return design.stages
-			.map((stage, i) => {
-				const built = buildStage(stage, i, componentOpts);
-				if (built) return built;
-				// the chosen stock cannot realize this stage at all: fall back to
-				// the full E24/E6 grid and flag it, rather than dropping the stage
-				const fallback = buildStage(stage, i, { resistorSeries: 'E24', capacitors: null });
-				return fallback && { ...fallback, stockShortfall: true };
-			});
+		if (pairPlan) return pairPlan.stages.map((s) => s.design);
+		return design.stages.map((stage, i) => realizeStage(stage, i, componentOpts));
 	});
 	const realizationFailures = $derived(stageResults.flatMap((s, i) => s ? [] : [i + 1]));
 	const realizedStages = $derived(realizationFailures.length ? [] : stageResults);
@@ -836,15 +871,20 @@
 		if (info.equiripple) {
 			const closed = info.lowered ?? info;
 			const start = `\\Omega_s = \\min(\\Omega_{sl}, \\Omega_{sh}) = ${(1 / closed.k).toFixed(4)},\\ A_{min} = ${closed.aminDb}\\ \\text{dB}: \\quad n \\geq ${closed.value.toFixed(4)}`;
-			return info.lowered ? `${start} \\ \\Rightarrow\\ ${info.lowered.from}, \\ \\text{and } n = ${info.n} \\text{ already meets both edges}` : `${start} \\ \\Rightarrow\\ n = ${info.n}`;
+			// n counts the prototype's poles; the band filter has twice as many
+			const order = `\\ \\Rightarrow\\ \\text{filter order } 2n = ${2 * info.n}`;
+			return info.lowered ? `${start} \\ \\Rightarrow\\ ${info.lowered.from}, \\ \\text{and } n = ${info.n} \\text{ already meets both edges} ${order}` : `${start} \\ \\Rightarrow\\ n = ${info.n} ${order}`;
 		}
 		// a searched order (Bessel, Legendre) is already a whole number
 		const bound = (v) => (Number.isInteger(v) ? `= ${v}` : `\\geq ${v.toFixed(4)}`);
 		const [low, high] = info.edges;
-		return `n_{sl} ${bound(low.value)}, \\qquad n_{sh} ${bound(high.value)} \\ \\Rightarrow\\ n = ${info.n}`;
+		return `n_{sl} ${bound(low.value)}, \\qquad n_{sh} ${bound(high.value)} \\ \\Rightarrow\\ n = ${info.n} \\ \\Rightarrow\\ \\text{filter order } 2n = ${2 * info.n}`;
 	});
 
-	const shortfallStages = $derived(realizedStages.flatMap((r, i) => (r.stockShortfall ? [i + 1] : [])));
+	// stages on the full grids: those the list cannot build at all, and
+	// those it builds only with more pairs than a limit leaves them
+	const limitShortStages = $derived(pairPlan?.limited && realizedStages.length ? pairPlan.stages.flatMap((s, i) => (s.short ? [i + 1] : [])) : []);
+	const shortfallStages = $derived(realizedStages.flatMap((r, i) => (r.stockShortfall && !limitShortStages.includes(i + 1) ? [i + 1] : [])));
 	// what to look at when the passband misses by more than rounding
 	const missCause = $derived(
 		(Object.keys(capOverrides).length > 0
@@ -1117,7 +1157,7 @@
 			if (!Number.isFinite(stageDesign.actual.gbw) && detune > DETUNE_WARN) {
 				out.push({
 					level: detune > DETUNE_BAD ? 'bad' : 'warn',
-					text: `At its f0 the op-amp of this stage works at a noise gain of ${stageDesign.steps.noiseGain.toFixed(1)}. With a TL082 (${formatHz(GBW_TYPICAL)} on its model) that pulls f0 down by about ${(100 * drop).toFixed(1)} % and Q up by about ${(100 * (Math.sqrt(1 + k) - 1)).toFixed(1)} % (k = Q(1 + C2/C1)·f0/GBW = ${k.toFixed(3)}), ${(100 * detune).toFixed(0)} % of the stage's own width f0/Q, so the band edges this stage sets move${detune > DETUNE_BAD ? ' by several dB' : ''}. The shift falls as 1/GBW: a faster op-amp, Tow-Thomas band-pass stages (whose Q moves by about 2Q·f0/f_T, f0 hardly) or a wider band (lower Q) keep it small. The LTspice download shows the real part's effect, and picking the op-amp under Design the MFB stages for corrects it.`
+					text: `At its f0 the op-amp of this stage works at a noise gain of ${stageDesign.steps.noiseGain.toFixed(1)}. With a TL082 (${formatHz(GBW_TYPICAL)} on its model) that pulls f0 down by about ${(100 * drop).toFixed(1)} % and Q up by about ${(100 * (Math.sqrt(1 + k) - 1)).toFixed(1)} % (k = Q(1 + C2/C1)·f0/GBW = ${k.toFixed(3)}), ${(100 * detune).toFixed(0)} % of the stage's own width f0/Q, so the band edges this stage sets move${detune > DETUNE_BAD ? ' by several dB' : ''}. The shift falls as 1/GBW, so a faster op-amp or a wider band (lower Q) keeps it small. A Tow-Thomas stage is no cure here: its f0 holds, but its Q rises as Q/(1 - 4Q·f0/f_T), more than this one's. The LTspice download shows the real part's effect, and picking the op-amp under Design the MFB stages for corrects it.`
 				});
 			}
 		}
@@ -1144,6 +1184,13 @@
 
 	// a notch of a transformed design is held at another gain than a cascade's
 	const notchContext = $derived(transformed && design ? { method: 'transformed', filterType, w0: design.w0 } : undefined);
+
+	/** A stage's math, with a sentence on the pairs the cap took away from it. */
+	function explainComponentsLimited(stageDesign, i) {
+		const blocks = explainComponents(stageDesign, i);
+		const text = pairPlan?.limited ? filterPairLimitSentence(pairPlan.stages[i], pairPlan.limit) : '';
+		return text ? [...blocks, { type: 'p', text }] : blocks;
+	}
 
 	function explainComponents(stageDesign, i) {
 		if (stageDesign.topology === 'boctor' || stageDesign.topology === 'boctorHp') return explainBoctor(stageDesign, notchContext);
@@ -1215,6 +1262,8 @@
 			capOverrides: capOverridesFarads,
 			resistorStock: componentOpts.resistorSeries,
 			resistorPairs: componentOpts.pairs,
+			// the cap on pairs, when one is set: the script shares them out as the page does
+			...(componentOpts.pairs && componentOpts.pairLimit !== null ? { resistorPairLimit: componentOpts.pairLimit } : {}),
 			capacitorStock: componentOpts.capacitors
 		});
 		saveFile(code, 'filter-design.js', 'text/javascript');
@@ -1751,9 +1800,31 @@
 			stock,
 			// every stage of a transformed band-stop is a notch
 			needsTowThomas: transformed ? hasZeros : needsTowThomas,
-			pairs: componentOpts.pairs
+			pairs: componentOpts.pairs,
+			pairLimit: componentOpts.pairLimit
 		})}
 		widgets={{ 'two-tones': TwoTonesDemo, 'rc-on-spec': RcOnSpecDemo, 'order-on-spec': OrderOnSpecDemo, 'stages-multiply': StagesMultiplyDemo }}
+	/>
+
+	<!-- the same spec designed by hand with the table method, every number checked -->
+	<BuildPanel
+		{filterType}
+		{fp}
+		{fs}
+		{fl}
+		{fh}
+		{fsl}
+		{fsh}
+		{amaxDb}
+		{aminDb}
+		amaxAtFl={filterType === 'bandstop' ? amaxDbLp : amaxDbHp}
+		amaxAtFh={filterType === 'bandstop' ? amaxDbHp : amaxDbLp}
+		{aminAtFsl}
+		{aminAtFsh}
+		pageResponse={isBandType ? (responseHp === responseLp ? responseLp : 'butterworth') : response}
+		{componentOpts}
+		stockPhrase={stockWords(stock, componentOpts.pairs)}
+		{spiceOpamp}
 	/>
 
 	{#if realizationFailures.length}
@@ -1810,7 +1881,7 @@
 				<div class="panel-head">
 					<span class="num">02</span>
 					<h2>Order</h2>
-					<span class="hint">{orderBand !== null && !orderBandTooHigh ? `n = ${orderBand}, a band filter of order ${2 * orderBand}` : ''}</span>
+					<span class="hint">{orderBand !== null && !orderBandTooHigh ? `order ${2 * orderBand}: ${orderBand} second-order stage${orderBand === 1 ? '' : 's'} (prototype n = ${orderBand})` : ''}</span>
 				</div>
 
 				{@render methodTable()}
@@ -1836,8 +1907,8 @@
 				{:else if orderBand !== null}
 					<div class="field order-field">
 						<label for="orderBand">
-							Prototype order used
-							<span class="value">{orderBand} {orderBand === minOrderBand ? '(minimum)' : ''}</span>
+							Filter order used
+							<span class="value">{2 * orderBand} (prototype n = {orderBand}{orderBand === minOrderBand ? ', minimum' : ''})</span>
 						</label>
 						<input
 							id="orderBand"
@@ -2241,7 +2312,7 @@
 					</span>
 				</div>
 
-				<StockPicker id="stock" bind:stock bind:resistorText bind:capacitorText bind:pairs />
+				<StockPicker id="stock" bind:stock bind:resistorText bind:capacitorText bind:pairs bind:pairLimit />
 
 				{#if restrictedStock}
 					<p class="note">
@@ -2250,6 +2321,10 @@
 						spec check at the end already show whether the result still meets the spec.
 					</p>
 				{/if}
+				{#if pairPlan && realizedStages.length}
+					<!-- the cap on pairs: how many where they help would take, and which the limit keeps -->
+					<p class="note">{filterPairPlanSummary(pairPlan)}</p>
+				{/if}
 
 				{#if shortfallStages.length > 0}
 					<p class="flag warn">
@@ -2257,6 +2332,14 @@
 						{shortfallStages.join(', ')}
 						cannot be built from those values at all, so {shortfallStages.length > 1 ? 'they are' : 'it is'}
 						shown with the full E24 and E6 grids instead. Add values, or lower the order or the Q.
+					</p>
+				{/if}
+				{#if limitShortStages.length > 0}
+					<p class="flag warn">
+						Stage{limitShortStages.length > 1 ? 's' : ''}
+						{limitShortStages.join(', ')}
+						cannot be built from those values with at most {pairPlan.limit} {pairPlan.limit === 1 ? 'pair' : 'pairs'}, so {limitShortStages.length > 1 ? 'they are' : 'it is'}
+						shown with the full E24 and E6 grids instead. Allow more pairs, or add values.
 					</p>
 				{/if}
 
@@ -2290,8 +2373,8 @@
 						Tow-Thomas: three op-amps per second-order stage (a damped integrator, an integrator and an
 						inverter in a loop). f0, Q and gain are each set by one part, any Q is buildable with equal
 						capacitors (Rd = Q R), and the sensitivities are fixed at 1/2 or 1. The cost is the extra
-						op-amps and their bandwidth: the loop raises the realized Q by roughly 2 Q f0 / f_T, so the
-						op-amp gain-bandwidth should be a few hundred times Q times f0. See each stage's math for
+						op-amps and their bandwidth: the loop raises the realized Q to Q / (1 - 4 Q f0 / f_T), so the
+						op-amp gain-bandwidth should be at least 400 times Q times f0 for a 1 % error. See each stage's math for
 						the comparison with MFB and Sallen-Key.
 					</p>
 				{/if}
@@ -2560,7 +2643,7 @@
 							<div class="math-full">
 								<MathPanel
 									summary="Show the math for this stage's components"
-									blocks={explainComponents(stageDesign, i)}
+									blocks={explainComponentsLimited(stageDesign, i)}
 								/>
 							</div>
 						</div>

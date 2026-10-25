@@ -4,9 +4,10 @@ import { mfbBandPassResponse } from './mfbBandPass';
  * Frequency response of a cascade of realized stages, evaluated from the
  * actual (rounded) component values rather than the ideal design targets:
  * this is what actually shows up on the bench. A stage is read from its
- * topology and its actual figures: first order (tau), a notch (finite wz),
- * a band-pass (topology ending in "Bp", gain = the signed gain at its own
- * centre), a high-pass (ending in "Hp") or else a low-pass. A multiple
+ * topology and its actual figures: a plain gain (order 0, actual.gain),
+ * first order (tau), a notch (finite wz), a band-pass (topology ending in
+ * "Bp", gain = the signed gain at its own centre), a high-pass (ending in
+ * "Hp") or else a low-pass. A multiple
  * feedback band-pass built for a single-pole op-amp (a finite actual.gbw)
  * is evaluated exactly from its parts with that op-amp.
  */
@@ -60,6 +61,8 @@ function stageGainComplex(stage, s) {
 	// constant, since H(0) = 0 and H(infinity) is what is finite.
 	const isHp = stage.topology?.endsWith('Hp');
 
+	// a gain stage (inverting, divider and follower, non-inverting): no poles
+	if (stage.order === 0) return { re: stage.actual.gain, im: 0 };
 	if (stage.order === 1) {
 		const tau = stage.actual.tau;
 		if (isHp) {

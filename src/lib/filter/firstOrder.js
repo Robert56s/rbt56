@@ -1,4 +1,4 @@
-import { capacitorCandidates, nearestCapacitor, pairedResistor, smallCapPenalty } from './eseries';
+import { capacitorCandidates, nearestCapacitor, pairAllowed, pairedResistor, smallCapPenalty } from './eseries';
 
 /**
  * First-order low-pass stage: H(s) = 1 / (RCs + 1), used for the leftover
@@ -12,11 +12,12 @@ const FO_R_SWEET = 10_000;
 /**
  * R rounded to stock. With `pairs` it may be two resistors in series, kept
  * only when that leaves tau no further off than a single part, as in
- * roundMfb (mfb.js); with tau set by R alone, a pair is always kept.
+ * roundMfb (mfb.js); with tau set by R alone, a pair is always kept. A
+ * list of names in `pairs` (pairAllowed in eseries.js) takes 'R'.
  */
 function roundFirstOrder(Rtarget, C, tau, resistorSeries, pairs) {
 	const single = pairedResistor(Rtarget, resistorSeries, false);
-	if (!pairs) return single;
+	if (!pairAllowed(pairs, 'R')) return single;
 	const paired = pairedResistor(Rtarget, resistorSeries, true);
 	const miss = (R) => Math.abs(Math.log((R * C) / tau));
 	return miss(paired) <= miss(single) ? paired : single;

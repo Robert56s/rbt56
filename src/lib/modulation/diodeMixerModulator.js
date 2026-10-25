@@ -1,5 +1,5 @@
 import { DIODE_MODELS, diodeCurrent } from './diodeLaw';
-import { capacitorValues, largestResistorNotAbove, nearestResistor, nearestValue, pairedResistor, resistorValues, seriesPair, stockName } from './eseries';
+import { capacitorValues, largestResistorNotAbove, nearestResistor, nearestValue, pairAllowed, pairedResistor, resistorValues, seriesPair, stockName } from './eseries';
 
 /**
  * Diode + resonant tank AM modulator, built as a switching modulator.
@@ -46,8 +46,9 @@ import { capacitorValues, largestResistorNotAbove, nearestResistor, nearestValue
  *        target index
  *
  * With a list of values on hand and `pairs` on, R_p and R_m may each be
- * two resistors in series (pairedResistor), kept only when the design they
- * give does no worse than the single parts' on what the page checks: the
+ * two resistors in series (pairedResistor), or only the ones a whitelist
+ * names ('Rp', 'Rm'). A pair is kept only when the design it gives does
+ * no worse than the single parts' on what the page checks: the
  * index at least as close to the target, and no check lost. The rest
  * stay single: R_t is a ceiling (rounded down, so the band is never
  * narrower than asked), R_s's rounding is taken up by R_t, and R_b and
@@ -220,7 +221,7 @@ function driveForIndex(current, base, vb, target, P, S) {
  * index further from the target, the carrier taken past 1, or a check
  * the single parts pass that it fails.
  */
-const DIODE_CHECKS = [(d) => d.indexOk, (d) => d.tuneOk, (d) => d.rangeOk, (d) => d.cjOk, (d) => d.sidebandsInBand, (d) => d.currentOk, (d) => d.leakOk, (d) => d.summer.swingOk, (d) => d.summer.gbwOk, (d) => d.sidebandGain >= 0.9];
+export const DIODE_CHECKS = [(d) => d.indexOk, (d) => d.tuneOk, (d) => d.rangeOk, (d) => d.cjOk, (d) => d.sidebandsInBand, (d) => d.currentOk, (d) => d.leakOk, (d) => d.summer.swingOk, (d) => d.summer.gbwOk, (d) => d.sidebandGain >= 0.9];
 function worseThanSingle(paired, single) {
 	const miss = (d) => Math.abs(d.modulationIndex - d.targetModulationIndex);
 	if (miss(paired) > miss(single)) return true;
@@ -244,7 +245,7 @@ export function designDiodeMixerModulator({
 	resistorSeries = 'E24', // a series name, or a list of the resistors on hand (ohms)
 	capacitors = null, // null for E12 capacitors, or a list of the capacitors on hand (farads)
 	capacitorStock = capacitors, // the same, under the name the downloaded script uses
-	pairs = false // with a list: R_p and R_m may each be two resistors in series (pairedResistor)
+	pairs = false // with a list: R_p and R_m may each be two resistors in series (pairedResistor); or a whitelist of the ones that may: 'Rp', 'Rm'
 } = {}) {
 	if (!(fp > 0) || !(fmMax > 0) || !(inductance > 0) || !(sidebandMargin > 0)) return null;
 	// the band, sidebandMargin x fmMax either side of fp, has to stay clear of the message itself
@@ -364,8 +365,8 @@ export function designDiodeMixerModulator({
 	// with `pairs` on, the two in series pairedResistor builds for an ideal
 	// value (where no single one comes within 2 %) joins the candidates,
 	// after the single ones so that a tie keeps the single part
-	const pairFor = (target) => {
-		const v = pairedResistor(target, stock, pairs);
+	const pairFor = (target, name) => {
+		const v = pairedResistor(target, stock, pairAllowed(pairs, name));
 		return seriesPair(v, stock) ? [v] : [];
 	};
 	// R_p within 12 % of its ideal value, or the stock values either side of
@@ -375,12 +376,12 @@ export function designDiodeMixerModulator({
 	const rpSingles = rpNear.length ? rpNear : rpAround.length ? rpAround : [nearestResistor(rpIdeal, stock)];
 	let pick = null;
 	let pickSingle = null; // the best of the single parts alone, which is the design without pairs
-	for (const rpC of [...rpSingles, ...pairFor(rpIdeal)]) {
+	for (const rpC of [...rpSingles, ...pairFor(rpIdeal, 'Rp')]) {
 		const driveC = (rf / rpC) * carrierAmplitude;
 		const rmIdeal = (rf * modAmplitude) / (umWanted * (driveC / drive));
 		const rmAround = neighbours(rmIdeal);
 		const rmSingles = rmAround.length ? rmAround : [nearestResistor(rmIdeal, stock)];
-		for (const rmC of [...rmSingles, ...pairFor(rmIdeal)]) {
+		for (const rmC of [...rmSingles, ...pairFor(rmIdeal, 'Rm')]) {
 			const umC = (rf / rmC) * modAmplitude;
 			const nC = envelopeOf(current, { ...base, a: driveC, um: umC, vb }, P0, S0).n;
 			const err = Math.abs(nC - targetModulationIndex) + 0.02 * Math.abs(Math.log(rpC / rpIdeal));

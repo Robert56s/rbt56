@@ -1,4 +1,4 @@
-import { capacitorCandidates, nearestResistor, pairedResistor } from '../filter/eseries';
+import { anyPairAllowed, capacitorCandidates, nearestResistor, pairAllowed, pairedResistor, pairSubsets, seriesPair } from '../filter/eseries';
 import { ladderTransfer, retune, retuneQuadrature, solveBalance, solvePole, stageLagDeg, TWO_PI, zeroPhase } from './loop';
 import { agcAmplitude, DIODES, dividerClampAmplitude, feedbackLimiterAmplitude, JFETS, lampModel, sizeAgc, sizeDividerClamp, sizeFeedbackLimiter } from './limiter';
 
@@ -160,7 +160,8 @@ for (const t of TOPOLOGIES) {
 /**
  * Picks C from a preferred series so that R lands near 10 kohm, for a wanted
  * R C product. R sets the frequency, so with `pairs` on (and a list of parts
- * on hand) it may then be two resistors in series for the same C.
+ * on hand), or a whitelist naming 'R', it may then be two resistors in
+ * series for the same C.
  */
 function pickRC(rcTarget, capacitors, resistorSeries, pairs = false) {
 	let best = null;
@@ -176,7 +177,7 @@ function pickRC(rcTarget, capacitors, resistorSeries, pairs = false) {
 	}
 	// pairedResistor keeps the single value unless two in series at least
 	// halve its miss, so the frequency can only come closer
-	if (best && pairs) best = { ...best, r: pairedResistor(best.rTarget, resistorSeries, true) };
+	if (best && pairAllowed(pairs, 'R')) best = { ...best, r: pairedResistor(best.rTarget, resistorSeries, true) };
 	return best;
 }
 
@@ -247,8 +248,8 @@ function sizeStabilizer({ topology, stabilizer, requiredGain, excessGain, r, c, 
 			const fraction = (requiredGain - 1) / requiredGain;
 			const rs = (gStartTarget - 1) * rg;
 			const sz = sizeFeedbackLimiter({ rt: rfBalance, rs, amplitude, fraction, diode, resistorSeries, pairs });
-			const rf1 = sz ? sz.rf1 : pairedResistor(0.1 * rs, resistorSeries, pairs);
-			const rf2 = sz ? sz.rf2 : pairedResistor(0.9 * rs, resistorSeries, pairs);
+			const rf1 = sz ? sz.rf1 : pairedResistor(0.1 * rs, resistorSeries, pairAllowed(pairs, 'Rf1'));
+			const rf2 = sz ? sz.rf2 : pairedResistor(0.9 * rs, resistorSeries, pairAllowed(pairs, 'Rf2'));
 			const gainStart = 1 + (rf1 + rf2) / rg;
 			const gainLimited = 1 + rf1 / rg;
 			const amplitudeActual = feedbackLimiterAmplitude({ rf1, rf2, rt: rfBalance, fraction, diode });
@@ -314,8 +315,8 @@ function sizeStabilizer({ topology, stabilizer, requiredGain, excessGain, r, c, 
 		const rt = requiredGain * rg;
 		const rs = gStartTarget * rg;
 		const sz = sizeFeedbackLimiter({ rt, rs, amplitude, fraction: 1, diode, resistorSeries, pairs });
-		const rf1 = sz ? sz.rf1 : pairedResistor(0.1 * rs, resistorSeries, pairs);
-		const rf2 = sz ? sz.rf2 : pairedResistor(0.9 * rs, resistorSeries, pairs);
+		const rf1 = sz ? sz.rf1 : pairedResistor(0.1 * rs, resistorSeries, pairAllowed(pairs, 'Rf1'));
+		const rf2 = sz ? sz.rf2 : pairedResistor(0.9 * rs, resistorSeries, pairAllowed(pairs, 'Rf2'));
 		const rf = rf1 + rf2;
 		const gainStart = rf / rg;
 		const gainLimited = rf1 / rg;
@@ -353,8 +354,14 @@ function sizeStabilizer({ topology, stabilizer, requiredGain, excessGain, r, c, 
  *   resistorSeries, capacitors  the values on hand (src/lib/stock.js)
  *   pairs        with a list of resistors, let the ones that set the
  *                frequency, the start and the amplitude be two in series
- *                (R, Rf1 and Rf2, Rn, Rd1, the AGC's Ra); the reference
- *                values (Rg, Rd2, Rb, Rx) and matched pairs stay single
+ *                (R, Rf1 and Rf2, Rn, Rd1, the AGC's Ra and its series
+ *                resistor Rser); the reference values (Rg, Rd2, Rb, Rx)
+ *                and matched pairs stay single. Besides true and false, a
+ *                whitelist (an array or a Set of those names, PAIR_PARTS)
+ *                lets only the resistors it names pair.
+ *   pairLimit    with pairs true, the most resistors of the circuit that may
+ *                be two in series (null: as many as help); see
+ *                limitedOscillator below
  *
  * Two in series are only kept where they do no harm. At high frequencies
  * the op-amp's lag depends on the start gain, and a limiter that now lands
@@ -365,10 +372,223 @@ function sizeStabilizer({ topology, stabilizer, requiredGain, excessGain, r, c, 
  * below). When it does not, the single-part design is returned.
  */
 export function designOscillator(options = {}) {
-	const single = designWith({ ...options, pairs: false });
-	if (!(options.pairs && Array.isArray(options.resistorSeries))) return single;
-	const paired = designWith({ ...options, pairs: true });
+	const limit = pairLimitOf(options);
+	if (limit !== null) return limitedOscillator(options, limit);
+	const single = designCached({ ...options, pairs: false });
+	if (!(anyPairAllowed(options.pairs) && Array.isArray(options.resistorSeries))) return single;
+	const paired = designCached({ ...options, pairs: options.pairs });
 	return pairsDoNoHarm(paired, single) ? paired : single;
+}
+
+/* ------------------------------------------ a limit on the number of pairs */
+
+/**
+ * The resistors two in series may stand in for, in the order the page lists
+ * them, with where each sits in a design. R is one value for several
+ * resistors: both arms of the Wien bridge, both integrators of the
+ * quadrature loop, every section of a ladder (its last one is Rg, the
+ * amplifier's input resistor). Built from two in series, it is a pair in
+ * each of them, so it counts that many times against a limit (pairCost).
+ */
+export const PAIR_PARTS = [
+	{ name: 'R', value: (d) => d.r },
+	{ name: 'Rf1', value: (d) => (d.limiter.kind === 'diodes' ? d.parts.rf1 : null) },
+	{ name: 'Rf2', value: (d) => (d.limiter.kind === 'diodes' ? d.parts.rf2 : null) },
+	{ name: 'Rser', value: (d) => (d.limiter.kind === 'jfet' ? d.parts.rSeries : null) },
+	{ name: 'Ra', value: (d) => (d.limiter.kind === 'jfet' ? d.parts.ra : null) },
+	{ name: 'Rn', value: (d) => (d.limiter.kind === 'clamp' ? d.parts.rn : null) },
+	{ name: 'Rd1', value: (d) => (d.limiter.kind === 'clamp' ? d.parts.rd1 : null) }
+];
+
+/** How many resistors the name stands for in this topology: R several, the rest one each. */
+export function pairCost(topology, name) {
+	if (name !== 'R') return 1;
+	const topo = TOPOLOGY_BY_ID[topology];
+	return topo?.ladder ? topo.ladder.sections : 2;
+}
+
+/** The names of a design's resistors that are two in series, in PAIR_PARTS order. */
+export function oscillatorPairNames(design) {
+	if (!design?.pairs || !Array.isArray(design.resistorSeries)) return [];
+	return PAIR_PARTS.filter((p) => {
+		const v = p.value(design);
+		return typeof v === 'number' && v > 0 && seriesPair(v, design.resistorSeries) !== null;
+	}).map((p) => p.name);
+}
+
+/** How many resistors of a design are two in series, each R counted where it sits. */
+export function oscillatorPairCount(design) {
+	return oscillatorPairNames(design).reduce((n, name) => n + pairCost(design.topology, name), 0);
+}
+
+/**
+ * What a design misses by, the figure "up to N pairs" ranks designs with
+ * (lower is better). It is made of what the designer aims its parts at:
+ * the frequency, ln(f0 / f); the amplitude the limiter holds, ln(A held /
+ * A asked); and the start the parts set, the start gain against the
+ * excess asked for (a diode limiter) or the start-up growth Rn designs in,
+ * its rho against ln(1 + growth) / pi (the quadrature loop). A lamp or an
+ * AGC starts far above balance by design, so only whether it starts counts
+ * there. Each miss is taken in units of what the tool lets pass, squared,
+ * and the squares are summed, the way the filter tool sums its stages:
+ * 2 % for the frequency (MEASURE_FREQUENCY_SCALE: a single resistor that
+ * misses by more is what two in series are for, and every design is
+ * checked to land within it), a tenth for the amplitude and the start
+ * (MEASURE_AMPLITUDE_SCALE: past it the page flags the amplitude, and the
+ * limiter's sizing weighs the start the same as the amplitude). So a
+ * 6 % frequency error costs as much as a 30 % amplitude error, and a pair
+ * that only fixes the amplitude still counts. A design that does not
+ * start, or does not hold its amplitude inside the op-amp's swing, adds a
+ * million for each, more than any set of misses, so a working design
+ * always ranks first; one that cannot be built is Infinity.
+ */
+export const MEASURE_FREQUENCY_SCALE = 0.02;
+export const MEASURE_AMPLITUDE_SCALE = 0.1;
+export function oscillatorMeasure(design, { excessGain = 0.05, quadGrowth = 0.1 } = {}) {
+	if (!design) return Infinity;
+	const sq = (ratio, scale) => (ratio > 0 && Number.isFinite(ratio) ? (Math.log(ratio) / scale) ** 2 : 0);
+	const holds = design.limiter.regulates !== false && design.opamp.swingOk;
+	let m = (design.starts ? 0 : 1e6) + (holds ? 0 : 1e6);
+	m += sq(design.f0 / design.frequency, MEASURE_FREQUENCY_SCALE);
+	if (design.limiter.amplitudeActual > 0) m += sq(design.limiter.amplitudeActual / design.amplitude, MEASURE_AMPLITUDE_SCALE);
+	if (design.limiter.kind === 'diodes') m += sq(design.startGain / (design.requiredGain * (1 + excessGain)), MEASURE_AMPLITUDE_SCALE);
+	if (design.limiter.kind === 'clamp') m += sq(design.limiter.rho / (Math.log(1 + quadGrowth) / Math.PI), MEASURE_AMPLITUDE_SCALE);
+	return m;
+}
+
+/** The limit a call asks for: a whole number with `pairs` true and a list, otherwise null (no limit). */
+function pairLimitOf(options) {
+	const v = options.pairLimit;
+	if (options.pairs !== true || !Array.isArray(options.resistorSeries)) return null;
+	return typeof v === 'number' && Number.isFinite(v) ? Math.max(0, Math.round(v)) : null;
+}
+
+/**
+ * Designs already made, by their options, and the designs made under a
+ * limit: the page asks for the same design again for its comparison table
+ * and on every rerun, a limit tries several whitelists, each a whole
+ * design, and the AM tool's carrier tries every whitelist of its R, Rf1 and
+ * Rf2 against the same single parts. The oldest goes first once the memo is
+ * full. A design is never changed once made, so one object serves every call.
+ */
+const limitMemo = new Map();
+const LIMIT_MEMO_SIZE = 600;
+function memoized(key, make) {
+	if (limitMemo.has(key)) {
+		const hit = limitMemo.get(key);
+		limitMemo.delete(key);
+		limitMemo.set(key, hit);
+		return hit;
+	}
+	const value = make();
+	limitMemo.set(key, value);
+	if (limitMemo.size > LIMIT_MEMO_SIZE) limitMemo.delete(limitMemo.keys().next().value);
+	return value;
+}
+
+/**
+ * Whether designOscillator(options) is a design already made under a limit,
+ * so asking for it again costs nothing: the page then shows it at once
+ * instead of waiting for the typing to pause. False without a limit.
+ */
+export function oscillatorIsMemoized(options = {}) {
+	const limit = pairLimitOf(options);
+	if (limit === null) {
+		// no limit: designOscillator reads the single design and, where pairs
+		// may help, the paired one, both through designCached
+		const key = (pairs) => {
+			const { pairLimit, ...rest } = { ...options, pairs };
+			return `design ${JSON.stringify({ ...rest, pairs: rest.pairs instanceof Set ? [...rest.pairs] : rest.pairs })}`;
+		};
+		const paired = anyPairAllowed(options.pairs) && Array.isArray(options.resistorSeries);
+		return limitMemo.has(key(false)) && (!paired || limitMemo.has(key(options.pairs)));
+	}
+	const { pairLimit, ...rest } = options;
+	return limitMemo.has(`${JSON.stringify(rest)}|limit ${limit}`);
+}
+
+/** designWith, kept in the memo by its options (a whitelist as a Set is keyed as the array of its names; pairLimit is not read). */
+function designCached(options) {
+	const { pairLimit, ...rest } = options;
+	const key = { ...rest, pairs: rest.pairs instanceof Set ? [...rest.pairs] : rest.pairs };
+	return memoized(`design ${JSON.stringify(key)}`, () => designWith(rest));
+}
+
+/** Measures this close, relative to the larger, are a tie, so rounding noise never decides. */
+const MEASURE_TIE = 1e-9;
+function clearlyBelow(a, b) {
+	if (a === b || a === Infinity) return false;
+	if (b === Infinity) return true;
+	return a < b - MEASURE_TIE * Math.max(Math.abs(a), Math.abs(b));
+}
+
+/**
+ * The resistors of this oscillator that two in series may stand in for, in
+ * PAIR_PARTS order: those its limiter has (Rf1 and Rf2 for diodes, Rser and
+ * Ra for an AGC, Rn and Rd1 for the clamp), with R, whether or not pairs
+ * where they help made them pairs.
+ */
+function pairCandidates(designs) {
+	return PAIR_PARTS.filter((p) =>
+		designs.some((d) => {
+			const v = d ? p.value(d) : null;
+			return typeof v === 'number' && v > 0;
+		})
+	).map((p) => p.name);
+}
+
+/**
+ * "Up to N pairs" for one oscillator. It starts from the design with pairs
+ * where they help (designOscillator with pairs true): when that one holds N
+ * pairs or fewer, each R counted where it sits, it is the answer as it
+ * stands. Otherwise every whitelist of the resistors that may pair
+ * (pairCandidates) that fits in N is designed again with it (a real design:
+ * the parts that follow are solved again from the ones kept), kept only
+ * where it does no harm against one resistor per part (pairsDoNoHarm), and
+ * the one that misses least by oscillatorMeasure wins; one resistor per
+ * part is in the running too. The whitelists are not only the subsets of
+ * the pairs where they help: with R single, the frequency moves and the
+ * limiter is solved again, and then Rf2 can call for two in series where it
+ * did not before (a 1 kHz phase shift on the lab kit holds its amplitude
+ * with Rf1 and Rf2 as pairs, and with no subset of R and Rf1). A tie goes to
+ * fewer pairs, then to the whitelist that holds the parts listed first
+ * (PAIR_PARTS). The design returned then carries pairLimit: { limit,
+ * allowed, kept, dropped, added, count, fullCount }: the whitelist it was
+ * designed with (designOscillator with pairs set to it gives it back), the
+ * names that are pairs in it, the pairs where they help it gives up, those
+ * it adds that pairs where they help leave single, and how many resistors
+ * are pairs with the limit and without it. Null when nothing within the
+ * limit can be built (one resistor per part cannot either).
+ */
+function limitedOscillator(options, limit) {
+	const { pairLimit, ...rest } = options;
+	const base = JSON.stringify(rest);
+	const build = (pairs) => designCached({ ...rest, pairs });
+	return memoized(`${base}|limit ${limit}`, () => {
+		const single = build(false);
+		const paired = build(true);
+		const full = pairsDoNoHarm(paired, single) ? paired : single;
+		const names = oscillatorPairNames(full);
+		const fullCount = oscillatorPairCount(full);
+		if (fullCount <= limit) return full;
+		const topology = rest.topology ?? 'wien';
+		const measure = (d) => oscillatorMeasure(d, rest);
+		const pool = pairCandidates([single, paired]);
+		let best = { design: single, measure: measure(single), count: 0, allowed: [] };
+		for (let size = 1; size <= pool.length; size++) {
+			for (const allowed of pairSubsets(pool, size)) {
+				if (allowed.reduce((n, name) => n + pairCost(topology, name), 0) > limit) continue;
+				const design = build(allowed);
+				if (!design || !pairsDoNoHarm(design, single)) continue;
+				const m = measure(design);
+				const count = oscillatorPairCount(design);
+				if (clearlyBelow(m, best.measure) || (!clearlyBelow(best.measure, m) && count < best.count)) best = { design, measure: m, count, allowed };
+			}
+		}
+		if (!best.design) return null;
+		const kept = oscillatorPairNames(best.design);
+		return { ...best.design, pairLimit: { limit, allowed: best.allowed, kept, dropped: names.filter((n) => !kept.includes(n)), added: kept.filter((n) => !names.includes(n)), count: best.count, fullCount } };
+	});
 }
 
 /**
@@ -463,7 +683,7 @@ function designWith({
 		const rc = r * c;
 		// the inverter's matched pair is the reference; Rn sets the start-up growth
 		rg = nearestResistor(10_000, resistorSeries);
-		const rn = pairedResistor(r / rho0, resistorSeries, pairs);
+		const rn = pairedResistor(r / rho0, resistorSeries, pairAllowed(pairs, 'Rn'));
 		const rho = r / rn;
 		const pole = solvePole('quadrature', { ...base, rc, rho }, { omega0: 1 / rc });
 		const pole0 = solvePole('quadrature', { ...base, rc, rho: 0 }, { omega0: 1 / rc });
@@ -645,7 +865,7 @@ function designWith({
 		// what the parts were picked from, so a table or an export can tell
 		// two resistors in series from one part (seriesPair in eseries.js)
 		resistorSeries,
-		pairs: Boolean(pairs) && Array.isArray(resistorSeries),
+		pairs: anyPairAllowed(pairs) && Array.isArray(resistorSeries),
 		startGain,
 		requiredGain,
 		idealGain: topo.gain,

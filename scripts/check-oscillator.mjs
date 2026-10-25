@@ -18,16 +18,24 @@
 //    off changes nothing, on keeps every resistor a value on hand or a
 //    pair of them, is never worse than one resistor per part, and the
 //    export names each pair.
+// 8. A limit on the pairs (up to N): never more than N, each R counted
+//    where it sits; N at or above the count of pairs where they help is
+//    that design, N = 0 single parts; the measure never worsens as N
+//    grows below the count; each limited design is the real design of the
+//    whitelist it names; the exports and sentences follow the parts kept.
+//    The whitelists tried are every subset of the resistors that may pair,
+//    not only of the pairs where they help: the result is the one an
+//    exhaustive search over them finds.
 // Exits non-zero on any failure. LTspice itself is run by check-ltspice.mjs.
 
 import { readFileSync } from 'node:fs';
 import katex from 'katex';
-import { LAB_KIT, seriesPair } from '../src/lib/filter/eseries.js';
-import { AMPLITUDE_TOLERANCE, amplitudeRemark, explainBarkhausen, explainOpampLimit, explainStabilizer, explainTopology } from '../src/lib/oscillator/explain.js';
+import { LAB_KIT, pairSubsets, seriesPair } from '../src/lib/filter/eseries.js';
+import { AMPLITUDE_TOLERANCE, amplitudeRemark, explainBarkhausen, explainOpampLimit, explainStabilizer, explainTopology, pairLimitNote } from '../src/lib/oscillator/explain.js';
 import { DIODES, feedbackLimiterAmplitude } from '../src/lib/oscillator/limiter.js';
 import { openLoop, retune, solveBalance, solvePole, zeroPhase } from '../src/lib/oscillator/loop.js';
 import { buildElements, generateNetlist, generateSchematic, pairNotes } from '../src/lib/oscillator/spice.js';
-import { compareOscillators, designOscillator, PAIRS_FREQUENCY_SLACK, solveLadder, TOPOLOGIES } from '../src/lib/oscillator/topologies.js';
+import { compareOscillators, designOscillator, oscillatorMeasure, oscillatorPairCount, oscillatorPairNames, pairCost, PAIR_PARTS, PAIRS_FREQUENCY_SLACK, solveLadder, TOPOLOGIES } from '../src/lib/oscillator/topologies.js';
 import { parseSchematic, spiceValue } from '../src/lib/spice/core.js';
 import { audit } from '../src/lib/spice/geometry.js';
 import { realOpampProblems } from './lib-real-opamp.mjs';
@@ -634,6 +642,343 @@ const WT = 2 * Math.PI * 3e6;
 			}
 		}
 		check('amplitude: with two in series no oscillator clips where the single-part one holds', worse.length === 0 && compared > 50, worse.length ? worse.slice(0, 4).join('; ') : `${compared} designs`);
+	}
+}
+
+/* ------------------------------ a limit on the number of pairs (up to N) */
+// The stock picker's "Up to N pairs": the design with pairs where they help
+// when it holds N or fewer, otherwise the subset of its pairs that misses
+// least by oscillatorMeasure. R counts once for each resistor it is (both
+// Wien arms, both integrators, every ladder section), so the count is the
+// resistors on the board built from two in series.
+{
+	const { componentOptions } = await import('../src/lib/stock.js');
+	const json = (d) => JSON.stringify(d);
+	const strip = (d) => {
+		if (!d) return d;
+		const { pairLimit, ...rest } = d;
+		return rest;
+	};
+	const SHORT_PARTS = { resistorSeries: [1000, 2200, 4700, 10000, 22000, 47000, 100000], capacitors: [1e-9, 10e-9, 100e-9] };
+	const stocks = { lab: componentOptions('lab', '', '', true), labR: componentOptions('labR', '', '', true), short: { ...SHORT_PARTS, pairs: true } };
+	const limitCases = [];
+	for (const t of TOPOLOGIES) {
+		for (const stabilizer of t.id === 'wien' ? ['diodes', 'lamp', 'jfet'] : ['diodes']) {
+			for (const [frequency, amplitude] of [[1000, 3], [55000, 1], [200, 5], [7300, 4], [20000, 3]]) limitCases.push({ topology: t.id, stabilizer, frequency, amplitude });
+		}
+	}
+	// the resistors of the exported circuit that are two in series: what a
+	// limit counts, read off the netlist rather than off the designer's names
+	const boardPairs = (d) => {
+		try {
+			return buildElements(d).filter((e) => e.kind === 'R' && typeof e.value === 'number' && seriesPair(e.value, d.resistorSeries)).length;
+		} catch {
+			return null;
+		}
+	};
+	const plainText = (text) => !/[–—]|\byou\b|\byour\b|undefined|NaN|\bnull\b/i.test(text);
+
+	// no limit, or a limit where nothing can pair, changes nothing
+	{
+		const moved = [];
+		for (const c of limitCases) {
+			const tag = `${c.topology}/${c.stabilizer} ${c.frequency} Hz`;
+			const lab = stocks.lab;
+			if (json(designOscillator({ ...c, ...lab, pairLimit: null })) !== json(designOscillator({ ...c, ...lab }))) moved.push(`null ${tag}`);
+			if (json(designOscillator({ ...c, ...lab, pairs: false, pairLimit: 1 })) !== json(designOscillator({ ...c, ...lab, pairs: false }))) moved.push(`pairs off ${tag}`);
+			if (json(designOscillator({ ...c, resistorSeries: 'E24', capacitors: null, pairs: true, pairLimit: 1 })) !== json(designOscillator({ ...c, resistorSeries: 'E24', capacitors: null }))) moved.push(`E24 ${tag}`);
+		}
+		check('pair limit: none (null), pairs off or a series instead of a list leave every design as it was', moved.length === 0, moved.length ? moved.slice(0, 3).join('; ') : `${limitCases.length} cases each`);
+	}
+
+	// the designers take a whitelist: every name is pairs on, none is pairs off
+	{
+		const moved = [];
+		const every = PAIR_PARTS.map((p) => p.name);
+		for (const c of limitCases) {
+			const tag = `${c.topology}/${c.stabilizer} ${c.frequency} Hz`;
+			const parts = stocks.lab;
+			const on = json(designOscillator({ ...c, ...parts, pairs: true }));
+			if (json(designOscillator({ ...c, ...parts, pairs: every })) !== on) moved.push(`array ${tag}`);
+			if (json(designOscillator({ ...c, ...parts, pairs: new Set(every) })) !== on) moved.push(`Set ${tag}`);
+			if (json(designOscillator({ ...c, ...parts, pairs: [] })) !== json(designOscillator({ ...c, ...parts, pairs: false }))) moved.push(`empty ${tag}`);
+		}
+		check('pair limit: a whitelist of every name is pairs on, an empty one pairs off, as an array or a Set', moved.length === 0, moved.length ? moved.slice(0, 3).join('; ') : `${limitCases.length} cases`);
+	}
+
+	// every N from 0 to one past the count of the design with pairs where
+	// they help, on three lists, with the exports and the words of each
+	{
+		const over = [];
+		const notFull = [];
+		const notSingle = [];
+		const rising = [];
+		const unreal = [];
+		const harm = [];
+		const stray = [];
+		const counted = [];
+		const exported = [];
+		const words = [];
+		let limited = 0;
+		let keeping = 0;
+		let cases = 0;
+		let nulls = 0;
+		let drawn = 0;
+		for (const [sname, parts] of Object.entries(stocks)) {
+			const list = parts.resistorSeries;
+			for (const c of limitCases) {
+				const tag = `${sname} ${c.topology}/${c.stabilizer} ${c.frequency} Hz`;
+				const full = designOscillator({ ...c, ...parts });
+				const single = designOscillator({ ...c, ...parts, pairs: false });
+				if (!full) continue;
+				cases++;
+				const total = oscillatorPairCount(full);
+				const fullBoard = boardPairs(full);
+				if (fullBoard !== null && fullBoard !== total) counted.push(`${tag}: ${fullBoard} on the board, ${total} counted`);
+				let previous = Infinity;
+				for (let n = 0; n <= total + 1; n++) {
+					const d = designOscillator({ ...c, ...parts, pairLimit: n });
+					const at = `${tag} N=${n}`;
+					if (!d) {
+						// nothing within the limit can be built: one resistor per part cannot either
+						nulls++;
+						if (single || n >= total) unreal.push(`${at}: no design`);
+						previous = Infinity;
+						continue;
+					}
+					const count = oscillatorPairCount(d);
+					const board = boardPairs(d);
+					if (count > n) over.push(`${at}: ${count} pairs`);
+					if (board !== null && board !== count) counted.push(`${at}: ${board} on the board, ${count} counted`);
+					if (n >= total) {
+						if (json(d) !== json(full)) notFull.push(at);
+						continue;
+					}
+					limited++;
+					if (count > 0) keeping++;
+					if (!d.pairLimit || d.pairLimit.count !== count || d.pairLimit.fullCount !== total || d.pairLimit.limit !== n) unreal.push(`${at}: ${json(d.pairLimit)}`);
+					if (n === 0 && json(strip(d)) !== json(single)) notSingle.push(at);
+					// the measure never gets worse as N grows, below the count
+					const m = oscillatorMeasure(d, c);
+					if (m > previous * (1 + 1e-9)) rising.push(`${at}: ${previous.toExponential(3)} -> ${m.toExponential(3)}`);
+					previous = m;
+					// a real design: the whitelist it names gives it back, and its
+					// figures are those of its parts
+					const lim = d.pairLimit ?? { allowed: [], kept: [], dropped: [] };
+					const rebuilt = lim.allowed.length ? designOscillator({ ...c, ...parts, pairs: lim.allowed }) : single;
+					if (json(rebuilt) !== json(strip(d))) unreal.push(`${at}: not the design of [${lim.allowed}]`);
+					if (!lim.kept.every((name) => lim.allowed.includes(name))) unreal.push(`${at}: kept ${lim.kept} outside [${lim.allowed}]`);
+					// dropped: the pairs of the full design given up; added: the pairs it leaves single that this one gains
+					const fullNames = oscillatorPairNames(full);
+					if (json(lim.dropped) !== json(fullNames.filter((x) => !lim.kept.includes(x))) || json(lim.added ?? []) !== json(lim.kept.filter((x) => !fullNames.includes(x)))) unreal.push(`${at}: dropped and added are not the pairs of the full design given up and gained`);
+					const topo = TOPOLOGIES.find((t) => t.id === d.topology);
+					if (!rel(d.fIdeal, topo.k / (2 * Math.PI * d.r * d.c), 1e-12)) unreal.push(`${at}: fIdeal is not k / (2 pi R C)`);
+					if (d.limiter.kind === 'diodes') {
+						const p = d.parts;
+						const wien = d.topology === 'wien';
+						const start = wien ? 1 + (p.rf1 + p.rf2) / d.rg : (p.rf1 + p.rf2) / d.rg;
+						const g = d.requiredGain;
+						const a = feedbackLimiterAmplitude({ rf1: p.rf1, rf2: p.rf2, rt: wien ? (g - 1) * d.rg : g * d.rg, fraction: wien ? (g - 1) / g : 1, diode: DIODES[d.diode] });
+						if (!rel(d.startGain, start, 1e-12) || (a === null ? d.limiter.amplitudeActual !== null : !rel(d.limiter.amplitudeActual, a, 1e-12))) unreal.push(`${at}: start gain or amplitude not those of Rf1 and Rf2`);
+					}
+					// never worse than one resistor per part, the rule pairs where they help keep
+					if (single) {
+						const s = [single.starts, single.limiter.regulates !== false && single.opamp.swingOk];
+						const q = [d.starts, d.limiter.regulates !== false && d.opamp.swingOk];
+						const miss = (x) => Math.abs(Math.log(x.f0 / c.frequency));
+						if ((s[0] && !q[0]) || (s[1] && !q[1])) harm.push(`${at}: starts ${s[0]} -> ${q[0]}, holds ${s[1]} -> ${q[1]}`);
+						else if (q[0] === s[0] && q[1] === s[1] && miss(d) > miss(single) + PAIRS_FREQUENCY_SLACK) harm.push(`${at}: ${(100 * miss(single)).toFixed(3)} % -> ${(100 * miss(d)).toFixed(3)} %`);
+					}
+					const p = d.parts;
+					for (const [k, v] of Object.entries({ r: d.r, rg: d.rg, rf1: p.rf1, rf2: p.rf2, rf: p.rf1 ? null : p.rf, rSeries: p.rSeries, ra: p.ra, rb: p.rb, rx: p.rx, rn: p.rn, rd1: p.rd1, rd2: p.rd2 })) {
+						if (v && !seriesPair(v, list) && !list.some((x) => Math.abs(x / v - 1) < 1e-9)) stray.push(`${at} ${k} ${v}`);
+					}
+					// the words: the limit's sentence, and the amplitude remark never
+					// asks for pairs that are on
+					const note = pairLimitNote(d);
+					if (!note || !plainText(note)) words.push(`${at}: ${note}`);
+					const remark = amplitudeRemark(d);
+					if (remark && (!plainText(remark.text) || /two resistors in series get closer/.test(remark.text))) words.push(`${at}: ${remark.text}`);
+					// the exports (N = 0 is single parts: nothing more to see there)
+					if (n === 0) continue;
+					let cir;
+					let asc;
+					try {
+						cir = generateNetlist(d);
+						asc = generateSchematic(d);
+					} catch {
+						continue;
+					}
+					drawn++;
+					const lines = pairNotes(d);
+					const named = lines.flatMap((l) => l.split(' = ')[0].split(', ')).sort();
+					const wanted = buildElements(d).filter((e) => e.kind === 'R' && typeof e.value === 'number' && seriesPair(e.value, list)).map((e) => e.name).sort();
+					if (json(named) !== json(wanted)) exported.push(`${at}: notes name ${named} for ${wanted}`);
+					if (!cir.includes(`* ${note}\n`)) exported.push(`${at}: the .cir lacks the limit line`);
+					if (!lines.every((l) => asc.includes(l.replace('their sum is used below', 'the drawing above carries their sum')))) exported.push(`${at}: the .asc lacks a pair line`);
+					const { elements: got, clashes, dangling } = parseSchematic(asc);
+					if (clashes.length || dangling.length) exported.push(`${at}: ${[...clashes, ...dangling][0]}`);
+					for (const w of buildElements(d).filter((e) => (e.kind === 'R' || e.kind === 'C') && typeof e.value === 'number')) {
+						const g = got.find((e) => e.name === w.name);
+						if (!g || g.value !== spiceValue(w.value)) exported.push(`${at}: ${w.name} reads ${g?.value}`);
+					}
+					const issues = audit(asc);
+					if (issues.length) exported.push(`${at}: ${issues[0].kind}: ${issues[0].detail}`);
+				}
+			}
+		}
+		check('pair limit: never more pairs than N, every R counted where it sits, the count the netlist shows', over.length === 0 && counted.length === 0 && limited > 100, over.length || counted.length ? [...over, ...counted].slice(0, 3).join('; ') : `${limited} limited designs of ${cases} oscillators, ${keeping} keeping some pairs`);
+		check('pair limit: N at or above the count of pairs where they help gives exactly that design', notFull.length === 0, notFull.length ? notFull.slice(0, 3).join('; ') : `${2 * cases} designs`);
+		check('pair limit: N = 0 is one resistor per part', notSingle.length === 0, notSingle.slice(0, 3).join('; '));
+		check('pair limit: the measure never gets worse as N grows, up to the count', rising.length === 0, rising.slice(0, 3).join('; '));
+		check('pair limit: each limited design is the real design of the whitelist it names, its figures those of its parts', unreal.length === 0, unreal.length ? unreal.slice(0, 3).join('; ') : `${limited} designs rebuilt${nulls ? `, ${nulls} with nothing buildable inside the limit, as with single parts` : ''}`);
+		check('pair limit: never worse than one resistor per part (starts, holds, frequency)', harm.length === 0, harm.slice(0, 3).join('; '));
+		check('pair limit: every resistor a value on hand or two of them in series', stray.length === 0, stray.slice(0, 3).join('; '));
+		check('pair limit: the exports name the pairs kept, carry the limit line, and the drawings stay the netlist, drawn clean', exported.length === 0 && drawn > 50, exported.length ? exported.slice(0, 3).join('; ') : `${drawn} limited exports`);
+		check('pair limit: the sentences read cleanly and never ask for pairs that are on', words.length === 0, words.slice(0, 2).join(' | '));
+	}
+
+	// the case to read: a 1 kHz, 3 V Wien bridge on the lab kit holds R (both
+	// arms), Rf1 and Rf2 as pairs, 4 in all; each step of N buys the next best
+	{
+		const c = { topology: 'wien', stabilizer: 'diodes', frequency: 1000, amplitude: 3, ...stocks.lab };
+		const at = [0, 1, 2, 3, 4].map((n) => designOscillator({ ...c, pairLimit: n }));
+		const names = at.map((d) => oscillatorPairNames(d).join('+') || '-');
+		const measures = at.map((d) => oscillatorMeasure(d, c));
+		check(
+			'pair limit: Wien 1 kHz on the lab kit keeps nothing, Rf1, R, R and Rf1, then all of R, Rf1 and Rf2 as N goes 0 to 4',
+			names.join(' ') === '- Rf1 R R+Rf1 R+Rf1+Rf2' && at[1].parts.rf1 === 15510 && at[1].r === 33000 && at[2].r === 33680 && measures.every((m, i) => i === 0 || m < measures[i - 1]),
+			names.map((n, i) => `${i}: ${n} ${measures[i].toFixed(3)}`).join(', ')
+		);
+		const cir1 = generateNetlist(at[1]);
+		check(
+			'pair limit: its N = 1 netlist names the one pair kept and says which went back to single parts',
+			/^\* RF1 = 15k \+ 510 in series \(their sum is used below\)$/m.test(cir1) && !/^\* RS, RP = /m.test(cir1) && cir1.includes(`* ${pairLimitNote(at[1])}\n`) && pairLimitNote(at[1]) === 'With at most 1 pair, Rf1 stays two resistors in series; R (both arms) and Rf2 are single parts.',
+			pairLimitNote(at[1])
+		);
+		check('pair limit: the design with no limit says nothing of one', pairLimitNote(at[4]) === null && !generateNetlist(at[4]).includes('With at most'));
+		// the page asks again for its comparison table: the same design, at once
+		check('pair limit: the same limited design asked again comes from the memo', designOscillator({ ...c, pairLimit: 1 }) === at[1]);
+	}
+
+	// a limit that gives up a pair on the amplitude's resistors says a higher
+	// one gets closer: a 200 Hz, 3 V phase shift on the lab kit with one pair
+	{
+		const one = designOscillator({ topology: 'phaseShift', stabilizer: 'diodes', frequency: 200, amplitude: 3, ...stocks.lab, pairLimit: 1 });
+		const r = amplitudeRemark(one);
+		check(
+			'pair limit: the amplitude remark of a design that gave up Rf2 asks for more pairs, not for pairs',
+			json(one.pairLimit?.kept) === '["Rf1"]' && json(one.pairLimit?.dropped) === '["Rf2"]' && /allowing more pairs gets closer\.$/.test(r?.text ?? ''),
+			r?.text
+		);
+	}
+
+	// a limit that keeps no pair says why: on a 7.3 kHz, 4 V phase shift,
+	// Rf1 or Rf2 alone fits in one pair, but neither does better than single
+	// parts, so "only helps with more pairs" would be wrong
+	{
+		const shift = (n, frequency = 7300, amplitude = 4) => designOscillator({ topology: 'phaseShift', stabilizer: 'diodes', frequency, amplitude, ...stocks.lab, pairLimit: n });
+		const notes = [1, 2, 3].map((n) => pairLimitNote(shift(n)));
+		const kept = [1, 2, 3].map((n) => shift(n).pairLimit?.kept.length ?? -1);
+		const fits = notes.every((t) => /every resistor is a single part: none of the pairs that fit brings the oscillator closer to its targets\.$/.test(t ?? ''));
+		check(
+			'pair limit: a limit that keeps no pair says the pairs that fit do no better, never that each one needs more pairs',
+			kept.every((k) => k === 0) && fits && notes.every((t) => plainText(t)),
+			notes[0]
+		);
+	}
+
+	// the whitelists a limit tries are every subset of the resistors the
+	// oscillator may pair, not only of the pairs where they help: with R
+	// single the frequency moves and the limiter is solved again, and then Rf2
+	// can call for two in series where it did not before
+	{
+		const lab = stocks.lab;
+		const held = (d) => Boolean(d && d.starts && d.limiter.regulates !== false && d.opamp.swingOk);
+		// a 1 kHz, 3 V phase shift: R (3 resistors) and Rf1 where they help;
+		// with two pairs the parts hold the amplitude only with Rf1 and Rf2
+		const shiftCase = { topology: 'phaseShift', stabilizer: 'diodes', frequency: 1000, amplitude: 3 };
+		const shift = [2, 3].map((n) => designOscillator({ ...shiftCase, ...lab, pairLimit: n }));
+		const shiftSingle = designOscillator({ ...shiftCase, ...lab, pairs: false });
+		check(
+			'pair limit: a 1 kHz, 3 V phase shift on the lab kit holds its amplitude with up to 2 or 3 pairs (Rf1 and Rf2), which single parts do not',
+			shift.every((d) => held(d) && json(d.pairLimit?.kept) === '["Rf1","Rf2"]' && json(d.pairLimit?.added) === '["Rf2"]' && rel(d.limiter.amplitudeActual, 0.996, 0.01) && oscillatorMeasure(d, shiftCase) < 1000) && !held(shiftSingle),
+			shift.map((d) => `${d.pairLimit?.kept.join('+')}: ${d.limiter.amplitudeActual?.toFixed(3)} V, measure ${oscillatorMeasure(d, shiftCase).toFixed(1)}`).join('; ')
+		);
+		check(
+			'pair limit: its note says Rf1 stays a pair and Rf2 becomes one, in the netlist too',
+			pairLimitNote(shift[0]) === 'With at most 2 pairs, Rf1 stays two resistors in series and Rf2 becomes two in series too; R (all 3 sections) is a single part.' && generateNetlist(shift[0]).includes(`* ${pairLimitNote(shift[0])}\n`),
+			pairLimitNote(shift[0])
+		);
+		// a 1 kHz, 3 V Bubba: R (4 resistors) and Rf1 where they help; with 2
+		// or 3 pairs, Rf1 and Rf2 land closer than Rf1 alone
+		const bubbaCase = { topology: 'bubba', stabilizer: 'diodes', frequency: 1000, amplitude: 3 };
+		const rf1Only = designOscillator({ ...bubbaCase, ...lab, pairs: ['Rf1'] });
+		const bubba = [2, 3].map((n) => designOscillator({ ...bubbaCase, ...lab, pairLimit: n }));
+		check(
+			'pair limit: a 1 kHz, 3 V Bubba on the lab kit keeps Rf1 and Rf2 with 2 or 3 pairs, closer than Rf1 alone',
+			bubba.every((d) => json(d.pairLimit?.kept) === '["Rf1","Rf2"]' && oscillatorMeasure(d, bubbaCase) < oscillatorMeasure(rf1Only, bubbaCase) - 0.1),
+			`Rf1 alone ${oscillatorMeasure(rf1Only, bubbaCase).toFixed(3)}; ${bubba.map((d, i) => `N=${i + 2} ${d.pairLimit?.kept.join('+')} ${oscillatorMeasure(d, bubbaCase).toFixed(3)}`).join(', ')}`
+		);
+
+		// on a sweep, the design a limit gives is the one an exhaustive search
+		// finds: every whitelist of the resistors that may pair whose cost (R
+		// counted where it sits) fits in N, kept where it does no harm against
+		// single parts, the lowest measure, a tie to fewer pairs and then to
+		// the whitelist holding the parts listed first; and the measure never
+		// gets worse as N grows from 0 to one below the count
+		const off = [];
+		const rising = [];
+		let searched = 0;
+		let gained = 0;
+		const outcome = (d) => [d.starts, d.limiter.regulates !== false && d.opamp.swingOk];
+		const noHarm = (p, s) => {
+			if (!p) return false;
+			if (!s) return true;
+			const [a, b] = [outcome(s), outcome(p)];
+			if ((a[0] && !b[0]) || (a[1] && !b[1])) return false;
+			if ((b[0] && !a[0]) || (b[1] && !a[1])) return true;
+			const miss = (d) => Math.abs(Math.log(d.f0 / d.frequency));
+			return miss(p) <= miss(s) + PAIRS_FREQUENCY_SLACK;
+		};
+		const clearlyBelow = (a, b) => a !== b && a !== Infinity && (b === Infinity || a < b - 1e-9 * Math.max(Math.abs(a), Math.abs(b)));
+		for (const [sname, parts] of Object.entries(stocks)) {
+			for (const c of limitCases) {
+				const full = designOscillator({ ...c, ...parts });
+				const single = designOscillator({ ...c, ...parts, pairs: false });
+				if (!full) continue;
+				const total = oscillatorPairCount(full);
+				if (total === 0) continue;
+				const fullNames = oscillatorPairNames(full);
+				const paired = designOscillator({ ...c, ...parts, pairs: PAIR_PARTS.map((p) => p.name) });
+				const names = PAIR_PARTS.filter((p) => [single, paired].some((d) => d && typeof p.value(d) === 'number' && p.value(d) > 0)).map((p) => p.name);
+				const every = [];
+				for (let size = 1; size <= names.length; size++) {
+					for (const w of pairSubsets(names, size)) {
+						const d = designOscillator({ ...c, ...parts, pairs: w });
+						every.push({ w, d, cost: w.reduce((n, name) => n + pairCost(c.topology, name), 0), m: oscillatorMeasure(d, c), count: d ? oscillatorPairCount(d) : 0 });
+					}
+				}
+				let previous = Infinity;
+				for (let n = 0; n < total; n++) {
+					const got = designOscillator({ ...c, ...parts, pairLimit: n });
+					let best = { d: single, m: oscillatorMeasure(single, c), count: 0 };
+					for (const o of every) {
+						if (o.cost > n || !noHarm(o.d, single)) continue;
+						if (clearlyBelow(o.m, best.m) || (!clearlyBelow(best.m, o.m) && o.count < best.count)) best = o;
+					}
+					searched++;
+					const at = `${sname} ${c.topology}/${c.stabilizer} ${c.frequency} Hz N=${n}`;
+					if (json(strip(got)) !== json(best.d)) off.push(`${at}: [${got ? oscillatorPairNames(got) : 'none'}] ${oscillatorMeasure(got, c).toPrecision(4)} against [${best.d ? oscillatorPairNames(best.d) : 'none'}] ${best.m.toPrecision(4)}`);
+					if (got && oscillatorPairNames(got).some((name) => !fullNames.includes(name))) gained++;
+					const m = oscillatorMeasure(got, c);
+					if (m > previous * (1 + 1e-9)) rising.push(`${at}: ${previous.toPrecision(4)} -> ${m.toPrecision(4)}`);
+					previous = m;
+				}
+			}
+		}
+		check('pair limit: on a sweep of three lists, every limit below the count gives the design an exhaustive search over every whitelist of the resistors that may pair finds', off.length === 0 && searched > 200, off.length ? off.slice(0, 3).join('; ') : `${searched} limits, ${gained} with a pair that pairs where they help leave single`);
+		check('pair limit: on that sweep the measure never gets worse as N grows from 0 to one below the count', rising.length === 0, rising.slice(0, 3).join('; '));
 	}
 }
 

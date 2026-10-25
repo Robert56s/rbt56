@@ -1,4 +1,4 @@
-import { capacitorCandidates, pairedResistor } from './eseries';
+import { anyPairAllowed, capacitorCandidates, pairAllowed, pairedResistor } from './eseries';
 
 /**
  * Multiple-feedback (MFB) low-pass, the envelope filter's other stage: the
@@ -52,18 +52,20 @@ function mfbScore(R1, R2) {
  * `pairs` and a list each may be two resistors in series, kept only when
  * the stage then lands no further from its f0 and Q than with single parts
  * (the larger of the two misses, as logs, decides), as in filter/mfb.js.
+ * A whitelist of the stage's names ('R1', 'R2', 'R3') lets R1 = R3 pair
+ * only when it names both, and R2 when it names R2.
  */
 function roundMfbStage(R1, R2, C1, C2, wn, q, resistorSeries, pairs) {
-	const round = (p) => {
-		const R1n = pairedResistor(R1, resistorSeries, p);
-		const R2n = pairedResistor(R2, resistorSeries, p);
+	const round = (p13, p2 = p13) => {
+		const R1n = pairedResistor(R1, resistorSeries, p13);
+		const R2n = pairedResistor(R2, resistorSeries, p2);
 		const aActual = (1 / C1) * (2 / R1n + 1 / R2n);
 		const bActual = 1 / (R1n * R2n * C1 * C2);
 		return { R1n, R2n, wn: Math.sqrt(bActual), q: Math.sqrt(bActual) / aActual };
 	};
 	const single = round(false);
-	if (!pairs) return single;
-	const paired = round(true);
+	if (!anyPairAllowed(pairs)) return single;
+	const paired = round(pairAllowed(pairs, 'R1') && pairAllowed(pairs, 'R3'), pairAllowed(pairs, 'R2'));
 	const miss = (r) => Math.max(Math.abs(Math.log(r.wn / wn)), Math.abs(Math.log(r.q / q)));
 	return miss(paired) <= miss(single) ? paired : single;
 }

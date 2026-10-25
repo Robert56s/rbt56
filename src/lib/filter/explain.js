@@ -682,7 +682,7 @@ function towThomasComparison(targetQ) {
 			`Where it is better. No component ratio grows with Q: for the Q of ${q.toFixed(2)} in this stage MFB needs a capacitor ratio of at least 8Q^2 = ${(8 * q * q).toFixed(1)}:1 and Sallen-Key exactly 4Q^2 = ${(4 * q * q).toFixed(1)}:1, while here Q is just Rd/R = ${q.toFixed(2)} with equal capacitors, so high-Q stages (well past Q = 5, where the one-op-amp ratios become unbuildable) are routine. The sensitivities are fixed constants of magnitude 1/2 (and 1 for Rd) whatever the Q, instead of growing with it. And the same circuit gives several outputs at once: low-pass at A2, band-pass at A1, high-pass by swapping the input resistor for a capacitor, a notch by feeding the input into a third node. The low-pass output is also non-inverting, where MFB inverts.`
 		),
 		p(
-			`Where it is worse. Three op-amps per stage instead of one: more parts, more supply current, more noise, more board space, and the third op-amp's phase lag inside the loop raises the realized Q above the designed one (Q enhancement, roughly by a factor 1 + 2 Q f0/f_T for op-amps of gain-bandwidth f_T), so f_T should be at least a few hundred times Q times f0 (the check below puts a number on it). For a plain low-Q stage where a single op-amp does the job, MFB or Sallen-Key stays the cheaper choice; the Tow-Thomas earns its op-amps when Q is high, when a filter has to be tuned, or when the band-pass or notch output is wanted too.`
+			`Where it is worse. Three op-amps per stage instead of one: more parts, more supply current, more noise, more board space, and the third op-amp's phase lag inside the loop raises the realized Q above the designed one (Q enhancement: Q_real = Q / (1 - 4 Q f0/f_T) for op-amps of gain-bandwidth f_T, which oscillates once 4 Q f0 reaches f_T), so f_T should be at least 400 times Q times f0 for a 1% error (the check below puts a number on it). For a plain low-Q stage where a single op-amp does the job, MFB or Sallen-Key stays the cheaper choice; the Tow-Thomas earns its op-amps when Q is high, when a filter has to be tuned, or when the band-pass or notch output is wanted too.`
 		)
 	];
 }
@@ -725,7 +725,7 @@ export function explainTowThomas(stageDesign, targetWn, targetQ) {
 		),
 		...towThomasComparison(targetQ),
 		p(
-			`Gain-bandwidth check for this stage: with Q = ${targetQ.toFixed(2)} and f0 = ${formatHz(f0)}, an op-amp with f_T = 3 MHz (a TL08x) shifts Q by roughly ${(100 * 2 * targetQ * f0 / 3e6).toFixed(1)}%; keeping that under 1% needs f_T above ${formatHz(200 * targetQ * f0)}.`
+			`Gain-bandwidth check for this stage: with Q = ${targetQ.toFixed(2)} and f0 = ${formatHz(f0)}, an op-amp with f_T = 3 MHz (a TL08x) ${4 * targetQ * f0 < 3e6 ? `raises Q by roughly ${(100 * (1 / (1 - (4 * targetQ * f0) / 3e6) - 1)).toFixed(1)}% (Q_real = Q / (1 - 4 Q f0 / f_T))` : 'makes the loop oscillate (4 Q f0 reaches f_T)'}; keeping that under 1% needs f_T above ${formatHz(400 * targetQ * f0)}.`
 		)
 	];
 	return blocks;
@@ -764,7 +764,7 @@ export function explainTowThomasHp(stageDesign, targetWn, targetQ) {
 		),
 		...towThomasComparison(targetQ),
 		p(
-			`Gain-bandwidth check for this stage: with Q = ${targetQ.toFixed(2)} and f0 = ${formatHz(f0)}, an op-amp with f_T = 3 MHz (a TL08x) shifts Q by roughly ${(100 * 2 * targetQ * f0 / 3e6).toFixed(1)}%; keeping that under 1% needs f_T above ${formatHz(200 * targetQ * f0)}.`
+			`Gain-bandwidth check for this stage: with Q = ${targetQ.toFixed(2)} and f0 = ${formatHz(f0)}, an op-amp with f_T = 3 MHz (a TL08x) ${4 * targetQ * f0 < 3e6 ? `raises Q by roughly ${(100 * (1 / (1 - (4 * targetQ * f0) / 3e6) - 1)).toFixed(1)}% (Q_real = Q / (1 - 4 Q f0 / f_T))` : 'makes the loop oscillate (4 Q f0 reaches f_T)'}; keeping that under 1% needs f_T above ${formatHz(400 * targetQ * f0)}.`
 		)
 	];
 }
@@ -1060,7 +1060,7 @@ export function explainTransformedOrder(design) {
 		} else {
 			blocks.push(
 				p(`A ${label} prototype loses more and more past its passband edge, so an order that meets the harder edge meets the other one too. The prototype takes the larger of the two counts:`),
-				eq(`n = \\max(n_{sl},\\ n_{sh}) = \\max(${low.n},\\ ${high.n}) = ${oi.n}`)
+				eq(`n = \\max(n_{sl},\\ n_{sh}) = \\max(${low.n},\\ ${high.n}) = ${oi.n} \\ \\Rightarrow\\ \\text{filter order } 2n = ${2 * oi.n}`)
 			);
 		}
 	} else {
@@ -1359,7 +1359,7 @@ export function explainTowThomasBp(stageDesign, targetWn, targetQ) {
 			'Against the multiple-feedback band-pass: three op-amps instead of one, but no ratio grows with Q (there R3/R2 grows like 4Q^2), the sensitivities stay at 1/2 and 1 whatever the Q, and the gain is one resistor ratio. It earns its op-amps on narrow bands, where the stage Q is high.'
 		),
 		p(
-			`Gain-bandwidth check for this stage: with Q = ${targetQ.toFixed(2)} and f0 = ${formatHz(f0)}, an op-amp with f_T = 3 MHz (a TL08x) shifts Q by roughly ${((100 * 2 * targetQ * f0) / 3e6).toFixed(1)}%; keeping that under 1% needs f_T above ${formatHz(200 * targetQ * f0)}.`
+			`Gain-bandwidth check for this stage: with Q = ${targetQ.toFixed(2)} and f0 = ${formatHz(f0)}, an op-amp with f_T = 3 MHz (a TL08x) ${4 * targetQ * f0 < 3e6 ? `raises Q by roughly ${(100 * (1 / (1 - (4 * targetQ * f0) / 3e6) - 1)).toFixed(1)}% (Q_real = Q / (1 - 4 Q f0 / f_T))` : 'makes the loop oscillate (4 Q f0 reaches f_T)'}; keeping that under 1% needs f_T above ${formatHz(400 * targetQ * f0)}.`
 		)
 	];
 }

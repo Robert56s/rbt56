@@ -1,5 +1,5 @@
 import { polyRoots } from './approximations';
-import { SERIES, capacitorCandidates, pairedResistor, seriesValues, smallCapPenalty } from './eseries';
+import { SERIES, anyPairAllowed, capacitorCandidates, pairAllowed, pairedResistor, seriesValues, smallCapPenalty } from './eseries';
 
 /**
  * Multiple-feedback band-pass (Delyiannis-Friend) with an input
@@ -325,7 +325,12 @@ function mfbBpPastStock(target, resistorSeries, pairs) {
 }
 
 /** Whether rounding clamped a part of this stage to an end of the stock (mfbBpPastStock): the stock cannot build it. */
-const mfbBpClamped = (ideal, parts, resistorSeries, pairs) => [ideal.R3, parts.R1Target, parts.R2Target].some((t) => mfbBpPastStock(t, resistorSeries, pairs));
+const mfbBpClamped = (ideal, parts, resistorSeries, pairs) =>
+	[
+		[ideal.R3, 'R3'],
+		[parts.R1Target, 'R1'],
+		[parts.R2Target, 'R2']
+	].some(([t, name]) => mfbBpPastStock(t, resistorSeries, pairAllowed(pairs, name)));
 
 /**
  * R3 rounded, R1 solved against it and rounded, R2 solved against both
@@ -336,21 +341,23 @@ const mfbBpClamped = (ideal, parts, resistorSeries, pairs) => [ideal.R3, parts.R
  * and the designers below then skip the pair.
  * With `pairs` and a list of values, the paired set is kept only when it
  * lands no further off (mfbBpMiss, its f0 miss counted f0Weight times).
+ * `pairs` may also be a list of the names allowed to pair (pairAllowed in
+ * eseries.js): 'R1', 'R2' and 'R3'.
  */
 function mfbBpRound(ideal, wn, q, gain, C1, C2, resistorSeries, pairs, f0Weight = 1) {
 	const round = (p, up) => {
-		const R3 = up ? mfbBpAbove(ideal.R3, resistorSeries) : mfbBpNearest(ideal.R3, resistorSeries, p);
+		const R3 = up ? mfbBpAbove(ideal.R3, resistorSeries) : mfbBpNearest(ideal.R3, resistorSeries, pairAllowed(p, 'R3'));
 		const R1Target = (R3 * C2) / (gain * (C1 + C2));
-		const R1 = up ? mfbBpAbove(R1Target, resistorSeries) : mfbBpNearest(R1Target, resistorSeries, p);
+		const R1 = up ? mfbBpAbove(R1Target, resistorSeries) : mfbBpNearest(R1Target, resistorSeries, pairAllowed(p, 'R1'));
 		const g2 = wn * wn * R3 * C1 * C2 - 1 / R1;
 		const R2Target = g2 > 0 && Number.isFinite(g2) ? 1 / g2 : Infinity;
-		const R2 = Number.isFinite(R2Target) ? mfbBpNearest(R2Target, resistorSeries, p) : Infinity;
+		const R2 = Number.isFinite(R2Target) ? mfbBpNearest(R2Target, resistorSeries, pairAllowed(p, 'R2')) : Infinity;
 		return { R1, R2, R3, R1Target, R2Target };
 	};
 	let single = round(false, false);
 	if (!Number.isFinite(single.R2)) single = round(false, true);
-	if (!pairs || !Array.isArray(resistorSeries)) return single;
-	const paired = round(true, false);
+	if (!anyPairAllowed(pairs) || !Array.isArray(resistorSeries)) return single;
+	const paired = round(pairs, false);
 	const missOf = (r) => (Number.isFinite(r.R2) ? mfbBpMiss(mfbBandPassActual({ ...r, C1, C2 }), wn, q, gain, f0Weight) : Infinity);
 	return missOf(paired) <= missOf(single) ? paired : single;
 }

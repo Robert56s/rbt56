@@ -1,4 +1,4 @@
-import { capacitorCandidates, nearestCapacitor, pairedResistor, smallCapPenalty } from './eseries';
+import { anyPairAllowed, capacitorCandidates, nearestCapacitor, pairAllowed, pairedResistor, smallCapPenalty } from './eseries';
 
 /**
  * Sallen-Key low-pass, unity-gain simplified form: two equal resistors R, a
@@ -10,8 +10,9 @@ import { capacitorCandidates, nearestCapacitor, pairedResistor, smallCapPenalty 
  *
  * The capacitor ratio is fixed by Q alone, which is the practical reason
  * this topology is discouraged past a low order: a Q of just 3 already asks
- * for a 36:1 capacitor ratio, on top of the Q sensitivity to R (S_R^Q = -2)
- * being four times worse than MFB's.
+ * for a 36:1 capacitor ratio. The sensitivities themselves are mild: with
+ * equal resistors Q does not depend on R at all, and moves by half of any
+ * capacitor error (see sensitivity.js).
  */
 
 const SK_R_MIN = 200;
@@ -26,16 +27,18 @@ export function capRatio(q) {
  * R (both of them) rounded to stock, and the f0 and Q the stage then has.
  * With `pairs` R may be two resistors in series, kept only when that leaves
  * the stage no further off than a single part, as in roundMfb (mfb.js).
- * Here a pair is always kept: Q is set by the capacitors alone.
+ * Here a pair is always kept: Q is set by the capacitors alone. A list of
+ * names in `pairs` (pairAllowed in eseries.js) takes 'R1' for both
+ * resistors, which are one value.
  */
 function roundSallenKey(Rtarget, Ctop, Cbottom, wn, q, resistorSeries, pairs) {
 	const round = (p) => {
-		const R = pairedResistor(Rtarget, resistorSeries, p);
+		const R = pairedResistor(Rtarget, resistorSeries, pairAllowed(p, 'R1'));
 		return { R, wn: 1 / (R * Math.sqrt(Ctop * Cbottom)), q: 0.5 * Math.sqrt(Ctop / Cbottom) };
 	};
 	const single = round(false);
-	if (!pairs) return single;
-	const paired = round(true);
+	if (!anyPairAllowed(pairs)) return single;
+	const paired = round(pairs);
 	const miss = (r) => Math.max(Math.abs(Math.log(r.wn / wn)), Math.abs(Math.log(r.q / q)));
 	return miss(paired) <= miss(single) ? paired : single;
 }

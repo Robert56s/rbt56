@@ -673,7 +673,11 @@ function stageCorner(stage) {
 	return { f, tex: `${lhs} = ${numeric} = ${hzTex(f)}${where ? ` \\qquad ${where.replace('\\quad ', '')}` : ''}` };
 }
 
-function stagesToParts({ topology, stock, design, realizedStages, needsTowThomas, pairs = false }) {
+/** How the parts are rounded with two in series allowed: where no single one comes close, for up to pairLimit resistors when a limit is set. */
+const pairsRounding = (pairs, pairLimit) =>
+	!pairs ? '' : pairLimit ? ` (or, for up to ${pairLimit} of them in the whole filter, to two resistors in series where no single one comes close)` : ' (or to two resistors in series where no single one comes close)';
+
+function stagesToParts({ topology, stock, design, realizedStages, needsTowThomas, pairs = false, pairLimit = null }) {
 	const known = TOPOLOGY_LINE[topology] ? topology : 'mfb';
 	const others = Object.keys(TOPOLOGY_LINE).filter((t) => t !== known);
 	// order 1: every stage is first order, which the Topology menu does not touch
@@ -686,7 +690,7 @@ function stagesToParts({ topology, stock, design, realizedStages, needsTowThomas
 	}
 	const rounding =
 		(ROUNDING[stock] ?? 'fixes the capacitors from the values in stock, solves for the resistors, rounds each to the nearest value in stock') +
-		(pairs ? ' (or to two resistors in series where no single one comes close)' : '');
+		pairsRounding(pairs, pairLimit);
 	// zeros take the Tow-Thomas notch form, so the menu has to be on it
 	if (needsTowThomas && !['towThomas', 'boctor'].includes(topology)) {
 		menu += ' Elliptic and inverse Chebyshev put zeros in the stopband, which need Tow-Thomas or Boctor notch sections, so the page designs nothing until the menu is on Tow-Thomas or Boctor.';
@@ -744,7 +748,7 @@ const NOTCH_LINE = {
  * Band-pass stages menu, and the Notch stages menu for the notch stages
  * (every stage of a band-stop, the pole pairs of a band-pass with zeros).
  */
-function transformedStagesToParts({ type, topology, topologyNotch, stock, design, realizedStages, pairs = false }) {
+function transformedStagesToParts({ type, topology, topologyNotch, stock, design, realizedStages, pairs = false, pairLimit = null }) {
 	const stop = type === 'bandstop';
 	const stages = design && Array.isArray(design.stages) ? design.stages : [];
 	const realized = Array.isArray(realizedStages) ? realizedStages.filter(Boolean) : [];
@@ -765,7 +769,7 @@ function transformedStagesToParts({ type, topology, topologyNotch, stock, design
 	const lines = stop ? [NOTCH_LINE[notchMenu], NOTCH_LINE[otherNotch]] : [BAND_LINE[bandMenu], BAND_LINE[bandMenu === 'mfb' ? 'towThomas' : 'mfb'], ...(hasNotches ? [NOTCH_LINE[notchMenu]] : [])];
 	const rounding =
 		(ROUNDING[stock] ?? 'fixes the capacitors from the values in stock, solves for the resistors, rounds each to the nearest value in stock') +
-		(pairs ? ' (or to two resistors in series where no single one comes close)' : '');
+		pairsRounding(pairs, pairLimit);
 
 	const stage = realized[0] ?? null;
 	const corner = stageCorner(stage);
@@ -887,6 +891,7 @@ export function filterBasics({
 	stock,
 	needsTowThomas,
 	pairs = false,
+	pairLimit = null,
 	method,
 	topologyNotch
 } = {}) {
@@ -903,8 +908,8 @@ export function filterBasics({
 		...theOrder({ type, response, side, ...limits, ok, order }),
 		...opampAndQ({ type, response, side, ...limits, ok }),
 		...(transformed
-			? transformedStagesToParts({ type, topology, topologyNotch, stock, design, realizedStages, pairs })
-			: stagesToParts({ topology, stock, design, realizedStages, needsTowThomas, pairs })),
+			? transformedStagesToParts({ type, topology, topologyNotch, stock, design, realizedStages, pairs, pairLimit })
+			: stagesToParts({ topology, stock, design, realizedStages, needsTowThomas, pairs, pairLimit })),
 		...restOfPage({ type, amaxDb, aminDb, bandLimits, k, stages, attenuationAtFs, attenuationAtFp, attenuationAtFsl, attenuationAtFsh, attenuationAtFl, attenuationAtFh, transformed, design }),
 		h('Words used on this page'),
 		terms(transformed ? [...GLOSSARY, ...BAND_TERMS] : GLOSSARY)

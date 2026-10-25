@@ -23,7 +23,7 @@
  *     a peak detector (AGC), and an incandescent lamp in the same place
  */
 
-import { nearestResistor, pairedResistor } from '../filter/eseries';
+import { nearestResistor, pairAllowed, pairedResistor } from '../filter/eseries';
 
 /** kT/q at SPICE's default 27 C. */
 const VT = 0.025852;
@@ -157,7 +157,8 @@ function pairAmplitudeFor(G, d) {
  * one bisection finds it.
  *
  * Rf1 sets the amplitude and Rf1 + Rf2 the start gain, so with `pairs` on
- * (and a list of parts on hand) either may be two resistors in series.
+ * (and a list of parts on hand) either may be two resistors in series;
+ * `pairs` may also be a whitelist of the names that may ('Rf1', 'Rf2').
  */
 export function sizeFeedbackLimiter({ rt, rs, amplitude, fraction, diode, resistorSeries = 'E24', pairs = false }) {
 	const delta = rs - rt;
@@ -184,12 +185,14 @@ export function sizeFeedbackLimiter({ rt, rs, amplitude, fraction, diode, resist
 	// and with two in series allowed each neighbour may also be a pair
 	// (pairedResistor), the single values staying in the running.
 	const rf1Series = Array.isArray(resistorSeries) ? resistorSeries : 'E96';
-	const nearby = (target, series) => (pairs ? [nearestResistor(target, series), pairedResistor(target, series, true)] : [nearestResistor(target, series)]);
-	const around = (target, series, steps) => [...new Set(steps.flatMap((m) => nearby(target * m, series)))];
+	const pairsRf1 = pairAllowed(pairs, 'Rf1');
+	const pairsRf2 = pairAllowed(pairs, 'Rf2');
+	const nearby = (target, series, paired) => (paired ? [nearestResistor(target, series), pairedResistor(target, series, true)] : [nearestResistor(target, series)]);
+	const around = (target, series, steps, paired) => [...new Set(steps.flatMap((m) => nearby(target * m, series, paired)))];
 	const excessWanted = rs / rt - 1;
 	const combos = [];
-	for (const rf2 of around(rf2Target, resistorSeries, [0.8, 0.9, 1, 1.12, 1.25])) {
-		for (const rf1 of rf1Target < 0.02 * rs ? [0] : around(rf1Target, rf1Series, [0.95, 0.975, 0.99, 1, 1.01, 1.025, 1.05])) {
+	for (const rf2 of around(rf2Target, resistorSeries, [0.8, 0.9, 1, 1.12, 1.25], pairsRf2)) {
+		for (const rf1 of rf1Target < 0.02 * rs ? [0] : around(rf1Target, rf1Series, [0.95, 0.975, 0.99, 1, 1.01, 1.025, 1.05], pairsRf1)) {
 			const excess = (rf1 + rf2) / rt - 1;
 			if (excess < excessWanted / 3 || excess > 2.5 * excessWanted) continue;
 			// the amplitude and the excess weigh the same: a few percent of
@@ -210,7 +213,7 @@ export function sizeFeedbackLimiter({ rt, rs, amplitude, fraction, diode, resist
 		const score = Math.log(a / amplitude) ** 2 + excessScore;
 		if (!best || score < best.score || (score === best.score && order < best.order)) best = { rf1, rf2, score, order };
 	}
-	if (!best) return { rf1: pairedResistor(rf1Target, rf1Series, pairs), rf2: pairedResistor(rf2Target, resistorSeries, pairs), rf1Target, rf2Target };
+	if (!best) return { rf1: pairedResistor(rf1Target, rf1Series, pairsRf1), rf2: pairedResistor(rf2Target, resistorSeries, pairsRf2), rf1Target, rf2Target };
 	return { rf1: best.rf1, rf2: best.rf2, rf1Target, rf2Target };
 }
 
@@ -283,8 +286,8 @@ export function dividerClampConductance(V, rd1, rd2, d) {
  * on hand nearest it) so the slope
  * above threshold is steep, and Rd1 is solved so the describing function
  * meets the target conductance exactly at the wanted amplitude, before
- * rounding. Rd1 is what sets the amplitude, so with `pairs` on it may be
- * two resistors in series.
+ * rounding. Rd1 is what sets the amplitude, so with `pairs` on (or a
+ * whitelist naming 'Rd1') it may be two resistors in series.
  */
 export function sizeDividerClamp({ gTarget, amplitude, diode, resistorSeries = 'E24', pairs = false }) {
 	const rd2 = nearestResistor(1000, resistorSeries);
@@ -301,7 +304,7 @@ export function sizeDividerClamp({ gTarget, amplitude, diode, resistorSeries = '
 		else hi = mid;
 	}
 	const rd1Target = Math.sqrt(lo * hi);
-	return { rd1: pairedResistor(rd1Target, resistorSeries, pairs), rd2, rd1Target };
+	return { rd1: pairedResistor(rd1Target, resistorSeries, pairAllowed(pairs, 'Rd1')), rd2, rd1Target };
 }
 
 /** The amplitude a given clamp settles at against a target conductance. */
@@ -366,7 +369,8 @@ export function lampModel({ rHot, vLampPeak, f0, cycles = 40, alpha = 0.005 }) {
  * detector (under 0.95 rMax); among the values that allow both, the one
  * closest to the target, from the series asked for and then from E96,
  * whose steps are finer. A list of parts on hand has no E96, but with two
- * in series allowed its pairs take that place.
+ * in series allowed (`pairs` true, or a whitelist naming 'Rser') its pairs
+ * take that place.
  */
 /**
  * The detector: D1 charges Cdet to the output's negative peak less the
@@ -408,7 +412,7 @@ function agcSeries({ amplitude, legBalance, rdsOn, rChannelMin, vto, beta, diode
 	// a list of parts on hand has no E96 to fall back on, only its pairs
 	const list = Array.isArray(resistorSeries);
 	const passes = list ? [(t) => nearestResistor(t, resistorSeries)] : [(t) => nearestResistor(t, resistorSeries), (t) => nearestResistor(t, 'E96')];
-	if (list && pairs) passes.push((t) => pairedResistor(t, resistorSeries, true));
+	if (list && pairAllowed(pairs, 'Rser')) passes.push((t) => pairedResistor(t, resistorSeries, true));
 	for (const pick of passes) {
 		const around = [0.8, 0.85, 0.9, 0.93, 0.95, 0.97, 1, 1.03, 1.05, 1.1].map((f) => pick(rSeriesTarget * f));
 		const usable = [...new Set(around)].filter(fits).sort((a, b) => Math.abs(a - rSeriesTarget) - Math.abs(b - rSeriesTarget));
@@ -471,7 +475,7 @@ export function sizeAgc({ rf, gBalance, amplitude, jfet, diode, resistorSeries =
 	// no E96 to reach for, so its nearest value stands, or two in series
 	// when those are allowed and it misses by more than 2 %)
 	const miss = (ra) => Math.abs((gateAt(ra) - vto) / (vgsNeeded - vto) - 1);
-	let ra = raTarget < 1e3 ? 0 : pairedResistor(raTarget, resistorSeries, pairs);
+	let ra = raTarget < 1e3 ? 0 : pairedResistor(raTarget, resistorSeries, pairAllowed(pairs, 'Ra'));
 	if (ra > 0 && miss(ra) > 0.01 && !Array.isArray(resistorSeries)) ra = nearestResistor(raTarget, 'E96');
 	return { ok: true, rdsOn, rChannelMin, legBalance, rBalance, rBalanceTarget, rSeries, rSeriesTarget, ra, rb, rx, ratio: rb / (ra + rb), vgsNeeded, vPeak: detectorPeak(amplitude, ra + rb, diode), minAmplitude };
 }

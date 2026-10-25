@@ -1,4 +1,4 @@
-import { capacitorCandidates, nearestCapacitor, pairedResistor, smallCapPenalty } from './eseries';
+import { anyPairAllowed, capacitorCandidates, nearestCapacitor, pairAllowed, pairedResistor, smallCapPenalty } from './eseries';
 
 /**
  * Multiple-feedback (MFB) low-pass, the standard (Rauch) layout: R1 from
@@ -52,18 +52,20 @@ function scoreResistors(R1, R2) {
  * larger of its f0 and Q misses, as logs, decides. Each resistor is paired
  * on its own miss, and in Q the misses of R1 and R2 can partly cancel, so
  * pairing one of them alone could otherwise move the stage further off.
+ * `pairs` may also be a list of the names allowed to pair (pairAllowed in
+ * eseries.js): 'R1' (R1 and R3, one value) and 'R2'.
  */
 function roundMfb(R1, R2, C1, C2, wn, q, resistorSeries, pairs) {
 	const round = (p) => {
-		const R1n = pairedResistor(R1, resistorSeries, p);
-		const R2n = pairedResistor(R2, resistorSeries, p);
+		const R1n = pairedResistor(R1, resistorSeries, pairAllowed(p, 'R1'));
+		const R2n = pairedResistor(R2, resistorSeries, pairAllowed(p, 'R2'));
 		const aActual = (1 / C1) * (2 / R1n + 1 / R2n);
 		const bActual = 1 / (R1n * R2n * C1 * C2);
 		return { R1n, R2n, wn: Math.sqrt(bActual), q: Math.sqrt(bActual) / aActual };
 	};
 	const single = round(false);
-	if (!pairs) return single;
-	const paired = round(true);
+	if (!anyPairAllowed(pairs)) return single;
+	const paired = round(pairs);
 	const miss = (r) => Math.max(Math.abs(Math.log(r.wn / wn)), Math.abs(Math.log(r.q / q)));
 	return miss(paired) <= miss(single) ? paired : single;
 }

@@ -1,4 +1,4 @@
-import { capacitorCandidates, pairedResistor, smallCapPenalty } from './eseries';
+import { anyPairAllowed, capacitorCandidates, pairAllowed, pairedResistor, smallCapPenalty } from './eseries';
 
 // Boctor networks, Analog Devices Basic Linear Design, figures 8.78 and
 // 8.79. Coefficients below are independently derived from nodal equations.
@@ -52,6 +52,8 @@ function boctorMiss(a, wn, q, wz, lowSide) {
 	return Math.max(Math.abs(Math.log(a.wn / wn)), Math.abs(Math.log(a.q / q)), Math.abs(Math.log(a.wz / wz)), Math.abs(a.numeratorS / (a.gain * wz)), lowSide ? Math.abs(Math.log(a.dcGain)) : 0);
 }
 
+// `pairs` may also be a list of the names allowed to pair (pairAllowed in
+// eseries.js), 'R1' to 'R6'.
 function boctorSearch(wn, q, wz, { lowSide = true, resistorSeries = 'E24', capacitors = null, pairs = false } = {}, manualC = null) {
 	if (!boctorFeasible(wn, q, wz, lowSide)) return null;
 	const caps = capacitorCandidates(capacitors);
@@ -75,8 +77,8 @@ function boctorSearch(wn, q, wz, { lowSide = true, resistorSeries = 'E24', capac
 			for (const t of ts) {
 				const theoretical = boctorIdeal(wn, q, wz, C1, C2, t, lowSide);
 				if (!Object.entries(theoretical).filter(([k]) => k.startsWith('R')).every(([,v]) => v >= 200 && v <= 2e6)) continue;
-				const round = p => Object.fromEntries(Object.entries(theoretical).map(([k,v]) => [k, k.startsWith('R') ? pairedResistor(v, resistorSeries, p) : v]));
-				const single = round(false), paired = pairs ? round(true) : single;
+				const round = p => Object.fromEntries(Object.entries(theoretical).map(([k,v]) => [k, k.startsWith('R') ? pairedResistor(v, resistorSeries, pairAllowed(p, k)) : v]));
+				const single = round(false), paired = anyPairAllowed(pairs) ? round(pairs) : single;
 				const components = boctorMiss(boctorActual(paired, lowSide), wn, q, wz, lowSide) <= boctorMiss(boctorActual(single, lowSide), wn, q, wz, lowSide) ? paired : single;
 				const actual = boctorActual(components, lowSide), miss = boctorMiss(actual, wn, q, wz, lowSide);
 				if (!Number.isFinite(miss)) continue;
@@ -90,7 +92,7 @@ function boctorSearch(wn, q, wz, { lowSide = true, resistorSeries = 'E24', capac
 
 export function designBoctorNotch(wn, q, wz, opts = {}) {
 	const single = boctorSearch(wn, q, wz, { ...opts, pairs: false });
-	if (!opts.pairs) return single;
+	if (!anyPairAllowed(opts.pairs)) return single;
 	const paired = boctorSearch(wn, q, wz, opts);
 	if (!single || !paired) return paired ?? single;
 	return boctorMiss(paired.actual, wn, q, wz, opts.lowSide !== false) <= boctorMiss(single.actual, wn, q, wz, opts.lowSide !== false) ? paired : single;

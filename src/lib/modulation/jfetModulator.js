@@ -1,4 +1,4 @@
-import { largestResistorNotAbove, nearestResistor, nearestValue, pairedResistor, resistorNotBelow, resistorValues, stockList, stockName } from './eseries';
+import { largestResistorNotAbove, nearestResistor, nearestValue, pairAllowed, pairedResistor, resistorNotBelow, resistorValues, stockList, stockName } from './eseries';
 import { modelFromIdss } from './jfetModel';
 
 /**
@@ -139,7 +139,7 @@ export function designJfetModulator({
 	slewRate = 13e6,
 	resistorSeries = 'E24', // a series name, or a list of the resistors on hand (ohms)
 	capacitors = null, // null for the usual values, or a list of the capacitors on hand (farads)
-	pairs = false, // with a list: R_ac, R_bias, R_b, the carrier divider's top and the post-gain's R_top may each be two resistors in series
+	pairs = false, // with a list: R_ac, R_bias, R_b, the carrier divider's top and the post-gain's R_top may each be two resistors in series; or a whitelist of the ones that may, by name: 'Rac', 'Rbias', 'Rb', 'Rdt' (the divider's top), 'Rtop'
 	onFail = null // told why when no design comes back: 'pinchoff' or 'depth'
 } = {}) {
 	const m = model ?? modelFromIdss(vp, idss);
@@ -205,7 +205,7 @@ export function designJfetModulator({
 	const choosePairs = () => {
 		const cells = [];
 		const drives = [
-			[pairedResistor(racTarget, stock, true), pairedResistor(rbiasTarget, stock, true)],
+			[pairedResistor(racTarget, stock, pairAllowed(pairs, 'Rac')), pairedResistor(rbiasTarget, stock, pairAllowed(pairs, 'Rbias'))],
 			[nearestResistor(racTarget, stock), nearestResistor(rbiasTarget, stock)]
 		];
 		for (const [racC, rbiasC] of drives) {
@@ -222,7 +222,7 @@ export function designJfetModulator({
 				if (open && !inverting && targetModulationIndex > 0 && targetModulationIndex < depth) {
 					const r1 = 1 / G(vcC);
 					const rbTarget = (targetModulationIndex / (depth - targetModulationIndex)) * r1;
-					const xC = (rbPaired ? pairedResistor(rbTarget, stock, true) : nearestResistor(rbTarget, stock)) / r1;
+					const xC = (rbPaired ? pairedResistor(rbTarget, stock, pairAllowed(pairs, 'Rb')) : nearestResistor(rbTarget, stock)) / r1;
 					n = (depth * xC) / (1 + xC);
 				}
 				cells.push({ rac: racC, rbias: rbiasC, rbPaired, open, headroom, cornerOk, n });
@@ -237,8 +237,10 @@ export function designJfetModulator({
 		// nothing works: the pairs' gate drive, so the reason given is its own
 		return cells.find((cell) => usable(cell) && notWorse(cell)) ?? cells[0];
 	};
+	// with a whitelist, the gate drive and R_b are tried as above when any of the three may pair
+	const drivePairs = ['Rac', 'Rbias', 'Rb'].some((name) => pairAllowed(pairs, name));
 	const chosen =
-		pairs && Array.isArray(stock) ? choosePairs() : { rac: nearestResistor(racTarget, stock), rbias: nearestResistor(rbiasTarget, stock), rbPaired: false };
+		drivePairs && Array.isArray(stock) ? choosePairs() : { rac: nearestResistor(racTarget, stock), rbias: nearestResistor(rbiasTarget, stock), rbPaired: false };
 	const rac = chosen.rac;
 	const gainActual = rf / rac;
 	const rbias = chosen.rbias;
@@ -321,7 +323,7 @@ export function designJfetModulator({
 			}
 			xTarget = targetModulationIndex / (gDepth - targetModulationIndex);
 			feedbackTarget = xTarget * r1AtCenter;
-			rbActual = chosen.rbPaired ? pairedResistor(feedbackTarget, stock, true) : nearestResistor(feedbackTarget, stock);
+			rbActual = chosen.rbPaired ? pairedResistor(feedbackTarget, stock, pairAllowed(pairs, 'Rb')) : nearestResistor(feedbackTarget, stock);
 		}
 		feedback = rbActual;
 		x = rbActual / r1AtCenter;
@@ -353,7 +355,7 @@ export function designJfetModulator({
 	let divBottom = nearestResistor(1_000, stock);
 	const ratio = Math.min(1, acMax / carrierSourceAmplitude);
 	let divTopTarget = ratio >= 1 ? 0 : divBottom * (1 / ratio - 1);
-	const divTop = divTopTarget > 0 ? resistorNotBelow(divTopTarget, stock, pairs) : 0;
+	const divTop = divTopTarget > 0 ? resistorNotBelow(divTopTarget, stock, pairAllowed(pairs, 'Rdt')) : 0;
 	if (divTop > 0 && divTop < divTopTarget * (1 - 1e-9)) {
 		// a list with nothing large enough over a 1 k foot: under the largest
 		// value it has, a smaller foot still keeps the carrier under the limit
@@ -406,7 +408,7 @@ export function designJfetModulator({
 		if (kTarget > 1.05) {
 			const rbottom = nearestResistor(1_000, stock);
 			const rtopTarget = (kTarget - 1) * rbottom;
-			const rtop = pairedResistor(rtopTarget, stock, pairs);
+			const rtop = pairedResistor(rtopTarget, stock, pairAllowed(pairs, 'Rtop'));
 			const kActual = 1 + rtop / rbottom;
 			const factor = bandwidthFactor(kActual);
 			const outMax = kActual * envelopeMax;
@@ -547,12 +549,14 @@ export function designJfetModulator({
  * The two cells on the same JFET, same carrier and same op-amp, side by
  * side: what each gives for the modulation index, the noise gain the
  * op-amp must follow, its bandwidth at the crest, the audio distortion,
- * the output level and the number of op-amps.
+ * the output level and the number of op-amps. `designFor` gives the
+ * design of a cell; by default it is designJfetModulator on params (a
+ * limit on the pairs gives each cell its own whitelist instead).
  */
-export function compareTopologies(params) {
+export function compareTopologies(params, designFor = (topology) => designJfetModulator({ ...params, topology })) {
 	const rows = [];
 	for (const topology of ['noninverting', 'inverting']) {
-		const d = designJfetModulator({ ...params, topology });
+		const d = designFor(topology);
 		if (!d) {
 			rows.push({ topology, ok: false });
 			continue;

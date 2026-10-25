@@ -10,6 +10,9 @@
 	import {
 		buildFirstOrderDiagram,
 		buildFirstOrderHpDiagram,
+		buildGainDividerDiagram,
+		buildGainInvDiagram,
+		buildGainNonInvDiagram,
 		buildMfbBpDiagram,
 		buildMfbDiagram,
 		buildMfbHpDiagram,
@@ -38,6 +41,10 @@
 		if (design.topology === 'mfbBp') return buildMfbBpDiagram(design.components, opts);
 		if (design.topology === 'sallenKeyHp') return buildSallenKeyHpDiagram(design.components, opts);
 		if (design.topology === 'firstOrderHp') return buildFirstOrderHpDiagram(design.components, design.actual.tau, opts);
+		// the gain stages of a filter designed by hand
+		if (design.topology === 'gainInv') return buildGainInvDiagram(design.components, opts);
+		if (design.topology === 'gainNonInv') return buildGainNonInvDiagram(design.components, opts);
+		if (design.topology === 'gainDivider') return buildGainDividerDiagram(design.components, opts);
 		return null;
 	});
 </script>

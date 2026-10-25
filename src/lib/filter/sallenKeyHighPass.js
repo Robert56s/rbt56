@@ -1,4 +1,4 @@
-import { capacitorCandidates, nearestCapacitor, pairedResistor, smallCapPenalty } from './eseries';
+import { anyPairAllowed, capacitorCandidates, nearestCapacitor, pairAllowed, pairedResistor, smallCapPenalty } from './eseries';
 
 /**
  * Sallen-Key high-pass, unity-gain simplified form: two equal capacitors C
@@ -45,17 +45,18 @@ function scoreSkHpResistors(Rtop, Rbottom) {
  * `pairs` each may be two resistors in series, kept only when that leaves
  * the stage no further off than single parts, as in roundMfb (mfb.js). Here
  * it never has to refuse: f0 and Q share the two resistors evenly, so the
- * stage's larger miss is the mean of the two parts' own.
+ * stage's larger miss is the mean of the two parts' own. A list of names
+ * in `pairs` (pairAllowed in eseries.js) takes 'Rtop' and 'Rbottom'.
  */
 function roundSallenKeyHp(Rtop, Rbottom, C, wn, q, resistorSeries, pairs) {
 	const round = (p) => {
-		const RtopN = pairedResistor(Rtop, resistorSeries, p);
-		const RbottomN = pairedResistor(Rbottom, resistorSeries, p);
+		const RtopN = pairedResistor(Rtop, resistorSeries, pairAllowed(p, 'Rtop'));
+		const RbottomN = pairedResistor(Rbottom, resistorSeries, pairAllowed(p, 'Rbottom'));
 		return { RtopN, RbottomN, wn: 1 / (C * Math.sqrt(RtopN * RbottomN)), q: 0.5 * Math.sqrt(RbottomN / RtopN) };
 	};
 	const single = round(false);
-	if (!pairs) return single;
-	const paired = round(true);
+	if (!anyPairAllowed(pairs)) return single;
+	const paired = round(pairs);
 	const miss = (r) => Math.max(Math.abs(Math.log(r.wn / wn)), Math.abs(Math.log(r.q / q)));
 	return miss(paired) <= miss(single) ? paired : single;
 }
