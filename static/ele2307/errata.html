@@ -18,6 +18,7 @@
     <a href="cours4.html">Cours 4</a>
     <a href="cours5.html">Cours 5</a>
     <a href="cours6.html">Cours 6</a>
+    <a href="cours7.html">Cours 7</a>
     <a href="formulaire.html">Formulaire</a>
     <a href="intra.html">Intra</a>
     <a href="errata.html">Errata</a>
@@ -48,8 +49,9 @@
   <tr><td>Corrigés cours 4 (chap. 12)</td><td class="num">1</td><td>Ex. 38 : une détente qui chauffe le gaz</td></tr>
   <tr><td>Corrigés cours 5 (chap. 13)</td><td class="num">4</td><td>Ex. 6 (c) : 840 J au lieu de 385 J</td></tr>
   <tr><td>Corrigé cours 6</td><td class="num">1</td><td>Exposant d'une résistance (sans impact)</td></tr>
+  <tr><td>Corrigés cours 7 (chap. 15 et 19)</td><td class="num">7</td><td>Chap. 19 ex. 2 (formule des fermions pour des bosons), chap. 15 ex. 50 (masse), chap. 19 ex. 28 (b)</td></tr>
   <tr><td>Liste d'exercices suggérés</td><td class="num">1</td><td>Exercice 13 du chap. 5 listé deux fois</td></tr>
-  <tr><td>Manuel (Stowe)</td><td class="num">6</td><td>Formule de la gaussienne et dérivation de σ (corrigées par le prof)</td></tr>
+  <tr><td>Manuel (Stowe)</td><td class="num">8</td><td>Formule de la gaussienne et dérivation de σ (corrigées par le prof)</td></tr>
   <tr><td>Sujet d'intra 2021 (pratique)</td><td class="num">1</td><td>QCM 9 : deux réponses défendables</td></tr>
 </table>
 
@@ -247,7 +249,57 @@
   <p><strong>À lire :</strong> \(R_C = \dfrac{0{,}07\times10^{-3}}{390\times0{,}01} = 1{,}8\times10^{-5}\) K/W et \(R_{3C} = 5{,}4\times10^{-5}\) K/W (exposant −5, et \(k_{Cu} = 390\)). <strong>Impact :</strong> aucun sur les températures finales (337 K et 333 K), le cuivre étant négligeable devant l'époxy et les convections.</p>
 </article>
 
-<h2>8. Liste d'exercices suggérés</h2>
+<h2>8. Corrigés du cours 7 (chapitres 15 et 19, manuscrits)</h2>
+
+<article class="err">
+  <header><span class="tag">Chap. 19, ex. 2</span><span class="tag conf-certain">Certain</span><h4>Formule des fermions utilisée pour des bosons</h4></header>
+  <p><strong>Écrit :</strong> « pour un fermion, \(\bar n = 1/(e^{\beta(\varepsilon-\mu)} + 1)\) : (a) 0,597 (b) 0,403 (c) 0,981 (d) 0,013 », sous le numéro 2.</p>
+  <p><strong>À lire :</strong> ce sont les réponses de l'exercice 1 (fermions à 0,01 et 0,1 eV sous et au-dessus de \(\mu\), avec 0,019 en (d)). L'exercice 2 porte sur des bosons : \(\bar n = 1/(e^{\beta(\varepsilon-\mu)} - 1)\) à 295 K donne (a) 2,07 pour 0,01 eV, (b) 0,020 pour 0,1 eV, (c) \(8\times10^{-18}\) pour 1,0 eV.</p>
+  <p><strong>Impact :</strong> le signe du dénominateur est tout l'enjeu du chapitre ; à 0,01 eV au-dessus de \(\mu\), les bosons donnent 2,07 et les fermions 0,40.</p>
+</article>
+
+<article class="err">
+  <header><span class="tag">Chap. 15, ex. 50</span><span class="tag conf-certain">Certain</span><h4>Masse du plancton mille fois trop petite dans le calcul</h4></header>
+  <p><strong>Écrit :</strong> \(m = \rho\times\text{volume} = 120\times10^{-15}\) kg puis \(v_{rms} = 9{,}9\times10^{-3}\) m/s.</p>
+  <p><strong>À lire :</strong> la masse \(1{,}2\times10^{-13}\) kg est juste, mais la vitesse a été calculée avec \(1{,}2\times10^{-16}\) kg (le volume en m³ sans la masse volumique). Avec la bonne masse et \(T = 281\) K : \(v_{rms} = \sqrt{3kT/m} = 3{,}1\times10^{-4}\) m/s, soit environ 27 m de trajet par jour.</p>
+  <p><strong>Impact :</strong> facteur \(\sqrt{1000} \approx 32\) sur la vitesse.</p>
+</article>
+
+<article class="err">
+  <header><span class="tag">Chap. 19, ex. 28 (b)</span><span class="tag conf-certain">Certain</span><h4>Température de non-dégénérescence des nucléons</h4></header>
+  <p><strong>Écrit :</strong> \(T \gt 100h^2/(3r^2mk) = 4\times10^{34}\) K.</p>
+  <p><strong>À lire :</strong> la formule est bonne (critère \(rp/h \gt 10\) avec \(p = \sqrt{3mkT}\)), mais l'application numérique ne l'est pas : avec \(r = 2{,}6\times10^{-15}\) m et \(m = 1{,}67\times10^{-27}\) kg on trouve \(T \gt 9\times10^{13}\) K (et \(9\times10^{11}\) K avec le critère \(rp/h \gt 1\)). La conclusion reste la même : bien au-dessus des \(7\times10^{10}\) K de la partie (a), donc les nucléons d'un noyau sont dégénérés.</p>
+  <p><strong>Impact :</strong> 20 ordres de grandeur sur la valeur, pas sur la conclusion.</p>
+</article>
+
+<article class="err">
+  <header><span class="tag">Chap. 19, ex. 26 (e)</span><span class="tag conf-probable">Probable</span><h4>Les atomes de cuivre peuvent se traiter classiquement</h4></header>
+  <p><strong>Écrit :</strong> « les atomes sont maintenus en place dans le solide, leur espace d'états accessibles est restreint : pas possible d'utiliser le modèle classique ».</p>
+  <p><strong>À lire :</strong> le critère du chapitre (équation 19.9) donne, pour un atome de cuivre (\(m = 1{,}06\times10^{-25}\) kg, \(r = 2{,}3\times10^{-10}\) m, 298 K), \(rp/h \approx 12 \gg 1\) : la statistique classique s'applique aux atomes, contrairement aux électrons de conduction (0,04). C'est la réponse attendue par le manuel, et c'est cohérent avec la loi de Dulong et Petit (équipartition) qui décrit bien ces solides à température ambiante.</p>
+  <p><strong>Impact :</strong> conclusion inversée pour la question (e).</p>
+</article>
+
+<article class="err">
+  <header><span class="tag">Chap. 15, ex. 4</span><span class="tag conf-probable">Probable</span><h4>Pression minimale d'une étoile à neutrons : critère au dixième</h4></header>
+  <p><strong>Écrit :</strong> « on peut supposer que \(pV_s \gtrsim E_s/10\) », d'où \(p \gt 2{,}2\times10^{16}\) Pa.</p>
+  <p><strong>À lire :</strong> le seuil naturel est celui où l'état combiné (neutron) devient plus probable que l'état séparé : \(\Delta E + p\Delta V \lt 0\) avec \(\Delta V = -V_H = -6{,}2\times10^{-31}\) m³, soit \(p \gt \Delta E/V_H = 2{,}2\times10^{17}\) Pa. Le critère « un dixième » du corrigé donne un ordre de grandeur en dessous ; les deux valeurs sont défendables selon ce qu'on appelle « ne plus pouvoir négliger » \(p\Delta V\).</p>
+  <p><strong>Impact :</strong> facteur 10 sur une estimation d'ordre de grandeur.</p>
+</article>
+
+<article class="err">
+  <header><span class="tag">Chap. 15, ex. 2 (a)</span><span class="tag conf-verif">À vérifier</span><h4>Rapport donné à l'envers</h4></header>
+  <p><strong>Écrit :</strong> \(P_2/P_1 = 0{,}35\).</p>
+  <p><strong>À lire :</strong> la question demande combien de fois l'état 1 est plus probable que l'état 2, soit \(P_1/P_2 = 1/0{,}35 = 2{,}9\). Les parties (b) et (c) donnent aussi \(P_3/P_1\) et \(P_4/P_1\) (\(1{,}5\times10^{-9}\) et \(2{,}3\times10^{-12}\)), dont les inverses sont \(6{,}6\times10^{8}\) et \(4{,}4\times10^{11}\).</p>
+  <p><strong>Impact :</strong> aucun sur la méthode, mais à l'examen il faut répondre dans le sens demandé.</p>
+</article>
+
+<article class="err">
+  <header><span class="tag">Chap. 19, ex. 10</span><span class="tag conf-verif">À vérifier</span><h4>Potentiel chimique oublié dans l'exposant</h4></header>
+  <p><strong>Écrit :</strong> \(\bar n = (2e^{-2\beta\varepsilon} + 5e^{-5\beta\varepsilon})/(1 + e^{-2\beta\varepsilon} + e^{-5\beta\varepsilon})\).</p>
+  <p><strong>À lire :</strong> la variable est \(x = \beta(\varepsilon - \mu)\), comme dans les formules des fermions et des bosons : \(\bar n = (2e^{-2x} + 5e^{-5x})/(1 + e^{-2x} + e^{-5x})\). La structure du résultat est correcte.</p>
+</article>
+
+<h2>9. Liste d'exercices suggérés</h2>
 
 <article class="err">
   <header><span class="tag">Liste d'exercices suggérés, cours 2, chapitre 5</span><span class="tag conf-probable">Probable</span><h4>Exercice 13 listé deux fois</h4></header>
@@ -255,7 +307,7 @@
   <p><strong>À lire :</strong> le second est vraisemblablement l'exercice 16 (combustion du carbone, p. 94-95), seul exercice de la section C qui traite d'une réaction. C'est celui qui est corrigé dans le cours 2 du site.</p>
 </article>
 
-<h2>9. Manuel de Stowe : erreurs signalées par le professeur ou constatées</h2>
+<h2>10. Manuel de Stowe : erreurs signalées par le professeur ou constatées</h2>
 
 <article class="err">
   <header><span class="tag">Manuel, p. 42 (chap. 3)</span><span class="tag conf-certain">Certain, corrigé par le prof</span><h4>Dérivation de l'écart type du critère unique</h4></header>
@@ -287,7 +339,19 @@
   <p>Pour un cycle de Carnot entre 800 K et 400 K avec \(Q_h = 4\) J, on doit avoir \(Q_c = Q_hT_c/T_h = 2\) J, donc \(\Delta W_3 = -2\) J et non \(-1\) J comme l'indique le tableau de l'énoncé. Le corrigé du professeur note la contradiction (« Erreur dans l'énoncé ou ma réponse ? ») : l'énoncé est en cause. Rendement attendu : 0,5.</p>
 </article>
 
-<h2>10. Remarques diverses</h2>
+<article class="err">
+  <header><span class="tag">Stowe, chap. 19, ex. 27 (p. 419)</span><span class="tag conf-certain">Certain</span><h4>Séparation des molécules d'eau : nm, pas µm</h4></header>
+  <p><strong>Écrit :</strong> « The characteristic separation of molecules of liquid water is about 0.3 µm ».</p>
+  <p><strong>À lire :</strong> 0,3 nm (\(3\times10^{-10}\) m), ce que confirme la réponse du manuel (\(rp/h = 9\)) : avec 0,3 µm on trouverait 9000. Ordre de grandeur à retenir : \((V/N)^{1/3}\) pour l'eau liquide vaut \(3{,}1\times10^{-10}\) m.</p>
+</article>
+
+<article class="err">
+  <header><span class="tag">Stowe, chap. 19, ex. 25 (b), réponse p. 540</span><span class="tag conf-verif">À vérifier</span><h4>Température où les états et les molécules de N₂ deviennent aussi nombreux</h4></header>
+  <p><strong>Écrit :</strong> réponse 0,8 K.</p>
+  <p><strong>À lire :</strong> avec le critère du chapitre (\(rp/h = 1\), \(p = \sqrt{3mkT}\), \(r = (kT/p_{atm})^{1/3} = 3{,}4\times10^{-9}\) m à densité fixe), \(T = h^2/(3mkr^2) = 0{,}02\) K. La valeur du manuel semble venir d'un autre facteur numérique dans le critère ; l'ordre de grandeur (une fraction de kelvin) est le même, et dans tous les cas l'azote se liquéfie bien avant.</p>
+</article>
+
+<h2>11. Remarques diverses</h2>
 
 <article class="err">
   <header><span class="tag">TD1, énoncé PDF</span><span class="tag theme">Remarque</span><h4>Phrase cachée destinée aux outils d'IA</h4></header>

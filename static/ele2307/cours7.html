@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cours 7 - La statistique quantique | ELE2307</title>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<link rel="stylesheet" href="assets/style.css?v=10">
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="index.html">ELE2307 <small>Thermodynamique statistique et semiconducteurs</small></a>
+  <nav>
+    <a href="index.html">Accueil</a>
+    <a href="cours1.html">Cours 1</a>
+    <a href="cours2.html">Cours 2</a>
+    <a href="cours3.html">Cours 3</a>
+    <a href="cours4.html">Cours 4</a>
+    <a href="cours5.html">Cours 5</a>
+    <a href="cours6.html">Cours 6</a>
+    <a href="cours7.html">Cours 7</a>
+    <a href="formulaire.html">Formulaire</a>
+    <a href="intra.html">Intra</a>
+    <a href="errata.html">Errata</a>
+    <button class="theme-btn" type="button">Thème</button>
+  </nav>
+</header>
+
+<main class="layout">
+<aside class="toc"></aside>
+<article class="content">
+
+<div class="course-hero">
+  <div class="kicker">Cours 7 - Chapitre 7 du cours</div>
+  <h1>La statistique quantique</h1>
+  <p class="meta">Stowe, chapitre 15 « Probabilities and microscopic behaviors » (p. 329 à 351) et chapitre 19 « Introduction to quantum statistics » (p. 401 à 421) | Diapos « Cours 7 » (26 pages) | Exercices faits en classe : 6 p. 344, 16 p. 345, 49 p. 350, 4 et 9 p. 416</p>
+  <p><span class="pill accent">Probabilité d'un état</span><span class="pill accent">Facteur de Boltzmann</span><span class="pill accent">Cas classique et cas quantique</span><span class="pill accent">Équipartition</span><span class="pill accent">Fermions et bosons</span><span class="pill accent">Nombre d'occupation</span><span class="pill accent">Limite du cas classique</span></p>
+  <p class="small">Fil conducteur : jusqu'ici on comptait les états d'un grand système. On retourne maintenant vers un <em>petit</em> système (une molécule, un seul état quantique) plongé dans un réservoir à la température \(T\). Toute la physique tient dans une exponentielle, \(e^{-\beta(\ldots)}\) avec \(\beta = 1/kT\) : la probabilité d'un état décroît exponentiellement avec ce qu'il coûte au réservoir.</p>
+</div>
+
+<h2>0. D'où vient ce cours</h2>
+<p>Les chapitres 2 à 13 traitaient des systèmes à grand nombre d'éléments : nombre d'états \(\Omega\), entropie, température, processus. Le chapitre 15 du manuel retourne les mêmes outils vers un petit système qui échange de l'énergie (et parfois du volume ou des particules) avec un réservoir, et en déduit la probabilité de chacun de ses états. Deux façons de poser le problème : suivre une <strong>particule</strong> et demander dans quel état elle est (cas classique, statistique de Boltzmann), ou suivre un <strong>état</strong> et demander combien de particules il contient (cas quantique, chapitre 19 : fermions et bosons). La fin du cours montre quand les deux approches coïncident et quand il faut absolument la seconde.</p>
+<div class="box def"><span class="label">Deux constantes à avoir en tête</span>
+  <p>\(k = 1{,}381\times10^{-23}\) J/K \(= 8{,}617\times10^{-5}\) eV/K. À 293 K, \(kT = 0{,}0253\) eV, soit environ 1/40 eV : c'est l'échelle d'énergie de l'agitation thermique. Un écart d'énergie de 1 eV correspond à \(kT\) pour \(T = 11\,600\) K.</p>
+</div>
+
+<h2>1. Probabilité d'existence d'un état</h2>
+<h3>1.1 Le réservoir paie la facture</h3>
+<p>Un petit système \(A_1\) (par exemple une molécule) est en contact avec un grand réservoir \(R\) de température \(T\), de pression \(p\) et de potentiel chimique \(\mu\). Pour être dans un état \(s\) donné, \(A_1\) doit prendre au réservoir une énergie \(\Delta E\), un volume \(\Delta V\) et un nombre de particules \(\Delta N\). Le petit système dans un état précis a \(\Omega = 1\) ; la probabilité de cet état est donc proportionnelle au nombre d'états qui <em>restent</em> au réservoir. Avec \(dS = (dE + p\,dV - \mu\,dN)/T\) (cours 3), l'entropie du réservoir passe de \(S_{R0}\) à</p>
+<div class="formula"><div class="title">Entropie et nombre d'états du réservoir après le prélèvement</div>
+\[S_R = S_{R0} - \frac{\Delta E + p\,\Delta V - \mu\,\Delta N}{T}, \qquad \Omega_R = e^{S_R/k} = \exp\!\left(\frac{S_{R0}}{k} - \frac{\Delta E + p\,\Delta V - \mu\,\Delta N}{kT}\right)\]
+<div class="cond">Le réservoir est si grand que \(T\), \(p\) et \(\mu\) ne bougent pas. Le terme \(e^{S_{R0}/k}\) est le même pour tous les états de \(A_1\).</div>
+</div>
+<div class="formula"><div class="title">Probabilité qu'un petit système soit dans l'état \(s\) (équation générale du cours)</div>
+\[P_s = C\exp\!\left(-\frac{\Delta E + p\,\Delta V - \mu\,\Delta N}{kT}\right), \qquad \sum_s P_s = 1\]
+<div class="cond">\(C\) absorbe \(e^{S_{R0}/k}\) et normalise la somme des probabilités. Plus un état coûte cher au réservoir (énergie, volume, particules), moins il est probable, et cela de façon exponentielle. \(\mu\) étant en général négatif, prendre une particule coûte aussi.</div>
+</div>
+
+<h3>1.2 Deux façons d'aborder un problème</h3>
+<table>
+  <tr><th></th><th>Cas classique (statistique de Boltzmann)</th><th>Cas quantique</th></tr>
+  <tr><td>Ce qu'on suit</td><td>un ensemble <strong>fixé de particules</strong> (\(\Delta N = 0\)) qui peuvent être dans différents états</td><td>un <strong>état donné</strong> (\(\Delta V = 0\)) qui peut contenir plusieurs particules, ou aucune</td></tr>
+  <tr><td>Quand l'utiliser</td><td>éléments distincts ou identifiables, ou nombre d'éléments \(\ll\) nombre d'états : atomes et molécules des gaz, liquides, solides</td><td>nombre d'états comparable ou plus petit que le nombre de particules : électrons, trous, protons, photons, particules élémentaires</td></tr>
+  <tr><td>Question posée</td><td>probabilité que la particule occupe l'état \(s\) : \(P_s = Ce^{-\beta\varepsilon_s}\)</td><td>probabilité qu'il y ait \(n\) particules dans l'état : \(P_n = Ce^{-n\beta(\varepsilon - \mu)}\)</td></tr>
+  <tr><td>Grandeur utile</td><td>rapport de probabilités, fraction excitée</td><td>nombre d'occupation \(\bar n = \sum_n nP_n\)</td></tr>
+</table>
+
+<h3>1.3 Cas classique : le facteur de Boltzmann</h3>
+<p>Une particule (ou un groupe de particules) peut se retrouver dans l'un ou l'autre des états accessibles ; aucun échange de particules, donc \(\Delta N = 0\). L'énergie de l'état \(s\) est \(\varepsilon_s\) et son volume \(\upsilon_s\) : \(P_s = Ce^{-\beta(\varepsilon_s + p\upsilon_s)}\). Dans la quasi-totalité des cas, \(p\upsilon_s \ll \varepsilon_s\) (un volume atomique à la pression atmosphérique vaut \(10^{-5}\) eV) et il reste</p>
+<div class="formula"><div class="title">Probabilité de Boltzmann et sa constante</div>
+\[P_s = Ce^{-\beta\varepsilon_s}, \qquad \beta = \frac{1}{kT}, \qquad C = \frac{1}{\sum_s e^{-\beta\varepsilon_s}}, \qquad \frac{P_i}{P_j} = e^{-\beta(\varepsilon_i - \varepsilon_j)}\]
+<div class="cond">La somme porte sur tous les états accessibles (pas sur les niveaux : un niveau dégénéré compte autant de fois qu'il a d'états). Le rapport \(P_i/P_j\) ne dépend que de la différence d'énergie : on peut mesurer les énergies depuis n'importe quel niveau de référence (ex. 24).</div>
+</div>
+<div class="box ex"><span class="label">Exemples des diapos</span>
+  <p>Atome d'hydrogène, \(\varepsilon_0 = -13{,}6\) eV et \(\varepsilon_1 = -3{,}4\) eV, à 295 K : \(P_1/P_0 = e^{-\beta(10{,}2\ \text{eV})} = e^{-401}\), soit \(10^{-174}\). À température ambiante, l'hydrogène est dans son état fondamental. Pour avoir moitié moins d'atomes dans l'état 1 que dans l'état 0, il faudrait \(T = (\varepsilon_1 - \varepsilon_0)/(k\ln 2) = 1{,}7\times10^{5}\) K.</p>
+</div>
+<div class="box method"><span class="label">Niveaux régulièrement espacés</span>
+  <p>Si \(\varepsilon_n = n\varepsilon\) avec \(n = 0, 1, 2, \ldots\), la somme est géométrique : \(\sum_n e^{-n\beta\varepsilon} = 1/(1 - e^{-\beta\varepsilon})\), donc \(C = 1 - e^{-\beta\varepsilon}\), \(P_0 = C\) et \(P_n = Ce^{-n\beta\varepsilon}\). C'est le cas des exercices 6, 7 et 18 du chapitre 15 et de la vibration d'une molécule.</p>
+</div>
+<div class="box warn"><span class="label">Quand \(p\,\Delta V\) compte quand même</span>
+  <p>Seulement sous des pressions extrêmes. Dans une étoile à neutrons, la combinaison électron + proton → neutron libère un volume atomique entier (\(6\times10^{-31}\) m³) contre un coût de 0,84 MeV : l'état « neutron » l'emporte dès que \(p\,V_H \gt \Delta E\), soit \(p \gt 2\times10^{17}\) Pa (ex. 4).</p>
+</div>
+
+<h3>1.4 Cas quantique : un état, \(n\) particules</h3>
+<p>Un état accessible occupe un volume défini (\(\Delta V = 0\)) mais peut contenir différents nombres de particules. Mettre \(n\) particules d'énergie \(\varepsilon\) dans cet état coûte \(n\varepsilon\) en énergie et \(n\) particules au réservoir :</p>
+<div class="formula"><div class="title">Probabilité d'avoir \(n\) particules dans un état</div>
+\[P_n = Ce^{-n\beta(\varepsilon - \mu)} = Ce^{-nx}, \qquad x = \beta(\varepsilon - \mu), \qquad C = \frac{1}{\sum_n e^{-nx}}\]
+<div class="cond">\(\varepsilon\) : énergie d'une particule dans cet état ; \(\mu\) : potentiel chimique du réservoir (en général négatif, voir le cours 3). La somme s'arrête au nombre maximal de particules que l'état peut contenir.</div>
+</div>
+<div class="formula"><div class="title">La constante \(C\) selon le type de particule</div>
+\[\text{fermions } (n = 0, 1) : C = \frac{1}{1 + e^{-x}} \qquad\qquad \text{bosons } (n = 0, 1, 2, \ldots,\ x \gt 0) : \sum_{n=0}^{\infty} e^{-nx} = \frac{1}{1 - e^{-x}} \ \Rightarrow\ C = 1 - e^{-x}\]
+<div class="cond">Dans les deux cas \(P_0 = C\) et \(P_1/P_0 = e^{-x}\). Pour les bosons la série ne converge que si \(\varepsilon \gt \mu\).</div>
+</div>
+<div class="box ex"><span class="label">Exemples des diapos</span>
+  <p>Photon dans un four à 500 K, état de 0,1 eV, \(\mu = 0\) : \(P_0/P_1 = e^{\beta\varepsilon} = e^{2{,}32} = 10\). Électrons d'un métal, \(\mu = -2{,}03\) eV, état à \(-2\) eV qui contient 0 ou 1 électron (\(T = 300\) K, donc \(x = 0{,}03/0{,}0259 = 1{,}16\)) : \(C = 1/(1 + e^{-1{,}16}) = 0{,}76\) ; état vide \(P_0 = 0{,}76\), état plein \(P_1 = 0{,}24\).</p>
+</div>
+
+<h3>1.5 Niveaux dégénérés, bandes et température d'excitation</h3>
+<p>Si plusieurs états ont la même énergie \(\varepsilon_s\) (niveau \(n_s\) fois dégénéré), la probabilité que le système ait cette énergie est la somme des probabilités de ces états :</p>
+<div class="formula"><div class="title">Niveau dégénéré, rapport entre niveaux, bande d'états</div>
+\[P(\varepsilon_s) = n_sP_s, \qquad \frac{P(\varepsilon_i)}{P(\varepsilon_j)} = \frac{n_i}{n_j}e^{-\beta(\varepsilon_i - \varepsilon_j)}, \qquad P_{bande} = \sum_{s \in bande} n_sP_s = \int_{bande} g(\varepsilon)P(\varepsilon)\,d\varepsilon\]
+<div class="cond">\(g(\varepsilon)\) : densité d'états (nombre d'états par unité d'énergie). Une bande étroite devant \(kT\) se traite comme un seul niveau dégénéré.</div>
+</div>
+<div class="formula"><div class="title">Température d'excitation</div>
+\[T_e = \frac{\varepsilon_1 - \varepsilon_0}{k} \qquad\Rightarrow\qquad \frac{P_1}{P_0} = e^{-T_e/T}\]
+<div class="cond">Pour \(T \ll T_e\), le système est confiné à son état fondamental : le degré de liberté correspondant est « gelé » et ne peut stocker d'énergie.</div>
+</div>
+<p>C'est ce gel qui explique les capacités thermiques : \(C_V = \tfrac{\nu}{2}R\), mais \(\nu\) n'est pas constant. Pour un gaz diatomique, la translation s'excite dès \(10^{-20}\) K (dans une pièce), la rotation vers 5 à 50 K et la vibration vers 2000 à 10 000 K : \(\nu\) passe de 3 à 5 puis à 7 quand on franchit ces températures. Pour les solides (6 degrés de liberté, trois cinétiques et trois potentiels), \(C_V = 3R\) à température ambiante (loi de Dulong et Petit, cuivre 0,98 × 3R, aluminium 0,97 × 3R) puis chute à basse température ; plus le solide est rigide, plus \(T_e\) est élevée (le diamant n'atteint \(3R\) que vers 2000 K).</p>
+<div class="box tip"><span class="label">Réflexe d'examen</span>
+  <p>Toujours convertir en kelvins, calculer \(kT\) en eV (\(8{,}617\times10^{-5}\times T\)) puis l'exposant \(\Delta\varepsilon/kT\). Un exposant de 1 donne un rapport \(e^{-1} = 0{,}37\) ; de 5, \(6{,}7\times10^{-3}\) ; de 10, \(4{,}5\times10^{-5}\). Pour une fraction, ne pas oublier les dégénérescences, et ne pas confondre « la probabilité d'un état excité » avec « la probabilité d'être excité » (somme sur tous les états excités).</p>
+</div>
+<div class="widget" data-widget="boltzmann-levels"></div>
+
+<h2>2. L'équipartition</h2>
+<p>Le calcul statistique donne l'énergie moyenne d'un degré de liberté d'un système classique. Pour une particule libre selon un axe, \(\varepsilon = \tfrac{1}{2}mv^2\) ; plus généralement l'énergie stockée dans un degré de liberté a la forme \(\varepsilon = b\xi^2\) où \(\xi\) est une coordonnée de position ou de quantité de mouvement. L'énergie moyenne est \(\bar\varepsilon = \sum_s P_s\varepsilon_s\), et pour un continuum d'états la somme devient une intégrale :</p>
+<div class="formula"><div class="title">Énergie moyenne par degré de liberté quadratique</div>
+\[\bar\varepsilon = \frac{\displaystyle\int_{-\infty}^{+\infty} e^{-\beta b\xi^2}\,b\xi^2\,d\xi}{\displaystyle\int_{-\infty}^{+\infty} e^{-\beta b\xi^2}\,d\xi} = \frac{1}{2\beta} = \frac{1}{2}kT\]
+<div class="cond">Le numérateur s'intègre par parties et redonne \(\frac{1}{2\beta}\) fois le dénominateur (ex. 47). Si l'énergie vaut \(b|\xi|^{\alpha}\), le même calcul donne \(\bar\varepsilon = kT/\alpha\) (ex. 48) : le \(\tfrac{1}{2}\) vient de l'exposant 2.</div>
+</div>
+<p>On retrouve le théorème d'équipartition du cours 2, cette fois démontré. Une particule libre en trois dimensions a trois degrés de liberté de translation :</p>
+<div class="formula"><div class="title">Vitesse quadratique moyenne et mouvement brownien</div>
+\[\bar\varepsilon_{trans} = \tfrac{1}{2}m\overline{v^2} = \tfrac{3}{2}kT \qquad\Rightarrow\qquad v_{rms} = \sqrt{\overline{v^2}} = \sqrt{\frac{3kT}{m}}\]
+<div class="cond">Une particule confinée à une surface n'a que deux degrés de liberté : \(v_{rms} = \sqrt{2kT/m}\). Cette agitation existe pour toute particule, de l'électron au grain de poussière, mais n'est visible qu'aux petites masses : N₂ à 20 °C, 508 m/s ; grain de \(10^{-11}\) kg dans l'eau glacée, \(3\times10^{-5}\) m/s. Robert Brown l'a observée au microscope en 1827 sur des spores à la surface de l'eau.</div>
+</div>
+
+<h2>3. Les fermions et les bosons</h2>
+<h3>3.1 Le nombre d'occupation</h3>
+<p>Dans le cas quantique, le nombre moyen de particules dans un état d'énergie \(\varepsilon\) s'obtient en moyennant \(n\) avec les probabilités \(P_n\). L'astuce des diapos : \(ne^{-nx} = -\partial(e^{-nx})/\partial x\), ce qui transforme la somme pondérée en dérivée d'un logarithme.</p>
+<div class="formula"><div class="title">Nombre d'occupation d'un état</div>
+\[\bar n = \sum_n nP_n = \frac{\sum_n ne^{-nx}}{\sum_n e^{-nx}} = -\frac{\partial}{\partial x}\ln\!\left(\sum_n e^{-nx}\right), \qquad x = \beta(\varepsilon - \mu)\]
+<div class="cond">Tout dépend de la somme \(\sum_n e^{-nx}\), c'est-à-dire du nombre maximal de particules que l'état peut contenir. La nature n'offre que deux possibilités pour les particules élémentaires.</div>
+</div>
+<h3>3.2 Les fermions</h3>
+<p>Une seule particule à la fois peut occuper un état (principe d'exclusion de Pauli ; spin demi-entier : électron, trou, positron, proton, neutron, muon). La somme n'a que deux termes :</p>
+<div class="formula"><div class="title">Statistique de Fermi-Dirac</div>
+\[\sum_{n=0}^{1} e^{-nx} = 1 + e^{-x} \qquad\Rightarrow\qquad \bar n_{fermions} = -\frac{\partial}{\partial x}\ln(1 + e^{-x}) = \frac{1}{e^{x} + 1} = \frac{1}{e^{\beta(\varepsilon - \mu)} + 1}\]
+<div class="cond">Toujours entre 0 et 1. À \(\varepsilon = \mu\), \(\bar n = 1/2\) quelle que soit la température. À \(T \to 0\) : tous les états sous \(\mu\) sont pleins, tous ceux au-dessus sont vides (marche). À \(T\) plus élevée la marche s'adoucit sur une largeur de quelques \(kT\).</div>
+</div>
+<h3>3.3 Les bosons</h3>
+<p>Un nombre quelconque de particules peut occuper le même état (spin entier : photon, particule α, deutéron, atome d'hélium 4, méson π). La somme est une série géométrique, qui ne converge que pour \(x \gt 0\) :</p>
+<div class="formula"><div class="title">Statistique de Bose-Einstein</div>
+\[\sum_{n=0}^{\infty} e^{-nx} = \frac{1}{1 - e^{-x}} \qquad\Rightarrow\qquad \bar n_{bosons} = -\frac{\partial}{\partial x}\ln\!\left(\frac{1}{1 - e^{-x}}\right) = \frac{1}{e^{x} - 1} = \frac{1}{e^{\beta(\varepsilon - \mu)} - 1}\]
+<div class="cond">Peut dépasser 1 et diverge quand \(\varepsilon \to \mu\) : le potentiel chimique d'un système de bosons est toujours sous l'énergie de l'état le plus bas (pour les photons, \(\mu = 0\)).</div>
+</div>
+<div class="formula"><div class="title">Les deux statistiques en une formule, et leurs fluctuations</div>
+\[\bar n = \frac{1}{e^{\beta(\varepsilon - \mu)} \pm 1} \quad (+ \text{ fermions}, - \text{ bosons}), \qquad \sigma^2 = \overline{n^2} - \bar n^2 = \bar n(1 \mp \bar n)\]
+<div class="cond">Fermions : fluctuations faibles sauf près de \(\mu\) (où \(\bar n \approx 1/2\)). Bosons : \(\sigma^2 = \bar n(1 + \bar n) \gt \bar n\), les fluctuations dépassent la valeur moyenne. Le nombre d'occupation ne dit rien sur l'existence des états : il faut aussi connaître le spectre d'états accessibles (cours 8).</div>
+</div>
+<div class="box method"><span class="label">D'autres règles d'occupation</span>
+  <p>La formule \(\bar n = -\partial_x\ln\sum e^{-nx}\) marche pour n'importe quelle règle. Des « goofions » qui admettent 0, 1 ou 2 particules par état donnent \(\sum = 1 + e^{-x} + e^{-2x}\) et \(\bar n = (e^{-x} + 2e^{-2x})/(1 + e^{-x} + e^{-2x})\) (ex. 9) ; une molécule qui fixe de 0 à \(m\) groupes identiques (oxygène sur l'hémoglobine) se traite de la même façon.</p>
+</div>
+<div class="widget" data-widget="occupation-number"></div>
+
+<h2>4. Comparaison des cas classique et quantique</h2>
+<h3>4.1 Hautes énergies : les trois statistiques coïncident</h3>
+<p>Dans le cas classique, le nombre moyen de particules dans l'état \(s\) est le nombre de particules fois la probabilité d'y être : \(\bar n_{classique} = NP_s = NCe^{-\beta\varepsilon_s}\) avec \(C = 1/\sum_s e^{-\beta\varepsilon_s}\). Dans le cas quantique, pour les grandes énergies, \(e^{\beta(\varepsilon - \mu)} \gg 1\) et le \(\pm 1\) du dénominateur devient négligeable :</p>
+<div class="formula"><div class="title">Limite des hautes énergies (faibles occupations)</div>
+\[\bar n_{quantique} = \frac{1}{e^{\beta(\varepsilon - \mu)} \pm 1} \approx e^{-\beta(\varepsilon - \mu)} = e^{\beta\mu}e^{-\beta\varepsilon}, \qquad N = \sum_s \bar n_s \approx e^{\beta\mu}\sum_s e^{-\beta\varepsilon_s} \ \Rightarrow\ e^{\beta\mu} = \frac{N}{\sum_s e^{-\beta\varepsilon_s}} = NC\]
+<div class="cond">En réinjectant \(e^{\beta\mu} = NC\), on retrouve exactement \(\bar n_{classique}\) : \(\bar n_{classique} \approx \bar n_{bosons} \approx \bar n_{fermions} \approx e^{-\beta(\varepsilon - \mu)}\) pour \(\varepsilon - \mu \gg kT\). Cela donne aussi le potentiel chimique d'un système dilué : \(\mu = kT\ln(N/\sum_s e^{-\beta\varepsilon_s})\).</div>
+</div>
+<h3>4.2 Basses énergies : elles diffèrent</h3>
+<div class="formula"><div class="title">Ordre des nombres d'occupation à basse énergie</div>
+\[\frac{1}{e^{\beta(\varepsilon - \mu)} - 1} \gt e^{-\beta(\varepsilon - \mu)} \gt \frac{1}{e^{\beta(\varepsilon - \mu)} + 1} \qquad\Rightarrow\qquad \bar n_{bosons} \gt \bar n_{classique} \gt \bar n_{fermions}\]
+<div class="cond">Valable dès que \(\varepsilon - \mu\) n'est plus grand devant \(kT\), c'est-à-dire pour les états fortement occupés.</div>
+</div>
+<h3>4.3 Pourquoi : le comptage des configurations</h3>
+<p>Deux particules dans deux états : avec des particules distinctes ①② il y a 4 configurations (2 à occupation simple, 2 à occupation double). Si les particules sont identiques, la correction classique divise par \(N! = 2\) et prédit 1 et 1. Mais les bosons identiques ont 1 configuration simple et 2 doubles (●|● ; ●●|- ; -|●●), et les fermions 1 configuration simple et 0 double. Trois particules dans trois états : 27 configurations distinctes (6 simples, 18 doubles, 3 triples), correction classique 1, 3 et 1/2, bosons 1, 6 et 3, fermions 1, 0 et 0.</p>
+<table>
+  <tr><th>Occupation</th><th>Particules distinctes \(\Omega_D\)</th><th>Classique corrigé \(\Omega_D/N!\)</th><th>Bosons</th><th>Fermions</th></tr>
+  <tr><td>2 particules, 2 états : simple</td><td class="num">2</td><td class="num">1</td><td class="num">1</td><td class="num">1</td></tr>
+  <tr><td>2 particules, 2 états : double</td><td class="num">2</td><td class="num">1</td><td class="num">2</td><td class="num">0</td></tr>
+  <tr><td>3 particules, 3 états : simple</td><td class="num">6</td><td class="num">1</td><td class="num">1</td><td class="num">1</td></tr>
+  <tr><td>3 particules, 3 états : double</td><td class="num">18</td><td class="num">3</td><td class="num">6</td><td class="num">0</td></tr>
+  <tr><td>3 particules, 3 états : triple</td><td class="num">3</td><td class="num">1/2</td><td class="num">3</td><td class="num">0</td></tr>
+  <tr><td>3 particules, 3 états : total</td><td class="num">27</td><td class="num">4,5</td><td class="num">10</td><td class="num">1</td></tr>
+</table>
+<p>La correction classique \(1/N!\) est exacte pour l'occupation simple, mais elle sous-estime le nombre de configurations à occupation multiple des bosons et le surestime pour les fermions (qui n'en ont aucune). Dans un vrai système (\(10^{24}\) particules), ce sont les états de basse énergie, fortement occupés, qui portent cette différence : plus de particules par état pour les bosons, moins pour les fermions.</p>
+<div class="box def"><span class="label">Formules générales de comptage (complément)</span>
+  <p>\(n\) particules dans \(m\) états : distinctes \(\Omega_D = m^n\) ; classique corrigé \(m^n/n!\) ; bosons identiques \(C_{n+m-1}^{\,n}\) (répartir \(n\) objets identiques dans \(m\) boîtes) ; fermions identiques \(C_m^{\,n}\) (choisir \(n\) états distincts), nul si \(n \gt m\).</p>
+</div>
+<div class="widget" data-widget="arrangements"></div>
+
+<h2>5. Limite du cas classique</h2>
+<p>L'approche classique est bonne tant qu'il est peu probable que deux particules identiques essaient d'occuper le même état, donc tant que le nombre d'états quantiques est très supérieur au nombre de particules. Chaque état occupe un volume \(h^3\) dans l'espace des phases (position × quantité de mouvement, cours 2) :</p>
+<div class="formula"><div class="title">Critère de validité de la statistique classique</div>
+\[\frac{V_rV_p}{h^3} \gg N, \qquad V_r \approx Nr^3,\ V_p \approx p^3 \quad\Rightarrow\quad \frac{r^3p^3}{h^3} \gg 1 \quad\Rightarrow\quad \frac{rp}{h} \gg 1, \qquad r \approx \left(\frac{V}{N}\right)^{1/3},\ p \approx \sqrt{3mkT}\]
+<div class="cond">\(r\) : distance moyenne entre particules ; \(p\) : quantité de mouvement thermique (\(p^2/2m \approx \tfrac{3}{2}kT\)). Autrement dit, la distance entre particules doit être grande devant la longueur d'onde de de Broglie \(h/p\). Le critère ne dépend ni de la charge ni des interactions, seulement de \(m\), de la densité et de \(T\).</div>
+</div>
+<div class="box ex"><span class="label">Ordres de grandeur</span>
+  <ul>
+    <li>N₂ de l'air (1 atm, 293 K, \(N/V = p/kT = 2{,}5\times10^{25}\) m⁻³, \(r = 3{,}4\) nm) : \(rp/h = 120\), classique. Il faudrait descendre vers 0,02 K à cette densité pour que les deux nombres se rejoignent (ex. 25).</li>
+    <li>Électrons de conduction du cuivre (\(8{,}4\times10^{28}\) m⁻³, \(r = 2{,}3\times10^{-10}\) m) : \(rp/h = 0{,}04\) à 298 K et 0,2 à 10 000 K. Toujours quantiques : la masse de l'électron est trop petite (ex. 26). Les atomes de cuivre, 115 000 fois plus lourds, donnent 12 : classiques.</li>
+    <li>Électrons d'une naine blanche à \(10^{9}\) K : dégénérés dès \(N/V \gt 2{,}5\times10^{34}\) m⁻³ (ex. 24). Nucléons d'un noyau (\(r = 2{,}6\times10^{-15}\) m) : non dégénérés seulement au-delà de \(10^{12}\) K (ex. 28).</li>
+  </ul>
+</div>
+<div class="widget" data-widget="classical-limit"></div>
+
+<h2>6. Le potentiel chimique (complément du chapitre 19)</h2>
+<p>Toutes les formules quantiques contiennent \(\mu\). Sa valeur est fixée par le nombre total de particules : \(N = \sum_s \bar n_s = \sum_s 1/(e^{\beta(\varepsilon_s - \mu)} \pm 1)\), équation implicite qu'on sait résoudre dans deux limites. À faible densité (cas classique), \(\mu = kT\ln(N/\sum_s e^{-\beta\varepsilon_s})\), très négatif. À forte densité (système dégénéré), les bosons s'entassent tous dans l'état le plus bas, \(N = 1/(e^{-\beta\mu} - 1)\), d'où \(\mu \approx -kT/N\), juste sous le fondamental ; les fermions remplissent les \(N\) états les plus bas jusqu'à la surface de Fermi, \(\mu_{T=0} = \varepsilon_F\), et comme \(N\) fermions occupent un volume \(Nh^3\) de l'espace des phases, \(p_F \approx h(N/V)^{1/3}\) et</p>
+<div class="formula"><div class="title">Énergie de Fermi d'un gaz de fermions dégénéré (estimation grossière)</div>
+\[\varepsilon_F = \frac{p_F^2}{2m} \approx \frac{h^2}{2m}\left(\frac{N}{V}\right)^{2/3}\]
+<div class="cond">Électrons du cuivre : environ 28 eV avec cette estimation (7 eV avec le calcul complet du cours 9), soit des températures équivalentes de \(10^{5}\) K. Plus la densité est élevée, plus la surface de Fermi est haute. Suite au cours 8 (gaz quantiques, corps noir) et au cours 9 (électrons dans les solides).</div>
+</div>
+
+<h2>7. À retenir</h2>
+<ul class="summary-list">
+  <li>Équation générale : \(P_s = C\exp[-(\Delta E + p\Delta V - \mu\Delta N)/kT]\), probabilité décroissante avec ce que l'état coûte au réservoir.</li>
+  <li>Classique : \(P_s = Ce^{-\beta\varepsilon_s}\), \(C = 1/\sum e^{-\beta\varepsilon_s}\), \(P_i/P_j = e^{-\beta(\varepsilon_i - \varepsilon_j)}\) ; niveaux dégénérés : multiplier par \(n_s\) ; \(T_e = \Delta\varepsilon/k\).</li>
+  <li>Quantique : \(P_n = Ce^{-n\beta(\varepsilon - \mu)}\) ; fermions \(C = 1/(1 + e^{-x})\), bosons \(C = 1 - e^{-x}\).</li>
+  <li>Équipartition : \(\tfrac{1}{2}kT\) par degré de liberté quadratique ; \(v_{rms} = \sqrt{3kT/m}\).</li>
+  <li>Nombre d'occupation : \(\bar n = 1/(e^{\beta(\varepsilon - \mu)} \pm 1)\), + fermions (entre 0 et 1, 1/2 à \(\mu\)), − bosons (diverge à \(\mu\)).</li>
+  <li>Haute énergie : tout le monde vaut \(e^{-\beta(\varepsilon - \mu)}\) ; basse énergie : bosons \(\gt\) classique \(\gt\) fermions, à cause des occupations multiples.</li>
+  <li>Classique valable si \(rp/h \gg 1\) avec \(r = (V/N)^{1/3}\) et \(p = \sqrt{3mkT}\) : oui pour les gaz et les atomes, non pour les électrons d'un métal.</li>
+</ul>
+
+<section class="quiz" data-quiz-id="c7" id="quiz-c7">
+<h2>Quiz rapide - Cours 7</h2>
+<p class="small">Une seule bonne réponse par question. Cliquez pour vérifier immédiatement.</p>
+
+<div class="q" data-answer="1">
+  <p class="q-text">D'où vient l'exponentielle de \(P_s = C\exp[-(\Delta E + p\Delta V - \mu\Delta N)/kT]\) ?</p>
+  <ul class="choices"><li>De la loi des gaz parfaits</li><li>Du nombre d'états qui restent au réservoir, \(\Omega_R = e^{S_R/k}\), après que le petit système lui a pris \(\Delta E\), \(\Delta V\), \(\Delta N\)</li><li>D'une hypothèse sur la forme des états du petit système</li><li>Du théorème d'équipartition</li></ul>
+  <div class="explain">Le petit système dans un état précis a \(\Omega = 1\) ; sa probabilité est proportionnelle aux états restants du réservoir, dont l'entropie a baissé de \((\Delta E + p\Delta V - \mu\Delta N)/T\).</div>
+</div>
+
+<div class="q" data-answer="2">
+  <p class="q-text">Dans le cas classique (statistique de Boltzmann), qu'est-ce qui est fixé ?</p>
+  <ul class="choices"><li>L'état : on compte combien de particules il contient</li><li>Le volume de chaque état</li><li>L'ensemble des particules (\(\Delta N = 0\)) : on cherche dans quel état elles sont</li><li>La température du petit système</li></ul>
+  <div class="explain">Classique : on suit des particules fixées entre différents états, \(P_s = Ce^{-\beta\varepsilon_s}\). Quantique : on suit un état donné (\(\Delta V = 0\)) et \(n\) varie.</div>
+</div>
+
+<div class="q" data-answer="0">
+  <p class="q-text">Que vaut \(kT\) à 290 K ?</p>
+  <ul class="choices"><li>Environ 0,025 eV</li><li>Environ 0,25 eV</li><li>Environ 2,5 eV</li><li>Environ 25 eV</li></ul>
+  <div class="explain">\(kT = 8{,}617\times10^{-5}\times290 = 0{,}025\) eV, le fameux « 1/40 d'électronvolt ».</div>
+</div>
+
+<div class="q" data-answer="1">
+  <p class="q-text">Deux états séparés de 0,1 eV à 290 K : le rapport de probabilités \(P_{haut}/P_{bas}\) vaut</p>
+  <ul class="choices"><li>\(e^{-0{,}4} \approx 0{,}67\)</li><li>\(e^{-4} \approx 0{,}018\)</li><li>\(e^{-40} \approx 4\times10^{-18}\)</li><li>exactement 0,1</li></ul>
+  <div class="explain">\(\Delta\varepsilon/kT = 0{,}1/0{,}025 = 4\), donc \(P_{haut}/P_{bas} = e^{-4} = 0{,}018\).</div>
+</div>
+
+<div class="q" data-answer="2">
+  <p class="q-text">Une molécule a un niveau fondamental non dégénéré et un niveau excité trois fois dégénéré. La probabilité d'être au niveau excité vaut</p>
+  <ul class="choices"><li>\(Ce^{-\beta\Delta\varepsilon}\)</li><li>\(3C\)</li><li>\(3Ce^{-\beta\Delta\varepsilon}\) avec \(C = 1/(1 + 3e^{-\beta\Delta\varepsilon})\)</li><li>\(e^{-3\beta\Delta\varepsilon}\)</li></ul>
+  <div class="explain">\(P(\varepsilon_s) = n_sP_s\) : trois états à la même énergie, chacun de probabilité \(Ce^{-\beta\Delta\varepsilon}\), et \(C\) normalise sur les quatre états.</div>
+</div>
+
+<div class="q" data-answer="3">
+  <p class="q-text">La température d'excitation \(T_e = (\varepsilon_1 - \varepsilon_0)/k\) d'une vibration moléculaire vaut 3000 K. À 300 K, cette vibration</p>
+  <ul class="choices"><li>stocke \(\tfrac{1}{2}kT\) par degré de liberté comme les autres</li><li>stocke \(kT\) (cinétique + potentiel)</li><li>est excitée dans un tiers des molécules</li><li>est gelée : presque aucune molécule n'est excitée et \(C_V\) ne compte pas ces degrés de liberté</li></ul>
+  <div class="explain">\(P_1/P_0 = e^{-T_e/T} = e^{-10} = 4{,}5\times10^{-5}\). C'est pourquoi \(\nu = 5\) et non 7 pour N₂ ou O₂ à température ambiante.</div>
+</div>
+
+<div class="q" data-answer="1">
+  <p class="q-text">L'équipartition donne \(\tfrac{1}{2}kT\) par degré de liberté. Si l'énergie d'un degré de liberté est \(b|\xi|^{4}\), son énergie moyenne vaut</p>
+  <ul class="choices"><li>\(2kT\)</li><li>\(\tfrac{1}{4}kT\)</li><li>\(\tfrac{1}{2}kT\) quand même</li><li>\(4kT\)</li></ul>
+  <div class="explain">Pour \(\varepsilon = b|\xi|^{\alpha}\), le même calcul (intégration par parties) donne \(kT/\alpha\). Le \(\tfrac{1}{2}\) habituel vient de l'exposant 2.</div>
+</div>
+
+<div class="q" data-answer="0">
+  <p class="q-text">Quelle est la vitesse quadratique moyenne d'une molécule de N₂ (\(4{,}7\times10^{-26}\) kg) à 293 K ?</p>
+  <ul class="choices"><li>Environ 500 m/s</li><li>Environ 50 m/s</li><li>Environ 5000 m/s</li><li>Environ 5 m/s</li></ul>
+  <div class="explain">\(v_{rms} = \sqrt{3kT/m} = \sqrt{3\times1{,}381\times10^{-23}\times293/4{,}7\times10^{-26}} = 508\) m/s.</div>
+</div>
+
+<div class="q" data-answer="2">
+  <p class="q-text">Pour un état de fermions situé exactement à \(\varepsilon = \mu\), le nombre d'occupation vaut</p>
+  <ul class="choices"><li>0</li><li>1</li><li>1/2, quelle que soit la température</li><li>\(kT/\mu\)</li></ul>
+  <div class="explain">\(\bar n = 1/(e^{0} + 1) = 1/2\). La température ne change que la largeur de la transition autour de \(\mu\).</div>
+</div>
+
+<div class="q" data-answer="1">
+  <p class="q-text">Pourquoi le potentiel chimique d'un gaz de bosons doit-il être inférieur à l'énergie de l'état le plus bas ?</p>
+  <ul class="choices"><li>Parce que les bosons ont un spin entier</li><li>Parce que \(\bar n = 1/(e^{\beta(\varepsilon - \mu)} - 1)\) diverge à \(\varepsilon = \mu\) et serait négatif en dessous</li><li>Parce que \(C = 1 - e^{-x}\) doit être supérieur à 1</li><li>Ce n'est pas nécessaire, seulement pratique</li></ul>
+  <div class="explain">La série \(\sum e^{-nx}\) ne converge que pour \(x \gt 0\). Pour les photons, \(\mu = 0\) et l'état fondamental a une énergie qui tend vers 0.</div>
+</div>
+
+<div class="q" data-answer="3">
+  <p class="q-text">Les fluctuations du nombre de particules dans un état, \(\sigma^2 = \bar n(1 \mp \bar n)\) :</p>
+  <ul class="choices"><li>sont nulles pour les bosons</li><li>sont maximales pour les fermions quand \(\bar n \approx 1\)</li><li>sont les mêmes pour les deux statistiques</li><li>sont faibles pour les fermions sauf près de \(\mu\), et dépassent \(\bar n\) pour les bosons</li></ul>
+  <div class="explain">Fermions : \(\bar n(1 - \bar n)\), maximal à \(\bar n = 1/2\), nul à 0 et 1. Bosons : \(\bar n(1 + \bar n) \gt \bar n\).</div>
+</div>
+
+<div class="q" data-answer="0">
+  <p class="q-text">Pour un état d'énergie très supérieure à \(\mu\) (\(\varepsilon - \mu \gg kT\)), les nombres d'occupation classique, bosons et fermions</p>
+  <ul class="choices"><li>sont tous à peu près égaux à \(e^{-\beta(\varepsilon - \mu)}\)</li><li>valent tous 1/2</li><li>diffèrent d'un facteur 2</li><li>sont tous égaux à 1</li></ul>
+  <div class="explain">Le \(\pm 1\) du dénominateur devient négligeable devant \(e^{\beta(\varepsilon - \mu)}\), et \(e^{\beta\mu} = N/\sum e^{-\beta\varepsilon_s}\) redonne exactement \(NP_s\).</div>
+</div>
+
+<div class="q" data-answer="2">
+  <p class="q-text">Pour des états de basse énergie (fortement occupés), quel est l'ordre correct ?</p>
+  <ul class="choices"><li>\(\bar n_{fermions} \gt \bar n_{classique} \gt \bar n_{bosons}\)</li><li>\(\bar n_{classique} \gt \bar n_{bosons} \gt \bar n_{fermions}\)</li><li>\(\bar n_{bosons} \gt \bar n_{classique} \gt \bar n_{fermions}\)</li><li>Les trois sont égaux</li></ul>
+  <div class="explain">\(1/(e^x - 1) \gt e^{-x} \gt 1/(e^x + 1)\). Les bosons ont plus de configurations à occupation multiple que le comptage classique corrigé, les fermions n'en ont aucune.</div>
+</div>
+
+<div class="q" data-answer="1">
+  <p class="q-text">Deux bosons identiques dans deux états : combien d'arrangements différents ?</p>
+  <ul class="choices"><li>4</li><li>3</li><li>2</li><li>1</li></ul>
+  <div class="explain">●|●, ●●|-, -|●● : trois arrangements (\(C_{3}^{\,2} = 3\)). Particules distinctes : 4 ; classique corrigé : 2 ; fermions : 1.</div>
+</div>
+
+<div class="q" data-answer="3">
+  <p class="q-text">Le critère \(rp/h \gg 1\) de validité de la statistique classique signifie que</p>
+  <ul class="choices"><li>la pression est faible</li><li>les particules n'interagissent pas</li><li>la température est supérieure à la température d'excitation</li><li>la distance entre particules est grande devant leur longueur d'onde de de Broglie \(h/p\), donc il y a beaucoup plus d'états que de particules</li></ul>
+  <div class="explain">\(V_rV_p/h^3 \gg N\) : le nombre d'états quantiques dans l'espace des phases doit dépasser largement le nombre de particules.</div>
+</div>
+
+<div class="q" data-answer="1">
+  <p class="q-text">Lequel de ces systèmes ne peut pas être traité par la statistique classique à température ambiante ?</p>
+  <ul class="choices"><li>Les molécules d'azote de l'air</li><li>Les électrons de conduction du cuivre</li><li>Les atomes de cuivre du métal</li><li>Les molécules d'eau liquide</li></ul>
+  <div class="explain">Électrons du cuivre : \(rp/h \approx 0{,}04\) (masse minuscule, densité élevée). Azote : 120, atomes de cuivre : 12, eau : 9.</div>
+</div>
+</section>
+
+<h2 id="dev-c7">Exercices à développement (à faire sur papier)</h2>
+<p>Exemples des diapos et exercices faits en classe (fichier « Lundi - Exercices cours 7 » : 6 p. 344, 16 p. 345, 49 p. 350, 4 et 9 p. 416). Les valeurs ont été recalculées ; les écarts avec les corrigés du professeur sont signalés.</p>
+<div class="exo-tools" data-scope="dev-c7-list">
+  <button class="btn secondary" type="button" data-action="open-all">Tout ouvrir</button>
+  <button class="btn secondary" type="button" data-action="close-all">Tout fermer</button>
+  <div class="progress-bar"><span></span></div><span class="progress-label small"></span>
+</div>
+<div id="dev-c7-list">
+
+<article class="exo" data-exo-id="c7-d1">
+  <header><span class="tag">Diapo 9 - Ex. 1 et 2</span><span class="tag theme">Cas classique</span><h4>D1. L'atome d'hydrogène à 295 K</h4></header>
+  <div class="enonce"><p>Les deux premiers états d'énergie de l'atome d'hydrogène sont \(\varepsilon_0 = -13{,}6\) eV et \(\varepsilon_1 = -3{,}4\) eV. (a) Quel est le rapport de probabilité d'occupation \(P_1/P_0\) à 295 K ? (b) À quelle température trouverait-on moitié moins d'atomes dans l'état 1 que dans l'état 0 ?</p></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>Le rapport ne dépend que de la différence d'énergie : \(P_1/P_0 = e^{-\beta(\varepsilon_1 - \varepsilon_0)}\). Travailler avec \(k = 8{,}617\times10^{-5}\) eV/K.</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(\varepsilon_1 - \varepsilon_0 = 10{,}2\) eV et \(kT = 8{,}617\times10^{-5}\times295 = 0{,}0254\) eV, donc \(\beta(\varepsilon_1 - \varepsilon_0) = 401\) : \(P_1/P_0 = e^{-401} = 10^{-174}\). Aucun atome excité thermiquement à température ambiante.</li>
+      <li>(b) \(e^{-\beta\Delta\varepsilon} = 1/2 \Rightarrow \beta\Delta\varepsilon = \ln 2 \Rightarrow T = \Delta\varepsilon/(k\ln 2) = 10{,}2/(8{,}617\times10^{-5}\times0{,}693) = 1{,}7\times10^{5}\) K.</li>
+    </ol>
+    <p class="answer">(a) \(e^{-401} \approx 10^{-174}\) | (b) \(1{,}7\times10^{5}\) K</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c7-d2">
+  <header><span class="tag">Diapo 12 - Ex. 1</span><span class="tag theme">Cas quantique, bosons</span><h4>D2. Un état de photon dans un four</h4></header>
+  <div class="enonce"><p>L'énergie d'un état quantique de photon dans un four à 500 K est 0,1 eV. Quelle est la chance de trouver zéro photon dans cet état comparativement à celle d'en trouver un ? Le potentiel chimique d'un photon est nul.</p></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>\(P_n = Ce^{-n\beta(\varepsilon - \mu)}\) ; le rapport \(P_0/P_1\) ne demande pas \(C\).</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>\(kT = 8{,}617\times10^{-5}\times500 = 0{,}0431\) eV ; \(x = \beta(\varepsilon - \mu) = 0{,}1/0{,}0431 = 2{,}32\).</li>
+      <li>\(P_0/P_1 = Ce^{0}/(Ce^{-x}) = e^{x} = e^{2{,}32} = 10{,}2\).</li>
+      <li>Pour aller plus loin : \(C = 1 - e^{-x} = 0{,}902\), \(P_0 = 0{,}902\), \(P_1 = 0{,}089\), et le nombre d'occupation \(\bar n = 1/(e^{x} - 1) = 0{,}109\).</li>
+    </ol>
+    <p class="answer">\(P_0/P_1 = e^{2{,}32} \approx 10\)</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c7-d3">
+  <header><span class="tag">Diapo 12 - Ex. 2</span><span class="tag theme">Cas quantique, fermions</span><h4>D3. Un état électronique dans un métal</h4></header>
+  <div class="enonce"><p>Des électrons dans un métal ont un potentiel chimique \(\mu = -2{,}03\) eV. Un état quantique de ce métal a une énergie de \(-2\) eV et peut contenir zéro ou un électron. Quelles sont les probabilités que cet état soit vide ou plein ? (Prendre \(T = 300\) K, valeur implicite de la diapo.)</p></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>Il faut d'abord \(C\) : deux termes seulement dans la somme (\(n = 0\) et \(n = 1\)).</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>\(\varepsilon - \mu = 0{,}03\) eV ; \(kT = 0{,}0259\) eV ; \(x = 1{,}16\).</li>
+      <li>\(C = 1/\sum_{n=0}^{1} e^{-nx} = 1/(1 + e^{-1{,}16}) = 1/1{,}313 = 0{,}76\).</li>
+      <li>État vide : \(P_0 = C = 0{,}76\) ; état plein : \(P_1 = Ce^{-x} = 0{,}24\). Vérification : \(P_1\) est aussi le nombre d'occupation \(1/(e^{1{,}16} + 1) = 0{,}24\).</li>
+    </ol>
+    <p class="answer">\(P_0 = 0{,}76\), \(P_1 = 0{,}24\)</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c7-d4">
+  <header><span class="tag">Diapo 15 - Ex. 1</span><span class="tag theme">Équipartition</span><h4>D4. Vitesse quadratique moyenne en trois dimensions</h4></header>
+  <div class="enonce"><p>Trouver la vitesse quadratique moyenne de particules libres de se déplacer en translation selon les trois directions, puis l'appliquer à une molécule de N₂ (\(4{,}7\times10^{-26}\) kg) et à un électron libre, tous deux à 293 K.</p></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>Trois degrés de liberté quadratiques, \(\tfrac{1}{2}kT\) chacun.</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>\(\bar\varepsilon_{trans} = \tfrac{1}{2}m\overline{v^2} = 3\times\tfrac{1}{2}kT\), donc \(v_{rms} = \sqrt{\overline{v^2}} = \sqrt{3kT/m}\).</li>
+      <li>N₂ : \(3kT = 3\times1{,}381\times10^{-23}\times293 = 1{,}21\times10^{-20}\) J ; \(v_{rms} = \sqrt{1{,}21\times10^{-20}/4{,}7\times10^{-26}} = 508\) m/s.</li>
+      <li>Électron : \(v_{rms} = \sqrt{1{,}21\times10^{-20}/9{,}11\times10^{-31}} = 1{,}15\times10^{5}\) m/s. (Dans un métal, les électrons sont dégénérés et vont en fait beaucoup plus vite, cours 9.)</li>
+    </ol>
+    <p class="answer">\(v_{rms} = \sqrt{3kT/m}\) : 508 m/s pour N₂, \(1{,}2\times10^{5}\) m/s pour un électron classique</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c7-d5">
+  <header><span class="tag">Diapos 24 et 25 - Ex. 1 et 2</span><span class="tag theme">Comptage des configurations</span><h4>D5. Deux particules dans deux états, trois particules dans trois états</h4></header>
+  <div class="enonce"><p>Construire le tableau du nombre de configurations (occupation simple, double, triple) pour (a) deux particules dans deux états, (b) trois particules dans trois états, dans les cas : particules distinctes, correction classique \(\Omega_D/N!\), bosons identiques, fermions identiques. Conclure sur le sens de l'inégalité \(\bar n_{bosons} \gt \bar n_{classique} \gt \bar n_{fermions}\).</p></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>Dessiner les cases. Pour des particules identiques, deux dessins qui ne diffèrent que par l'échange des étiquettes sont le même arrangement.</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) Distinctes : ①|②, ②|①, ①②|-, -|①② : 2 simples et 2 doubles, \(\Omega_D = 4\). Classique corrigé : \(4/2! = 2\), soit 1 et 1. Bosons : ●|●, ●●|-, -|●● : 1 simple et 2 doubles (3 au total). Fermions : ●|● seulement : 1 simple, 0 double.</li>
+      <li>(b) Distinctes : \(3^3 = 27\) : 6 simples (permutations de ①②③ dans trois cases), 18 doubles, 3 triples. Classique corrigé \(/3! = 6\) : 1, 3 et 1/2 (4,5 au total). Bosons : 1 simple (●|●|●), 6 doubles (choix de la case double × choix de la case simple), 3 triples (10 au total). Fermions : 1 simple, 0, 0.</li>
+      <li>La correction \(1/N!\) est exacte pour l'occupation simple mais sous-estime les occupations multiples des bosons (3 contre 6 doubles, 1/2 contre 3 triples) et surestime celles des fermions (qui n'en ont pas). Les états de basse énergie, fortement occupés, reçoivent donc plus de particules avec des bosons et moins avec des fermions que ne le prédit le calcul classique.</li>
+    </ol>
+    <p class="answer">(a) 4 / 2 / 3 / 1 | (b) 27 / 4,5 / 10 / 1 (distinctes / classique / bosons / fermions)</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c7-d6">
+  <header><span class="tag">Lundi - Ex. 6 p. 344</span><span class="tag theme">Cas classique, niveaux équidistants</span><h4>D6. Niveaux \(\varepsilon_n = n\,(0{,}02\ \text{eV})\) à 273 K</h4></header>
+  <div class="enonce"><p>Soit un système dont les énergies d'état sont \(\varepsilon_n = n(0{,}02\ \text{eV})\), \(n = 0, 1, 2, \ldots\), à 273 K. (a) Quelle est la valeur de la constante \(C\) dans \(P_s = Ce^{-\beta\varepsilon_s}\) (3 décimales) ? (b) Quelle est la probabilité que le système soit dans l'état de moindre énergie ? (c) Dans le premier état excité ? (Utiliser \(1 + x + x^2 + \cdots = 1/(1 - x)\).)</p></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>La somme \(\sum_n e^{-n\beta\varepsilon}\) est géométrique de raison \(e^{-\beta\varepsilon}\).</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>\(kT = 8{,}617\times10^{-5}\times273 = 0{,}02352\) eV ; \(\beta\varepsilon = 0{,}02/0{,}02352 = 0{,}850\) ; \(e^{-0{,}850} = 0{,}427\).</li>
+      <li>(a) \(\sum_n e^{-n\beta\varepsilon} = 1/(1 - 0{,}427) = 1{,}746\), donc \(C = 1 - e^{-\beta\varepsilon} = 0{,}573\).</li>
+      <li>(b) \(P_0 = Ce^{0} = 0{,}573\). (c) \(P_1 = Ce^{-\beta\varepsilon} = 0{,}573\times0{,}427 = 0{,}245\).</li>
+    </ol>
+    <p class="small">Même valeurs que le corrigé du professeur (0,572 et 0,245). À 500 K (ex. 7), on aurait \(C = 0{,}371\), \(P_0 = 0{,}371\), \(P_1 = 0{,}233\) : plus il fait chaud, plus les états excités sont peuplés.</p>
+    <p class="answer">(a) \(C = 0{,}573\) | (b) \(P_0 = 0{,}573\) | (c) \(P_1 = 0{,}245\)</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c7-d7">
+  <header><span class="tag">Lundi - Ex. 16 p. 345</span><span class="tag theme">Niveau dégénéré, température d'excitation</span><h4>D7. Molécule à quatre configurations électroniques</h4></header>
+  <div class="enonce"><p>Une molécule a 4 configurations électroniques possibles : un état à \(-0{,}34\) eV (fondamental) et trois états à \(-0{,}30\) eV. (a) À 17 °C, quelle fraction des molécules est dans l'état de moindre énergie ? (b) À quelle température la moitié des molécules serait-elle dans l'un des états excités ?</p></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>Quatre états, donc quatre termes dans \(C\). Mesurer les énergies depuis le fondamental : seul \(\Delta\varepsilon = 0{,}04\) eV compte.</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(T = 290\) K, \(kT = 0{,}0250\) eV, \(\beta\Delta\varepsilon = 1{,}60\), \(e^{-1{,}60} = 0{,}202\). \(C = 1/(1 + 3\times0{,}202) = 1/1{,}606 = 0{,}623\) et \(P_0 = C = 0{,}623\) : 62 % des molécules au fondamental.</li>
+      <li>(b) Fraction excitée \(= 3Ce^{-\beta\Delta\varepsilon} = 3e^{-\beta\Delta\varepsilon}/(1 + 3e^{-\beta\Delta\varepsilon}) = 1/2 \Rightarrow 3e^{-\beta\Delta\varepsilon} = 1 \Rightarrow \beta\Delta\varepsilon = \ln 3\).</li>
+      <li>\(T = \Delta\varepsilon/(k\ln 3) = 0{,}04/(8{,}617\times10^{-5}\times1{,}099) = 423\) K.</li>
+    </ol>
+    <p class="small">Sans la dégénérescence (un seul état excité), la moitié ne serait jamais excitée : la fraction excitée tend vers \(g_1/(g_0 + g_1) = 3/4\) ici, vers 1/2 seulement à \(T \to \infty\) avec \(g_1 = g_0\).</p>
+    <p class="answer">(a) 0,62 | (b) 423 K</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c7-d8">
+  <header><span class="tag">Lundi - Ex. 49 p. 350</span><span class="tag theme">Mouvement brownien</span><h4>D8. Grain de poussière sur l'eau glacée</h4></header>
+  <div class="enonce"><p>Un grain de poussière pèse \(10^{-8}\) g. Il tombe dans un verre d'eau glacée et est maintenu à la surface par la tension de surface, où il se déplace librement en deux dimensions seulement. Quelle est la valeur quadratique moyenne de la vitesse de son mouvement brownien ?</p></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>Combien de degrés de liberté de translation a un grain confiné à une surface ? Masse en kg, température en kelvins.</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>\(m = 10^{-8}\ \text{g} = 10^{-11}\) kg ; eau glacée : \(T = 273\) K.</li>
+      <li>Deux degrés de liberté : \(\tfrac{1}{2}m\overline{v^2} = 2\times\tfrac{1}{2}kT\), donc \(v_{rms} = \sqrt{2kT/m} = \sqrt{2\times1{,}381\times10^{-23}\times273/10^{-11}} = 2{,}7\times10^{-5}\) m/s, soit 27 µm/s.</li>
+      <li>Avec trois degrés de liberté (l'énoncé abrégé de la diapo ne précise pas « deux dimensions »), on obtiendrait \(\sqrt{3kT/m} = 3{,}4\times10^{-5}\) m/s. La réponse du manuel (\(2{,}8\times10^{-5}\) m/s) confirme la version à deux dimensions.</li>
+    </ol>
+    <p class="answer">\(v_{rms} = \sqrt{2kT/m} = 2{,}7\times10^{-5}\) m/s (\(3{,}4\times10^{-5}\) m/s en 3D)</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c7-d9">
+  <header><span class="tag">Lundi - Ex. 4 p. 416</span><span class="tag theme">Nombre d'occupation</span><h4>D9. Un état à 0,004 eV au-dessus de \(\mu\)</h4></header>
+  <div class="enonce"><p>Un état d'énergie est 0,004 eV au-dessus du potentiel chimique dans un système à 17 °C. Quel est le nombre d'occupation de cet état s'il est composé (a) de fermions, (b) de bosons ?</p></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>\(x = (\varepsilon - \mu)/kT\) est petit : les deux statistiques vont différer énormément.</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>\(kT = 8{,}617\times10^{-5}\times290 = 0{,}0250\) eV ; \(x = 0{,}004/0{,}0250 = 0{,}160\) ; \(e^{x} = 1{,}174\).</li>
+      <li>(a) Fermions : \(\bar n = 1/(e^{x} + 1) = 1/2{,}174 = 0{,}46\) (juste sous 1/2, comme attendu un peu au-dessus de \(\mu\)).</li>
+      <li>(b) Bosons : \(\bar n = 1/(e^{x} - 1) = 1/0{,}174 = 5{,}8\). Le classique donnerait \(e^{-x} = 0{,}85\).</li>
+    </ol>
+    <p class="answer">(a) 0,46 | (b) 5,8</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c7-d10">
+  <header><span class="tag">Lundi - Ex. 9 p. 416</span><span class="tag theme">Nombre d'occupation, autre règle</span><h4>D10. Les « goofions »</h4></header>
+  <div class="enonce"><p>Imaginons une troisième classe de particules, les goofions, pour lesquelles il peut uniquement y avoir 0, 1 ou 2 particules par état. Déterminer l'expression du nombre d'occupation de ces particules en fonction de \(\varepsilon\), \(\mu\) et \(\beta\).</p></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>Trois termes dans \(\sum_n e^{-nx}\), puis \(\bar n = -\partial_x\ln\sum\), ou directement \(\bar n = \sum nP_n\).</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>\(x = \beta(\varepsilon - \mu)\) ; \(Z = \sum_{n=0}^{2} e^{-nx} = 1 + e^{-x} + e^{-2x}\).</li>
+      <li>\(\bar n = -\dfrac{\partial\ln Z}{\partial x} = \dfrac{e^{-x} + 2e^{-2x}}{1 + e^{-x} + e^{-2x}}\). En multipliant haut et bas par \(e^{2x}\) : \(\bar n = \dfrac{e^{x} + 2}{e^{2x} + e^{x} + 1}\), forme donnée par le manuel.</li>
+      <li>Contrôles : \(x \to +\infty\) donne \(\bar n \to e^{-x}\) (limite classique) ; \(x \to -\infty\) donne \(\bar n \to 2\) (état saturé) ; à \(x = 0\), \(\bar n = 1\).</li>
+    </ol>
+    <p class="answer">\(\bar n = (e^{x} + 2)/(e^{2x} + e^{x} + 1)\), \(x = \beta(\varepsilon - \mu)\)</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c7-d11">
+  <header><span class="tag">Diapo 26 - application</span><span class="tag theme">Limite du cas classique</span><h4>D11. L'air de la pièce et les électrons d'un métal</h4></header>
+  <div class="enonce"><p>Vérifier avec le critère \(rp/h \gg 1\) si la statistique classique s'applique (a) aux molécules de N₂ de l'air (1 atm, 293 K, \(m = 4{,}67\times10^{-26}\) kg) et (b) aux électrons de conduction du cuivre (un électron par atome, 8,9 g/cm³, masse atomique 64) à 298 K.</p></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>Pour un gaz parfait, \(N/V = p/kT\). Pour le cuivre, compter les atomes par m³ à partir de la masse volumique.</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(N/V = p/kT = 1{,}013\times10^{5}/(1{,}381\times10^{-23}\times293) = 2{,}5\times10^{25}\) m⁻³, \(r = (V/N)^{1/3} = 3{,}4\times10^{-9}\) m ; \(p = \sqrt{3mkT} = \sqrt{3\times4{,}67\times10^{-26}\times1{,}381\times10^{-23}\times293} = 2{,}38\times10^{-23}\) kg m/s ; \(rp/h = 3{,}4\times10^{-9}\times2{,}38\times10^{-23}/6{,}626\times10^{-34} = 120\). Classique sans hésitation.</li>
+      <li>(b) \(N/V = 8900/(64\times1{,}66\times10^{-27}) = 8{,}4\times10^{28}\) m⁻³, \(r = 2{,}3\times10^{-10}\) m ; \(p = \sqrt{3\times9{,}11\times10^{-31}\times1{,}381\times10^{-23}\times298} = 1{,}06\times10^{-25}\) kg m/s ; \(rp/h = 0{,}037\). Très inférieur à 1 : gaz d'électrons dégénéré, statistique de Fermi-Dirac obligatoire (cours 9).</li>
+    </ol>
+    <p class="answer">(a) \(rp/h \approx 120\), classique | (b) \(rp/h \approx 0{,}04\), quantique</p>
+  </div></details>
+</article>
+
+</div>
+
+<h2 id="sugg-c7">Exercices suggérés</h2>
+<p>Liste officielle pour le cours 7 : chapitre 15, exercices 1, 4, 5, 10, 15, 21, 25, 39, 45 et 46 ; chapitre 19, exercices 1, 5, 11, 15, 17, 19, 26 et 27. Les pairs ont un corrigé du professeur (manuscrit), les impairs une réponse à la fin du manuel ; tout a été recalculé.</p>
+<div class="exo-tools" data-scope="sugg-c7-list">
+  <button class="btn secondary" type="button" data-action="open-all">Tout ouvrir</button>
+  <button class="btn secondary" type="button" data-action="close-all">Tout fermer</button>
+  <div class="progress-bar"><span></span></div><span class="progress-label small"></span>
+</div>
+<div id="sugg-c7-list">
+
+<article class="exo" data-exo-id="c7-s1">
+  <header><span class="tag">Chap. 15, ex. 1, p. 343</span><span class="tag theme">Sous-système et réservoir</span><h4>Entropie du réservoir après le prélèvement</h4></header>
+  <div class="enonce"><p>Un réservoir a pour température, pression et potentiel chimique \(T\), \(p\), \(\mu\) et pour entropie initiale \(S_0\). Un petit système interagit avec lui et lui prend \(\Delta E\), \(\Delta V\), \(\Delta N\). Trouver (a) la nouvelle entropie \(S_R\) du réservoir, (b) le nombre d'états qui lui sont maintenant accessibles, (c) la probabilité, à une constante près, que le petit système soit dans l'état qui prend \(\Delta E\), \(\Delta V\), \(\Delta N\) au réservoir.</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(dS = (dE + p\,dV - \mu\,dN)/T\) pour le réservoir, qui perd \(\Delta E\), \(\Delta V\), \(\Delta N\) : \(S_R = S_0 - (\Delta E + p\Delta V - \mu\Delta N)/T\).</li>
+      <li>(b) \(\Omega_R = e^{S_R/k}\).</li>
+      <li>(c) \(P \propto \Omega_R\) : \(P = C\exp[-(\Delta E + p\Delta V - \mu\Delta N)/kT]\), \(C\) contenant \(e^{S_0/k}\) et la normalisation.</li>
+    </ol>
+    <p class="answer">(a) \(S_0 - (\Delta E + p\Delta V - \mu\Delta N)/T\) | (b) \(e^{S_R/k}\) | (c) \(Ce^{-(\Delta E + p\Delta V - \mu\Delta N)/kT}\)</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c7-s2">
+  <header><span class="tag">Chap. 15, ex. 4, p. 343</span><span class="tag theme">Le terme \(p\Delta V\)</span><h4>Pression minimale dans une étoile à neutrons</h4></header>
+  <div class="enonce"><p>Le rayon d'un atome d'hydrogène est d'environ \(0{,}53\times10^{-10}\) m, celui d'un neutron est négligeable. L'électron peut se combiner au proton pour former un neutron (en libérant un neutrino), mais cet état est 0,84 MeV plus haut en énergie que l'état non combiné. En supposant que la statistique classique donne à peu près la bonne réponse, calculer la pression minimale qui doit régner dans une étoile à neutrons.</p></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>Ici \(p\Delta V\) ne peut plus être négligé : la combinaison libère tout le volume de l'atome, \(\Delta V = -V_H\).</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>\(V_H = \tfrac{4}{3}\pi(0{,}53\times10^{-10})^3 = 6{,}2\times10^{-31}\) m³. Passer de l'atome au neutron coûte \(\Delta E = 0{,}84\) MeV mais rend \(V_H\) au réservoir : \(P_{neutron}/P_{atome} = e^{-(\Delta E - pV_H)/kT}\).</li>
+      <li>L'état neutron devient le plus probable quand \(pV_H \gt \Delta E\) : \(p \gt \Delta E/V_H = 0{,}84\times10^{6}\times1{,}602\times10^{-19}/6{,}2\times10^{-31} = 2{,}2\times10^{17}\) Pa.</li>
+      <li>Le corrigé du professeur prend un critère plus doux (\(pV_H\) de l'ordre de \(\Delta E/10\)) et obtient \(2{,}2\times10^{16}\) Pa. Dans les deux cas, c'est \(10^{11}\) à \(10^{12}\) fois la pression atmosphérique (errata).</li>
+    </ol>
+    <p class="answer">\(p \gtrsim \Delta E/V_H \approx 2\times10^{17}\) Pa (corrigé du professeur : \(2\times10^{16}\) Pa avec un critère au dixième)</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c7-s3">
+  <header><span class="tag">Chap. 15, ex. 5, p. 343</span><span class="tag theme">Le terme \(p\Delta V\)</span><h4>Hydrogène excité : quand \(p\Delta V\) compte-t-il ?</h4></header>
+  <div class="enonce"><p>Dans le modèle de Bohr, le rayon de l'atome d'hydrogène au fondamental est \(0{,}53\times10^{-10}\) m et celui du premier état excité est quatre fois plus grand. Les énergies sont \(-13{,}6\) eV et \(-3{,}4\) eV. (a) Que valent \(\Delta E\) et \(p\Delta V\) pour l'excitation à la pression atmosphérique ? (b) À quelle pression \(p\Delta V\) serait-il comparable à \(\Delta E\) ? Combien d'atmosphères ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(\Delta E = 10{,}2\) eV. \(\Delta V = (4^3 - 1)V_H = 63\times6{,}2\times10^{-31} = 3{,}9\times10^{-29}\) m³ ; \(p\Delta V = 1{,}013\times10^{5}\times3{,}9\times10^{-29} = 4{,}0\times10^{-24}\) J \(= 2{,}5\times10^{-5}\) eV. Négligeable : \(4\times10^{5}\) fois plus petit que \(\Delta E\).</li>
+      <li>(b) \(p = \Delta E/\Delta V = 10{,}2\times1{,}602\times10^{-19}/3{,}9\times10^{-29} = 4{,}2\times10^{10}\) Pa \(= 4{,}1\times10^{5}\) atm.</li>
+    </ol>
+    <p class="answer">(a) 10,2 eV et \(2{,}5\times10^{-5}\) eV | (b) \(4{,}2\times10^{10}\) Pa \(\approx 4\times10^{5}\) atm</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c7-s4">
+  <header><span class="tag">Chap. 15, ex. 10, p. 344</span><span class="tag theme">Cas quantique, fermions</span><h4>Probabilités d'occupation d'un état de fermions</h4></header>
+  <div class="enonce"><p>Un système est à 290 K avec \(\mu = -0{,}2\) eV. Un état quantique a une énergie par particule de \(-0{,}16\) eV et ne peut contenir qu'un fermion au plus. (a) Valeur de \(C\) dans \(P_n = Ce^{-n\beta(\varepsilon - \mu)}\) (3 décimales) ? (b) Probabilité que l'état soit vide ? (c) Qu'il contienne une particule ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>\(\varepsilon - \mu = 0{,}04\) eV ; \(kT = 0{,}02499\) eV ; \(x = 1{,}60\) ; \(e^{-x} = 0{,}202\).</li>
+      <li>(a) \(C = 1/(1 + e^{-x}) = 0{,}832\). (b) \(P_0 = C = 0{,}832\). (c) \(P_1 = Ce^{-x} = 0{,}168\).</li>
+      <li>Comparaison avec l'ex. 9 (même état, bosons) : \(C = 1 - e^{-x} = 0{,}798\), \(P_0 = 0{,}798\), \(P_1 = 0{,}161\), et une probabilité non nulle d'en avoir 2, 3, etc.</li>
+    </ol>
+    <p class="answer">(a) 0,832 | (b) 0,832 | (c) 0,168 (corrigé du professeur identique)</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c7-s5">
+  <header><span class="tag">Chap. 15, ex. 15, p. 345</span><span class="tag theme">Cas quantique</span><h4>Vide ou occupé à 1000 K</h4></header>
+  <div class="enonce"><p>Un système de particules est à 1000 K avec \(\mu = -0{,}4\) eV. Dans un certain état quantique, une particule aurait l'énergie \(-0{,}2\) eV. Combien de fois est-il plus probable que cet état soit vide plutôt qu'occupé par une particule ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>\(P_0/P_1 = e^{\beta(\varepsilon - \mu)}\), indépendamment de \(C\) et du type de particule.</li>
+      <li>\(\varepsilon - \mu = 0{,}2\) eV, \(kT = 0{,}0862\) eV, \(x = 2{,}32\) : \(P_0/P_1 = e^{2{,}32} = 10{,}2\).</li>
+    </ol>
+    <p class="answer">10,2 fois</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c7-s6">
+  <header><span class="tag">Chap. 15, ex. 21, p. 346</span><span class="tag theme">Température d'excitation</span><h4>En dessous de quelle température l'excitation est-elle improbable ?</h4></header>
+  <div class="enonce"><p>S'il faut 0,03 eV pour exciter les molécules d'un système vers leur premier état excité, quelle est, grosso modo, la température en dessous de laquelle la probabilité d'excitation est faible ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>Température d'excitation \(T_e = \Delta\varepsilon/k = 0{,}03/8{,}617\times10^{-5} = 348\) K.</li>
+      <li>Pour \(T \ll 348\) K le rapport \(P_1/P_0 = e^{-T_e/T}\) devient petit (à 100 K : \(e^{-3{,}5} = 0{,}03\)) ; à 348 K il vaut déjà \(e^{-1} = 0{,}37\).</li>
+    </ol>
+    <p class="answer">\(T_e \approx 350\) K</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c7-s7">
+  <header><span class="tag">Chap. 15, ex. 25, p. 346</span><span class="tag theme">Cas classique</span><h4>Molécule d'air en mouvement ou immobile</h4></header>
+  <div class="enonce"><p>Une molécule d'air a une masse de \(5\times10^{-26}\) kg. Dans l'état 1 elle se déplace dans une direction donnée à 400 m/s, dans l'état 2 elle est immobile. Quel est le rapport \(P_1/P_2\) si la température de l'air est (a) 17 °C, (b) \(-40\) °C ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>\(\varepsilon_1 - \varepsilon_2 = \tfrac{1}{2}mv^2 = 0{,}5\times5\times10^{-26}\times400^2 = 4{,}0\times10^{-21}\) J \(= 0{,}0250\) eV.</li>
+      <li>(a) 290 K : \(kT = 0{,}0250\) eV, \(P_1/P_2 = e^{-1{,}00} = 0{,}37\). (b) 233 K : \(kT = 0{,}0201\) eV, \(P_1/P_2 = e^{-1{,}24} = 0{,}29\).</li>
+      <li>Il s'agit de deux états précis (une vitesse donnée) et non de deux vitesses : la distribution des vitesses, qui compte les états, est l'objet du chapitre 16.</li>
+    </ol>
+    <p class="answer">(a) 0,37 | (b) 0,29</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c7-s8">
+  <header><span class="tag">Chap. 15, ex. 39, p. 348</span><span class="tag theme">Niveau dégénéré</span><h4>Quatre états, un fondamental et trois excités</h4></header>
+  <div class="enonce"><p>Une particule interagit avec un réservoir à 500 K et peut être dans quatre états : le fondamental à \(-3{,}1\) eV et trois états excités à \(-3{,}0\) eV. Probabilité qu'elle soit (a) dans le fondamental, (b) dans un état excité particulier, (c) dans n'importe quel état d'énergie \(-3{,}0\) eV ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>\(kT = 0{,}0431\) eV, \(\Delta\varepsilon = 0{,}1\) eV, \(e^{-\beta\Delta\varepsilon} = e^{-2{,}32} = 0{,}0982\).</li>
+      <li>(a) \(P_0 = 1/(1 + 3\times0{,}0982) = 0{,}772\). (b) \(P_{exc} = 0{,}772\times0{,}0982 = 0{,}076\). (c) \(3\times0{,}076 = 0{,}228 = 1 - P_0\).</li>
+    </ol>
+    <p class="answer">(a) 0,772 | (b) 0,076 | (c) 0,228</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c7-s9">
+  <header><span class="tag">Chap. 15, ex. 45, p. 350</span><span class="tag theme">Équipartition</span><h4>Énergie et vitesse d'une molécule d'azote</h4></header>
+  <div class="enonce"><p>Une molécule de N₂ a une masse de \(4{,}7\times10^{-26}\) kg. Dans l'air à 20 °C : (a) combien de degrés de liberté de translation a-t-elle ? (b) Quelle est son énergie cinétique de translation moyenne ? (c) Sa vitesse quadratique moyenne ? (d) Celle d'une molécule de H₂ (\(3{,}3\times10^{-27}\) kg) ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) 3. (b) \(\tfrac{3}{2}kT = 1{,}5\times1{,}381\times10^{-23}\times293 = 6{,}1\times10^{-21}\) J \(= 0{,}038\) eV.</li>
+      <li>(c) \(v_{rms} = \sqrt{3kT/m} = \sqrt{1{,}21\times10^{-20}/4{,}7\times10^{-26}} = 508\) m/s. (d) \(\sqrt{1{,}21\times10^{-20}/3{,}3\times10^{-27}} = 1920\) m/s : à même température, même énergie, donc la molécule 14 fois plus légère va \(\sqrt{14} = 3{,}8\) fois plus vite.</li>
+    </ol>
+    <p class="answer">(a) 3 | (b) \(6{,}1\times10^{-21}\) J | (c) 508 m/s | (d) 1920 m/s</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c7-s10">
+  <header><span class="tag">Chap. 15, ex. 46, p. 350</span><span class="tag theme">Équipartition</span><h4>Nucléon et électron à dix millions de kelvins</h4></header>
+  <div class="enonce"><p>La masse d'un nucléon est \(1{,}7\times10^{-27}\) kg et celle d'un électron \(9{,}1\times10^{-31}\) kg. Dans les réactions nucléaires violentes (intérieur des étoiles), la température est d'environ \(10^{7}\) K. Quelle est la vitesse quadratique moyenne (a) d'un nucléon, (b) d'un électron ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>\(3kT = 3\times1{,}381\times10^{-23}\times10^{7} = 4{,}14\times10^{-16}\) J.</li>
+      <li>(a) \(v_{rms} = \sqrt{4{,}14\times10^{-16}/1{,}7\times10^{-27}} = 4{,}9\times10^{5}\) m/s. (b) \(\sqrt{4{,}14\times10^{-16}/9{,}1\times10^{-31}} = 2{,}1\times10^{7}\) m/s, soit 7 % de la vitesse de la lumière : la formule classique commence à peine à être limite pour l'électron.</li>
+    </ol>
+    <p class="answer">(a) \(4{,}9\times10^{5}\) m/s | (b) \(2{,}1\times10^{7}\) m/s</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c7-s11">
+  <header><span class="tag">Chap. 19, ex. 1, p. 415</span><span class="tag theme">Nombre d'occupation, fermions</span><h4>Quatre états de fermions autour de \(\mu\)</h4></header>
+  <div class="enonce"><p>À 295 K, trouver le nombre d'occupation d'un état de fermions situé (a) 0,01 eV sous \(\mu\), (b) 0,01 eV au-dessus, (c) 0,1 eV sous \(\mu\), (d) 0,1 eV au-dessus.</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>\(kT = 0{,}02542\) eV ; \(\bar n = 1/(e^{x} + 1)\) avec \(x = (\varepsilon - \mu)/kT = \mp0{,}393\) ou \(\mp3{,}93\).</li>
+      <li>(a) \(x = -0{,}393\) : \(1/(0{,}675 + 1) = 0{,}597\). (b) \(x = +0{,}393\) : \(1/(1{,}482 + 1) = 0{,}403\). (c) \(x = -3{,}93\) : \(1/(0{,}0196 + 1) = 0{,}981\). (d) \(x = +3{,}93\) : \(1/(51{,}1 + 1) = 0{,}019\).</li>
+      <li>Symétrie : \(\bar n(\mu - \delta) + \bar n(\mu + \delta) = 1\). Le corrigé manuscrit du professeur donne ces quatre valeurs sous le numéro 2, qui concerne en fait des bosons (errata).</li>
+    </ol>
+    <p class="answer">(a) 0,597 | (b) 0,403 | (c) 0,981 | (d) 0,019</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c7-s12">
+  <header><span class="tag">Chap. 19, ex. 5, p. 416</span><span class="tag theme">Bosons et fermions</span><h4>Rapport \(\bar n_{bosons}/\bar n_{fermions}\) à 300 K</h4></header>
+  <div class="enonce"><p>À 300 K, calculer le rapport \(\bar n_{bosons}/\bar n_{fermions}\) pour \(\varepsilon - \mu\) égal à (a) 0,002 eV, (b) 0,02 eV, (c) 0,2 eV, (d) 2,0 eV.</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>\(\dfrac{\bar n_B}{\bar n_F} = \dfrac{e^{x} + 1}{e^{x} - 1}\), \(kT = 0{,}02585\) eV.</li>
+      <li>(a) \(x = 0{,}0774\) : 25,9. (b) \(x = 0{,}774\) : 2,71. (c) \(x = 7{,}74\) : 1,0009. (d) \(x = 77{,}4\) : 1,000.</li>
+      <li>Dès que \(\varepsilon - \mu\) dépasse quelques \(kT\), les deux statistiques (et la classique) coïncident.</li>
+    </ol>
+    <p class="answer">(a) 25,9 | (b) 2,71 | (c) 1,001 | (d) 1,000</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c7-s13">
+  <header><span class="tag">Chap. 19, ex. 11, p. 416</span><span class="tag theme">Potentiel chimique</span><h4>Potentiel chimique d'un gaz de bosons dilué</h4></header>
+  <div class="enonce"><p>L'état fondamental d'un système de bosons à 290 K a l'énergie \(\varepsilon = 0\). Si le nombre d'occupation de cet état est 0,001, quel est le potentiel chimique ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>\(\bar n = 1/(e^{-\beta\mu} - 1) = 0{,}001 \Rightarrow e^{-\beta\mu} = 1 + 1/\bar n = 1001\).</li>
+      <li>\(\mu = -kT\ln 1001 = -0{,}02499\times6{,}909 = -0{,}173\) eV. Occupation faible, donc \(\mu\) très négatif : on est dans le régime classique, où \(\bar n \approx e^{\beta\mu}\) donne presque la même chose.</li>
+    </ol>
+    <p class="answer">\(\mu = -0{,}173\) eV</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c7-s14">
+  <header><span class="tag">Chap. 19, ex. 15, p. 417</span><span class="tag theme">Comparaison des statistiques</span><h4>Où le classique vaut la moitié des bosons</h4></header>
+  <div class="enonce"><p>(a) Pour quelle valeur de \((\varepsilon - \mu)/kT\) la prédiction classique vaut-elle la moitié de celle des bosons ? (b) Pour cette valeur, quel est le rapport entre la prédiction classique et celle des fermions ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(e^{-x} = \tfrac{1}{2}\cdot\dfrac{1}{e^{x} - 1} \Rightarrow 2(e^{x} - 1)e^{-x} = 1 \Rightarrow 2 - 2e^{-x} = 1 \Rightarrow e^{-x} = \tfrac{1}{2}\), \(x = \ln 2 = 0{,}693\).</li>
+      <li>(b) \(\dfrac{\bar n_{cl}}{\bar n_F} = e^{-x}(e^{x} + 1) = 1 + e^{-x} = 1{,}5\).</li>
+    </ol>
+    <p class="answer">(a) \(\ln 2 = 0{,}693\) | (b) 1,5</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c7-s15">
+  <header><span class="tag">Chap. 19, ex. 17, p. 417</span><span class="tag theme">Comptage des configurations</span><h4>Trois pièces de monnaie</h4></header>
+  <div class="enonce"><p>Trois pièces sont lancées. Selon la statistique classique, combien d'arrangements différents sont disponibles (a) si les pièces sont distinguables, (b) si elles sont identiques ? (c) Pour quelle fraction des arrangements de (a) a-t-on trois faces ou trois piles ? (d) Quel est le vrai nombre de configurations face/pile distinctes pour trois pièces identiques ? (e) Pour quelle fraction de ces arrangements a-t-on trois faces ou trois piles ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) Deux états (face, pile) pour chaque pièce : \(2^3 = 8\). (b) Correction classique \(8/3! = 4/3\) (non entier : la correction n'est qu'approximative). (c) FFF et PPP : \(2/8 = 1/4\).</li>
+      <li>(d) Avec des pièces identiques, seul le nombre de faces compte : 0, 1, 2 ou 3, soit 4 configurations (c'est \(C_{3+2-1}^{\,3} = 4\), le comptage « bosons »). (e) \(2/4 = 1/2\).</li>
+      <li>Le comptage classique sous-estime les arrangements à occupation multiple (trois pièces dans le « même état »), exactement comme pour les bosons.</li>
+    </ol>
+    <p class="answer">(a) 8 | (b) 4/3 | (c) 1/4 | (d) 4 | (e) 1/2</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c7-s16">
+  <header><span class="tag">Chap. 19, ex. 19, p. 418</span><span class="tag theme">Comptage des configurations</span><h4>Deux particules dans quatre états</h4></header>
+  <div class="enonce"><p>Deux particules se répartissent entre quatre états quantiques. Donner les nombres \(s\) et \(d\) d'arrangements à occupation simple et double selon (a) la statistique classique pour des particules distinguables, (b) la statistique classique pour des particules identiques, (c) Bose-Einstein, (d) Fermi-Dirac.</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) Distinguables : \(4^2 = 16\) arrangements, dont \(4\times3 = 12\) simples et 4 doubles.</li>
+      <li>(b) Classique corrigé \(/2!\) : \(s = 6\), \(d = 2\).</li>
+      <li>(c) Bosons : \(s = C_4^{\,2} = 6\) (deux états distincts occupés), \(d = 4\) (les deux dans le même état) ; total \(C_{5}^{\,2} = 10\).</li>
+      <li>(d) Fermions : \(s = 6\), \(d = 0\).</li>
+    </ol>
+    <p class="answer">(a) 12 et 4 | (b) 6 et 2 | (c) 6 et 4 | (d) 6 et 0</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c7-s17">
+  <header><span class="tag">Chap. 19, ex. 26, p. 419</span><span class="tag theme">Limite du cas classique</span><h4>Les électrons de conduction du cuivre</h4></header>
+  <div class="enonce"><p>Chaque atome de cuivre fournit un électron de conduction. Masse atomique 64, masse volumique 8,9 g/cm³. (a) Volume par électron de conduction ? (b) Séparation caractéristique \(r\) ? (c) Peut-on traiter ces électrons classiquement à température ambiante ? (d) À 10 000 K ? (e) Peut-on traiter les atomes de cuivre classiquement à température ambiante ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(N/V = 8900/(64\times1{,}66\times10^{-27}) = 8{,}4\times10^{28}\) m⁻³, soit \(1{,}2\times10^{-29}\) m³ par électron. (b) \(r = (1{,}2\times10^{-29})^{1/3} = 2{,}3\times10^{-10}\) m.</li>
+      <li>(c) \(p = \sqrt{3m_ekT} = 1{,}06\times10^{-25}\) kg m/s à 298 K ; \(rp/h = 0{,}037 \ll 1\) : non, les électrons sont dégénérés. (d) \(p\) croît comme \(\sqrt{T}\) : \(rp/h = 0{,}037\times\sqrt{10\,000/298} = 0{,}21\), toujours non.</li>
+      <li>(e) Atomes de cuivre, \(m = 1{,}06\times10^{-25}\) kg (116 000 fois l'électron) : \(p = 3{,}6\times10^{-23}\) kg m/s et \(rp/h = 12 \gg 1\) : oui, les atomes se traitent classiquement, ce qui est cohérent avec Dulong et Petit. Le corrigé du professeur répond non en invoquant les atomes fixés dans le réseau ; le critère du chapitre dit le contraire (errata).</li>
+    </ol>
+    <p class="answer">(a) \(1{,}2\times10^{-29}\) m³ | (b) \(2{,}3\times10^{-10}\) m | (c) non (0,04) | (d) non (0,2) | (e) oui (12)</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c7-s18">
+  <header><span class="tag">Chap. 19, ex. 27, p. 419</span><span class="tag theme">Limite du cas classique</span><h4>Les molécules de l'eau liquide</h4></header>
+  <div class="enonce"><p>La séparation caractéristique des molécules de l'eau liquide est d'environ 0,3 nm (l'énoncé du manuel écrit 0,3 µm, coquille : voir l'errata). Les molécules d'eau à température ambiante peuvent-elles être étudiées avec la statistique classique ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>\(m = 18\times1{,}66\times10^{-27} = 3{,}0\times10^{-26}\) kg ; \(p = \sqrt{3mkT} = \sqrt{3\times3{,}0\times10^{-26}\times1{,}381\times10^{-23}\times295} = 1{,}9\times10^{-23}\) kg m/s.</li>
+      <li>\(rp/h = 3\times10^{-10}\times1{,}9\times10^{-23}/6{,}626\times10^{-34} = 8{,}7 \approx 9\) : oui, de justesse mais oui. Avec 0,3 µm on trouverait 9000, ce qui ne correspond pas à la réponse du manuel (9) : la donnée est bien 0,3 nm.</li>
+    </ol>
+    <p class="answer">Oui, \(rp/h \approx 9\)</p>
+  </div></details>
+</article>
+
+</div>
+
+</article>
+</main>
+<footer class="footer">ELE2307 - site d'étude personnel généré à partir des diapos du cours, des corrigés du professeur et du manuel de Stowe. Vérifiez toujours avec les documents officiels sur Moodle.</footer>
+<script defer src="assets/katex/katex.min.js"></script>
+<script defer src="assets/katex/contrib/auto-render.min.js"></script>
+<script defer src="assets/app.js?v=4"></script>
+<script defer src="assets/widgets.js?v=5"></script>
+<script defer src="assets/widgets3.js?v=1"></script>
+</body>
+</html>

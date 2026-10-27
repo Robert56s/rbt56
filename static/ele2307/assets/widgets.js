@@ -96,7 +96,7 @@
     return { lab, input };
   }
   function rangeInput(label, value, min, max, step, fmt = v => v) {
-    const input = el('input', { type: 'range', value, min, max, step });
+    const input = el('input', { type: 'range', min, max, step, value });   // min/max/step avant value, sinon le navigateur arrondit la valeur initiale
     const val = el('span', { class: 'val' }, fmt(value));
     const lab = el('label', {}, [el('span', { html: label + ' : ' }, [val]), input]);
     input.addEventListener('input', () => { val.textContent = fmt(parseFloat(input.value)); });

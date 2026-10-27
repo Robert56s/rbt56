@@ -18,6 +18,7 @@
     <a href="cours4.html">Cours 4</a>
     <a href="cours5.html">Cours 5</a>
     <a href="cours6.html">Cours 6</a>
+    <a href="cours7.html">Cours 7</a>
     <a href="formulaire.html">Formulaire</a>
     <a href="intra.html">Intra</a>
     <a href="errata.html">Errata</a>
@@ -270,6 +271,51 @@
   <tr><th class="notion">Refroidir</th>
     <td class="f">\(\dot Q_{conv} = hA(T_H - T_B)\) : augmenter \(A\), diminuer \(T_B\), augmenter \(h\)</td>
     <td class="rem">dissipateur (ailettes), fluide froid, ventilateur / turbulence</td></tr>
+</table>
+</section>
+
+<section class="form-section">
+<h2>Cours 7 - La statistique quantique</h2>
+<table class="formulaire">
+  <tr><th class="notion">Probabilité d'un état (petit système dans un réservoir)</th>
+    <td class="f">\(\displaystyle P_s = C\exp\!\left(-\frac{\Delta E + p\,\Delta V - \mu\,\Delta N}{kT}\right)\) ; \(\displaystyle \sum_s P_s = 1\)</td>
+    <td class="rem">\(\Delta E, \Delta V, \Delta N\) pris au réservoir \((T, p, \mu)\) ; vient de \(S_R = S_{R0} - (\Delta E + p\Delta V - \mu\Delta N)/T\) et \(\Omega_R = e^{S_R/k}\)</td></tr>
+  <tr><th class="notion">Cas classique (Boltzmann)</th>
+    <td class="f"><p>\(P_s = C e^{-\beta\varepsilon_s}\) avec \(\beta = 1/kT\) et \(\displaystyle C = \frac{1}{\sum_s e^{-\beta\varepsilon_s}}\)</p><p>\(\displaystyle \frac{P_i}{P_j} = e^{-\beta(\varepsilon_i - \varepsilon_j)}\)</p><p>Niveaux \(\varepsilon_n = n\varepsilon\) : \(C = 1 - e^{-\beta\varepsilon}\)</p></td>
+    <td class="rem">particules en nombre fixe (\(\Delta N = 0\)), \(p\upsilon_s \ll \varepsilon_s\) ; le niveau de référence des énergies n'a pas d'importance ; \(kT = 0{,}0253\) eV à 293 K, \(k = 8{,}617\times10^{-5}\) eV/K</td></tr>
+  <tr><th class="notion">Cas quantique (un état, \(n\) particules)</th>
+    <td class="f"><p>\(P_n = C e^{-n\beta(\varepsilon - \mu)} = Ce^{-nx}\), \(x = \beta(\varepsilon - \mu)\), \(\displaystyle C = \frac{1}{\sum_n e^{-nx}}\)</p><p>Fermions (\(n = 0, 1\)) : \(\displaystyle C = \frac{1}{1 + e^{-x}}\) ; bosons (\(n \ge 0\), \(x \gt 0\)) : \(C = 1 - e^{-x}\)</p></td>
+    <td class="rem">état de volume fixe (\(\Delta V = 0\)) ; \(\varepsilon\) énergie d'une particule dans l'état, \(\mu\) potentiel chimique ; \(P_1/P_0 = e^{-x}\)</td></tr>
+  <tr><th class="notion">Niveaux dégénérés et bandes</th>
+    <td class="f"><p>\(P(\varepsilon_s) = n_s P_s\) ; \(\displaystyle \frac{P(\varepsilon_i)}{P(\varepsilon_j)} = \frac{n_i}{n_j}e^{-\beta(\varepsilon_i - \varepsilon_j)}\)</p><p>\(\displaystyle P_{bande} = \int_{bande} g(\varepsilon)P(\varepsilon)\,d\varepsilon\)</p></td>
+    <td class="rem">\(n_s\) : nombre d'états de même énergie ; \(g(\varepsilon)\) densité d'états ; une bande étroite devant \(kT\) se traite comme un niveau dégénéré</td></tr>
+  <tr><th class="notion">Température d'excitation</th>
+    <td class="f">\(\displaystyle T_e = \frac{\varepsilon_1 - \varepsilon_0}{k}\) ; \(\displaystyle \frac{P_1}{P_0} = e^{-T_e/T}\)</td>
+    <td class="rem">\(T \ll T_e\) : système confiné au fondamental, le degré de liberté est gelé ; \(C_V = \tfrac{\nu}{2}R\) avec \(\nu\) qui passe 3 → 5 → 7 (gaz diatomique) ; solides : loi de Dulong et Petit \(C_V = 3R\)</td></tr>
+  <tr><th class="notion">Équipartition</th>
+    <td class="f"><p>\(\displaystyle \bar\varepsilon = \sum_s P_s\varepsilon_s = \frac{\int e^{-\beta b\xi^2} b\xi^2\,d\xi}{\int e^{-\beta b\xi^2}\,d\xi} = \frac{1}{2\beta} = \frac{1}{2}kT\)</p><p>\(\varepsilon = b|\xi|^{\alpha}\) : \(\bar\varepsilon = kT/\alpha\)</p></td>
+    <td class="rem">par degré de liberté quadratique (position ou quantité de mouvement) ; vrai pour un système classique</td></tr>
+  <tr><th class="notion">Vitesse quadratique moyenne (mouvement brownien)</th>
+    <td class="f">\(\displaystyle \bar\varepsilon_{trans} = \tfrac{1}{2}m\overline{v^2} = \tfrac{3}{2}kT\) ; \(\displaystyle v_{rms} = \sqrt{\overline{v^2}} = \sqrt{\frac{3kT}{m}}\)</td>
+    <td class="rem">3 degrés de liberté de translation ; en 2D (particule à une surface) \(v_{rms} = \sqrt{2kT/m}\) ; distance parcourue en un temps \(t\) : environ \(v_{rms}t\)</td></tr>
+  <tr><th class="notion">Nombre d'occupation</th>
+    <td class="f"><p>\(\displaystyle \bar n = \sum_n nP_n = -\frac{\partial}{\partial x}\ln\!\left(\sum_n e^{-nx}\right)\), \(x = \beta(\varepsilon - \mu)\)</p><p>\(\displaystyle \bar n_{fermions} = \frac{1}{e^{x} + 1}\) ; \(\displaystyle \bar n_{bosons} = \frac{1}{e^{x} - 1}\) ; \(\displaystyle \bar n = \frac{1}{e^{\beta(\varepsilon-\mu)} \pm 1}\)</p></td>
+    <td class="rem">+ fermions (Fermi-Dirac, spin demi-entier : e, trou, p, n, μ), − bosons (Bose-Einstein, spin entier : photon, α, deutéron, He-4, π) ; fermions : \(\bar n = 1/2\) à \(\varepsilon = \mu\) ; bosons : il faut \(\mu \lt \varepsilon\) ; la somme se tronque pour d'autres règles d'occupation (0, 1, 2 : « goofions »)</td></tr>
+  <tr><th class="notion">Fluctuations</th>
+    <td class="f">\(\sigma^2 = \overline{n^2} - \bar n^2 = \bar n(1 \mp \bar n)\)</td>
+    <td class="rem">− fermions (petites sauf près de \(\mu\)), + bosons (plus grandes que \(\bar n\))</td></tr>
+  <tr><th class="notion">Cas classique et comparaison</th>
+    <td class="f"><p>\(\displaystyle \bar n_{classique} = NP_s = NCe^{-\beta\varepsilon_s}\) ; \(\displaystyle e^{\beta\mu} = \frac{N}{\sum_s e^{-\beta\varepsilon_s}}\)</p><p>\(\varepsilon - \mu \gg kT\) : \(\bar n_{cl} \approx \bar n_B \approx \bar n_F \approx e^{-\beta(\varepsilon - \mu)}\)</p><p>\(\varepsilon - \mu \lesssim kT\) : \(\bar n_{bosons} \gt \bar n_{classique} \gt \bar n_{fermions}\)</p></td>
+    <td class="rem">haute énergie ou faible occupation : les trois statistiques coïncident ; à basse énergie elles diffèrent à cause du comptage des occupations multiples</td></tr>
+  <tr><th class="notion">Comptage des arrangements (\(n\) particules, \(m\) états)</th>
+    <td class="f">\(\Omega_D = m^n\) ; \(\Omega_{cl} = m^n/n!\) ; \(\Omega_{bosons} = C_{n+m-1}^{\,n}\) ; \(\Omega_{fermions} = C_m^{\,n}\)</td>
+    <td class="rem">2 particules, 2 états : 4 / 2 / 3 / 1 ; 3 particules, 3 états : 27 / 4,5 / 10 / 1 ; la correction \(1/n!\) est exacte pour l'occupation simple seulement</td></tr>
+  <tr><th class="notion">Limite du cas classique</th>
+    <td class="f"><p>\(\displaystyle \frac{V_rV_p}{h^3} \gg N\) → \(\displaystyle \frac{rp}{h} \gg 1\) avec \(\displaystyle r \approx \left(\frac{V}{N}\right)^{1/3}\), \(p \approx \sqrt{3mkT}\)</p></td>
+    <td class="rem">nombre d'états quantiques ≫ nombre de particules ; équivaut à \(r \gg h/p\) (longueur d'onde de de Broglie) ; N₂ de l'air : 120 (classique) ; électrons du cuivre : 0,04 (dégénéré)</td></tr>
+  <tr><th class="notion">Potentiel chimique (complément)</th>
+    <td class="f"><p>\(\displaystyle N = \sum_s \bar n_s\) ; faible densité : \(\displaystyle \mu = kT\ln\frac{N}{\sum_s e^{-\beta\varepsilon_s}}\)</p><p>Bosons dégénérés : \(\mu \approx -kT/N\) ; fermions dégénérés : \(\displaystyle \mu_{T=0} = \varepsilon_F \approx \frac{h^2}{2m}\left(\frac{N}{V}\right)^{2/3}\)</p></td>
+    <td class="rem">\(\mu\) est fixé par le nombre total de particules ; \(\varepsilon_F\) énergie de Fermi (cuivre : ordre de 10 eV, soit \(10^5\) K)</td></tr>
 </table>
 </section>
 
