@@ -106,3 +106,99 @@ export function worstCaseQError(sensitivities, tolerancePercent) {
 	const sum = Object.values(sensitivities).reduce((acc, s) => acc + (s * tolerancePercent) ** 2, 0);
 	return Math.sqrt(sum);
 }
+
+/*
+ * The narrow band-pass stages (rlcBandPass.js, sallenKeyBandPass.js,
+ * khnBandPass.js): S^Q_x = x dQ/(Q dx) for each part, from the exact
+ * expressions of each designer, for any parts (equal or not). A part a
+ * stage does not have (Rb with no input divider) is left out.
+ */
+
+/**
+ * Sallen-Key band-pass: Q = omega0 / a with
+ *   omega0^2 = (G1 + G3) / (C1 C2 R2),   a = (G1 + (1 - K) G3)/C1 + 1/(C2 R2) + 1/(C1 R2),
+ * G1 = 1/Ra (+ 1/Rb), G3 = 1/R3, K = 1 + Rf/Rg. Rf and Rg act through K:
+ * S_Rf = -S_Rg = (Rf/Rg) G3 / (C1 a), which is (K - 1)/(4 - K) with equal
+ * parts, the largest of all.
+ */
+export function sallenKeyBpSensitivity({ Ra, Rb, C1, C2, R2, R3, Rf, Rg }) {
+	const Ga = 1 / Ra;
+	const Gb = Number.isFinite(Rb) && Rb > 0 ? 1 / Rb : 0;
+	const G1 = Ga + Gb;
+	const G3 = 1 / R3;
+	const K = 1 + Rf / Rg;
+	const a = (G1 + (1 - K) * G3) / C1 + 1 / (C2 * R2) + 1 / (C1 * R2);
+	const s = {
+		Ra: (-0.5 * Ga) / (G1 + G3) + Ga / (C1 * a),
+		...(Gb ? { Rb: (-0.5 * Gb) / (G1 + G3) + Gb / (C1 * a) } : {}),
+		C1: -0.5 + ((G1 + (1 - K) * G3) / C1 + 1 / (C1 * R2)) / a,
+		C2: -0.5 + 1 / (C2 * R2 * a),
+		R2: -0.5 + (1 / (C2 * R2) + 1 / (C1 * R2)) / a,
+		R3: (-0.5 * G3) / (G1 + G3) + ((1 - K) * G3) / (C1 * a),
+		Rf: ((Rf / Rg) * G3) / (C1 * a),
+		Rg: -((Rf / Rg) * G3) / (C1 * a)
+	};
+	return s;
+}
+
+/**
+ * State-variable band-pass: Q = p / D sqrt(R1 R4 C1 / (R2 R7 C2)), p = 1 + R5/R6,
+ * D = 1 + R4/R3 + R4/R7. Every exponent stays at or under 1: R5 and R6 carry
+ * (p - 1)/p, the most.
+ */
+export function khnBpSensitivity({ R1, R2, R3, R4, R5, R6, R7 }) {
+	const p = 1 + R5 / R6;
+	const D = 1 + R4 / R3 + R4 / R7;
+	return {
+		R1: 0.5,
+		R2: -0.5,
+		R3: R4 / R3 / D,
+		R4: 0.5 - (R4 / R3 + R4 / R7) / D,
+		R5: (R5 / R6) / p,
+		R6: -(R5 / R6) / p,
+		R7: -0.5 + R4 / R7 / D,
+		C1: 0.5,
+		C2: -0.5
+	};
+}
+
+/**
+ * RLC with Antoniou's GIC: Q = R sqrt(C / L), R = Ra || Rb, L = Cg R1 R3 R4 / R2,
+ * plain exponents: the input resistors share 1, the tank capacitor 1/2,
+ * the converter's parts 1/2 each.
+ */
+export function rlcGicSensitivity({ Ra, Rb }) {
+	const divided = Number.isFinite(Rb) && Rb > 0;
+	return {
+		Ra: divided ? Rb / (Ra + Rb) : 1,
+		...(divided ? { Rb: Ra / (Ra + Rb) } : {}),
+		C: 0.5,
+		Cg: -0.5,
+		R1: -0.5,
+		R2: 0.5,
+		R3: -0.5,
+		R4: -0.5
+	};
+}
+
+/**
+ * RLC with a gyrator: Q = omega0 / a with
+ *   omega0^2 = (g + 1/R1) h / (C Cg),   a = g/C + h/C + h/Cg,
+ * g = 1/Ra (+ 1/Rb), h = 1/R2.
+ */
+export function rlcGyratorSensitivity({ Ra, Rb, C, R1, R2, Cg }) {
+	const Ga = 1 / Ra;
+	const Gb = Number.isFinite(Rb) && Rb > 0 ? 1 / Rb : 0;
+	const g = Ga + Gb;
+	const G1 = 1 / R1;
+	const h = 1 / R2;
+	const a = g / C + h / C + h / Cg;
+	return {
+		Ra: (-0.5 * Ga) / (g + G1) + Ga / (C * a),
+		...(Gb ? { Rb: (-0.5 * Gb) / (g + G1) + Gb / (C * a) } : {}),
+		C: -0.5 + (g / C + h / C) / a,
+		R1: (-0.5 * G1) / (g + G1),
+		R2: -0.5 + (h / C + h / Cg) / a,
+		Cg: -0.5 + h / Cg / a
+	};
+}

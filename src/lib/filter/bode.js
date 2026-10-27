@@ -1,4 +1,7 @@
+import { khnBpResponse } from './khnBandPass';
 import { mfbBandPassResponse } from './mfbBandPass';
+import { rlcGicResponse, rlcGyratorResponse } from './rlcBandPass';
+import { sallenKeyBpResponse } from './sallenKeyBandPass';
 
 /**
  * Frequency response of a cascade of realized stages, evaluated from the
@@ -9,7 +12,9 @@ import { mfbBandPassResponse } from './mfbBandPass';
  * "Bp", gain = the signed gain at its own centre), a high-pass (ending in
  * "Hp") or else a low-pass. A multiple
  * feedback band-pass built for a single-pole op-amp (a finite actual.gbw)
- * is evaluated exactly from its parts with that op-amp.
+ * is evaluated exactly from its parts with that op-amp. The stages of a
+ * narrow band-pass (rlcGyrator, rlcGic, sallenKeyBp, khnBp) are evaluated
+ * exactly from their parts too, the gyrator's lossy Z_in included.
  */
 
 /** Complex response H(j*2*pi*f) of the full cascade at one frequency. */
@@ -76,6 +81,12 @@ function stageGainComplex(stage, s) {
 		// its parts with the op-amp it was built for, sign included
 		return mfbBandPassResponse(stage.components, s.im / (2 * Math.PI), stage.actual.gbw);
 	}
+	// the narrow band-pass stages, each from its own parts
+	const f = s.im / (2 * Math.PI);
+	if (stage.topology === 'rlcGyrator') return rlcGyratorResponse(stage.components, f);
+	if (stage.topology === 'rlcGic') return rlcGicResponse(stage.components, f);
+	if (stage.topology === 'sallenKeyBp') return sallenKeyBpResponse(stage.components, f);
+	if (stage.topology === 'khnBp') return khnBpResponse(stage.components, f);
 	const wn = stage.actual.wn;
 	const q = stage.actual.q;
 	const gain = stage.actual.gain ?? 1;

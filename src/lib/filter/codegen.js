@@ -16,6 +16,12 @@ import sensitivitySrc from './sensitivity.js?raw';
 import stagesSrc from './stages.js?raw';
 import towThomasSrc from './towThomas.js?raw';
 import boctorSrc from './boctor.js?raw';
+import khnBandPassSrc from './khnBandPass.js?raw';
+import narrowBandSrc from './narrowBand.js?raw';
+import nodalSrc from './nodal.js?raw';
+import rlcBandPassSrc from './rlcBandPass.js?raw';
+import sallenKeyBandPassSrc from './sallenKeyBandPass.js?raw';
+import stageElementsSrc from './stageElements.js?raw';
 import { OPAMP_GBW } from '../spice/opamps';
 
 /**
@@ -38,7 +44,8 @@ const TYPE_LABEL = {
 	lowpass: 'low-pass',
 	highpass: 'high-pass',
 	bandpass: 'band-pass',
-	bandstop: 'band-stop'
+	bandstop: 'band-stop',
+	narrowband: 'narrow band-pass'
 };
 
 function header(filterType) {
@@ -709,6 +716,29 @@ export function nextSteps(gbw = null) {
 	];
 }
 
+/**
+ * The closing steps of a narrow band-pass, the page's and its script's: the
+ * same five as NEXT_STEPS, the first and fourth told for a peak a few
+ * percent wide around f0 (the op-amp's lag, stability, a sweep around
+ * f0). gbw: the op-amp its multiple feedback stages are built for, or null.
+ */
+export function narrowNextSteps(gbw = null) {
+	const built = Number.isFinite(gbw) && gbw > 0 ? ` The multiple feedback stages are built for a single-pole op-amp of ${Number((gbw / 1e6).toPrecision(4))} MHz, so their figures include it.` : '';
+	return [
+		{
+			title: 'Simulate before building',
+			detail: `The figures from the parts assume ideal op-amps; the comparison also runs every circuit on a single-pole TL082, and checks its poles for an oscillation.${built} A real part is not a single pole: the higher f0 times Q, the further the TL082 model moves Q past the single pole's figure. The LTspice download runs the design with the op-amp picked next to it (a TL082 or LM741 model, or the single-pole one): run its AC sweep with the part that will be built, then a time-domain run with an input at f0, which shows whether the output settles or grows. The part's gain-bandwidth should be well above the stage's needs: at least 100 times its Q times its f0 as a rule, 400 times for a Tow-Thomas or state-variable stage, whose Q rises as Q / (1 - 4 Q f0 / f_T) until it oscillates.`
+		},
+		NEXT_STEPS[1],
+		NEXT_STEPS[2],
+		{
+			title: 'Measure a real Bode plot',
+			detail: 'Compare it to the simulated response above: a sweep from f0/10 to 10·f0, with points close together around f0, where the peak is only f0/Q wide, taken with a function generator and a scope (or an audio analyzer), is enough to catch a wiring mistake or a component that is the wrong value. Read f0 at the peak and B between the two points 3 dB below it.'
+		},
+		NEXT_STEPS[4]
+	];
+}
+
 /** The closing comment of a script; gbw: the op-amp its MFB band-pass stages are built for, or null. */
 function nextStepsComment(gbw = null) {
 	const lines = [
@@ -740,6 +770,291 @@ function wrapComment(text, width) {
 	return lines;
 }
 
+/* ------------------------------------------------------------------------ */
+/* The narrow band-pass script                                               */
+/* ------------------------------------------------------------------------ */
+
+/*
+ * A script for filterType 'narrowband' is its own text from the parameters
+ * down: the spec of designNarrowBand, the comparison of every circuit, the
+ * circuit the page shows built from the same stock and capacitors, its
+ * response and a verdict. Every other script is written by the code above,
+ * exactly as before.
+ */
+
+const NARROW_CIRCUIT_KEYS = ['auto', 'rlcGyrator', 'rlcGic', 'sallenKeyBp', 'mfbBp', 'khnBp', 'towThomasBp'];
+
+/** The PARAMETERS block of a narrow band-pass script. */
+function narrowParamsBlock({ f0, by, q, bandwidth, gain, stages, menu, circuit, gbw, capOverrides, resistorStock, resistorPairs, pairLimit, capacitorStock }) {
+	const hasOverrides = capOverrides && Object.keys(capOverrides).length > 0;
+	const shown = menu === 'auto' && circuit ? `   // the page's rule picked ${JSON.stringify(circuit)}` : '';
+	return `// =====================================================================
+// PARAMETERS - the only block meant to be edited
+// =====================================================================
+
+const FILTER_TYPE = "narrowband";    // a narrow band-pass: one frequency picked out
+const F0 = ${f0};                 // Hz, the frequency to pick out, the centre of the band
+const NARROW_BY = ${JSON.stringify(by)};             // 'q': Q sets the band; 'b': BANDWIDTH sets it (Q = F0 / BANDWIDTH)
+const Q = ${q};                     // the overall Q = F0 / B, used when NARROW_BY is 'q'
+const BANDWIDTH = ${bandwidth};          // Hz, the overall -3 dB bandwidth B, used when NARROW_BY is 'b'
+const GAIN = ${gain};                  // V/V, the gain wanted at f0 (its size: an inverting circuit gives -GAIN)
+const STAGES = ${stages};                // N identical stages, 1 to 6: each gets Q sqrt(2^(1/N) - 1) and GAIN^(1/N)
+// The circuit of every stage: 'auto' for the one the comparison below
+// picks, as the page's Circuit menu does, or 'rlcGyrator' (RLC, gyrator
+// inductor), 'rlcGic' (RLC, Antoniou GIC inductor), 'sallenKeyBp'
+// (Sallen-Key), 'mfbBp' (multiple feedback), 'khnBp' (state variable) or
+// 'towThomasBp' (Tow-Thomas).
+const CIRCUIT = ${JSON.stringify(menu)};${shown}
+// The op-amp the multiple feedback stages are built for, as a single-pole
+// gain-bandwidth in Hz (${OPAMP_GBW.TL082} for a TL082 / TL072, ${OPAMP_GBW.LM741} for an
+// LM741, as measured on their models), or null for an ideal op-amp. Every
+// circuit is also measured on a single-pole TL082 in the comparison.
+const MFB_GBW = ${gbw ?? null};
+const RESISTOR_SERIES = ${JSON.stringify(resistorStock ?? 'E24')};
+// 'E24' or 'E96' for a full preferred series, or an explicit array of
+// ohm values to design against only what is actually in the drawer.
+const RESISTOR_PAIRS = ${JSON.stringify(resistorPairs ?? false)};   // with an array above: a resistor may be two in series where no single one comes within 2 %
+${pairLimit !== null ? `const RESISTOR_PAIR_LIMIT = ${pairLimit};   // with RESISTOR_PAIRS: at most this many resistors in the whole chain are two in series, the ones that land it closest\n` : ''}const CAPACITORS = ${JSON.stringify(capacitorStock ?? null)};
+// null for the usual E6/E12 capacitor grids, or an array of farad values.
+
+// Capacitor values (farads) to use instead of the automatic search, keyed
+// by stage index (0-based, same order as the STAGES report below): { C }
+// for every circuit but the multiple feedback one, { C1, C2 } for it (a
+// field left out keeps the automatic value). Capacitors that cannot build
+// their stage are dropped, as on the page. Leave a stage out to keep
+// searching automatically for it.
+const CAP_OVERRIDES = ${hasOverrides ? JSON.stringify(capOverrides, null, 2) : '{}'};
+`;
+}
+
+/** The single-pole gain-bandwidths narrowBand.js reads (OPAMP_GBW of opamps.js), ahead of it. */
+const narrowOpampChunk = () => `// the op-amps' measured single-pole gain-bandwidths (Hz), as the page uses them
+const OPAMP_GBW = ${JSON.stringify(OPAMP_GBW)};`;
+
+/** The REPORT of a narrow band-pass script; L: it carries RESISTOR_PAIR_LIMIT. */
+function narrowReportBlock(L = false) {
+	return `// =====================================================================
+// REPORT
+// =====================================================================
+
+// The report runs in a block of its own, so that its names cannot clash
+// with the engine's.
+{
+	const TWO_PI = 2 * Math.PI;
+	// a signed figure, and 0 for what rounds to nothing (no -0.0)
+	const signed = (v, digits) => {
+		const r = Number(v.toFixed(digits));
+		return \`\${r > 0 ? '+' : ''}\${r === 0 ? (0).toFixed(digits) : r.toFixed(digits)}\`;
+	};
+	const pct = (x, digits = 2) => (x === null || !Number.isFinite(x) ? '-' : signed(100 * x, digits));
+	const plural = (n, word) => \`\${n} \${word}\${n === 1 ? '' : 's'}\`;
+	const errorsOf = (fig) => ({ f0: fig.f0 / design.f0 - 1, q: fig.q === null ? null : fig.q / design.q - 1, gain: Math.abs(fig.gain) / design.gain - 1 });
+	const triple = (e) => (e ? \`f0 \${pct(e.f0)} %, Q \${pct(e.q, 1)} %, K \${pct(e.gain, 1)} %\` : '-');
+
+	console.log('='.repeat(72));
+	console.log('SPEC AND THE N IDENTICAL STAGES');
+	console.log('='.repeat(72));
+	const design = designNarrowBand({ f0: F0, q: NARROW_BY === 'q' ? Q : null, bandwidth: NARROW_BY === 'b' ? BANDWIDTH : null, gain: GAIN, stages: STAGES });
+	if (!design) throw new Error(\`F0, Q or BANDWIDTH and GAIN must be positive numbers, and STAGES a whole number from 1 to \${NARROW_MAX_STAGES}\`);
+	console.log(\`spec: narrow band-pass, f0 = \${F0} Hz, \${NARROW_BY === 'q' ? \`Q = \${design.q}, so B = f0/Q = \${design.B.toFixed(1)} Hz\` : \`B = \${design.B} Hz, so Q = f0/B = \${design.q.toFixed(4)}\`}, K = \${design.gain} (\${design.gainDb.toFixed(2)} dB) at f0, N = \${design.n}\`);
+	console.log(\`-3 dB edges: f1 = \${design.f1.toFixed(1)} Hz, f2 = \${design.f2.toFixed(1)} Hz (f1 f2 = f0^2, f2 - f1 = B)\`);
+	console.log(\`N identical stages: B = B_s sqrt(2^(1/N) - 1), so each stage gets Q_s = Q x \${design.shrink.toFixed(4)} = \${design.stageQ.toFixed(4)} (its own B_s = \${design.stageB.toFixed(1)} Hz) and K_s = K^(1/N) = \${design.stageGain.toFixed(4)} (\${design.stageGainDb.toFixed(2)} dB)\`);
+	console.log(\`far from f0 the chain falls \${-design.skirtDbPerDecade} dB per decade on each side\`);
+
+	console.log();
+	console.log('='.repeat(72));
+	console.log('COMPARISON (every circuit built from the stock and measured)');
+	console.log('='.repeat(72));
+	const OPTS = { resistorSeries: RESISTOR_SERIES, capacitors: CAPACITORS, pairs: RESISTOR_PAIRS, gbw: MFB_GBW };
+	const LIMIT = ${L ? 'RESISTOR_PAIRS && RESISTOR_PAIR_LIMIT !== null ? RESISTOR_PAIR_LIMIT : null' : 'null'};
+	// every circuit is built within RESISTOR_PAIR_LIMIT, as the one built below
+	const rows = compareNarrowCircuits(design, { ...OPTS, realGbw: NARROW_REAL_GBW, pairLimit: LIMIT });
+	console.log(\`  errors against the spec after rounding (ideal op-amps\${MFB_GBW !== null ? ', the multiple feedback stages with the op-amp they are built for' : ''}), and on a single-pole TL082 (GBW = \${formatHz(NARROW_REAL_GBW)}) solved from the netlist\`);
+	for (const r of rows) {
+		if (!r.ok) {
+			console.log(\`  \${r.label}: cannot be built (\${r.why})\`);
+			continue;
+		}
+		const w = r.sensitivity.worst;
+		console.log(\`  \${r.label}: \${plural(r.opamps, 'op-amp')}, \${r.parts.total} parts, resistor spread \${r.spread.resistors.toFixed(0)}:1, worst S^Q = \${w ? \`\${w.value.toFixed(2)} (\${w.part})\` : '-'}\`);
+		const onTl = r.stability && r.stability.oscillates ? \`oscillates near \${formatHz(r.stability.freq)}\` : \`\${triple(r.real.errors)}; the op-amp moves f0 \${pct(r.shift.f0)} %, Q \${pct(r.shift.q, 1)} %, the gain \${signed(r.shift.gainDb, 2)} dB\`;
+		console.log(\`    after rounding: \${triple(r.ideal.errors)}; on the TL082: \${onTl}\`);
+		console.log(\`    \${r.qualifies ? 'qualifies' : \`does not qualify: \${r.reasons.join(', ')}\`}\`);
+	}
+	console.log(\`rule: \${NARROW_RULE_TEXT}\`);
+	const AUTO = narrowDefaultCircuit(rows);
+	console.log(\`  -> the rule picks: \${AUTO ? NARROW_LABELS[AUTO] : 'none, no circuit can be built'}\`);
+	if (CIRCUIT !== 'auto' && !NARROW_CIRCUITS.includes(CIRCUIT)) throw new Error(\`CIRCUIT must be 'auto' or one of \${NARROW_CIRCUITS.join(', ')}\`);
+	const CHOSEN = CIRCUIT === 'auto' ? AUTO : CIRCUIT;
+	if (!CHOSEN) throw new Error('No circuit can build this spec from this stock: change the spec or the stock.');
+	const row = rows.find((r) => r.circuit === CHOSEN);
+	if (!row.ok) throw new Error(\`\${NARROW_LABELS[CHOSEN]}: \${row.why}. Pick another CIRCUIT or change the specification.\`);
+	console.log(\`  this script builds: \${NARROW_LABELS[CHOSEN]} (CIRCUIT = '\${CIRCUIT}')\`);
+
+	console.log();
+	console.log('='.repeat(72));
+	console.log('STAGES');
+	console.log('='.repeat(72));
+	// the table's own build, or built again with the capacitors of
+	// CAP_OVERRIDES (a stage they cannot build keeps its automatic ones)
+	const auto = row.realized;
+	const capFor = (i) => {
+		const ov = CAP_OVERRIDES[i];
+		if (!ov) return null;
+		const a = auto.resonators[i];
+		if (CHOSEN === 'mfbBp') {
+			const C1 = ov.C1 > 0 ? ov.C1 : a && a.components.C1;
+			const C2 = ov.C2 > 0 ? ov.C2 : a && a.components.C2;
+			return C1 > 0 && C2 > 0 ? { C1, C2 } : null;
+		}
+		return ov.C > 0 ? { C: ov.C } : null;
+	};
+	const capNote = (failure) => {
+		if (CHOSEN === 'mfbBp' && failure && failure.why === 'opamp') return 'with this op-amp no multiple feedback circuit lands on this stage, whatever the capacitors: it is too slow at f0 to correct for';
+		if (CHOSEN === 'mfbBp' && failure && failure.why === 'loop') return \`these capacitors leave the op-amp a loop gain of \${failure.loopGain.toFixed(2)} at f0, under 2: too little to correct for\`;
+		if (CHOSEN === 'mfbBp' && failure && Number.isFinite(failure.maxGain)) return \`these capacitors cannot give this stage its gain: the most it reaches is Q^2 (1 + C2/C1) = \${failure.maxGain.toFixed(3)}, so C2/C1 must be above \${failure.neededRatio.toFixed(2)}\`;
+		return 'these capacitors cannot build the stage with resistors in range';
+	};
+	const typed = design.stages.map((_, i) => i).filter((i) => capFor(i));
+	const capsOf = (list) => design.stages.map((_, i) => (list.includes(i) ? capFor(i) : null));
+	const build = (list, pairs = RESISTOR_PAIRS) => realizeNarrow(design, CHOSEN, { ...OPTS, pairs, caps: capsOf(list) });
+	let kept = typed;
+	if (typed.length && !build(typed).ok) {
+		for (const i of typed) {
+			const alone = build([i]);
+			if (!alone.ok) console.log(\`  note: CAP_OVERRIDES[\${i}]: \${capNote(alone.failure)}; stage \${i + 1} keeps the automatic capacitors\`);
+		}
+		kept = typed.filter((i) => build([i]).ok);
+		if (kept.length && !build(kept).ok) {
+			console.log('  note: the capacitors of CAP_OVERRIDES cannot build the chain together; every stage keeps the automatic ones');
+			kept = [];
+		}
+	}
+	// the row is already built within the limit; capacitors from CAP_OVERRIDES are built again within it
+	const plan = LIMIT === null ? null : kept.length ? narrowLimitPairs((pairs) => build(kept, pairs), LIMIT, design, RESISTOR_SERIES) : row.plan;
+	const realized = plan ? plan.realized : kept.length ? build(kept) : auto;
+	if (plan && plan.limited) console.log(\`  RESISTOR_PAIR_LIMIT = \${RESISTOR_PAIR_LIMIT}: pairs wherever they help would take \${plan.total}; the closest within the limit takes \${plan.count}, with \${plan.dropped.join(', ')} a single resistor\`);
+	if (!realized.ok) throw new Error(\`\${NARROW_LABELS[CHOSEN]}: \${realized.why}\`);
+	// a resistor built from two in series is printed with its two parts
+	const ohms = (value) => {
+		const pair = RESISTOR_PAIRS ? seriesPair(value, RESISTOR_SERIES) : null;
+		return \`\${Number(value.toPrecision(6))} ohm\${pair ? \` (\${Number(pair[0].toPrecision(6))} + \${Number(pair[1].toPrecision(6))} in series)\` : ''}\`;
+	};
+	const printParts = (s) => {
+		for (const [name, value] of Object.entries(s.components)) console.log(\`  \${name} = \${/^[Rr]/.test(name) ? ohms(value) : value.toExponential(4) + ' F'}\`);
+	};
+	realized.stages.forEach((s, i) => {
+		if (s.topology === 'gainNonInv') {
+			const k = realized.gainStages.indexOf(s);
+			const own = realized.stageGains.reduce((p, g) => p * g, 1);
+			const before = realized.gainStages.slice(0, k).reduce((p, g) => p * g.actual.gain, 1);
+			const of = realized.gainStages.length > 1 ? \` \${k + 1} of \${realized.gainStages.length}, the gain split so that each g f0 stays within \${NARROW_GAIN_SPEED} GBW on a TL082\` : '';
+			console.log(\`stage \${i + 1} (non-inverting gain stage\${of}, K_g = 1 + R2/R1): the stages before it give \${(own * before).toFixed(4)} at f0, so K_g = \${s.steps.gainTarget.toFixed(4)}\`);
+			if (s.stockShortfall) console.log('  Stock cannot realize this gain; using the full E24 series, as on the page.');
+			printParts(s);
+			console.log(\`  actual K_g = \${s.actual.gain.toFixed(4)} (\${pct(s.actual.gain / s.steps.gainTarget - 1)} %)\`);
+			return;
+		}
+		const t = design.stages[i];
+		console.log(\`stage \${i + 1} (\${NARROW_LABELS[CHOSEN]}): f0 = \${(t.wn / TWO_PI).toFixed(1)} Hz, Q = \${t.q.toFixed(4)}, gain at f0 = \${t.gain.toFixed(4)}\${s.manual ? ', capacitors from CAP_OVERRIDES' : ''}\${s.buffered === false ? ', its output buffered by the gain stage' : ''}\`);
+		if (s.stockShortfall) console.log('  Stock cannot realize this section; using the full E24/E6 grid, as on the page.');
+		printParts(s);
+		const f0Actual = s.actual.wn / TWO_PI;
+		const inverting = s.topology === 'mfbBp' || s.topology === 'towThomasBp';
+		const gainNote = realized.gainStages.length ? \`the gain stage\${realized.gainStages.length > 1 ? 's add' : ' adds'} the rest\` : \`\${pct(Math.abs(s.actual.gain) / t.gain - 1)}%\`;
+		console.log(\`  actual f0 = \${f0Actual.toFixed(1)} Hz (\${pct(s.actual.wn / t.wn - 1)}%), Q = \${s.actual.q.toFixed(4)} (\${pct(s.actual.q / t.q - 1)}%), gain at its f0 = \${Math.abs(s.actual.gain).toFixed(4)} (\${gainNote}\${inverting ? ', inverting' : ''})\`);
+		if (s.topology === 'mfbBp' && Number.isFinite(s.actual.gbw)) console.log(\`  built for the op-amp (single pole, GBW = \${formatHz(s.actual.gbw)}): the circuit alone gives f0 = \${(s.ideal.wn / TWO_PI).toFixed(1)} Hz, Q = \${s.ideal.q.toFixed(4)}; loop gain at f0 = \${s.steps.loopGain.toFixed(2)}\`);
+		const sens = narrowStageSensitivity(s);
+		const worst = Object.entries(sens).reduce((w, [part, value]) => (w === null || Math.abs(value) > Math.abs(w.value) ? { part, value } : w), null);
+		console.log(\`  Q sensitivity to 1% component error: \${worstCaseQError(sens, 1).toFixed(2)}% (root-sum-square), the most from \${worst.part}: \${worst.value.toFixed(2)}\`);
+	});
+	console.log(\`chain: \${plural(realized.opamps, 'op-amp')}, \${plural(realized.parts.resistors, 'resistor')}, \${plural(realized.parts.capacitors, 'capacitor')}, resistor spread \${realized.spread.resistors.toFixed(0)}:1\`);
+
+	console.log();
+	console.log('='.repeat(72));
+	console.log('FREQUENCY RESPONSE (from the rounded, realized components)');
+	console.log('='.repeat(72));
+	if (realized.stages.some((s) => s.topology === 'mfbBp' && Number.isFinite(s.actual.gbw))) console.log(\`  (the multiple feedback stages with the single-pole op-amp they are built for, GBW = \${formatHz(MFB_GBW)})\`);
+	const gainDb = (f) => magnitudePhaseAt(realized.stages, f).db;
+	for (const f of [design.f0 / 10, design.f0 / 2, design.f1, design.f0, design.f2, design.f0 * 2, design.f0 * 10]) console.log(\`  \${f.toFixed(0).padStart(9)} Hz : \${gainDb(f).toFixed(2).padStart(8)} dB\`);
+	const fig = narrowFigures((f) => responseAt(realized.stages, f), design.f0);
+	const real = narrowFigures(narrowNetlistResponse(realized.stages, { gbw: NARROW_REAL_GBW }), design.f0);
+	const show = (g) => \`peak at \${g.f0.toFixed(1)} Hz, \${g.gainDb.toFixed(2)} dB, -3 dB edges \${g.f1 === null ? '-' : g.f1.toFixed(1)} and \${g.f2 === null ? '-' : g.f2.toFixed(1)} Hz, B = \${g.B === null ? '-' : g.B.toFixed(1)} Hz, Q = \${g.q === null ? '-' : g.q.toFixed(4)}\`;
+	const stability = narrowStability(realized.stages, { gbw: NARROW_REAL_GBW, f0: design.f0 });
+	const oscillates = Boolean(stability && stability.oscillates);
+	console.log(\`from the parts: \${show(fig)}\`);
+	console.log(\`on a single-pole TL082 (GBW = \${formatHz(NARROW_REAL_GBW)}), solved from the netlist: \${show(real)}\`);
+	if (oscillates) console.log(\`  but on that TL082 the chain oscillates, near \${formatHz(stability.freq)}: a pole pair of its netlist lies in the right half plane, so the figures above never settle\`);
+	const limits = 'f0 within a tenth of B, Q and K within 10 %';
+	const realErrors = errorsOf(real);
+	const errors = errorsOf(fig);
+	const okParts = narrowFit(errors, design) <= 1;
+	const okReal = !oscillates && narrowFit(realErrors, design) <= 1;
+	console.log(\`on the TL082: \${oscillates ? 'it oscillates' : \`\${triple(realErrors)} against the spec: \${okReal ? 'within' : 'outside'} the limits (\${limits})\`}\`);
+	console.log(\`\\nverdict: from the rounded parts, \${triple(errors)} against the spec (\${limits}): \${okParts ? 'OK' : 'NOT MET'}; on a TL082: \${oscillates ? 'it oscillates, NOT MET' : okReal ? 'OK' : 'NOT MET'}\`);
+}
+`;
+}
+
+/** The closing comment of a narrow band-pass script: the page's next steps, swept around f0. */
+function narrowNextStepsComment(gbw = null) {
+	const lines = [
+		'// =====================================================================',
+		'// NEXT STEPS: this script only makes a paper design',
+		'// ====================================================================='
+	];
+	narrowNextSteps(gbw).forEach((step, i) => {
+		lines.push('//');
+		lines.push(`// ${i + 1}. ${step.title}.`);
+		for (const line of wrapComment(step.detail, 74)) lines.push(`//    ${line}`);
+	});
+	return lines.join('\n') + '\n';
+}
+
+/**
+ * The whole script for a narrow band-pass, as the page builds it: f0, q
+ * or bandwidth (narrowBy 'q' or 'b' says which one the spec gives; the
+ * other is written computed), gain, stages, circuit (the one the page
+ * shows) and circuitMenu ('auto' or a circuit: what its Circuit menu
+ * says), opampGbw (the single-pole Hz the multiple feedback stages are
+ * built for, or null), capOverrides (farads per stage: { C }, or { C1, C2 }
+ * for the multiple feedback circuit), the stock, and resistorPairLimit.
+ */
+function narrowScript({ f0, narrowBy, q, bandwidth, gain = 1, stages = 1, circuit = null, circuitMenu, opampGbw = null, capOverrides, resistorStock = null, resistorPairs = false, resistorPairLimit = null, capacitorStock = null }) {
+	const by = narrowBy === 'b' || narrowBy === 'q' ? narrowBy : Number.isFinite(q) && q > 0 ? 'q' : 'b';
+	const tidy = (x) => (Number.isFinite(x) ? Number(x.toPrecision(6)) : null);
+	const qv = Number.isFinite(q) && q > 0 ? q : tidy(f0 / bandwidth);
+	const bv = Number.isFinite(bandwidth) && bandwidth > 0 ? bandwidth : tidy(f0 / q);
+	const menu = NARROW_CIRCUIT_KEYS.includes(circuitMenu) ? circuitMenu : NARROW_CIRCUIT_KEYS.includes(circuit) ? circuit : 'auto';
+	const gbw = Number.isFinite(opampGbw) && opampGbw > 0 ? opampGbw : null;
+	const limited = Boolean(resistorPairs) && resistorPairLimit !== null && resistorPairLimit !== undefined;
+	const chunks = [
+		header('narrowband'),
+		narrowParamsBlock({ f0, by, q: qv, bandwidth: bv, gain, stages, menu, circuit, gbw, capOverrides, resistorStock, resistorPairs, pairLimit: limited ? resistorPairLimit : null, capacitorStock }),
+		'// ===================================================================== \n// ENGINE - same code the web tool runs\n// =====================================================================\n',
+		inline(eseriesSrc),
+		inline(formatSrc),
+		inline(approximationsSrc),
+		inline(mfbBandPassSrc),
+		inline(towThomasSrc),
+		inline(rlcBandPassSrc),
+		inline(sallenKeyBandPassSrc),
+		inline(khnBandPassSrc),
+		inline(stageElementsSrc),
+		inline(nodalSrc),
+		inline(bodeSrc),
+		inline(sensitivitySrc),
+		// narrowBand.js counts and names pairs with it (narrowLimitPairs)
+		inline(pairPlanSrc),
+		narrowOpampChunk(),
+		inline(narrowBandSrc),
+		narrowReportBlock(limited),
+		// the multiple feedback stages built for the op-amp: the closing steps say so
+		narrowNextStepsComment((circuit ?? menu) === 'mfbBp' ? gbw : null)
+	];
+	return chunks.join('\n\n');
+}
+
 /**
  * Builds the full standalone script for the design currently shown on the
  * page: same math, same component search, same order and any manual
@@ -755,6 +1070,9 @@ function wrapComment(text, width) {
  * resistors that may be two in series in the whole filter (the stock
  * picker's "Up to N pairs"): the script carries it as RESISTOR_PAIR_LIMIT
  * and shares the pairs out as the page does (pairPlan.js).
+ * filterType 'narrowband' writes the narrow band-pass script instead
+ * (narrowScript above: f0, narrowBy, q, bandwidth, gain, stages, circuit,
+ * circuitMenu, opampGbw, and the same stock and capacitor arguments).
  */
 export function generateScript({
 	amaxDb,
@@ -788,8 +1106,20 @@ export function generateScript({
 	topologyNotch = 'boctor',
 	orderBand = null,
 	opampGbw = undefined,
-	resistorPairLimit = null
+	resistorPairLimit = null,
+	f0,
+	narrowBy,
+	q,
+	bandwidth,
+	gain,
+	stages,
+	circuit,
+	circuitMenu
 }) {
+	// a narrow band-pass is a script of its own; every other one is written below as before
+	if (filterType === 'narrowband') {
+		return narrowScript({ f0, narrowBy, q, bandwidth, gain, stages, circuit, circuitMenu, opampGbw: opampGbw ?? null, capOverrides, resistorStock, resistorPairs, resistorPairLimit, capacitorStock });
+	}
 	// only a band filter built by transformation carries the method's
 	// parameters and code, every other script stays exactly what it was
 	const transformed = bandMethod === 'transformed' && (filterType === 'bandpass' || filterType === 'bandstop');

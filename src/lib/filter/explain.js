@@ -1,6 +1,8 @@
 import { pairLabel, seriesPair } from './eseries';
 import { explainModernApproximation, explainModernOrder, isClassic, modernRealPoleBlocks, modernStageBlocks } from './explainResponses';
 import { formatFarads, formatHz, formatOhms, formatSeconds } from './format';
+import { narrowStageSensitivity, narrowTextbook, NARROW_GAIN_SPEED } from './narrowBand';
+import { sallenKeyBpLimit } from './sallenKeyBandPass';
 
 /**
  * Builds the "show the math" content for the Order, Stages and Components
@@ -1362,4 +1364,561 @@ export function explainTowThomasBp(stageDesign, targetWn, targetQ) {
 			`Gain-bandwidth check for this stage: with Q = ${targetQ.toFixed(2)} and f0 = ${formatHz(f0)}, an op-amp with f_T = 3 MHz (a TL08x) ${4 * targetQ * f0 < 3e6 ? `raises Q by roughly ${(100 * (1 / (1 - (4 * targetQ * f0) / 3e6) - 1)).toFixed(1)}% (Q_real = Q / (1 - 4 Q f0 / f_T))` : 'makes the loop oscillate (4 Q f0 reaches f_T)'}; keeping that under 1% needs f_T above ${formatHz(400 * targetQ * f0)}.`
 		)
 	];
+}
+
+/* ------------------------------------------------------------------------ */
+/* 6. Narrow band-pass: one peak, one stage or N identical ones              */
+/* ------------------------------------------------------------------------ */
+
+/**
+ * A value with its unit, as formatHz, formatOhms or formatFarads print it,
+ * set in TeX: the number and prefix as text (upright, its space kept), an
+ * ohm or a micro as their symbols (text mode has neither).
+ */
+const tu = (text) => `\\text{${String(text).replace(/ u(?=[FHs])/g, ' }\\mu\\text{').replace(/Ω/g, '}\\Omega\\text{')}}`.replace(/\\text\{\}/g, '');
+/** A number to four decimals without trailing zeros, as plain text or TeX: 8, 3.2184, 0.6436. */
+const n4t = (x) => (Number.isFinite(x) ? String(Number(x.toFixed(4))) : '-');
+/** A number to four significant figures, as plain text: 3.218, 0.6436, 25.33. */
+const sig4 = (x) => (Number.isFinite(x) ? String(Number(x.toPrecision(4))) : '-');
+/** An inductance in TeX: 25.3\ mH. */
+const henryTex = (L) => {
+	if (!Number.isFinite(L)) return '-';
+	if (L >= 1) return `${sig4(L)}\\ \\text{H}`;
+	if (L >= 1e-3) return `${sig4(L * 1e3)}\\ \\text{mH}`;
+	return `${sig4(L * 1e6)}\\ \\mu\\text{H}`;
+};
+/** A part as the component table prints it, a pair of two in series included. */
+const narrowOhms = (sd, name) => ohms(sd.components[name], sd.steps?.resistorSeries ?? 'E24');
+/** A relative miss in percent, signed: +0.16, -1.27. */
+const missPct = (actual, target) => {
+	const x = 100 * (actual / target - 1);
+	return Number.isFinite(x) ? `${x >= 0 ? '+' : ''}${x.toFixed(2)}` : '-';
+};
+/** A part's name in TeX: R1 -> R_{1}, Cg -> C_{g}, r -> r. */
+const partTexName = (name) => name.replace(/^([A-Za-z])(.+)$/, (m, a, b) => `${a}_{${b}}`);
+/** 20 log10 of a gain, signed, two decimals. */
+const dbText = (g) => signedDb(g);
+/** The loss of N identical stages of stage Q qs, x times off f0 (x f0 or f0 / x), in dB. */
+const narrowLossAt = (n, qs, x) => 10 * n * Math.log10(1 + (qs * (x - 1 / x)) ** 2);
+
+/**
+ * The N identical stages and the bandwidth they share (panel 02): Q from
+ * B or B from Q, the -3 dB edges, why N stages are narrower than one, the
+ * stage Q and gain that follow, and what the extra stages cost and buy.
+ */
+export function explainNarrowBandOrder(design) {
+	if (!design || !Number.isFinite(design.f0)) return [];
+	const { f0, q, B, n, shrink, stageQ, stageB, gain, stageGain, f1, f2 } = design;
+	const blocks = [
+		p(
+			'A narrow band-pass picks out one frequency, f0, and lets through a band of width B around it. B is measured between the two points where the response is 3 dB below its peak. The sharpness of the band is Q, the centre over the width:'
+		),
+		eq(
+			design.by === 'b'
+				? `Q = \\dfrac{f_0}{B} = \\dfrac{${hzNum(f0)}}{${hzNum(B)}} = ${n4t(q)}`
+				: `Q = \\dfrac{f_0}{B} \\ \\Rightarrow\\ B = \\dfrac{f_0}{Q} = \\dfrac{${hzNum(f0)}}{${n4t(q)}} = ${tu(formatHz(B))}`
+		),
+		p('The two edges are not symmetric about f0 in hertz. They are symmetric on a log axis: their product is f0 squared and their difference is B, which puts them at:'),
+		eq(
+			`f_{1,2} = f_0\\left(\\sqrt{1 + \\dfrac{1}{4Q^2}} \\mp \\dfrac{1}{2Q}\\right): \\qquad f_1 = ${tu(formatHz(f1))}, \\quad f_2 = ${tu(formatHz(f2))}, \\qquad f_1 f_2 = f_0^2`
+		),
+		p(
+			'One second-order band-pass stage does the whole job when N = 1: its own Q is the Q asked for. N identical stages in a row multiply their responses. One stage of Q_s and gain K_s gives the expression below, where x is ±1 at its own -3 dB edges:'
+		),
+		eq('|H_s(j\\omega)|^2 = \\dfrac{K_s^2}{1 + x^2}, \\qquad x = Q_s\\left(\\dfrac{f}{f_0} - \\dfrac{f_0}{f}\\right)'),
+		p('The chain of N stages is 3 dB below its peak where N such factors multiply to 1/2:'),
+		eq('(1 + x^2)^N = 2 \\ \\Rightarrow\\ x = \\pm\\sqrt{2^{1/N} - 1}'),
+		p(
+			'With u = f/f0, the two edges solve u - 1/u = ±sqrt(2^(1/N) - 1)/Q_s. The two positive roots multiply to 1 and differ by the right side, so the chain keeps f0 at the geometric centre and its bandwidth is that of one stage times a shrink factor:'
+		),
+		eq('f_1 f_2 = f_0^2, \\qquad B = f_2 - f_1 = \\dfrac{f_0}{Q_s}\\sqrt{2^{1/N} - 1} = B_s\\sqrt{2^{1/N} - 1}'),
+		p(
+			n === 1
+				? 'With N = 1 the shrink factor is exactly 1 and the stage is the filter. With more stages each one gets a lower Q, all on the same f0, so that the chain lands on the Q asked for:'
+				: `So ${n} stages make a band narrower than one of them alone. For the Q asked for, each stage gets a lower Q, all on the same f0:`
+		),
+		eq(
+			`Q_s = Q\\sqrt{2^{1/N} - 1} = ${n4t(q)} \\times \\sqrt{2^{1/${n}} - 1} = ${n4t(q)} \\times ${n4t(shrink)} = ${n4t(stageQ)}, \\qquad B_s = \\dfrac{f_0}{Q_s} = ${tu(formatHz(stageB))}`
+		),
+		p(`The gain is shared the same way: each stage gives the Nth root of K at f0, so that the chain multiplies back to K.`),
+		eq(
+			`K_s = K^{1/N} = ${sig4(gain)}^{1/${n}} = ${n4t(stageGain)}\\ \\ (${dbText(stageGain)}\\ \\text{dB}), \\qquad K = ${sig4(gain)}\\ \\ (${dbText(gain)}\\ \\text{dB})`
+		)
+	];
+	// what more stages cost and buy, on this spec's own numbers
+	const one = narrowLossAt(1, q, 2);
+	const chain = narrowLossAt(n, stageQ, 2);
+	if (n > 1) {
+		blocks.push(
+			p(
+				`The cost: ${n} times the op-amps and parts of one stage. The gain: far from f0 each stage falls 20 dB per decade, so the chain falls ${20 * n} dB per decade, and the skirts are steeper for the same bandwidth. An octave off, at 2 f0 or f0/2, the chain is ${chain.toFixed(1)} dB down where one stage of the same Q would be ${one.toFixed(1)} dB down:`
+			),
+			eq(
+				`A(2f_0) = 10N\\log_{10}\\!\\left(1 + Q_s^2\\left(2 - \\tfrac{1}{2}\\right)^2\\right) = 10 \\times ${n}\\log_{10}\\!\\left(1 + (1.5 \\times ${n4t(stageQ)})^2\\right) = ${n2(chain)}\\ \\text{dB}`
+			)
+		);
+	} else {
+		const two = narrowLossAt(2, q * narrowShrink2, 2);
+		blocks.push(
+			p(
+				`One stage falls 20 dB per decade on each side, far from f0. More stages cost op-amps and buy steeper skirts for the same bandwidth: an octave off, at 2 f0 or f0/2, this single stage is ${one.toFixed(1)} dB down, where two stages of Q_s = ${n4t(q * narrowShrink2)} each would be ${two.toFixed(1)} dB down.`
+			)
+		);
+	}
+	blocks.push(
+		p(
+			stageQ > 10
+				? `A stage Q of ${n2(stageQ)} is ${stageQ > 20 ? 'high' : 'on the high side'}. The band of each stage is only ${(100 / stageQ).toFixed(1)} % of f0 wide, and a part 1 % off moves f0 by about 0.5 %, a share of the band that grows with Q; tolerances also lower the peak. A stage Q between 5 and 10 builds reliably, and more stages bring the stage Q down.`
+				: 'Part tolerances move f0 and lower Q, more so the higher the Q. A stage Q between 5 and 10 builds reliably; the comparison in panel 04 says how far each circuit lands.'
+		)
+	);
+	return blocks;
+}
+
+/** The shrink factor of two stages, sqrt(sqrt(2) - 1). */
+const narrowShrink2 = Math.sqrt(Math.SQRT2 - 1);
+
+/**
+ * One stage of a narrow band-pass (panel 03): its H(s) in the standard
+ * band-pass form, its f0, Q, bandwidth and gain, and for N stages the
+ * chain they make. Stage i > 0 is a copy of stage 1 and says so briefly.
+ */
+export function explainNarrowBandStage(design, i) {
+	const st = design?.stages?.[i];
+	if (!st) return [];
+	const { f0, w0, n, stageQ, stageGain, stageB } = design;
+	const chain = [
+		eq(
+			`H(s) = \\left[K_s\\,\\dfrac{\\frac{\\omega_0}{Q_s}\\,s}{s^2 + \\frac{\\omega_0}{Q_s}\\,s + \\omega_0^2}\\right]^{${n}}, \\qquad H(j\\omega_0) = K_s^{${n}} = ${n4t(stageGain)}^{${n}} = ${n4t(design.gain)}`
+		),
+		eq(`f_1 = ${tu(formatHz(design.f1))}, \\quad f_2 = ${tu(formatHz(design.f2))}, \\quad B = f_2 - f_1 = ${tu(formatHz(design.B))}, \\quad Q = \\dfrac{f_0}{B} = ${n4t(design.q)}`)
+	];
+	if (i > 0) {
+		return [
+			p(`Stage ${i + 1} is a copy of stage 1: the same f0 = ${formatHz(f0)}, Q_s = ${n4t(stageQ)} and K_s = ${n4t(stageGain)}. The chain of all ${n} multiplies them:`),
+			...chain
+		];
+	}
+	const half = 1 / (2 * stageQ);
+	const blocks = [
+		p(
+			'Each stage is a second-order band-pass centred on f0. Its denominator is the standard second-order one, with the damping ξ = 1/(2Q). Its numerator is proportional to s, which is what makes it a band-pass: zero gain at DC and far above f0.'
+		),
+		eq(
+			'H_s(s) = K_s\\,\\dfrac{\\frac{\\omega_0}{Q_s}\\,s}{s^2 + \\frac{\\omega_0}{Q_s}\\,s + \\omega_0^2} = K_s\\,\\dfrac{2\\xi\\omega_0\\, s}{s^2 + 2\\xi\\omega_0\\, s + \\omega_0^2}, \\qquad \\xi = \\dfrac{1}{2Q_s}'
+		),
+		p('A caution on the form: with ω0^2 on top instead of 2ξω0 s, the same denominator is a low-pass, not a band-pass. The two are not the same function.'),
+		p(
+			'At s = jω0 the s^2 term and the constant cancel, and what is left of the denominator equals the numerator over K_s. So the stage gives exactly K_s at f0, with no phase shift. Below f0 the phase leads, up to +90°; above it lags, down to -90°. Far from f0 the stage falls 20 dB per decade on each side. With this design\'s numbers:'
+		),
+		eq(
+			`\\omega_0 = 2\\pi \\times ${hzNum(f0)} = ${n2(w0)}\\ \\text{rad/s}, \\qquad \\dfrac{\\omega_0}{Q_s} = \\dfrac{${n2(w0)}}{${n4t(stageQ)}} = ${n2(w0 / stageQ)}\\ \\text{rad/s}, \\qquad K_s = ${n4t(stageGain)}\\ \\ (${dbText(stageGain)}\\ \\text{dB})`
+		),
+		p('Its own -3 dB edges follow from its own Q, by the same formula as the whole filter\'s:'),
+		eq(
+			`f_{1,2} = f_0\\left(\\sqrt{1 + \\dfrac{1}{4Q_s^2}} \\mp \\dfrac{1}{2Q_s}\\right) = ${tu(formatHz(f0 * (Math.sqrt(1 + half * half) - half)))},\\ ${tu(formatHz(f0 * (Math.sqrt(1 + half * half) + half)))}, \\qquad B_s = \\dfrac{f_0}{Q_s} = ${tu(formatHz(stageB))}`
+		)
+	];
+	if (n > 1) {
+		blocks.push(p(`The ${n} stages are identical, so the whole filter is this H_s(s) to the power ${n}: gain K at f0, and the narrower band of panel 02:`), ...chain);
+	} else {
+		blocks.push(p('With N = 1 this stage is the whole filter: K, Q and B are the spec\'s own.'));
+	}
+	return blocks;
+}
+
+/* ---------------------------------------- 6b. the six circuits, one by one */
+
+/** The plain RLC the two simulated inductors start from, on this stage's capacitor. */
+function rlcPrincipleBlocks(sd, wn, q) {
+	const C = sd.components.C;
+	const X = 1 / (wn * C);
+	return [
+		p(
+			'The idea starts from a passive circuit. A resistor R runs from the input to the output node P, and a capacitor C and an inductor L both run from P to ground. At f0 the currents in L and C cancel: their parallel impedance becomes very large and P follows the input. Away from f0 one of the two shorts P to ground.'
+		),
+		p('L and C in parallel have the impedance sL/(1 + s^2 LC), and the divider it forms with R gives a band-pass:'),
+		eq('H(s) = \\dfrac{sL/R}{s^2 LC + sL/R + 1} = \\dfrac{\\frac{1}{RC}\\,s}{s^2 + \\frac{1}{RC}\\,s + \\frac{1}{LC}}'),
+		p('Matching the standard form gives f0 and Q. At f0 the numerator equals the middle term of the denominator, so the gain there is exactly 1:'),
+		eq('\\omega_0 = \\dfrac{1}{\\sqrt{LC}}, \\qquad Q = \\omega_0 RC = R\\sqrt{\\dfrac{C}{L}} \\ \\Rightarrow\\ R = Q\\sqrt{\\dfrac{L}{C}}, \\qquad H(j\\omega_0) = 1'),
+		p('A caution: R = Q sqrt(C/L) is a slip that is easy to make. sqrt(C/L) is a conductance, so that product is not even in ohms. The resistor is Q sqrt(L/C).'),
+		p(`With C chosen first, X = 1/(ω0 C) is its reactance at f0 and both other parts follow from it. On this stage's ${formatFarads(C)}:`),
+		eq(`X = \\dfrac{1}{\\omega_0 C} = ${tu(formatOhms(X))}, \\qquad L = \\dfrac{X}{\\omega_0} = ${henryTex(X / wn)}, \\qquad R = Q\\,X = ${n4t(q)} \\times ${tu(formatOhms(X))} = ${tu(formatOhms(q * X))}`),
+		p(
+			'An inductor of that size is bulky and lossy, and it picks up hum. So no real inductor is used: an op-amp circuit takes its place, seen from P as an impedance to ground. P itself is a high impedance, so the stage ends in a follower, or in the gain stage when one comes after it, whose + input buffers P just as well.'
+		)
+	];
+}
+
+/** The input divider of an RLC or Sallen-Key stage: Ra || Rb = R, alpha = Rb / (Ra + Rb). */
+function dividerBlocks(what) {
+	return [
+		p(
+			`The gain asked for is under the circuit's own, so the input resistor is split in two: Ra from the input to ${what}, Rb from ${what} to ground. ${what} then sees αV_in behind Ra || Rb. With Ra || Rb equal to the R found above, f0 and Q stay where they are and the centre gain is scaled by α:`
+		),
+		eq('R_a \\parallel R_b = R, \\qquad \\alpha = \\dfrac{R_b}{R_a + R_b} \\ \\Rightarrow\\ R_a = \\dfrac{R}{\\alpha}, \\quad R_b = \\dfrac{R}{1 - \\alpha}')
+	];
+}
+
+/** What the rounded parts of a stage give, as one equation. */
+function narrowActualEq(a, wn, q, gain) {
+	return eq(
+		`f_0' = ${tu(formatHz(a.wn / TWO_PI))}\\ (${missPct(a.wn, wn)}\\ \\%), \\quad Q' = ${n4t(a.q)}\\ (${missPct(a.q, q)}\\ \\%), \\quad |H_0'| = ${n4t(Math.abs(a.gain))}\\ \\ (${dbText(a.gain)}\\ \\text{dB}${Number.isFinite(gain) ? `, \\text{ asked } ${n4t(gain)}` : ''})`
+	);
+}
+
+/** RLC with a gyrator for L (rlcGyrator). */
+function gyratorBlocks(sd, wn, q, gain, context) {
+	const c = sd.components;
+	const st = sd.steps;
+	const tb = st.textbook;
+	const divided = Number.isFinite(c.Rb);
+	const blocks = [
+		...rlcPrincipleBlocks(sd, wn, q),
+		p(
+			'The gyrator takes the inductor\'s place with one op-amp wired as a follower. R1 runs from P to the follower\'s output O. Cg runs from P to its + input X, and R2 from X to ground. The follower copies V_X to O and draws no current from X:'
+		),
+		eq('V_O = V_X = V_P\\,\\dfrac{sR_2C_g}{1 + sR_2C_g}, \\qquad I_P = \\dfrac{V_P - V_O}{R_1} + sC_g\\left(V_P - V_X\\right)'),
+		p('Dividing V_P by that current gives the impedance seen from P. For R2 much larger than R1, and below the frequency 1/(2π R1 Cg), it is close to an inductor:'),
+		eq('Z_{in} = R_1\\,\\dfrac{1 + sR_2C_g}{1 + sR_1C_g} \\approx R_1 + s\\,R_1R_2C_g, \\qquad L = R_1R_2C_g'),
+		p(
+			'So the gyrator is an inductor L = R1 R2 Cg in series with a loss, R1. The loss is the catch. The plain recipe sets L = R1 R2 Cg and R = Q sqrt(L/C), and then the exact Z_in moves the peak and lowers it. On this stage\'s capacitor, with C = Cg:'
+		),
+		eq(
+			`R_1 = ${tu(formatOhms(tb.R1))}, \\quad R_2 = \\dfrac{L}{R_1 C_g} = ${tu(formatOhms(tb.R2))}, \\quad R = ${tu(formatOhms(tb.R))} \\ \\Rightarrow\\ f_0' = ${Number((tb.actual.wn / TWO_PI).toPrecision(5))}\\ \\text{Hz}\\ (${missPct(tb.actual.wn, wn)}\\ \\%),\\ \\ Q' = ${n4t(tb.actual.q)},\\ \\ |H_0'| = ${dbText(tb.actual.gain)}\\ \\text{dB}`
+		),
+		p(
+			'This tool keeps the exact Z_in instead. The whole stage is still second order, with one zero at 1/(R2 Cg), far below f0. That zero is also why the stage does not fall to zero at DC: there Cg is open, Z_in is R1 alone, and the stage passes R1/(R + R1) of its input, so below 1/(2π R2 Cg) its skirt stops falling at that level:'
+		),
+		eq('H(s) = \\alpha\\,\\dfrac{R_1\\left(1 + sR_2C_g\\right)}{s^2\\,CRR_1R_2C_g + s\\left(R_1R_2C_g + RR_1C_g + CRR_1\\right) + R_1 + R}, \\qquad H(0) = \\alpha\\,\\dfrac{R_1}{R + R_1}'),
+		eq('\\omega_0^2 = \\dfrac{1 + R_1/R}{R_1R_2CC_g}, \\qquad \\dfrac{\\omega_0}{Q} = \\dfrac{1}{RC} + \\dfrac{1}{R_2C} + \\dfrac{1}{R_2C_g}'),
+		p(
+			'The two terms in 1/R2 are the loss. With g = 1/R and h = 1/R2 the two targets are two equations in g and h. Eliminating g leaves a quadratic in h, and its smaller root, the larger R2, keeps the loss smallest:'
+		),
+		eq('Ck\\,h^2 - \\left(\\dfrac{1}{R_1} + \\dfrac{C\\omega_0}{Q}\\right)h + \\omega_0^2\\,CC_g = 0, \\qquad k = \\dfrac{1}{C} + \\dfrac{1}{C_g}, \\qquad g = C\\left(\\dfrac{\\omega_0}{Q} - hk\\right)'),
+		p(
+			`The loss shrinks as R1 gets small next to X and R2 large next to it, so R1 starts from ${formatOhms(st.R1Target)}: ${st.R1Target > 50.5 ? 'the smallest value that keeps R2 within 1 megohm' : '50 ohm, as small as the follower drives with ease'}. f0 rests on the product R1 R2, so R1 is tried at the stocked values from a little under that up to 1.6 times it, R2 solved for each and rounded, then R solved against both for the exact Q. The closest is kept:`
+		),
+		eq(
+			`${sd.manual ? '' : `C = C_g = ${tu(formatFarads(c.C))}, \\qquad `}R_1 = ${tu(formatOhms(c.R1))}, \\qquad R_2 = ${tu(formatOhms(st.R2Target))} \\rightarrow ${tu(formatOhms(c.R2))}, \\qquad R = ${tu(formatOhms(st.RTarget))}`
+		),
+		...(sd.manual ? [p(`C and Cg take the ${formatFarads(c.C)} entered by hand.`)] : [])
+	];
+	if (divided) {
+		blocks.push(...dividerBlocks('P'), eq(`\\alpha = ${n4t(st.gainTarget / st.ownGain)}: \\quad R_a = ${tu(formatOhms(st.RaTarget))} \\rightarrow ${tu(narrowOhms(sd, 'Ra'))}, \\qquad R_b = ${tu(formatOhms(st.RbTarget))} \\rightarrow ${tu(narrowOhms(sd, 'Rb'))}`));
+	} else {
+		blocks.push(p(`R is rounded to Ra = ${narrowOhms(sd, 'Ra')}.`));
+	}
+	blocks.push(
+		p('Even on target, the loss leaves the centre gain under α. At ω0 the denominator is jω0 times ω0/Q, and the zero adds a small term to the numerator:'),
+		eq('|H(j\\omega_0)| = \\alpha\\,\\dfrac{\\sqrt{\\left(\\frac{1}{RC}\\right)^2 + \\left(\\frac{1}{\\omega_0 RR_2CC_g}\\right)^2}}{\\omega_0/Q}'),
+		p('What the rounded parts give, from the exact expressions:'),
+		narrowActualEq(sd.actual, wn, q, gain),
+		p(
+			`${context.realized?.gainStages?.length ? `The gain stage${context.realized.gainStages.length > 1 ? 's' : ''} after the chain make${context.realized.gainStages.length > 1 ? '' : 's'} up the ${dbText(sd.actual.gain)} dB. ` : ''}A real op-amp moves this stage more than most. The follower lags by about f/GBW, and inside Z_in that lag works as a capacitance 1/(2π GBW R1) across the tank: f0 falls by about 1/(2 ω_T R1 C), ω_T = 2π GBW, and the small R1 that lowers the loss moves it the most. So the search weighs both: of the parts it tries, it keeps those whose worse miss, from the parts or on a TL082, is the smallest. The comparison table measures the result on the TL082.`
+		)
+	);
+	return blocks;
+}
+
+/** RLC with Antoniou's generalized impedance converter for L (rlcGic). */
+function gicBlocks(sd, wn, q, gain) {
+	const c = sd.components;
+	const st = sd.steps;
+	const divided = Number.isFinite(c.Rb);
+	const blocks = [
+		...rlcPrincipleBlocks(sd, wn, q),
+		p(
+			"Antoniou's generalized impedance converter, the GIC, makes an exact grounded inductor from two op-amps. A chain runs from P to ground: R1, R2, R3, Cg, R4. Op-amp 1 has its + input on P, its - input between R2 and R3, and its output V1 between R3 and Cg. Op-amp 2 has its + input between Cg and R4, its - input on the same node as op-amp 1's, and its output V2 between R1 and R2."
+		),
+		p('With ideal op-amps both inputs of each op-amp sit at the same voltage, so every input node is at V_P. The currents then follow one another up the chain, from R4 to R1, since no current enters an op-amp input:'),
+		eq(
+			'I_{R_4} = \\dfrac{V_P}{R_4} \\ \\Rightarrow\\ V_1 = V_P\\left(1 + \\dfrac{1}{sC_gR_4}\\right) \\ \\Rightarrow\\ V_2 = V_P\\left(1 - \\dfrac{R_2}{sC_gR_3R_4}\\right) \\ \\Rightarrow\\ I_{in} = \\dfrac{V_P - V_2}{R_1} = \\dfrac{R_2\\,V_P}{sC_gR_1R_3R_4}'
+		),
+		eq('Z_{in} = \\dfrac{V_P}{I_{in}} = s\\,\\dfrac{C_gR_1R_3R_4}{R_2} = sL, \\qquad L = \\dfrac{C_gR_1R_3R_4}{R_2}'),
+		p(
+			'No approximation and no loss: with ideal op-amps it is an inductor, grounded at one end, which is all the RLC needs. With Cg = C and all four resistors equal to X, L is X/ω0 exactly. As built, R1 = R3 at a stocked value near X, and R4/R2 is the stocked ratio closest to the one L asks for:'
+		),
+		eq(
+			`${sd.manual ? '' : `C = C_g = ${tu(formatFarads(c.C))}, \\qquad `}R_1 = R_3 = ${tu(narrowOhms(sd, 'R1'))}, \\qquad \\dfrac{R_4}{R_2} = \\dfrac{L}{C_gR_1^2} = ${n4t(st.R4R2Target)} \\rightarrow \\dfrac{${tu(narrowOhms(sd, 'R4'))}}{${tu(narrowOhms(sd, 'R2'))}} = ${n4t(c.R4 / c.R2)}`
+		),
+		...(sd.manual ? [p(`C and Cg take the ${formatFarads(c.C)} entered by hand.`)] : []),
+		p('R is then solved for the exact Q against the L that the rounded parts build, so the rounding of L moves f0 only:'),
+		eq(`L = ${henryTex(sd.actual.L)}\\ \\ (\\text{asked } ${henryTex(st.LTarget)}), \\qquad R = Q\\sqrt{\\dfrac{L}{C}} = ${tu(formatOhms(st.RTarget))}`)
+	];
+	if (divided) {
+		blocks.push(...dividerBlocks('P'), eq(`\\alpha = ${n4t(gain)}: \\quad R_a = ${tu(formatOhms(st.RaTarget))} \\rightarrow ${tu(narrowOhms(sd, 'Ra'))}, \\qquad R_b = ${tu(formatOhms(st.RbTarget))} \\rightarrow ${tu(narrowOhms(sd, 'Rb'))}`));
+	} else {
+		blocks.push(p(`R is rounded to Ra = ${narrowOhms(sd, 'Ra')}.`));
+	}
+	blocks.push(
+		p('What the rounded parts give:'),
+		narrowActualEq(sd.actual, wn, q, gain),
+		p(
+			'Every part of the converter enters L as a plain power, so its sensitivities are fixed: 1/2 for each of them and the tank capacitor, 1 for R. Real op-amps move it little, since each one works at a modest gain. The cost is three op-amps with the follower.'
+		)
+	);
+	return blocks;
+}
+
+/** The equal-R, equal-C Sallen-Key band-pass (sallenKeyBp). */
+function sallenKeyBpBlocks(sd, wn, q, gain) {
+	const c = sd.components;
+	const st = sd.steps;
+	const own = st.ownGain;
+	const lim = sallenKeyBpLimit(c);
+	const blocks = [
+		p(
+			'The Sallen-Key band-pass has one op-amp wired as a non-inverting amplifier of gain K = 1 + Rf/Rg, Rg from its - input to ground and Rf from there to the output. Ra runs from the input to a node X. C1 runs from X to ground, C2 from X to the + input P, R2 from P to ground, and R3 from X back to the output. The op-amp holds V_P = V_out/K, and two current balances describe the circuit:'
+		),
+		eq('\\text{at P:}\\ \\ sC_2(V_X - V_P) = \\dfrac{V_P}{R_2}, \\qquad \\text{at X:}\\ \\ \\dfrac{V_{in} - V_X}{R_a} = sC_1V_X + \\dfrac{V_P}{R_2} + \\dfrac{V_X - V_{out}}{R_3}'),
+		p('The first gives V_X in terms of V_out. Substituting it into the second and collecting powers of s gives a band-pass, with G1 = 1/Ra (plus 1/Rb when there is one):'),
+		eq(
+			'H(s) = \\dfrac{\\frac{K}{R_aC_1}\\,s}{s^2 + \\frac{\\omega_0}{Q}\\,s + \\omega_0^2}, \\qquad \\omega_0^2 = \\dfrac{G_1 + 1/R_3}{C_1C_2R_2}, \\qquad \\dfrac{\\omega_0}{Q} = \\dfrac{G_1 + (1 - K)/R_3}{C_1} + \\dfrac{1}{C_2R_2} + \\dfrac{1}{C_1R_2}'
+		),
+		p('With every resistor equal to R and both capacitors equal to C, τ = RC, it takes a simple form:'),
+		eq('H(s) = \\dfrac{K\\tau s}{(\\tau s)^2 + \\tau(4 - K)\\,s + 2}, \\qquad \\omega_0 = \\dfrac{\\sqrt{2}}{\\tau}, \\qquad Q = \\dfrac{\\sqrt{2}}{4 - K}, \\qquad H(j\\omega_0) = \\dfrac{K}{4 - K} = 2\\sqrt{2}\\,Q - 1'),
+		p(
+			'K alone sets Q, and with equal parts K must stay under 4: at 4 the damping term vanishes and the circuit oscillates. Note the K here is the op-amp\'s gain, not the gain at f0, which is K/(4 - K). The price of the one op-amp is the sensitivity. Q moves K/(4 - K) times as fast as K, the same number as the centre gain:'
+		),
+		eq(`K = 4 - \\dfrac{\\sqrt{2}}{Q} = ${n4t(st.KIdeal)}, \\qquad S^Q_K = \\dfrac{K}{Q}\\,\\dfrac{\\partial Q}{\\partial K} = \\dfrac{K}{4 - K} = ${n2(st.sensitivityK)}`),
+		p(
+			`So 1 % on K moves Q by ${n2(st.sensitivityK)} %, and Rf and Rg act through K - 1, with a sensitivity of about ${n2((st.KIdeal - 1) / (4 - st.KIdeal))} each. The circuit's own centre gain, ${n2(own)} here (${dbText(own)} dB), is far above 1 at any useful Q.`
+		),
+		eq(`R = \\dfrac{\\sqrt{2}}{\\omega_0 C} = ${tu(formatOhms(st.R))}${sd.manual ? '' : `, \\qquad C = C_1 = C_2 = ${tu(formatFarads(c.C1))}`}`),
+		...(sd.manual ? [p(`C1 and C2 take the ${formatFarads(c.C1)} entered by hand.`)] : [])
+	];
+	if (st.divider) {
+		blocks.push(
+			p(
+				`The gain asked for, ${n4t(gain)}, is under the circuit's own, so the input resistor is split in two: Ra from the input to X, Rb from X to ground. With Ra || Rb = R, f0 and Q stay where they are, and the centre gain is scaled by R/Ra:`
+			),
+			eq(`R_a = \\dfrac{R \\cdot ${n2(own)}}{K_0} = ${tu(formatOhms(st.RaTarget))}, \\qquad R_b = \\dfrac{R}{1 - K_0/${n2(own)}} = ${tu(formatOhms(st.RbTarget))}, \\qquad K_0 = ${n4t(gain)}`)
+		);
+	}
+	blocks.push(
+		p(
+			`Rounding goes in steps, each part against the ones already rounded: R3, then the input resistors, then R2 for the exact f0, then K for the exact Q, Rf/Rg the stocked pair closest to K - 1. Q moves nearly as steeply with R3 and the input as with K, so each of those is tried at the stocked values around its target and the closest result is kept. A stage that would still miss Q by more than 25 % is refused.`
+		),
+		eq(
+			`R_3 = ${tu(narrowOhms(sd, 'R3'))}, \\quad R_a = ${tu(narrowOhms(sd, 'Ra'))}${Number.isFinite(c.Rb) ? `, \\quad R_b = ${tu(narrowOhms(sd, 'Rb'))}` : ''}, \\quad R_2 = ${tu(formatOhms(st.R2Target))} \\rightarrow ${tu(narrowOhms(sd, 'R2'))}, \\quad K = ${n4t(st.KTarget)} \\rightarrow 1 + \\dfrac{${tu(narrowOhms(sd, 'Rf'))}}{${tu(narrowOhms(sd, 'Rg'))}} = ${n4t(sd.actual.K)}`
+		),
+		p('What the rounded parts give:'),
+		narrowActualEq(sd.actual, wn, q, gain),
+		p(
+			`As rounded, the parts are not quite equal, so the limit is not quite 4 either: the damping term vanishes where K reaches the value below. For this stage Rf/Rg has ${(100 * lim.margin).toFixed(1)} % of margin before the circuit oscillates, and Q follows K ${n2(lim.sensitivity)} times over:`
+		),
+		eq(`K_{lim} = 1 + R_3G_1 + \\dfrac{R_3}{R_2}\\left(1 + \\dfrac{C_1}{C_2}\\right) = ${n4t(lim.K)}, \\qquad S^Q_K = \\dfrac{K}{K_{lim} - K} = ${n2(lim.sensitivity)}`),
+		p(
+			`One op-amp and no ratio past K, but a Q that follows K ${n2(lim.sensitivity)} times over: 1 % on Rf alone moves Q by about ${n2(Math.abs(narrowStageSensitivity(sd).Rf))} %. It suits a low Q better than a narrow band.`
+		)
+	);
+	return blocks;
+}
+
+/** The state-variable (KHN) band-pass (khnBp). */
+function khnBlocks(sd, wn, q, gain) {
+	const c = sd.components;
+	const st = sd.steps;
+	return [
+		p(
+			'The state-variable circuit, KHN, builds the second-order response from two integrators and a summer: three op-amps. A1 integrates, R1 in from A3\'s output and C1 across it; its output is the band-pass, the stage output. A2 integrates again, R2 in from A1\'s output and C2 across it. A3 is the summer: its - input takes R3 from the input, R4 from A2\'s output and R7 from its own output, and its + input takes R5 from the band-pass output and R6 to ground.'
+		),
+		p(
+			'Mind the labels. A2 integrates the band-pass once more, so its output is the low-pass. A3\'s output is the high-pass. Swapped, the two outputs would make no sense at DC and far above f0.'
+		),
+		eq(
+			'V_{bp} = -\\dfrac{V_{hp}}{sR_1C_1}, \\qquad V_{lp} = -\\dfrac{V_{bp}}{sR_2C_2}, \\qquad \\dfrac{V_{in} - V_-}{R_3} + \\dfrac{V_{lp} - V_-}{R_4} + \\dfrac{V_{hp} - V_-}{R_7} = 0, \\qquad V_- = \\dfrac{V_{bp}}{1 + R_5/R_6}'
+		),
+		p('Writing V_hp and V_lp in terms of V_bp and collecting powers of s:'),
+		eq(
+			'\\dfrac{V_{bp}}{V_{in}} = \\dfrac{\\frac{R_2R_4C_2}{R_3}\\,s}{\\frac{R_1R_2R_4C_1C_2}{R_7}\\,s^2 + \\frac{R_2C_2}{1 + R_5/R_6}\\left(1 + \\frac{R_4}{R_3} + \\frac{R_4}{R_7}\\right)s + 1}'
+		),
+		eq(
+			'\\omega_0 = \\sqrt{\\dfrac{R_7}{R_1R_2R_4C_1C_2}}, \\qquad Q = \\dfrac{1 + R_5/R_6}{1 + R_4/R_3 + R_4/R_7}\\sqrt{\\dfrac{R_1R_4C_1}{R_2R_7C_2}}, \\qquad K = \\dfrac{R_4}{R_3}\\,\\dfrac{1 + R_5/R_6}{1 + R_4/R_3 + R_4/R_7}'
+		),
+		p('K is the gain at f0, and it is positive: the band-pass output does not invert. The design takes C1 = C2 = C, R1 = R2 = R and R4 = R7 = R0. Then R sets f0, R3 the gain and R5/R6 the Q, and no ratio grows past 2Q + K:'),
+		eq('\\omega_0 = \\dfrac{1}{RC}, \\qquad Q = \\dfrac{1 + R_5/R_6}{2 + R_0/R_3}, \\qquad K = \\dfrac{R_0}{R_3}\\,Q \\ \\Rightarrow\\ R_3 = \\dfrac{Q\\,R_0}{K}, \\qquad \\dfrac{R_5}{R_6} = 2Q + K - 1'),
+		p(
+			`Another way to unity gain is R5/R6 = 2 with R3 = R4 = R7: K is then 1 and Q = sqrt(R1/R2) with equal capacitors, so R1/R2 = Q^2, ${n2(q * q)}:1 here. The form above keeps R1 = R2 and puts Q in R5/R6 instead. For this stage, with R0 = ${formatOhms(st.R0)}:`
+		),
+		eq(
+			`${sd.manual ? '' : `C = ${tu(formatFarads(c.C1))}, \\qquad `}R = \\dfrac{1}{\\omega_0 C} = ${tu(formatOhms(st.R))}, \\qquad R_3 = \\dfrac{Q\\,R_0}{K} = ${tu(formatOhms((q * st.R0) / gain))}, \\qquad \\dfrac{R_5}{R_6} = 2Q + K - 1 = ${n4t(st.ratioIdeal)}`
+		),
+		...(sd.manual ? [p(`C1 and C2 take the ${formatFarads(c.C1)} entered by hand.`)] : []),
+		p(
+			'Rounding, each part against the ones before it: R1 and R2 as the stocked pair whose product comes closest to 1/(ω0 C)^2, which sets f0. Then R3/R0, R0 being R4 = R7, as the stocked pair closest to the ratio that sets the gain, Q sqrt(R2/R1)/K: only the ratio counts, and R1 and R2 unequal carry sqrt(R2/R1) into it. Then R5/R6 as the stocked pair closest to the ratio that puts Q on target:'
+		),
+		eq(
+			`R_1 = ${tu(narrowOhms(sd, 'R1'))},\\ R_2 = ${tu(narrowOhms(sd, 'R2'))}, \\quad R_3 = ${tu(formatOhms(st.R3Target))} \\rightarrow ${tu(narrowOhms(sd, 'R3'))}, \\quad \\dfrac{R_5}{R_6} = ${n4t(st.ratioTarget)} \\rightarrow \\dfrac{${tu(narrowOhms(sd, 'R5'))}}{${tu(narrowOhms(sd, 'R6'))}}, \\quad R_4 = R_7 = ${tu(narrowOhms(sd, 'R4'))}`
+		),
+		p('What the rounded parts give:'),
+		narrowActualEq(sd.actual, wn, q, gain),
+		p(
+			'Three op-amps for one stage, but every sensitivity stays at 1 or under, the three outputs come at once, and the knobs barely interact. Of the six circuits it is one of the easiest to trim on the bench.'
+		)
+	];
+}
+
+/** What the two-resistor form of the multiple feedback band-pass gives: the ceiling of the gain. */
+function mfbTwoResistorBlocks(sd, wn, q) {
+	const { C1, C2 } = sd.components;
+	const C = C1;
+	const tb = narrowTextbook(wn, q, C);
+	const equal = Math.abs(C2 / C1 - 1) < 1e-9;
+	return [
+		p(
+			"The ceiling of the gain is the two-resistor form of this circuit: no R2 to ground, R1 in and R3 across, the gain then fixed by f0, Q and the two capacitors. On this stage's own capacitors it is:"
+		),
+		eq(`|H_0|_{max} = Q^2\\left(1 + \\dfrac{C_2}{C_1}\\right) = ${n4t(q)}^2\\left(1 + \\dfrac{${tu(formatFarads(C2))}}{${tu(formatFarads(C1))}}\\right) = ${n2(q * q * (1 + C2 / C1))}`),
+		p(
+			equal
+				? 'With equal capacitors, as here, that is 2Q^2, and two equations in two unknowns give both resistors of the two-resistor form:'
+				: `With equal capacitors it would be 2Q^2, and two equations in two unknowns give both resistors of the two-resistor form. For comparison, on two capacitors of ${formatFarads(C)}:`
+		),
+		eq('\\omega_0 = \\dfrac{1}{C\\sqrt{R_1R_3}}, \\qquad Q = \\dfrac{1}{2}\\sqrt{\\dfrac{R_3}{R_1}} \\ \\Rightarrow\\ R_1 = \\dfrac{1}{2Q\\,\\omega_0 C}, \\quad R_3 = \\dfrac{2Q}{\\omega_0 C}, \\quad H_0 = -\\dfrac{R_3}{2R_1} = -2Q^2'),
+		eq(`C = ${tu(formatFarads(C))}: \\qquad R_1 = ${tu(formatOhms(tb.mfbTwoResistor.R1))}, \\quad R_3 = ${tu(formatOhms(tb.mfbTwoResistor.R3))}, \\quad H_0 = ${n2(tb.mfbTwoResistor.gain)}\\ \\ (${dbText(tb.mfbTwoResistor.gain)}\\ \\text{dB})`),
+		p(
+			'That form cannot give any other gain. The three-resistor form above brings the gain down from the ceiling with R2, which divides the input with R1. A gain past the ceiling is out of the circuit\'s reach: the stage is then built for gain 1 and the gain stage after the chain adds the rest.'
+		)
+	];
+}
+
+/** The non-inverting gain stage that makes up what the chain's own gain leaves short (gainNonInv). */
+function narrowGainStageBlocks(sd, context) {
+	const st = sd.steps;
+	const realized = context.realized;
+	const rlc = realized && (realized.circuit === 'rlcGyrator' || realized.circuit === 'rlcGic');
+	const product = Array.isArray(realized?.stageGains) && realized.stageGains.length ? realized.stageGains.reduce((acc, g) => acc * g, 1) : null;
+	const asked = context.design?.gain;
+	const all = Array.isArray(realized?.gainStages) ? realized.gainStages : [];
+	if (all.length > 1) return narrowGainStagesBlocks(sd, context, all, product);
+	return [
+		p(
+			`The stages alone cannot reach the gain asked for${product !== null ? `: their gains at f0 multiply to ${n4t(product)} (${dbText(product)} dB)` : ''}. So a non-inverting amplifier follows the last stage. R1 runs from its - input to ground and R2 from there to the output:`
+		),
+		eq(
+			`K_g = 1 + \\dfrac{R_2}{R_1}, \\qquad K_g = ${Number.isFinite(asked) && product !== null ? `\\dfrac{${n4t(asked)}}{${n4t(product)}} = ` : ''}${n4t(st.gainTarget)} \\ \\Rightarrow\\ \\dfrac{R_2}{R_1} = K_g - 1 = ${n4t(st.gainTarget - 1)}`
+		),
+		p(`R1 sits near 10 kilo-ohm and R2/R1 is the stocked ratio closest to K_g - 1. The rounding of every stage before it is included in K_g, so the whole chain lands on K:`),
+		eq(`R_1 = ${tu(narrowOhms(sd, 'R1'))}, \\quad R_2 = ${tu(narrowOhms(sd, 'R2'))} \\ \\Rightarrow\\ K_g' = 1 + \\dfrac{R_2}{R_1} = ${n4t(sd.actual.gain)}`),
+		...(rlc ? [p('Its + input draws no current, so it also buffers the RLC tank before it: that stage needs no follower of its own, and the op-amp count does not grow.')] : [])
+	];
+}
+
+/**
+ * Several gain stages (narrowBand.js, designNarrowGainStages): why the
+ * gain is split, then the first in full, a middle one as its copy, the
+ * last with the rounding it takes up.
+ */
+function narrowGainStagesBlocks(sd, context, all, product) {
+	const st = sd.steps;
+	const rlc = context.realized && (context.realized.circuit === 'rlcGyrator' || context.realized.circuit === 'rlcGic');
+	const asked = context.design?.gain;
+	const f0 = context.design?.f0;
+	const gbw = context.realGbw;
+	const total = Number.isFinite(asked) && product !== null ? asked / product : null;
+	const at = all.indexOf(sd) >= 0 ? all.indexOf(sd) : all.findIndex((g) => JSON.stringify(g.components) === JSON.stringify(sd.components));
+	const parts = eq(`R_1 = ${tu(narrowOhms(sd, 'R1'))}, \\quad R_2 = ${tu(narrowOhms(sd, 'R2'))} \\ \\Rightarrow\\ K_g' = 1 + \\dfrac{R_2}{R_1} = ${n4t(sd.actual.gain)}`);
+	if (at > 0) {
+		const made = all.slice(0, at).reduce((acc, g) => acc * g.actual.gain, 1);
+		return at === all.length - 1
+			? [p(`The last of the ${all.length} gain stages, wired like the first. It takes what the rounding of the ones before it leaves${total !== null ? `: ${n4t(total)} / ${n4t(made)} = ${n4t(st.gainTarget)}` : ''}, so the whole chain lands on K:`), parts]
+			: [p(`Gain stage ${at + 1} of ${all.length}, a copy of the first:`), parts];
+	}
+	const one = total !== null && Number.isFinite(f0) && Number.isFinite(gbw) ? ` One amplifier alone would run at g·f0 = ${n2((total * f0) / gbw)} GBW on a TL082.` : '';
+	return [
+		p(
+			`The stages alone cannot reach the gain asked for${product !== null ? `: their gains at f0 multiply to ${n4t(product)} (${dbText(product)} dB)` : ''}, which leaves ${total !== null ? n4t(total) : 'the rest'} to add. An amplifier of gain g on an op-amp of gain-bandwidth GBW closes its loop at GBW/g, and at f0 it keeps 1/sqrt(1 + (g f0/GBW)^2) of its gain. So the gain is split over ${all.length} identical non-inverting amplifiers, the fewest that keep each g·f0 within ${NARROW_GAIN_SPEED} GBW on a TL082.${one} In each, R1 runs from the - input to ground and R2 from there to the output:`
+		),
+		eq(`K_g = ${total !== null ? `\\sqrt[${all.length}]{${n4t(total)}}` : `K_{rest}^{1/${all.length}}`} = ${n4t(st.gainTarget)}, \\qquad \\dfrac{R_2}{R_1} = K_g - 1 = ${n4t(st.gainTarget - 1)}`),
+		p('R1 sits near 10 kilo-ohm and R2/R1 is the stocked ratio closest to K_g - 1:'),
+		parts,
+		...(rlc ? [p('Its + input draws no current, so it also buffers the RLC tank before it: that stage needs no follower of its own.')] : [])
+	];
+}
+
+/** Where the circuit stands against the other five, in one paragraph. */
+const NARROW_STANDING = {
+	rlcGyrator: 'Against the others: the fewest op-amps of the two RLC forms, but a lossy inductor and a strong pull from the op-amp; it suits a low f0 or a fast op-amp.',
+	rlcGic: 'Against the others: three op-amps with the follower, but an exact inductor and sensitivities of 1/2 and 1 whatever the Q; among the steadiest of the six on a real op-amp.',
+	mfbBp: 'Against the others: one op-amp and sensitivities at or under 1, but a resistor spread that grows like 4Q^2 and an op-amp that works at a noise gain of 1 + Q^2 (1 + C2/C1) at f0.',
+	towThomasBp: 'In a narrow band-pass the Tow-Thomas competes with the state-variable circuit: both take three op-amps and keep every ratio small, and here the gain is one resistor ratio and inverts.'
+};
+
+/**
+ * The chosen circuit for one stage, from its equations to its rounded parts
+ * (panel 04). stageDesign: one stage of realizeNarrow's `stages` (a
+ * resonator, or the gainNonInv gain stage). target: the design's stage it
+ * builds (design.stages[i]: wn, q, gain), or null for the gain stage.
+ * context (all optional): { design (designNarrowBand), realized
+ * (realizeNarrow's result), gbw (Hz, the op-amp the MFB stages are built
+ * for, or null) }.
+ */
+export function explainNarrowBandCircuit(stageDesign, target, context = {}) {
+	const sd = stageDesign;
+	if (!sd || !sd.components) return [];
+	const ctx = context ?? {};
+	if (sd.topology === 'gainNonInv') return narrowGainStageBlocks(sd, ctx);
+	const wn = target?.wn ?? sd.steps?.wn ?? ctx.design?.w0;
+	const q = target?.q ?? sd.steps?.q ?? ctx.design?.stageQ;
+	const gain = target?.gain ?? sd.steps?.gainTarget ?? ctx.design?.stageGain ?? 1;
+	if (!(Number.isFinite(wn) && Number.isFinite(q))) return [];
+	// a later stage built exactly like the first: say so instead of repeating the derivation
+	const first = ctx.realized?.stages?.[0];
+	if (Number.isInteger(target?.index) && target.index > 0 && first && first !== sd && first.topology === sd.topology && JSON.stringify(first.components) === JSON.stringify(sd.components)) {
+		return [
+			p(`Stage ${target.index + 1} is built exactly like stage 1, with the same parts and the same derivation${first.buffered !== sd.buffered ? ', except that the gain stage after it buffers its output instead of a follower of its own' : ''}. What its parts give:`),
+			narrowActualEq(sd.actual, wn, q, gain)
+		];
+	}
+	let blocks;
+	switch (sd.topology) {
+		case 'rlcGyrator':
+			blocks = gyratorBlocks(sd, wn, q, gain, ctx);
+			break;
+		case 'rlcGic':
+			blocks = gicBlocks(sd, wn, q, gain);
+			break;
+		case 'sallenKeyBp':
+			blocks = sallenKeyBpBlocks(sd, wn, q, gain);
+			break;
+		case 'khnBp':
+			blocks = khnBlocks(sd, wn, q, gain);
+			break;
+		case 'mfbBp':
+			blocks = [...explainMfbBp(sd, wn, q), ...mfbTwoResistorBlocks(sd, wn, q)];
+			break;
+		case 'towThomasBp':
+			blocks = explainTowThomasBp(sd, wn, q);
+			break;
+		default:
+			return [];
+	}
+	// the part Q follows most, and all of them at 1 % at once
+	const sens = narrowStageSensitivity(sd);
+	if (sens) {
+		let worst = null;
+		for (const [part, value] of Object.entries(sens)) if (worst === null || Math.abs(value) > Math.abs(worst.value)) worst = { part, value };
+		const rss = Math.sqrt(Object.values(sens).reduce((acc, s) => acc + s * s, 0));
+		blocks.push(
+			p(
+				`Sensitivity, from the exact expression of Q on these parts: Q moves ${Math.abs(worst.value).toFixed(2)} % for 1 % on ${worst.part}, the most of any part. With every part 1 % off in a random direction, Q moves about ${rss.toFixed(2)} % (root-sum-square).`
+			),
+			eq(`S^Q_{${partTexName(worst.part)}} = \\dfrac{${partTexName(worst.part)}}{Q}\\,\\dfrac{\\partial Q}{\\partial ${partTexName(worst.part)}} = ${n2(worst.value)}`)
+		);
+	}
+	const standing = NARROW_STANDING[sd.topology];
+	if (standing) blocks.push(p(standing));
+	// an oscillation on the TL082 (the page's poles of the chain), said in this circuit's words
+	if (Number.isFinite(ctx.oscillates?.freq)) {
+		blocks.push(
+			p(
+				`On a TL082, though, this chain oscillates, near ${formatHz(ctx.oscillates.freq)}. Each op-amp lags by about f/GBW times its noise gain. Around a loop that sets a sharp peak, those lags eat into the damping: in the loop of two integrators Q rises as about Q/(1 - 4Q f0/GBW) where every part runs near unity gain, and faster where one runs at a higher gain. Where the damping reaches zero, a pole pair crosses into the right half plane. A magnitude response cannot show it, since a pole pair and its mirror image give the same |H(jω)|; the poles of the netlist do. Another circuit, more stages of lower Q, or a faster op-amp keeps it stable.`
+			)
+		);
+	}
+	const n = ctx.design?.n;
+	if (Number.isFinite(n) && n > 1) blocks.push(p(`The other ${n - 1 === 1 ? 'stage is a copy' : `${n - 1} stages are copies`} of this one, unless capacitors were entered by hand for ${n - 1 === 1 ? 'it' : 'them'}.`));
+	return blocks;
 }

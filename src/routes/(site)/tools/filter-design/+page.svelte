@@ -16,7 +16,7 @@
 	import MathPanel from '$lib/components/MathPanel.svelte';
 	import OpampPicker from '$lib/components/OpampPicker.svelte';
 	import StockPicker from '$lib/components/StockPicker.svelte';
-	import { generateScript, nextSteps } from '$lib/filter/codegen';
+	import { generateScript, narrowNextSteps as narrowNextStepsOf, nextSteps } from '$lib/filter/codegen';
 	import { generateSchematic } from '$lib/filter/spice';
 	import { DEFAULT_OPAMP, OPAMP_GBW, OPAMP_MODELS } from '$lib/spice/opamps';
 	import {
@@ -28,6 +28,9 @@
 		explainMfb,
 		explainMfbBp,
 		explainMfbHp,
+		explainNarrowBandCircuit,
+		explainNarrowBandOrder,
+		explainNarrowBandStage,
 		explainOrder,
 		explainSallenKey,
 		explainSallenKeyHp,
@@ -88,10 +91,12 @@
 		minimumOrder,
 		notchOptions
 	} from '$lib/filter/stages';
-	import { branchDcGain, branchOrder, branchSign, combinerChoice, combinerDesign, magnitudePhaseAt, sweep, magnitudePhaseAtParallelSum, sweepParallelSum } from '$lib/filter/bode';
+	import { branchDcGain, branchOrder, branchSign, combinerChoice, combinerDesign, magnitudePhaseAt, sweep, magnitudePhaseAtParallelSum, sweepParallelSum, responseAt } from '$lib/filter/bode';
 	import { buildDifferenceAmpDiagram, buildSummingAmpDiagram } from '$lib/filter/circuits';
 	import { C_FLOOR, nearestResistor, pairDiagramLabel, pairLabel } from '$lib/filter/eseries';
 	import { filterPairLimitSentence, filterPairPlanSummary, planFilterPairs } from '$lib/filter/pairPlan';
+	import { compareNarrowCircuits, designNarrowBand, narrowDefaultCircuit, narrowFigures, narrowFit, narrowLabelInText, narrowLimitPairs, narrowNetlistResponse, narrowStability, narrowStageSensitivity, realizeNarrow, NARROW_CIRCUITS, NARROW_GAIN_SPEED, NARROW_LABELS, NARROW_MAX_STAGES, NARROW_REAL_GBW, NARROW_RULE, NARROW_RULE_TEXT } from '$lib/filter/narrowBand';
+	import { sallenKeyBpLimit } from '$lib/filter/sallenKeyBandPass';
 	import { componentOptions, defaultStock, isRestricted, loadStock, saveStock } from '$lib/stock';
 
 	const SUMMING_R = 10_000; // ohms, the summing amplifier's three equal resistors
@@ -153,6 +158,31 @@
 	// what selecting the transformation merged, shown until the next change
 	let mergeNote = $state('');
 	const RESPONSE_KEYS = ['butterworth', 'chebyshev', 'legendre', 'bessel', 'inverseChebyshev', 'elliptic'];
+
+	// A narrow band-pass picks out one frequency with one second-order
+	// band-pass stage, or N identical ones in series (narrowBand.js). Its
+	// spec: f0, Q or the -3 dB bandwidth B (Q = f0 / B: the one typed, the
+	// other shown), the gain K at f0 and N. Six circuits can build a stage:
+	// the table in panel 04 builds the spec on each, and the Circuit menu
+	// takes the one its rule finds best unless another one is picked.
+	let narrowF0 = $state(10000);
+	let narrowBy = $state('q'); // 'q' | 'b': which of Q and B is typed
+	let narrowQ = $state(5);
+	let narrowB = $state(2000);
+	let narrowK = $state(1);
+	let narrowN = $state(1);
+	let narrowCircuit = $state('auto'); // 'auto' | one of NARROW_CIRCUITS
+	const isNarrow = $derived(filterType === 'narrowband');
+	const posNum = (v) => typeof v === 'number' && Number.isFinite(v) && v > 0;
+	/** The overall Q, typed or from B, or NaN. */
+	const narrowQValue = $derived(narrowBy === 'q' ? Number(narrowQ) : posNum(narrowB) ? narrowF0 / narrowB : NaN);
+	const narrowValid = $derived(posNum(narrowF0) && posNum(narrowQValue) && posNum(narrowK) && Number.isInteger(narrowN) && narrowN >= 1 && narrowN <= NARROW_MAX_STAGES);
+	/** Q or B typed: the other one follows, rounded to four figures, so switching back and forth keeps the band. */
+	function selectNarrowBy(value) {
+		if (value === 'b' && posNum(narrowF0) && posNum(narrowQ)) narrowB = Number((narrowF0 / narrowQ).toPrecision(4));
+		if (value === 'q' && posNum(narrowF0) && posNum(narrowB)) narrowQ = Number((narrowF0 / narrowB).toPrecision(4));
+		narrowBy = value;
+	}
 
 	// Which values the component search is allowed to pick from: a preferred
 	// series, the lab drawer, or a list pasted in below. Restricting the
@@ -287,7 +317,8 @@
 	// Tow-Thomas biquad builds a stage with zeros (its notch form), so a
 	// filter, or a side of a band filter, with either one is Tow-Thomas:
 	// nothing is designed until its Topology menu says so too
-	const zeroResponses = $derived([...new Set(isBandType ? [responseHp, responseLp] : [response])].filter((r) => RESPONSES[r]?.zeros));
+	// a narrow band-pass has no response menu, so nothing waits on Tow-Thomas
+	const zeroResponses = $derived(isNarrow ? [] : [...new Set(isBandType ? [responseHp, responseLp] : [response])].filter((r) => RESPONSES[r]?.zeros));
 	const needsTowThomas = $derived(zeroResponses.length > 0);
 	const zerosHp = $derived(isBandType && !!RESPONSES[responseHp]?.zeros);
 	const zerosLp = $derived(isBandType && !!RESPONSES[responseLp]?.zeros);
@@ -379,7 +410,7 @@
 	const aminSideLp = $derived(filterType === 'bandstop' ? aminDb : aminDbLp);
 	const limitsOk = (amax, amin) => amax > 0 && amin > amax;
 	const valid = $derived(
-		isBandType ? edgesOk && limitsOk(amaxDbHp, aminSideHp) && limitsOk(amaxDbLp, aminSideLp) : fp > 0 && fs > 0 && edgesOk && limitsOk(amaxDb, aminDb)
+		isNarrow ? narrowValid : isBandType ? edgesOk && limitsOk(amaxDbHp, aminSideHp) && limitsOk(amaxDbLp, aminSideLp) : fp > 0 && fs > 0 && edgesOk && limitsOk(amaxDb, aminDb)
 	);
 	const sideWord = $derived(filterType === 'bandstop' ? 'branch' : 'side');
 	const sideWords = $derived(filterType === 'bandstop' ? 'branches' : 'sides');
@@ -397,7 +428,7 @@
 	const aminBandText = $derived(aminAtFsl === aminAtFsh ? `${aminAtFsl} dB` : `${aminAtFsl} dB at fsl and ${aminAtFsh} dB at fsh`);
 
 	const k = $derived(
-		valid && !isBandType
+		valid && !isBandType && !isNarrow
 			? filterType === 'highpass'
 				? transitionRatio(fs, fp)
 				: transitionRatio(fp, fs)
@@ -646,6 +677,8 @@
 	});
 
 	const design = $derived.by(() => {
+		// a narrow band-pass has its own design and realization (narrowDesign, narrowBuild below)
+		if (isNarrow) return null;
 		if (isBandType) return transformed ? designTransformed : designCascade;
 		if (!valid || topologyBlocked || orderTooHigh) return null;
 		return filterType === 'highpass'
@@ -1074,6 +1107,344 @@
 		return magnitudePhaseAt(realizedStages, filterType === 'bandstop' ? fl / 1000 : design.f0).db;
 	});
 
+	/* ------------------------------------------ the narrow band-pass, built */
+
+	const narrowDesign = $derived(
+		isNarrow && narrowValid
+			? designNarrowBand({ f0: narrowF0, q: narrowBy === 'q' ? narrowQ : null, bandwidth: narrowBy === 'b' ? narrowB : null, gain: narrowK, stages: narrowN })
+			: null
+	);
+	// the multiple feedback circuit is built for the op-amp picked under
+	// "Design the MFB stages for", as the transformed band-pass's stages are
+	const narrowGbw = $derived(isNarrow ? mfbGbwChosen : null);
+	const narrowOpts = $derived({ resistorSeries: componentOpts.resistorSeries, capacitors: componentOpts.capacitors, pairs: componentOpts.pairs, gbw: narrowGbw });
+	// "Up to N pairs": every circuit of the table is built within it, as the one shown below
+	const narrowPairLimit = $derived(componentOpts.pairs && componentOpts.pairLimit !== null ? componentOpts.pairLimit : null);
+	// every circuit built from the stock and measured, ideal and on a TL082
+	const narrowRows = $derived(narrowDesign ? compareNarrowCircuits(narrowDesign, { ...narrowOpts, realGbw: NARROW_REAL_GBW, pairLimit: narrowPairLimit }) : []);
+	const narrowAuto = $derived(narrowRows.length ? narrowDefaultCircuit(narrowRows) : null);
+	const narrowChosen = $derived(narrowCircuit === 'auto' ? narrowAuto : narrowCircuit);
+	const narrowRow = $derived(narrowRows.find((r) => r.circuit === narrowChosen) ?? null);
+
+	// manual capacitors belong to one circuit and one count of stages
+	$effect(() => {
+		void [narrowChosen, narrowN];
+		untrack(() => {
+			if (isNarrow && Object.keys(capOverrides).length) capOverrides = {};
+		});
+	});
+
+	/** The capacitors typed for stage i, in farads, for realizeNarrow: { C }, or { C1, C2 } for the multiple feedback circuit (a field left empty keeps the automatic value). */
+	function narrowCapFor(i, auto) {
+		const ov = capOverrides[i];
+		if (!ov) return null;
+		if (narrowChosen === 'mfbBp') {
+			const C1 = ov.C1 > 0 ? ov.C1 * 1e-9 : auto?.components.C1;
+			const C2 = ov.C2 > 0 ? ov.C2 * 1e-9 : auto?.components.C2;
+			return C1 > 0 && C2 > 0 ? { C1, C2 } : null;
+		}
+		return ov.C > 0 ? { C: ov.C * 1e-9 } : null;
+	}
+
+	/** Why capacitors typed for a stage cannot build it, from the designer's own answer. */
+	function narrowCapError(failure) {
+		if (narrowChosen === 'mfbBp' && failure?.why === 'opamp') return 'With this op-amp no multiple feedback circuit lands on this stage, whatever the capacitors: it is too slow at f0 to correct for.';
+		if (narrowChosen === 'mfbBp' && failure?.why === 'loop') return `These capacitors leave the op-amp a loop gain of ${failure.loopGain.toFixed(2)} at f0, under 2: too little to correct for. A smaller C2/C1 lowers the noise gain.`;
+		if (narrowChosen === 'mfbBp' && Number.isFinite(failure?.maxGain)) return `These capacitors cannot give this stage its gain: the most it reaches is Q²(1 + C2/C1) = ${failure.maxGain.toFixed(3)}, so C2/C1 must be above ${failure.neededRatio.toFixed(2)}.`;
+		if (narrowChosen === 'rlcGyrator') return "With this capacitor the gyrator's series loss alone takes the stage below its Q, or a resistor falls out of range.";
+		if (narrowChosen === 'sallenKeyBp') return 'With this capacitor no stocked pair of gain resistors brings Q close enough to its target.';
+		if (narrowChosen === 'khnBp') return 'With this capacitor no stocked pair gives the ratio R5/R6 this Q needs.';
+		return 'This capacitor cannot build the stage with resistors in range.';
+	}
+
+	// The relative errors of measured figures against the design (as narrowBand.js measures them).
+	const narrowErrorsOf = (fig, d) => ({ f0: fig.f0 / d.f0 - 1, q: fig.q === null ? null : fig.q / d.q - 1, gain: Math.abs(fig.gain) / d.gain - 1 });
+	const narrowIdealFigures = (stages, d) => narrowFigures((f) => responseAt(stages, f), d.f0);
+
+	/**
+	 * The chosen circuit as panel 04 shows it: the table's own build, or
+	 * built again with the capacitors typed (a stage they cannot build keeps
+	 * its automatic ones and says why) and the cap on pairs.
+	 */
+	const narrowBuild = $derived.by(() => {
+		if (!narrowDesign || !narrowRow) return null;
+		const auto = narrowRow.realized;
+		if (!narrowRow.ok) return { realized: auto, capErrors: {}, plan: null };
+		const typed = narrowDesign.stages.map((_, i) => i).filter((i) => narrowCapFor(i, auto.resonators[i]));
+		const capsOf = (list) => narrowDesign.stages.map((_, i) => (list.includes(i) ? narrowCapFor(i, auto.resonators[i]) : null));
+		const realize = (list, pairs = narrowOpts.pairs) => realizeNarrow(narrowDesign, narrowChosen, { ...narrowOpts, pairs, caps: capsOf(list) });
+		const capErrors = {};
+		let kept = typed;
+		if (typed.length) {
+			const all = realize(typed);
+			if (!all.ok) {
+				for (const i of typed) {
+					const alone = realize([i]);
+					if (!alone.ok) capErrors[i] = narrowCapError(alone.failure);
+				}
+				kept = typed.filter((i) => !(i in capErrors));
+				if (kept.length && !realize(kept).ok) {
+					for (const i of kept) capErrors[i] = narrowCapError(null);
+					kept = [];
+				}
+			}
+		}
+		// the table's row is already built within the limit; capacitors typed are built again within it
+		const limit = narrowPairLimit;
+		if (limit !== null) {
+			const plan = kept.length ? narrowLimitPairs((pairs) => realize(kept, pairs), limit, narrowDesign, componentOpts.resistorSeries) : narrowRow.plan;
+			return { realized: plan.realized, capErrors, plan };
+		}
+		return { realized: kept.length ? realize(kept) : auto, capErrors, plan: null };
+	});
+	const narrowStages = $derived(narrowBuild?.realized?.ok ? narrowBuild.realized.stages : []);
+	const narrowGainStages = $derived(narrowBuild?.realized?.ok ? narrowBuild.realized.gainStages : []);
+	// the figures of the built chain: from its parts (bode.js, as plotted) and on a TL082 single pole (its netlist)
+	const narrowIdealFig = $derived(narrowStages.length ? narrowIdealFigures(narrowStages, narrowDesign) : null);
+	const narrowRealFig = $derived(narrowStages.length ? narrowFigures(narrowNetlistResponse(narrowStages, { gbw: NARROW_REAL_GBW }), narrowDesign.f0) : null);
+	const narrowIdealErr = $derived(narrowIdealFig ? narrowErrorsOf(narrowIdealFig, narrowDesign) : null);
+	const narrowRealErr = $derived(narrowRealFig ? narrowErrorsOf(narrowRealFig, narrowDesign) : null);
+	// the poles of the built chain on that TL082: a pole pair past the axis oscillates, whatever |H| shows
+	const narrowRealStability = $derived(narrowStages.length ? narrowStability(narrowStages, { gbw: NARROW_REAL_GBW, f0: narrowDesign.f0 }) : null);
+	const narrowOscillates = $derived(Boolean(narrowRealStability?.oscillates));
+	// a multiple feedback stage built for its op-amp: the LTspice model takes that gain-bandwidth
+	const narrowCorrected = $derived(narrowStages.some((s) => s.topology === 'mfbBp' && Number.isFinite(s.actual.gbw)));
+	/**
+	 * The op-amp's speed, when it is what breaks the rule: on a TL082 the
+	 * built filter moves past a limit by more than its parts alone put it.
+	 */
+	const narrowOpampAlert = $derived.by(() => {
+		if (!narrowIdealFig || !narrowRealFig || !narrowRealErr) return '';
+		const d = narrowDesign;
+		if (narrowOscillates) {
+			return `Op-amp speed: on a TL082 (${formatHz(NARROW_REAL_GBW)}, single pole) this circuit oscillates, near ${formatHz(narrowRealStability.freq)}. The op-amps' lag adds to the loop of its integrators and undoes its damping: a pole pair crosses into the right half plane. A response on paper still shows a peak, which hides it. A faster op-amp, a lower f0·Q, more stages of lower Q, or another circuit in the table keeps it stable.`;
+		}
+		if (narrowWithin(narrowRealErr)) return '';
+		const f0Shift = narrowRealFig.f0 / narrowIdealFig.f0 - 1;
+		const qShift = narrowRealFig.q && narrowIdealFig.q ? narrowRealFig.q / narrowIdealFig.q - 1 : null;
+		const gainShift = Math.abs(narrowRealFig.gain) / Math.abs(narrowIdealFig.gain) - 1;
+		const broken = [
+			Math.abs(f0Shift) > NARROW_RULE.f0Share / d.q ? `f0 by ${narrowPct(f0Shift, 2)}, past a tenth of the bandwidth (${narrowPct(NARROW_RULE.f0Share / d.q, 2).replace('+', '')})` : null,
+			qShift !== null && Math.abs(qShift) > NARROW_RULE.qTolerance ? `Q by ${narrowPct(qShift)}` : null,
+			Math.abs(gainShift) > NARROW_RULE.gainTolerance ? `the gain by ${narrowPct(gainShift)}` : null
+		].filter(Boolean);
+		if (!broken.length) return '';
+		// a gain stage past the op-amp's reach at f0: g f0 against GBW
+		const slow = narrowGainStages.filter((s) => s.actual.gain * d.f0 > NARROW_GAIN_SPEED * NARROW_REAL_GBW);
+		const loss = narrowGainStages.reduce((acc, s) => acc * Math.hypot(1, (s.actual.gain * d.f0) / NARROW_REAL_GBW), 1);
+		const many = narrowGainStages.length > 1;
+		const gainWhy = slow.length
+			? ` The gain stage${many ? 's take' : ' takes'} part of it: an amplifier of gain g closes its loop at GBW/g, ${formatHz(NARROW_REAL_GBW / slow[0].actual.gain)} for g = ${slow[0].actual.gain.toFixed(2)}, and keeps 1/√(1 + (g·f0/GBW)²) of its gain at f0: ${narrowPct(1 / loss - 1)} in all here, ${many ? `with the gain already split over ${narrowGainStages.length} amplifiers` : 'and more amplifiers would lose more'}. A lower K or a faster op-amp keeps it.`
+			: '';
+		const why =
+			narrowChosen === 'rlcGyrator'
+				? " The gyrator's inductor leans on its follower, and the large R2 that keeps its loss low makes it the more sensitive to the op-amp's lag at f0."
+				: narrowChosen === 'mfbBp' && narrowGbw === null
+					? ' Designing the MFB stages for the TL082 (panel 01) corrects it.'
+					: '';
+		return `Op-amp speed: on a TL082 (${formatHz(NARROW_REAL_GBW)}, single pole) the built filter moves ${broken.join(', ')} from what its parts give with an ideal op-amp.${why}${gainWhy} A faster op-amp, a lower f0·Q or another circuit in the table above keeps it closer; the LTspice download runs the real part.`;
+	});
+	// the closing steps of a narrow band-pass: swept around f0, the op-amp's lag and stability first
+	const narrowNextSteps = $derived(narrowNextStepsOf(narrowCorrected ? narrowGbw : null));
+	const narrowShortfall = $derived(narrowStages.flatMap((s, i) => (s.stockShortfall ? [i + 1] : [])));
+
+	const narrowBodePoints = $derived.by(() => {
+		if (!narrowStages.length) return [];
+		const { f0, f1, f2, q } = narrowDesign;
+		// f0/span to f0·span: the narrower the band, the closer the view, 3 to 10 times either side
+		const span = Math.min(10, Math.max(3, 20 / q));
+		const freqs = [];
+		for (let i = 0; i < 240; i++) freqs.push((f0 / span) * (span * span) ** (i / 239));
+		// the peak drawn point by point, whatever its width
+		const lo = Math.min(f1, narrowIdealFig?.f1 ?? f1) / 1.15;
+		const hi = Math.max(f2, narrowIdealFig?.f2 ?? f2) * 1.15;
+		for (let i = 0; i < 160; i++) freqs.push(lo * (hi / lo) ** (i / 159));
+		return freqs.sort((a, b) => a - b).map((freq) => ({ freq, ...magnitudePhaseAt(narrowStages, freq) }));
+	});
+	// the same sweep on a TL082 single pole, from the netlist; none when it oscillates (no response settles)
+	const narrowRealPoints = $derived.by(() => {
+		if (!narrowBodePoints.length || narrowOscillates) return null;
+		const H = narrowNetlistResponse(narrowStages, { gbw: NARROW_REAL_GBW });
+		return narrowBodePoints.map(({ freq }) => {
+			const h = H(freq);
+			return { freq, db: 20 * Math.log10(Math.hypot(h.re, h.im)) };
+		});
+	});
+
+	/** A fraction as a signed percent, +0.16%, and 0.0% for what rounds to nothing (no -0.0). */
+	function narrowPct(x, digits = 1, unit = '%') {
+		if (!Number.isFinite(x)) return '-';
+		const v = Number((100 * x).toFixed(digits));
+		return `${v > 0 ? '+' : ''}${v === 0 ? (0).toFixed(digits) : v.toFixed(digits)}${unit}`;
+	}
+	/** f0, Q and K errors in one cell, in percent: +0.16 / +0.4 / 0.0. */
+	const narrowTriple = (e) => (e ? `${narrowPct(e.f0, 2, '')} / ${e.q === null ? '-' : narrowPct(e.q, 1, '')} / ${narrowPct(e.gain, 1, '')}` : '-');
+	/** Whether figures stay within the rule's limits. */
+	const narrowWithin = (e) => !!e && narrowFit(e, narrowDesign) <= 1;
+	/** Decibels to two decimals, 0.00 for what rounds to nothing (no -0.00). */
+	const narrowDb = (x) => (Math.abs(x) < 0.005 ? '0.00' : x.toFixed(2));
+	/** A circuit's name inside a sentence: the multiple feedback band-pass, the RLC, gyrator inductor. */
+	const narrowName = narrowLabelInText;
+	/** Names as a sentence lists them: Ra, Rb and R2. */
+	const listText = (names) => (names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names.join(''));
+	const ratioText = (x) => (x >= 1e4 ? Math.round(x).toLocaleString('en-US') : x >= 10 ? x.toFixed(0) : x.toFixed(1));
+
+	const NARROW_STAGE_WORD = {
+		rlcGyrator: 'RLC, its inductor a gyrator',
+		rlcGic: "RLC, its inductor Antoniou's GIC",
+		sallenKeyBp: 'Sallen-Key band-pass',
+		mfbBp: 'multiple feedback band-pass',
+		khnBp: 'state variable (KHN), band-pass output',
+		towThomasBp: 'Tow-Thomas biquad, band-pass output',
+		gainNonInv: 'non-inverting gain stage'
+	};
+	// the circuits whose capacitor field sets both capacitors (the tank and the inductor's, or C1 = C2)
+	const NARROW_ONE_CAP = ['rlcGyrator', 'rlcGic', 'sallenKeyBp', 'khnBp', 'towThomasBp'];
+
+	/**
+	 * The flags under one resonator stage: its Q against what one stage
+	 * holds well, its spread, tiny capacitors, its Q sensitivity, a fragile
+	 * op-amp correction. The stages share one Q, so that flag is stage 1's
+	 * alone, and a later stage built like stage 1 repeats none of them.
+	 */
+	function narrowStageAlerts(stageDesign, target, i) {
+		const out = [];
+		const q = target.q;
+		const width = 100 / q;
+		const first = narrowStages[0];
+		if (i > 0 && first && JSON.stringify(first.components) === JSON.stringify(stageDesign.components)) return out;
+		if (q > 10 && i === 0) {
+			out.push({
+				level: q > 20 ? 'bad' : 'warn',
+				text: `Q = ${q.toFixed(1)} for this stage, above the 5 to 10 that one stage holds well. Its peak is f0/Q wide, ${width.toFixed(1)} % of f0, and a 1 % part moves f0 by about 0.5 %, ${(50 / width).toFixed(0)} % of that width${q > 20 ? ': the built stage can miss its own band, so plan on trimming one part' : ''}. ${narrowN < NARROW_MAX_STAGES ? 'More identical stages (N) give each a lower Q for the same overall Q.' : 'A wider band lowers it.'}`
+			});
+		}
+		const rs = Object.entries(stageDesign.components).filter(([name, v]) => /^R/.test(name) && v > 0).map(([, v]) => v);
+		const spread = rs.length > 1 ? Math.max(...rs) / Math.min(...rs) : 1;
+		if (spread > R_SPREAD) {
+			out.push({
+				level: 'warn',
+				text: `The resistors of this stage span ${ratioText(spread)}:1, past about ${R_SPREAD}:1: the largest picks up stray capacitance and leakage, the smallest loads its op-amp.${stageDesign.topology === 'rlcGyrator' ? ' The gyrator needs it: its series loss R1 must stay small against the R2 = L/(R1 C) that makes the inductor.' : ''}`
+			});
+		}
+		const caps = Object.entries(stageDesign.components).filter(([name, v]) => /^C/.test(name) && Number.isFinite(v) && v > 0);
+		const tiny = caps.filter(([, v]) => v < C_TINY);
+		if (tiny.length) {
+			out.push({
+				level: 'warn',
+				text: `${tiny.map(([name, v]) => `${name} = ${formatFarads(v)}`).join(', ')}: a few picofarads of stray capacitance from a breadboard row or the op-amp's input pins add to ${tiny.length > 1 ? 'these values' : 'this value'}, so the built stage will not match. Above about 47 pF it holds: pick a larger value in the field below and the resistors are recalculated.`
+			});
+		}
+		const sens = narrowStageSensitivity(stageDesign) ?? {};
+		const worst = Object.entries(sens).reduce((w, [part, value]) => (w === null || Math.abs(value) > Math.abs(w.value) ? { part, value } : w), null);
+		if (worst && Math.abs(worst.value) > NARROW_RULE.sensitivityMax) {
+			// K_a = 1 + Rf/Rg: Q's sensitivity to K_a, K_a/(K_lim - K_a), K_lim the gain these parts oscillate at
+			const lim = stageDesign.topology === 'sallenKeyBp' ? sallenKeyBpLimit(stageDesign.components) : null;
+			const ka = stageDesign.actual.K;
+			out.push({
+				level: 'warn',
+				text: `Q moves ${Math.abs(worst.value).toFixed(1)} % for 1 % off on ${worst.part}${lim ? `, and ${lim.sensitivity.toFixed(1)} % for 1 % on the circuit's own gain K_a = ${ka.toFixed(3)}, which is K_a/(K_lim - K_a). With these parts the stage oscillates at K_lim = ${lim.K.toFixed(3)}, not the 4 of equal parts: Rf/Rg ${lim.margin * 100 < 0.05 ? 'is already past it' : `has only ${(100 * lim.margin).toFixed(1)} % of margin before it`}` : ''}. Parts of 1 % tolerance can move Q by several percent: a circuit with lower sensitivities in the table above holds it better.`
+			});
+		}
+		if (stageDesign.topology === 'mfbBp' && Number.isFinite(stageDesign.actual.gbw) && stageDesign.steps.loopGain < LOOP_FRAGILE) {
+			const slower = mfbBandPassEffective(stageDesign.components, 0.9 * stageDesign.actual.gbw);
+			out.push({
+				level: 'warn',
+				text: `The op-amp is left a loop gain of only ${stageDesign.steps.loopGain.toFixed(2)} at this stage's f0 (GBW / (noise gain × f0), noise gain ${stageDesign.steps.noiseGain.toFixed(1)}). The correction holds for exactly ${formatHz(stageDesign.actual.gbw)}: a part with 10 % less gain-bandwidth moves f0 by ${formatPercent(relativeErrorPercent(slower.wn, stageDesign.actual.wn))} and Q by ${formatPercent(relativeErrorPercent(slower.q, stageDesign.actual.q))}. A faster op-amp or a lower Q leaves more margin.`
+			});
+		}
+		return out;
+	}
+
+	// panel 02 and 03 of a narrow band-pass, its numbers in place
+	const sig = (x, digits = 4) => String(Number(x.toPrecision(digits)));
+	const narrowWidthTex = $derived(
+		!narrowDesign
+			? ''
+			: narrowDesign.by === 'q'
+				? `B = \\dfrac{f_0}{Q} = \\dfrac{${sig(narrowDesign.f0, 6)}}{${sig(narrowDesign.q, 6)}} = ${sig(narrowDesign.B, 5)}\\ \\text{Hz}`
+				: `Q = \\dfrac{f_0}{B} = \\dfrac{${sig(narrowDesign.f0, 6)}}{${sig(narrowDesign.B, 6)}} = ${sig(narrowDesign.q, 5)}`
+	);
+	// each a short line, so that a phone shows it whole
+	const narrowEdgesTex = $derived(
+		!narrowDesign
+			? []
+			: [
+					`f_{1,2} = f_0\\left(\\sqrt{1 + \\dfrac{1}{4Q^2}} \\mp \\dfrac{1}{2Q}\\right), \\qquad f_2 - f_1 = B, \\quad f_1 f_2 = f_0^2`,
+					`f_1 = ${sig(narrowDesign.f1, 5)}\\ \\text{Hz}, \\qquad f_2 = ${sig(narrowDesign.f2, 5)}\\ \\text{Hz}`
+				]
+	);
+	const narrowShrinkTex = $derived(
+		!narrowDesign
+			? []
+			: [
+					`B = B_s\\sqrt{2^{1/N} - 1} \\;\\Rightarrow\\; Q_s = Q\\sqrt{2^{1/N} - 1}`,
+					`Q_s = ${sig(narrowDesign.q)} \\cdot \\sqrt{2^{1/${narrowDesign.n}} - 1} = ${sig(narrowDesign.q)} \\cdot ${narrowDesign.shrink.toFixed(5)} = ${sig(narrowDesign.stageQ, 5)}`,
+					`K_s = K^{1/N} = ${sig(narrowDesign.gain)}^{1/${narrowDesign.n}} = ${sig(narrowDesign.stageGain, 5)}\\ \\ (${(20 * Math.log10(narrowDesign.stageGain)).toFixed(2)}\\ \\text{dB})`
+				]
+	);
+	const narrowHsTex = $derived.by(() => {
+		if (!narrowDesign) return [];
+		const d = narrowDesign;
+		const a = d.w0 / d.stageQ;
+		const sci = (x) => {
+			const e = Math.floor(Math.log10(x));
+			return e >= 5 ? `${(x / 10 ** e).toFixed(4)} \\times 10^{${e}}` : sig(x, 5);
+		};
+		const num = d.stageGain === 1 ? sci(a) : sci(d.stageGain * a);
+		return [`\\omega_0 = 2\\pi f_0 = ${sig(d.w0, 6)}\\ \\text{rad/s}`, `H_s(s) = \\dfrac{${num}\\, s}{s^2 + ${sci(a)}\\, s + ${sci(d.w0 * d.w0)}}`];
+	});
+	const formatHenry = (l) => formatOhms(l).replace('Ω', 'H');
+
+	/** The gain stages after a chain, in a few words: ', and a gain stage', ', and 2 gain stages'. */
+	const narrowGainWords = (n) => (n === 0 ? '' : n === 1 ? ', and a gain stage' : `, and ${n} gain stages`);
+	/** Whether a row's multiple feedback stages are built for the TL082 itself: its shift is then zero by design. */
+	const narrowCorrectedRow = (row) => row.circuit === 'mfbBp' && row.realized.stages.some((s) => s.topology === 'mfbBp' && s.actual.gbw === NARROW_REAL_GBW);
+	/** The f0, Q and gain a real op-amp moves a circuit by, as errors: the gain from its dB. */
+	const narrowShiftErrors = (shift) => (shift ? { f0: shift.f0, q: shift.q, gain: 10 ** (shift.gainDb / 20) - 1 } : null);
+	/** The rule's column of the table: the default, qualifies, or what keeps it out. */
+	function narrowRuleText(row) {
+		if (!row.ok) return `cannot be built: ${row.why}`;
+		const isDefault = row.circuit === narrowAuto;
+		if (row.qualifies) return isDefault ? 'qualifies: the default' : 'qualifies';
+		return `${isDefault ? 'the default, as the closest; ' : ''}${row.reasons.join('; ')}`;
+	}
+	/** Why the chosen circuit needs the gain stage after it, in a few words. */
+	function narrowGainWhy(circuit, first) {
+		const own = first?.steps?.ownGain;
+		if (circuit === 'rlcGic') return 'a passive RLC passes at most 1 at f0';
+		if (circuit === 'rlcGyrator') return `its tank passes at most ${Number.isFinite(own) ? own.toFixed(3) : 'under 1'} at f0, the gyrator's series loss taking the rest`;
+		if (circuit === 'sallenKeyBp') return `its own gain at f0 is 2√2·Q - 1 = ${Number.isFinite(own) ? own.toFixed(3) : '?'}`;
+		if (circuit === 'mfbBp') return 'its gain at f0 cannot pass Q²(1 + C2/C1), so it is built at gain 1';
+		return 'its own gain is under K';
+	}
+	/** The math of one stage: the explanation's blocks, or for the gain stage, when it has none, its one equation. */
+	function narrowExplain(stageDesign, i) {
+		const target = stageDesign.topology === 'gainNonInv' ? null : narrowDesign.stages[i];
+		const blocks = explainNarrowBandCircuit(stageDesign, target, narrowContext(i)) ?? [];
+		if (blocks.length || stageDesign.topology !== 'gainNonInv') return blocks;
+		const { R1, R2 } = stageDesign.components;
+		return [
+			{ type: 'p', text: 'A non-inverting amplifier: R1 from the - input to ground, R2 from there to the output. Its gain is set by the ratio alone, so R1 is kept near 10 kΩ and R2 is the stocked value closest to (K - 1)·R1.' },
+			{ type: 'tex', tex: `K = 1 + \\dfrac{R_2}{R_1} = 1 + \\dfrac{${sig(R2, 4)}}{${sig(R1, 4)}} = ${stageDesign.actual.gain.toFixed(4)}, \\qquad \\text{target } ${stageDesign.steps.gainTarget.toFixed(4)}` }
+		];
+	}
+
+	/** What the explanation of a narrow stage is told besides the stage and its target. */
+	const narrowContext = (i) => ({
+		design: narrowDesign,
+		realized: narrowBuild?.realized ?? null,
+		index: i,
+		circuit: narrowChosen,
+		stages: narrowStages,
+		gainStages: narrowGainStages,
+		oscillates: narrowOscillates ? narrowRealStability : null,
+		gbw: narrowGbw,
+		realGbw: NARROW_REAL_GBW,
+		resistorSeries: componentOpts.resistorSeries,
+		pairs: componentOpts.pairs
+	});
+
 	function sensitivityFor(stageDesign) {
 		if (stageDesign.topology === 'mfb') return mfbSensitivity(stageDesign.components);
 		if (stageDesign.topology === 'mfbBp') return mfbBpSensitivity(stageDesign.components);
@@ -1325,6 +1696,60 @@
 		saveFile(schematic, 'filter-design.asc', 'text/plain');
 	}
 
+	/** The capacitors typed, stage by stage, in farads. */
+	const capOverridesInFarads = () =>
+		Object.fromEntries(Object.entries(capOverrides).map(([i, caps]) => [i, Object.fromEntries(Object.entries(caps).map(([field, nF]) => [field, nF * 1e-9]))]));
+
+	// the narrow band-pass as the page shows it: the script rebuilds the same circuit
+	function downloadNarrowScript() {
+		if (!narrowDesign) return;
+		const code = generateScript({
+			filterType: 'narrowband',
+			f0: narrowF0,
+			narrowBy,
+			q: narrowBy === 'q' ? narrowQ : null,
+			bandwidth: narrowBy === 'b' ? narrowB : null,
+			gain: narrowK,
+			stages: narrowN,
+			// the circuit shown, and whether the menu left it to the rule
+			circuit: narrowChosen,
+			circuitMenu: narrowCircuit,
+			opampGbw: narrowGbw,
+			capOverrides: capOverridesInFarads(),
+			resistorStock: componentOpts.resistorSeries,
+			resistorPairs: componentOpts.pairs,
+			...(componentOpts.pairs && componentOpts.pairLimit !== null ? { resistorPairLimit: componentOpts.pairLimit } : {}),
+			capacitorStock: componentOpts.capacitors
+		});
+		saveFile(code, 'filter-design.js', 'text/javascript');
+	}
+
+	function downloadNarrowSchematic() {
+		if (!narrowStages.length) return;
+		const d = narrowDesign;
+		const schematic = generateSchematic({
+			opamp: spiceOpamp,
+			// a multiple feedback stage built for an op-amp: the single-pole model takes its gain-bandwidth
+			...(narrowCorrected ? { correctedGbw: narrowGbw } : {}),
+			realizedStages: narrowStages,
+			filterType: 'narrowband',
+			circuit: narrowChosen,
+			f0: d.f0,
+			B: d.B,
+			q: d.q,
+			gain: d.gain,
+			n: d.n,
+			f1: d.f1,
+			f2: d.f2,
+			// the -3 dB edges, measured and swept around by a sheet that reads fp and fs
+			fp: d.f1,
+			fs: d.f2,
+			resistorStock: componentOpts.resistorSeries,
+			pairs: componentOpts.pairs
+		});
+		saveFile(schematic, 'filter-design.asc', 'text/plain');
+	}
+
 	function saveFile(text, filename, mime) {
 		const blob = new Blob([text], { type: mime });
 		const url = URL.createObjectURL(blob);
@@ -1342,7 +1767,7 @@
 	<title>Active Filter Design · rbt56</title>
 	<meta
 		name="description"
-		content="Design a low-pass, high-pass, band-pass or band-stop active filter: order, transfer function, component values and a Bode plot."
+		content="Design a low-pass, high-pass, band-pass, band-stop or narrow band-pass active filter: order, transfer function, component values and a Bode plot."
 	/>
 </svelte:head>
 
@@ -1350,9 +1775,9 @@
 	<p class="eyebrow">Tool 02</p>
 	<h1>Active Filter Design</h1>
 	<p class="lead">
-		Low-pass, high-pass, band-pass and band-stop. Enter a passband/stopband spec, pick a response
-		and a topology, and get the order, the transfer function, real component values and a
-		simulated Bode plot.
+		Low-pass, high-pass, band-pass, band-stop and narrow band-pass. Enter a passband/stopband spec,
+		pick a response and a topology, and get the order, the transfer function, real component values
+		and a simulated Bode plot.
 	</p>
 
 	<section class="panel">
@@ -1362,6 +1787,8 @@
 			<span class="hint">
 				{#if !valid}
 					fix the values below
+				{:else if isNarrow && narrowDesign}
+					f0 = {formatHz(narrowDesign.f0)}, Q = {Number(narrowDesign.q.toPrecision(4))}, B = {formatHz(narrowDesign.B)}, K = {Number(narrowDesign.gain.toPrecision(4))}
 				{:else if blocked}
 					select Tow-Thomas or Boctor in Topology
 				{:else if transformed && bandEdges}
@@ -1376,7 +1803,7 @@
 			</span>
 		</div>
 
-		<div class="grid" class:fill={isBandType}>
+		<div class="grid" class:fill={isBandType || isNarrow}>
 			<div class="field">
 				<label for="filterType">Filter type</label>
 				<select id="filterType" bind:value={filterType}>
@@ -1384,8 +1811,66 @@
 					<option value="highpass">High-pass</option>
 					<option value="bandpass">Band-pass</option>
 					<option value="bandstop">Band-stop</option>
+					<option value="narrowband">Narrow band-pass</option>
 				</select>
 			</div>
+			{#if isNarrow}
+				<!-- one frequency: f0, Q or B (the other one follows), the gain at f0, the identical stages, the circuit -->
+				<div class="field wide">
+					<label for="narrowCircuit">Circuit</label>
+					<select id="narrowCircuit" bind:value={narrowCircuit}>
+						<option value="auto">Auto{narrowAuto ? `: ${NARROW_LABELS[narrowAuto]}` : ', by the rule in panel 04'}</option>
+						{#each NARROW_CIRCUITS as c (c)}<option value={c}>{NARROW_LABELS[c]}</option>{/each}
+					</select>
+				</div>
+				<div class="field">
+					<label for="narrowF0">f0 - centre frequency (Hz)</label>
+					<input id="narrowF0" type="number" min="1" step="100" bind:value={narrowF0} />
+				</div>
+				<div class="field">
+					<label for="narrowBy">Width set by</label>
+					<select id="narrowBy" bind:value={() => narrowBy, selectNarrowBy}>
+						<option value="q">Q, the quality factor</option>
+						<option value="b">B, the -3 dB bandwidth</option>
+					</select>
+				</div>
+				{#if narrowBy === 'q'}
+					<div class="field">
+						<label for="narrowQ">Q = f0 / B{posNum(narrowQValue) && posNum(narrowF0) ? `, so B = ${formatHz(narrowF0 / narrowQValue)}` : ''}</label>
+						<input id="narrowQ" type="number" min="0.1" step="0.5" bind:value={narrowQ} />
+					</div>
+				{:else}
+					<div class="field">
+						<label for="narrowB">B - bandwidth (Hz){posNum(narrowQValue) ? `, so Q = ${Number(narrowQValue.toPrecision(4))}` : ''}</label>
+						<input id="narrowB" type="number" min="1" step="100" bind:value={narrowB} />
+					</div>
+				{/if}
+				<div class="field">
+					<label for="narrowK">K - gain at f0 (V/V){posNum(narrowK) ? `, ${(20 * Math.log10(narrowK)).toFixed(2)} dB` : ''}</label>
+					<input id="narrowK" type="number" min="0.01" step="0.1" bind:value={narrowK} />
+				</div>
+				<div class="field">
+					<label for="narrowN">N - identical stages</label>
+					<select id="narrowN" bind:value={narrowN}>
+						{#each Array.from({ length: NARROW_MAX_STAGES }, (_, i) => i + 1) as n (n)}<option value={n}>{n}</option>{/each}
+					</select>
+				</div>
+				<div class="field wide">
+					<label for="mfbOpamp">Design the MFB stages for</label>
+					<select id="mfbOpamp" bind:value={mfbOpamp}>
+						<option value="TL082">TL082 / TL072 ({OPAMP_GBW.TL082 / 1e6} MHz, on its model)</option>
+						<option value="LM741">LM741 ({OPAMP_GBW.LM741 / 1e6} MHz)</option>
+						<option value="ideal">Ideal op-amp (no correction)</option>
+						<option value="other">Other gain-bandwidth</option>
+					</select>
+				</div>
+				{#if mfbOpamp === 'other'}
+					<div class="field">
+						<label for="mfbGbw">Gain-bandwidth (MHz)</label>
+						<input id="mfbGbw" type="number" min="0.01" step="0.1" bind:value={mfbGbwMHz} />
+					</div>
+				{/if}
+			{:else}
 			{#if isBandType}
 				<div class="field">
 					<label for="bandMethod">Method</label>
@@ -1434,6 +1919,7 @@
 						<option value="boctor" disabled={!needsTowThomas}>Boctor notch (1 op-amp)</option>
 					</select>
 				</div>
+			{/if}
 			{/if}
 		</div>
 
@@ -1673,7 +2159,12 @@
 		{/if}
 
 		<p class="note">
-			{#if filterType === 'highpass'}
+			{#if isNarrow}
+				A narrow band-pass picks out one frequency: one second-order band-pass stage centred on f0,
+				or N identical ones in series. Q = f0 / B sets how narrow its -3 dB band is, and K its gain
+				at f0 (an inverting circuit gives -K, the same size). One stage holds a Q of 5 to 10 well;
+				N stages share a higher one.
+			{:else if filterType === 'highpass'}
 				For a high-pass, fp is the passband edge above which the filter passes, and fs the
 				stopband edge below it (fp &gt; fs).
 			{:else if transformed && filterType === 'bandpass'}
@@ -1700,6 +2191,26 @@
 			{/if}
 		</p>
 
+		{#if isNarrow}
+			<p class="note">
+				{narrowGbw !== null
+					? 'The multiple feedback circuit is designed at a higher f0 and a lower Q, so that this op-amp brings it onto its target.'
+					: mfbOpamp === 'other'
+						? 'No gain-bandwidth above 0 is entered, so the multiple feedback circuit is designed for an ideal op-amp.'
+						: 'The multiple feedback circuit is designed for an ideal op-amp.'}
+				{#if mfbOpamp === 'TL082'}
+					The {formatHz(OPAMP_GBW.TL082)} comes from TI's model of the part. The datasheet gives 3 MHz typical and real parts vary, so the LTspice run and a bench test still decide.
+				{/if}
+				The other five circuits are designed for an ideal op-amp, and the comparison in panel 04 shows what a TL082 does to each.
+			</p>
+			{#if narrowDesign && narrowDesign.q < 1}
+				<p class="flag warn">
+					Q = {Number(narrowDesign.q.toPrecision(3))}: the band is wider than f0 itself, which is not narrow. The Band-pass type, a high-pass and a low-pass side with their own edges, shapes a wide band better.
+				</p>
+			{/if}
+		{/if}
+
+		{#if !isNarrow}
 		<p class="note">
 			{#if transformed}
 				{RESPONSES[responseLp].label}: {RESPONSES[responseLp].best}.
@@ -1727,6 +2238,7 @@
 					: 'uses the selected notch topology'}; an odd order adds one first-order RC stage.
 			{/if}
 		</p>
+		{/if}
 
 		{#if blocked}
 			<p class="flag bad">
@@ -1743,7 +2255,9 @@
 
 		{#if !valid}
 			<p class="flag bad">
-				{#if filterType === 'highpass'}
+				{#if isNarrow}
+					f0, {narrowBy === 'q' ? 'Q' : 'B'} and K must be numbers above 0.
+				{:else if filterType === 'highpass'}
 					fp must be greater than fs, and Amin must be greater than Amax.
 				{:else if filterType === 'bandpass' && bandMethod === 'transformed'}
 					Frequencies must satisfy fsl &lt; fl &lt; fh &lt; fsh, and both Amin must be greater than
@@ -1765,7 +2279,10 @@
 		title="Start here"
 		summary="New to filters: what this page is about, with a little maths and four figures to move"
 		minutes={5}
-		blocks={filterBasics({
+		blocks={isNarrow
+			? // a narrow band-pass gets a line of its own, then the basics told on a low-pass
+				filterBasics({ filterType: 'narrowband', design: narrowDesign, stock, pairs: componentOpts.pairs, pairLimit: componentOpts.pairLimit })
+			: filterBasics({
 			filterType,
 			// the transformation's figures: one response and Amax, order 2n,
 			// its two stage menus
@@ -1806,7 +2323,11 @@
 		widgets={{ 'two-tones': TwoTonesDemo, 'rc-on-spec': RcOnSpecDemo, 'order-on-spec': OrderOnSpecDemo, 'stages-multiply': StagesMultiplyDemo }}
 	/>
 
-	<!-- the same spec designed by hand with the table method, every number checked -->
+	<!-- the same spec designed by hand with the table method, every number checked;
+	     the table method has no narrow band-pass, which is one stage designed below -->
+	{#if isNarrow}
+		<p class="note build-note">The build-by-hand panel follows the table method of the four other types. A narrow band-pass is one stage, or N identical ones, and its math blocks below go through it by hand.</p>
+	{:else}
 	<BuildPanel
 		{filterType}
 		{fp}
@@ -1826,14 +2347,525 @@
 		stockPhrase={stockWords(stock, componentOpts.pairs)}
 		{spiceOpamp}
 	/>
+	{/if}
 
 	{#if realizationFailures.length}
 		<p class="flag bad">{failureText}</p>
 	{/if}
-	{#if usesTopology('boctor') && !realizationFailures.length}
+	{#if !isNarrow && usesTopology('boctor') && !realizationFailures.length}
 		<p class="note">Boctor uses one op-amp, six resistors and two capacitors per notch section. The high-pass form has gain above one. Resistor rounding can leave a finite notch minimum; the response plot includes it. {transformed ? `${filterType === 'bandpass' ? "Band-pass stages keep the band-pass menu's circuit, and a" : 'A'} notch Boctor cannot build (its zero on its own f0, past the high-pass form's Q limit, or no parts for it) is a Tow-Thomas notch, and so is one where Boctor's own gain would move the passband by more than 1 dB or leave its zero off target. Both are judged on the full E24 and E6 grids, so a smaller stock only rounds the parts of the stages Boctor keeps.` : 'Sections without finite zeros keep the Tow-Thomas circuit, and an odd order keeps its first-order RC section.'} <a href="https://www.analog.com/media/en/training-seminars/design-handbooks/Basic-Linear-Design/Chapter8.pdf" target="_blank" rel="noreferrer">Derivation reference: Analog Devices, figures 8.78 and 8.79.</a></p>
 	{/if}
-	{#if valid && !blocked && !realizationFailures.length}
+	{#if isNarrow}
+		{#if narrowDesign}
+			{@const d = narrowDesign}
+			<section class="panel">
+				<div class="panel-head">
+					<span class="num">02</span>
+					<h2>Stages</h2>
+					<span class="hint">{d.n === 1 ? `one second-order stage, Q = ${sig(d.stageQ)}` : `${d.n} identical stages, Q = ${sig(d.stageQ)} each`}</span>
+				</div>
+
+				<Equation tex={narrowWidthTex} />
+				{#each narrowEdgesTex as tex (tex)}<Equation {tex} />{/each}
+				{#if d.n > 1}
+					<p class="note">
+						{d.n} identical stages in series multiply their responses, so the -3 dB points of the whole
+						sit where each stage is only {(3 / d.n).toFixed(2)} dB down: the band of the cascade is
+						narrower than one stage's by a shrink factor, the square root below. Each stage therefore gets a lower Q than the
+						filter's, all of them centred on f0, and an equal share of the gain:
+					</p>
+					{#each narrowShrinkTex as tex (tex)}<Equation {tex} />{/each}
+				{:else}
+					<p class="note">One stage takes the Q and the gain of the whole filter: Q_s = Q = {sig(d.q)} and K_s = K = {sig(d.gain)}.</p>
+				{/if}
+				<p class="note">
+					{#if d.n > 1}
+						The cost: {d.n} times the op-amps and parts of one stage. In return, far from f0 the response
+						falls at {d.skirtDbPerDecade} dB per decade on each side, against -20 for one stage, and the
+						lower Q of each stage is easier to hold with real parts.
+					{:else}
+						Far from f0 one stage falls at 20 dB per decade on each side. N identical stages fall
+						N times faster, -20N dB per decade, for N times the op-amps, and each needs a lower Q.
+					{/if}
+				</p>
+				<MathPanel summary="Show where these numbers come from" blocks={explainNarrowBandOrder(d)} />
+			</section>
+
+			<section class="panel">
+				<div class="panel-head">
+					<span class="num">03</span>
+					<h2>Transfer function</h2>
+					<span class="hint">ω0 = {(d.w0 / 1000).toFixed(2)}k rad/s, Q_s = {sig(d.stageQ)}, K_s = {sig(d.stageGain)}</span>
+				</div>
+				<p class="note">
+					Each stage is the second-order band-pass: its numerator s makes it pass nothing at DC and at
+					high frequencies, and at s = jω0 the s² and ω0² terms cancel, which leaves exactly K_s.
+					{d.n > 1 ? `The ${d.n} stages in series multiply:` : 'One stage is the whole filter:'}
+				</p>
+				<Equation tex={`H_s(s) = K_s\\,\\dfrac{\\frac{\\omega_0}{Q_s}s}{s^2 + \\frac{\\omega_0}{Q_s}s + \\omega_0^2}`} />
+				<Equation tex={`H(s) = ${d.n > 1 ? `H_s(s)^{${d.n}}` : 'H_s(s)'}, \\qquad |H_s(j\\omega_0)| = K_s`} />
+				{#each narrowHsTex as tex (tex)}<Equation {tex} />{/each}
+				<div class="tableScroll">
+					<table>
+						<thead>
+							<tr>
+								<th>Stage</th>
+								<th>f0 = ω0/2π</th>
+								<th>Q</th>
+								<th>Gain at f0</th>
+								<th>B of the stage</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each d.stages as stage, i (i)}
+								<tr>
+									<td>{i + 1}</td>
+									<td>{formatHz(stage.wn / (2 * Math.PI))}</td>
+									<td>{sig(stage.q, 5)}</td>
+									<td>{stage.gain.toFixed(4)} ({narrowDb(20 * Math.log10(stage.gain))} dB)</td>
+									<td>{formatHz(d.stageB)}</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+				<p class="note">
+					The whole filter: f0 = {formatHz(d.f0)}, Q = {sig(d.q)}, B = {formatHz(d.B)} between
+					{formatHz(d.f1)} and {formatHz(d.f2)}, K = {sig(d.gain)} ({narrowDb(d.gainDb)} dB) at f0.
+				</p>
+				<MathPanel
+					summary="Show the math for every stage"
+					blocks={d.n === 1 ? explainNarrowBandStage(d, 0) : [{ type: 'p', text: d.n === 2 ? 'Stages 1 and 2, the same' : `Stages 1 to ${d.n}, all the same`, cls: 'stageHead' }, ...explainNarrowBandStage(d, 0)]}
+				/>
+			</section>
+
+			<section class="panel">
+				<div class="panel-head">
+					<span class="num">04</span>
+					<h2>Components</h2>
+					<span class="hint">
+						{narrowChosen ? NARROW_LABELS[narrowChosen] : 'no circuit'}{d.n > 1 ? `, ${d.n} stages` : ''}{narrowGainWords(narrowGainStages.length)}
+					</span>
+				</div>
+
+				<StockPicker id="stock" bind:stock bind:resistorText bind:capacitorText bind:pairs bind:pairLimit />
+
+				{#if restrictedStock}
+					<p class="note">
+						The search now rounds {stock === 'labR' ? 'every resistor to the lab resistors, the capacitors staying on the usual series,' : 'to those values only,'} so the errors below grow{componentOpts.pairs ? ', less so with two in series' : ''}.
+						Everything downstream is computed from the rounded values, so the Bode plot already shows
+						whether the result still holds.
+					</p>
+				{/if}
+
+				<h3 class="subhead">Six circuits for this spec</h3>
+				<div class="tableScroll">
+					<table class="methods narrow-table">
+						<thead>
+							<tr>
+								<th>Circuit</th>
+								<th>Op-amps</th>
+								<th>Parts</th>
+								<th>After rounding<br />f0 / Q / K, %</th>
+								<th>Shift on a TL082<br />f0 / Q / K, %</th>
+								<th>R spread</th>
+								<th>Worst S<sup>Q</sup></th>
+								<th>Rule</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each narrowRows as row (row.circuit)}
+								<tr class:chosen={row.circuit === narrowChosen}>
+									<td>{row.label}{row.ok ? narrowGainWords(row.realized.gainStages.length) : ''}</td>
+									<td>{row.ok ? row.opamps : '-'}</td>
+									<td>{row.ok ? `${row.parts.resistors} R, ${row.parts.capacitors} C` : '-'}</td>
+									<td>{row.ok ? narrowTriple(row.ideal.errors) : '-'}</td>
+									<td>
+										{#if !row.ok}-{:else if row.stability?.oscillates}oscillates near {formatHz(row.stability.freq)}{:else}{narrowTriple(narrowShiftErrors(row.shift))}{#if narrowCorrectedRow(row)}<br /><span class="err">built for it</span>{/if}{/if}
+									</td>
+									<td>{row.ok ? `${ratioText(row.spread.resistors)}:1` : '-'}</td>
+									<td>{row.ok && row.sensitivity?.worst ? `${Math.abs(row.sensitivity.worst.value).toFixed(2)} (${row.sensitivity.worst.part})` : '-'}</td>
+									<td>{narrowRuleText(row)}</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+				<p class="note">
+					Errors in percent of the target, each circuit built from {stockPhrase} with its capacitors
+					found automatically. After rounding: from the parts, ideal op-amps{narrowGbw !== null ? ' (the multiple feedback circuit with the op-amp it is designed for)' : ''}. The shift: what a
+					single-pole op-amp of the TL082's measured {formatHz(NARROW_REAL_GBW)} adds, solved from each
+					circuit's netlist, and its poles checked for an oscillation.{narrowGbw === NARROW_REAL_GBW
+						? ' The multiple feedback circuit is built for that op-amp, so its shift is zero by design; its stage below says how much loop gain the correction leaves.'
+						: ''} Worst S<sup>Q</sup>: Q moves that many percent for 1 % off on that part.
+				</p>
+				<p class="note">
+					{NARROW_RULE_TEXT}
+					{#if narrowAuto}
+						Here that is the {narrowName(narrowAuto)}{narrowRows.some((r) => r.qualifies) ? '' : ', as none qualifies'}{narrowCircuit === 'auto' ? '; the Circuit menu in panel 01 picks another one.' : `, and the Circuit menu has the ${narrowName(narrowCircuit)} selected instead.`}
+					{/if}
+				</p>
+				{#if componentOpts.pairs && componentOpts.pairLimit !== null}
+					<p class="note">
+						Every circuit of the table is built within the limit of {componentOpts.pairLimit} resistor{componentOpts.pairLimit === 1 ? '' : 's'} of two in series, as the one built below.
+						{#if narrowBuild?.plan}
+							{@const plan = narrowBuild.plan}
+							{plan.limited
+								? `Pairs where they help would make ${plan.total} resistors two in series, more than the limit.${d.n > 1 ? ' The stages are identical, so they share one set of pairs.' : ''} ${plan.kept.length ? `${listText(plan.kept)} ${plan.kept.length > 1 ? 'stay' : 'stays'} two in series and ${listText(plan.dropped)} ${plan.dropped.length > 1 ? 'are single parts' : 'is a single part'}` : 'Every resistor is a single part'}: of the sets within the limit, the one that lands closest.`
+								: plan.total
+									? `Pairs where they help make ${plan.total} resistor${plan.total === 1 ? '' : 's'} two in series, within the limit, so every one stays.`
+									: 'No resistor here needs two in series, so the limit changes nothing.'}
+						{/if}
+					</p>
+				{/if}
+
+				{#if !narrowRow}
+					<p class="flag bad">No circuit builds this spec with parts in range. Change f0, Q, K or the stock.</p>
+				{:else if !narrowRow.ok}
+					<p class="flag bad">The {narrowName(narrowRow.circuit)} cannot be built here: {narrowRow.why}. Pick another circuit in the Circuit menu, or change the spec.</p>
+				{/if}
+
+				{#if narrowShortfall.length > 0}
+					<p class="flag warn">
+						Stage{narrowShortfall.length > 1 ? 's' : ''}
+						{narrowShortfall.join(', ')}
+						cannot be built from those values at all, so {narrowShortfall.length > 1 ? 'they are' : 'it is'}
+						shown with the full E24 and E6 grids instead. Add values, or lower the Q.
+					</p>
+				{/if}
+				{#if narrowOpampAlert}
+					<p class="flag warn">{narrowOpampAlert}</p>
+				{/if}
+				{#if narrowGainStages.length}
+					{@const gs = narrowGainStages}
+					<p class="note">
+						The {narrowName(narrowChosen)} cannot reach K = {sig(d.gain)} by its own form ({narrowGainWhy(narrowChosen, narrowStages[0])}), so {gs.length === 1
+							? `a non-inverting stage after the last one adds the rest, its rounding included: 1 + R2/R1 = ${gs[0].actual.gain.toFixed(3)}.`
+							: `${gs.length} non-inverting stages after the last one add the rest, its rounding included: 1 + R2/R1 = ${gs.map((g) => g.actual.gain.toFixed(3)).join(', ')}. One amplifier of gain ${gs.reduce((acc, g) => acc * g.actual.gain, 1).toFixed(1)} would close its loop at ${formatHz(NARROW_REAL_GBW / gs.reduce((acc, g) => acc * g.actual.gain, 1))} on a TL082, too close to f0; each of these keeps g·f0 within a tenth of its gain-bandwidth.`}{narrowChosen === 'rlcGyrator' || narrowChosen === 'rlcGic'
+							? ` The + input of the first buffers the tank, so the RLC stage before it needs no follower of its own.`
+							: ''}
+					</p>
+				{/if}
+
+				{#each narrowStages as stageDesign, i (i)}
+					{@const target = stageDesign.topology === 'gainNonInv' ? null : d.stages[i]}
+					{@const sens = target ? narrowStageSensitivity(stageDesign) : null}
+					{@const mathBlocks = narrowExplain(stageDesign, i)}
+					<div class="stage-block">
+						<h3>Stage {i + 1} · {NARROW_STAGE_WORD[stageDesign.topology] ?? stageDesign.topology}</h3>
+						<div class="stage-grid">
+							<div>
+								<table>
+									<thead>
+										<tr>
+											<th>Component</th>
+											<th>Value</th>
+										</tr>
+									</thead>
+									<tbody>
+										{#each Object.entries(stageDesign.components) as [name, value] (name)}
+											<tr>
+												<td>{name}</td>
+												<td>{name.startsWith('R') || name.startsWith('r') ? pairLabel(value, componentOpts.resistorSeries, formatOhms, componentOpts.pairs && !stageDesign.stockShortfall) : formatFarads(value)}</td>
+											</tr>
+										{/each}
+									</tbody>
+								</table>
+
+								<table class="actual">
+									<tbody>
+										{#if target}
+											<tr>
+												<th>f0 actual</th>
+												<td>
+													{formatHz(stageDesign.actual.wn / (2 * Math.PI))}
+													<span class="err">({formatPercent(relativeErrorPercent(stageDesign.actual.wn, target.wn))})</span>
+												</td>
+											</tr>
+											<tr>
+												<th>Q actual</th>
+												<td>
+													{stageDesign.actual.q.toFixed(4)}
+													<span class="err">({formatPercent(relativeErrorPercent(stageDesign.actual.q, target.q))})</span>
+												</td>
+											</tr>
+											<tr>
+												<th>Gain at its f0</th>
+												<td>
+													{Math.abs(stageDesign.actual.gain).toFixed(3)}{stageDesign.actual.gain < 0 ? ', inverting' : ''}
+													<span class="err"
+														>({narrowGainStages.length
+															? `the gain stage${narrowGainStages.length > 1 ? 's add' : ' adds'} the rest`
+															: formatPercent(relativeErrorPercent(Math.abs(stageDesign.actual.gain), target.gain))})</span
+													>
+												</td>
+											</tr>
+											{#if stageDesign.topology === 'rlcGyrator'}
+												<tr>
+													<th>Inductor</th>
+													<td>
+														{formatHenry(stageDesign.components.R1 * stageDesign.components.R2 * stageDesign.components.Cg)}
+														<span class="err">(R1·R2·Cg, with R1 = {formatOhms(stageDesign.components.R1)} in series)</span>
+													</td>
+												</tr>
+											{:else if stageDesign.topology === 'rlcGic' && Number.isFinite(stageDesign.actual.L)}
+												<tr>
+													<th>Inductor</th>
+													<td>{formatHenry(stageDesign.actual.L)} <span class="err">(Cg·R1·R3·R4 / R2, exact)</span></td>
+												</tr>
+											{:else if stageDesign.topology === 'sallenKeyBp' && Number.isFinite(stageDesign.actual.K)}
+												{@const lim = sallenKeyBpLimit(stageDesign.components)}
+												<tr>
+													<th>K_a = 1 + Rf/Rg</th>
+													<td>{stageDesign.actual.K.toFixed(4)} <span class="err">(these parts oscillate at {lim.K.toFixed(3)}, {(100 * lim.margin).toFixed(1)} % more on Rf/Rg)</span></td>
+												</tr>
+											{:else if stageDesign.topology === 'mfbBp' && stageDesign.ideal}
+												<tr>
+													<th>Circuit alone</th>
+													<td>
+														{formatHz(stageDesign.ideal.wn / (2 * Math.PI))}, Q {stageDesign.ideal.q.toFixed(4)}, gain {Math.abs(stageDesign.ideal.gain).toFixed(3)}
+														<span class="err">(ideal op-amp)</span>
+													</td>
+												</tr>
+											{/if}
+										{:else}
+											<tr>
+												<th>Gain actual</th>
+												<td>
+													{stageDesign.actual.gain.toFixed(4)}
+													<span class="err">({formatPercent(relativeErrorPercent(stageDesign.actual.gain, stageDesign.steps.gainTarget))})</span>
+												</td>
+											</tr>
+										{/if}
+									</tbody>
+								</table>
+								{#if sens}
+									<p class="note">
+										1% error on any one component moves Q by roughly
+										{worstCaseQError(sens, 1).toFixed(2)}% (root-sum-square across all of them).
+									</p>
+								{/if}
+								{#if target}
+									{#each narrowStageAlerts(stageDesign, target, i) as alert, k (k)}
+										<p class="flag {alert.level}">{alert.text}</p>
+									{/each}
+								{/if}
+								{#if stageDesign.topology === 'mfbBp' && Number.isFinite(stageDesign.actual.gbw)}
+									<p class="note">
+										Built for {mfbOpampLabel}: f0, Q and gain above are with that op-amp. Another op-amp needs another correction.
+									</p>
+								{/if}
+							</div>
+							<!-- a pair is drawn as its two parts, R1 56k + 8.2k; a stage that fell back to E24 has none -->
+							<CircuitDiagram
+								design={stageDesign}
+								ohms={(v) => pairDiagramLabel(v, componentOpts.resistorSeries, formatOhms, componentOpts.pairs && !stageDesign.stockShortfall)}
+							/>
+							{#if target}
+								<div class="math-full cap-picker">
+									<p class="note">
+										{#if NARROW_ONE_CAP.includes(stageDesign.topology)}
+											{stageDesign.topology === 'rlcGyrator' || stageDesign.topology === 'rlcGic'
+												? 'C sets the tank capacitor and the one of the inductor circuit, the same value.'
+												: 'C sets both equal capacitors.'}
+											Pick a different value if the one above is not in stock; the resistors above are recalculated to fit.
+										{:else}
+											Pick different C1 and C2 values if the ones above are not in stock; the resistors above are
+											recalculated to fit.
+										{/if}
+									</p>
+									<div class="row">
+										{#if NARROW_ONE_CAP.includes(stageDesign.topology)}
+											<div class="field">
+												<label for={`cap-C-${i}`}>C (nF)</label>
+												<input
+													id={`cap-C-${i}`}
+													type="number"
+													step="any"
+													min="0"
+													placeholder={((stageDesign.components.C ?? stageDesign.components.C1) * 1e9).toPrecision(4)}
+													value={capOverrides[i]?.C ?? ''}
+													oninput={(e) => setCapOverride(i, 'C', e.currentTarget.value)}
+												/>
+											</div>
+										{:else}
+											<div class="field">
+												<label for={`cap-c1-${i}`}>C1 (nF)</label>
+												<input
+													id={`cap-c1-${i}`}
+													type="number"
+													step="any"
+													min="0"
+													placeholder={(stageDesign.components.C1 * 1e9).toPrecision(4)}
+													value={capOverrides[i]?.C1 ?? ''}
+													oninput={(e) => setCapOverride(i, 'C1', e.currentTarget.value)}
+												/>
+											</div>
+											<div class="field">
+												<label for={`cap-c2-${i}`}>C2 (nF)</label>
+												<input
+													id={`cap-c2-${i}`}
+													type="number"
+													step="any"
+													min="0"
+													placeholder={(stageDesign.components.C2 * 1e9).toPrecision(4)}
+													value={capOverrides[i]?.C2 ?? ''}
+													oninput={(e) => setCapOverride(i, 'C2', e.currentTarget.value)}
+												/>
+											</div>
+										{/if}
+										{#if capOverrides[i]}
+											<button type="button" class="ghost small" onclick={() => clearCapOverride(i)}>Use suggested</button>
+										{/if}
+									</div>
+									{#if narrowBuild?.capErrors[i]}
+										<p class="flag bad">{narrowBuild.capErrors[i]} Showing the automatic values instead.</p>
+									{/if}
+									{#if stageDesign.outOfRange}
+										<p class="flag warn">
+											A resistor falls outside the range this circuit is designed for with these capacitors; consider
+											different values.
+										</p>
+									{/if}
+								</div>
+							{/if}
+							{#if mathBlocks.length}
+								<div class="math-full">
+									<MathPanel summary="Show the math for this stage's components" blocks={mathBlocks} />
+								</div>
+							{/if}
+						</div>
+					</div>
+				{/each}
+			</section>
+
+			{#if narrowStages.length}
+				<section class="panel">
+					<div class="panel-head">
+						<span class="num">05</span>
+						<h2>Bode plot</h2>
+						<span class="hint">
+							{#if narrowIdealFig}
+								peak {Math.abs(narrowIdealFig.gain).toFixed(3)} at {formatHz(narrowIdealFig.f0)}, B = {narrowIdealFig.B ? formatHz(narrowIdealFig.B) : '-'}
+							{/if}
+						</span>
+					</div>
+
+					<BodePlot
+						points={narrowBodePoints}
+						passbandFreqs={[d.f1, d.f2]}
+						stopbandFreqs={[d.f0]}
+						limits={[{ db: -d.gainDb }, { db: 3 - d.gainDb }]}
+						fineTicks
+						markers={[
+							{ freq: d.f1, text: 'f1' },
+							{ freq: d.f0, text: 'f0' },
+							{ freq: d.f2, text: 'f2' }
+						]}
+						extra={narrowRealPoints}
+					/>
+					<div class="legend wrap">
+						<span><i class="line blue"></i>simulated response (rounded components{narrowCorrected ? `, the MFB stages with the ${formatHz(narrowGbw)} op-amp model` : ''})</span>
+						{#if narrowRealPoints}<span><i class="line dim"></i>the same on a TL082 ({formatHz(NARROW_REAL_GBW)}, single pole)</span>{/if}
+						<span><i class="line amber"></i>f0, the -3 dB edges f1 and f2, the gain K and K - 3 dB</span>
+					</div>
+
+					{#if narrowIdealFig}
+						{@const fig = narrowIdealFig}
+						{@const atF0 = magnitudePhaseAt(narrowStages, d.f0).db}
+						<p class="flag {narrowWithin(narrowIdealErr) ? 'ok' : 'warn'}">
+							Built from these parts: the peak at {formatHz(fig.f0)} ({narrowPct(narrowIdealErr.f0, 2)}), gain
+							{Math.abs(fig.gain).toFixed(3)} there ({narrowDb(fig.gainDb)} dB, {narrowPct(narrowIdealErr.gain)}), the -3 dB edges at
+							{fig.f1 ? formatHz(fig.f1) : '-'} and {fig.f2 ? formatHz(fig.f2) : '-'}: B = {fig.B ? formatHz(fig.B) : '-'}, Q = {fig.q ? fig.q.toFixed(3) : '-'}
+							({narrowIdealErr.q === null ? '-' : narrowPct(narrowIdealErr.q)}). At f0 = {formatHz(d.f0)} itself the gain is {(10 ** (atF0 / 20)).toFixed(3)} ({narrowDb(atF0)} dB).
+							{narrowWithin(narrowIdealErr)
+								? 'Within the limits of the rule above.'
+								: `More than the rule allows: ${Object.keys(capOverrides).length ? 'the capacitors typed above and the rounding to ' + stockPhrase + ' move it' : 'the rounding to ' + stockPhrase + ' moves it'}${stock === 'E24' ? '; the E96 series narrows it' : ''}.`}
+						</p>
+					{/if}
+					{#if narrowRealFig}
+						{@const fig = narrowRealFig}
+						{#if narrowOscillates}
+							<p class="flag bad">
+								On a TL082 ({formatHz(NARROW_REAL_GBW)}, single pole) this circuit oscillates, near {formatHz(narrowRealStability.freq)}: a pole pair of the chain sits in the right half plane. Its response on paper would read a peak at {formatHz(fig.f0)} with Q = {fig.q ? fig.q.toFixed(1) : '-'}, but no such filter settles. Another circuit in the table, more stages of lower Q, or a faster op-amp keeps it stable.
+							</p>
+						{:else}
+						<p class="flag {narrowWithin(narrowRealErr) ? 'ok' : 'warn'}">
+							On a TL082 ({formatHz(NARROW_REAL_GBW)}, single pole): the peak at {formatHz(fig.f0)} ({narrowPct(narrowRealErr.f0, 2)}), gain
+							{Math.abs(fig.gain).toFixed(3)} ({narrowPct(narrowRealErr.gain)}), Q = {fig.q ? fig.q.toFixed(3) : '-'} ({narrowRealErr.q === null ? '-' : narrowPct(narrowRealErr.q)}).
+							{narrowWithin(narrowRealErr)
+								? 'Within the limits of the rule above.'
+								: narrowWithin(narrowIdealErr)
+									? `The op-amp's finite speed moves it past the limits of the rule above: a faster op-amp, ${narrowChosen === 'mfbBp' ? 'the MFB stages designed for this one (panel 01)' : 'another circuit in the table'}, or a lower f0·Q keeps it closer. The LTspice download runs the real part.`
+									: `Past the limits of the rule above, as the parts alone already are${narrowOpampAlert ? ', and the op-amp moves it further' : ''}.`}
+						</p>
+						{/if}
+					{/if}
+				</section>
+
+				<section class="panel">
+					<div class="panel-head">
+						<span class="num">06</span>
+						<h2>Download</h2>
+					</div>
+
+					<p class="note">
+						A standalone JavaScript file with this exact design: the same stage calculation and
+						component search as this page, parameterized at the top so it can be edited and rerun with
+						<code>node filter-design.js</code>. It also prints the same report shown above, plus notes on
+						simulating, building and testing the result.
+					</p>
+
+					<OpampPicker id="spiceOpamp" label="Op-amp in the LTspice file" bind:value={spiceOpamp} />
+
+					<div class="row downloads">
+						<button type="button" onclick={downloadNarrowScript}>Download filter-design.js</button>
+						<button type="button" onclick={downloadNarrowSchematic}>Download filter-design.asc (LTspice)</button>
+					</div>
+
+					<p class="note">
+						An LTspice schematic with the same component values as the tables above and the AC analysis
+						already set up: open it, press Run, plot V(vout). Each stage is drawn wire by wire, the
+						inductor as its op-amp circuit, never a coil.
+						{#if OPAMP_MODELS[spiceOpamp]?.real}
+							Each op-amp is the {spiceOpamp} with its supply pins showing, on +15 V and -15 V rails (the two
+							sources under the drawing, nets v++ and v--); its model is written into the file, so it runs
+							with no library to install. The simulation shows what the part does to the response, which
+							the page's single-pole figure only approximates.
+						{:else if narrowCorrected}
+							Each op-amp is LTspice's ideal single-pole model with its gain-bandwidth as an editable
+							attribute, set to {ltspiceGbw(narrowGbw)}, the op-amp the multiple feedback stages are built for, so the run
+							gives the response above.
+						{:else}
+							Each op-amp is LTspice's ideal single-pole model with its gain-bandwidth as an editable
+							attribute (3Meg for a TL07x by its datasheet, 10Meg for an NE5532), so the simulation shows
+							what the gain-bandwidth alone does to the response.
+						{/if}
+					</p>
+
+					<p class="note formula-link">
+						Every formula this design used, on its own reference page with what each one is and how to
+						use it: <a href="/tools/filter-design/formulas/">Formula sheet</a>.
+					</p>
+				</section>
+
+				<section class="panel">
+					<div class="panel-head">
+						<span class="num">07</span>
+						<h2>Next steps</h2>
+					</div>
+
+					<p class="note">This tool only gets to a paper design. Before trusting it on a bench:</p>
+
+					<ol class="steps">
+						{#each narrowNextSteps as step, i (i)}
+							<li><strong>{step.title}.</strong> {step.detail}</li>
+						{/each}
+					</ol>
+				</section>
+			{/if}
+		{/if}
+	{:else if valid && !blocked && !realizationFailures.length}
 		{#snippet methodTable()}
 			<h3 class="subhead">Two ways to build it</h3>
 			<div class="tableScroll">
@@ -3094,6 +4126,28 @@
 		min-width: 9rem;
 	}
 
+	/* the six narrow band-pass circuits: the names and the rule's reasons
+	   wrap, so the figures between them fit the panel on a wide screen */
+	table.narrow-table td:first-child {
+		white-space: normal;
+		min-width: 9rem;
+	}
+
+	table.narrow-table td:last-child {
+		min-width: 11rem;
+	}
+
+	/* the shift on a TL082: an oscillation or a note wraps under the figures */
+	table.narrow-table td:nth-child(5) {
+		white-space: normal;
+		min-width: 9.5rem;
+	}
+
+	/* the line that stands in for the build-by-hand panel, spaced like a panel */
+	.build-note {
+		margin: 1.1rem 0;
+	}
+
 	.steps {
 		display: grid;
 		gap: 0.7rem;
@@ -3134,6 +4188,12 @@
 		color: var(--textDim);
 	}
 
+	/* a legend whose entries run long goes to two lines on a phone */
+	.legend.wrap {
+		flex-wrap: wrap;
+		row-gap: 0.4rem;
+	}
+
 	.legend span {
 		display: flex;
 		align-items: center;
@@ -3152,6 +4212,11 @@
 
 	.line.amber {
 		background: var(--amber);
+	}
+
+	/* the dashed curve of the narrow band-pass on a TL082 */
+	.line.dim {
+		background: repeating-linear-gradient(90deg, var(--textDim) 0 5px, transparent 5px 9px);
 	}
 
 	.flag {

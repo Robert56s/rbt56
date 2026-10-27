@@ -1,5 +1,5 @@
 import { createSheet, groundInput, hang, run, series } from '../spice/draw';
-import { stageElements } from './spice';
+import { stageElements } from './stageElements';
 
 /**
  * The filter drawn as an LTspice schematic, stage after stage along one
@@ -264,6 +264,178 @@ function drawBoctor(sheet, parts, p, hp = false) {
 	return run(sheet,O,'right',64);
 }
 
+/*
+ * The narrow band-pass stages. An element list may hold an input
+ * divider's Rb right after Ra (an R where the capacitor would be next),
+ * and an RLC stage its output follower last (absent when the stage is
+ * unbuffered and the gain stage after it is its buffer).
+ */
+
+/** [Ra, Rb or null, ...the rest] of a stage whose Rb is optional. */
+function takeDivider(parts) {
+	const [Ra, ...rest] = parts;
+	const Rb = rest[0].kind === 'R' ? rest.shift() : null;
+	return [Ra, Rb, rest];
+}
+
+/**
+ * The RLC tank on the main line: Ra in, then C (and Rb) hanging to
+ * ground. Returns the tap T on the line, right of the shunts, where the
+ * simulated inductor hangs.
+ */
+function drawTank(sheet, Ra, Rb, C, p) {
+	const P = run(sheet, series(sheet, Ra, p, 'right'), 'right', 48);
+	shunt(sheet, C, P);
+	let at = P;
+	if (Rb) {
+		at = run(sheet, at, 'right', 128);
+		shunt(sheet, Rb, at);
+	}
+	return run(sheet, at, 'right', 128);
+}
+
+/**
+ * The main line on past a block that hangs below it: to a follower whose
+ * + input sits right of the block (column `past`), or, unbuffered, on to
+ * that column alone.
+ */
+function pastBlock(sheet, T, past, Uo) {
+	const inPlus = { x: Math.max(T.x + 128, past + 96), y: T.y };
+	sheet.wire(T, inPlus);
+	if (!Uo) return inPlus;
+	return run(sheet, follower(sheet, Uo, inPlus), 'right', 48);
+}
+
+/**
+ * RLC with a gyrator inductor: [Ra, (Rb), C, R1, Cg, R2, Ug, (Uo)]. The
+ * tank on the main line; under it, from the tap, R1 on one row to the
+ * gyrator follower's output, and Cg on the row below to its + input, R2
+ * hanging from there to ground; then the output follower on the main
+ * line past the gyrator.
+ */
+function drawRlcGyrator(sheet, parts, p) {
+	const [Ra, Rb, [C, R1, Cg, R2, Ug, Uo]] = takeDivider(parts);
+	const T = drawTank(sheet, Ra, Rb, C, p);
+	const row1 = { x: T.x, y: T.y + 192 };
+	const row2 = { x: T.x, y: row1.y + 160 };
+	sheet.wire(T, row1);
+	sheet.wire(row1, row2);
+	const r1End = series(sheet, R1, row1, 'right');
+	const X = run(sheet, series(sheet, Cg, row2, 'right'), 'right', 48);
+	shunt(sheet, R2, X);
+	const O = follower(sheet, Ug, run(sheet, X, 'right', 128));
+	sheet.route(r1End, { x: O.x, y: row1.y }, O);
+	return pastBlock(sheet, T, O.x, Uo);
+}
+
+/**
+ * RLC with Antoniou's GIC: [Ra, (Rb), C, R1, R2, R3, Cg, R4, U1, U2, (Uo)].
+ * The tank on the main line; under it, from the tap, the converter's
+ * chain on one row (R1, A, R2, B, R3, D, Cg, E, R4 hanging to ground),
+ * op-amp 2 above the row facing left (output to A, - from B, + from E),
+ * op-amp 1 below it facing right (- from B, output to D, + fed from the
+ * tap along a lane under the row); then the output follower on the main
+ * line past the converter.
+ */
+function drawRlcGic(sheet, parts, p) {
+	const [Ra, Rb, [C, R1, R2, R3, Cg, R4, U1, U2, Uo]] = takeDivider(parts);
+	const T = drawTank(sheet, Ra, Rb, C, p);
+	const row = { x: T.x, y: T.y + 256 };
+	sheet.wire(T, row);
+	const A = run(sheet, series(sheet, R1, row, 'right'), 'right', 48);
+	const B = run(sheet, series(sheet, R2, A, 'right'), 'right', 48);
+	const D = run(sheet, series(sheet, R3, B, 'right'), 'right', 48);
+	const E = run(sheet, series(sheet, Cg, D, 'right'), 'right', 48);
+	shunt(sheet, R4, E);
+	// op-amp 2 above the row, facing left, its + input on top
+	const u2 = sheet.placeOpamp(U2, { x: A.x + 32, y: row.y - 96 }, { mirror: true, flip: true });
+	sheet.route(u2.pins[2], { x: A.x, y: u2.pins[2].y }, A);
+	sheet.route(B, { x: B.x, y: u2.pins[1].y }, u2.pins[1]);
+	sheet.route(E, { x: E.x, y: u2.pins[0].y }, u2.pins[0]);
+	// op-amp 1 below the row, facing right, its - input on top
+	const u1 = sheet.placeOpamp(U1, { x: D.x - 32, y: row.y + 96 });
+	sheet.route(B, { x: B.x, y: u1.pins[1].y }, u1.pins[1]);
+	sheet.route(u1.pins[2], { x: D.x, y: u1.pins[2].y }, D);
+	sheet.route(row, { x: row.x, y: u1.pins[0].y }, u1.pins[0]);
+	return pastBlock(sheet, T, E.x + 64, Uo);
+}
+
+/**
+ * Sallen-Key band-pass: [Ra, (Rb), C1, C2, R2, R3, Rg, Rf, U]. Ra in to X
+ * with C1 (and Rb) hanging, C2 on to the + input with R2 hanging, the
+ * op-amp a non-inverting amplifier as drawNonInverting draws it, and R3
+ * over the top from X to the output.
+ */
+function drawSallenKeyBp(sheet, parts, p) {
+	const [Ra, Rb, [C1, C2, R2, R3, Rg, Rf, U]] = takeDivider(parts);
+	const X = run(sheet, series(sheet, Ra, p, 'right'), 'right', 48);
+	shunt(sheet, C1, X);
+	let at = X;
+	if (Rb) {
+		at = run(sheet, at, 'right', 128);
+		shunt(sheet, Rb, at);
+	}
+	const P = run(sheet, series(sheet, C2, at, 'right'), 'right', 48);
+	shunt(sheet, R2, P);
+	// far enough on that the - input's node clears R2's labels
+	const inPlus = run(sheet, P, 'right', 192);
+	const u = sheet.placeOpamp(U, { x: inPlus.x + 64, y: inPlus.y + 16 }, { flip: true, labels: 'above' });
+	const OUT = run(sheet, u.pins[2], 'right', 64);
+	const inMinus = u.pins[1];
+	const M = { x: inMinus.x - 64, y: inMinus.y + 96 };
+	sheet.route(inMinus, { x: M.x, y: inMinus.y }, M);
+	shunt(sheet, Rg, M);
+	const rfEnd = series(sheet, Rf, M, 'right', { labels: 'below' });
+	sheet.route(rfEnd, { x: OUT.x, y: M.y }, OUT);
+	overTop(sheet, R3, X, OUT, 128, 'right');
+	return run(sheet, OUT, 'right', 48);
+}
+
+/**
+ * State-variable band-pass: [R3, R4, R7, R5, R6, Uc, R1, C1, Ua, R2, C2,
+ * Ub]. On the main line the summer A3 (R3 in, R7 over the top, its +
+ * input on R5 and R6), then the integrator A1 whose output is the stage
+ * output; the main line runs on past the rest. A2 sits on a row below,
+ * fed from the output, and its output returns along the bottom and up
+ * through R4 into A3's summing node. R6 hangs from A3's + input and R5
+ * runs from there along a lane under A3 and A1 up to the output.
+ */
+function drawKhnBp(sheet, parts, p) {
+	const [R3, R4, R7, R5, R6, Uc, R1, C1, Ua, R2, C2, Ub] = parts;
+	// A3, the summer: integrator()'s layout with its + input on R5 and R6
+	const N = run(sheet, series(sheet, R3, p, 'right'), 'right', 48);
+	const inMinus = run(sheet, N, 'right', 96);
+	const u3 = sheet.placeOpamp(Uc, { x: inMinus.x + 64, y: inMinus.y + 16 });
+	const H = run(sheet, u3.pins[2], 'right', 64);
+	const rung = { x: N.x, y: N.y - 112 };
+	sheet.wire(N, rung);
+	sheet.wire(H, { x: H.x, y: rung.y });
+	const r7End = series(sheet, R7, rung, 'right', { gap: Math.round((H.x - N.x - 80) / 32) * 16 });
+	sheet.wire(r7End, { x: H.x, y: rung.y });
+	const P = run(sheet, u3.pins[0], 'left', 32);
+	shunt(sheet, R6, P);
+	// A1, the integrator from H: its output is the stage output
+	const first = integrator(sheet, R1, [C1], Ua, H);
+	const BP = first.OUT;
+	const lane = { x: P.x - 32, y: P.y + 176 };
+	sheet.route(P, { x: lane.x, y: P.y }, lane);
+	const r5End = series(sheet, R5, lane, 'right');
+	sheet.route(r5End, { x: BP.x, y: lane.y }, BP);
+	// A2 on a row below, right of the lane's rise, fed from the output
+	const loopFrom = run(sheet, BP, 'right', 48);
+	const down = { x: loopFrom.x, y: p.y + 336 };
+	sheet.wire(loopFrom, down);
+	const second = integrator(sheet, R2, [C2], Ub, down);
+	// back along the bottom to under A3's summing node, up through R4
+	const bottom = second.OUT.y + 176;
+	const foot = { x: N.x, y: bottom };
+	sheet.route(second.OUT, { x: second.OUT.x, y: bottom }, foot);
+	sheet.wire(sheet.placeFrom(R4, foot, 'up', { labels: 'left' }).pins[1], N);
+	const cont = { x: second.OUT.x + 96, y: loopFrom.y };
+	sheet.wire(loopFrom, cont);
+	return cont;
+}
+
 const DRAW = {
 	boctor: (sheet, parts, p) => drawBoctor(sheet, parts, p),
 	boctorHp: (sheet, parts, p) => drawBoctor(sheet, parts, p, true),
@@ -280,7 +452,11 @@ const DRAW = {
 	towThomasNotch: drawTowThomasNotch,
 	gainInv: drawInverting,
 	gainDivider: drawFirstOrder,
-	gainNonInv: drawNonInverting
+	gainNonInv: drawNonInverting,
+	rlcGyrator: drawRlcGyrator,
+	rlcGic: drawRlcGic,
+	sallenKeyBp: drawSallenKeyBp,
+	khnBp: drawKhnBp
 };
 
 /**

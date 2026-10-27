@@ -9,7 +9,12 @@
 	// the loss at `to` when the segment slopes from one side's limit to the
 	// other's.
 
-	let { points, passbandFreqs = [], stopbandFreqs = [], amaxDb = null, aminDb = null, limits = null, height = 260 } = $props();
+	// Three options, off unless given (the narrow band-pass uses them):
+	// `fineTicks` labels the 2 and 5 of each decade too, for a view of
+	// about a decade; `markers` names marker lines, [{ freq, text }], their
+	// labels stacked where they would overlap; `extra` is a second curve,
+	// drawn dashed in the dim text colour (points like `points`).
+	let { points, passbandFreqs = [], stopbandFreqs = [], amaxDb = null, aminDb = null, limits = null, height = 260, fineTicks = false, markers = null, extra = null } = $props();
 
 	let canvas = $state(null);
 	let width = $state(600);
@@ -87,6 +92,24 @@
 			const label = freq >= 1000 ? `${freq / 1000}k` : `${freq}`;
 			g.fillText(label, xx, h - pad.bottom + 4);
 		}
+		// the 2 and 5 of each decade, labelled, for a view too short for its decades alone
+		if (fineTicks) {
+			const tickText = (f) => (f >= 1e6 ? `${Number((f / 1e6).toPrecision(3))}M` : f >= 1000 ? `${Number((f / 1000).toPrecision(3))}k` : `${Number(f.toPrecision(3))}`);
+			g.setLineDash([2, 4]);
+			for (let d = Math.floor(logMin); d <= Math.ceil(logMax); d++) {
+				for (const m of [2, 5]) {
+					const f = m * 10 ** d;
+					if (Math.log10(f) < logMin || Math.log10(f) > logMax) continue;
+					const xx = Math.round(x(f)) + 0.5;
+					g.beginPath();
+					g.moveTo(xx, pad.top);
+					g.lineTo(xx, h - pad.bottom);
+					g.stroke();
+					g.fillText(tickText(f), xx, h - pad.bottom + 4);
+				}
+			}
+			g.setLineDash([]);
+		}
 
 		// passband / stopband markers
 		g.setLineDash([4, 3]);
@@ -112,6 +135,39 @@
 			g.stroke();
 		}
 		g.setLineDash([]);
+
+		// the marker lines named at the foot of the plot, clear of a peak, each label in the first row free of the one before it
+		if (markers?.length) {
+			g.fillStyle = amber;
+			g.textAlign = 'center';
+			g.textBaseline = 'bottom';
+			const rows = [];
+			for (const mk of [...markers].filter((m) => m.freq).sort((a, b) => a.freq - b.freq)) {
+				const xx = x(mk.freq);
+				const half = g.measureText(mk.text).width / 2 + 3;
+				let row = rows.findIndex((end) => end < xx - half);
+				if (row < 0) row = rows.length;
+				rows[row] = xx + half;
+				g.fillText(mk.text, xx, h - pad.bottom - 3 - 12 * row);
+			}
+			g.fillStyle = textDim;
+		}
+
+		// a second curve, dashed
+		if (extra?.length) {
+			g.strokeStyle = textDim;
+			g.lineWidth = 1.5;
+			g.setLineDash([5, 4]);
+			g.beginPath();
+			extra.forEach((p, i) => {
+				const xx = x(p.freq);
+				const yy = Math.max(pad.top, Math.min(h - pad.bottom, y(p.db)));
+				if (i === 0) g.moveTo(xx, yy);
+				else g.lineTo(xx, yy);
+			});
+			g.stroke();
+			g.setLineDash([]);
+		}
 
 		// response curve
 		g.strokeStyle = blue;

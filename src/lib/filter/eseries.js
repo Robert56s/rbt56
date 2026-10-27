@@ -192,6 +192,93 @@ export function pairedResistor(target, option, pairs = false) {
 	return best && best.miss <= miss / 2 ? best.sum : single;
 }
 
+/*
+ * The same values as nearestResistor and pairedResistor, found by
+ * bisection in one sorted list per series or list, built once: the
+ * narrow band-pass designers round a few thousand resistors per stage.
+ */
+const stockLists = new Map();
+const stockKitLists = new WeakMap();
+
+/** Every stocked resistor of a series (all decades nearestInSeries searches) or of a list, sorted. */
+function stockListOf(option) {
+	if (Array.isArray(option)) {
+		let list = stockKitLists.get(option);
+		if (!list) {
+			list = normalizeList(option);
+			stockKitLists.set(option, list);
+		}
+		return list;
+	}
+	const name = SERIES[option] ? option : 'E24';
+	let list = stockLists.get(name);
+	if (!list) {
+		list = seriesValues(SERIES[name], -12, 12);
+		stockLists.set(name, list);
+	}
+	return list;
+}
+
+/** Index of the first stocked value at or above the target. */
+function stockIndex(list, target) {
+	let lo = 0;
+	let hi = list.length;
+	while (lo < hi) {
+		const mid = (lo + hi) >> 1;
+		if (list[mid] < target) lo = mid + 1;
+		else hi = mid;
+	}
+	return lo;
+}
+
+/**
+ * The stocked resistor for a target: nearestResistor's value (the lower
+ * one on a tie, as it keeps the first it finds), or pairedResistor's when
+ * `pairs` lets a list pair it.
+ */
+export function stockResistor(target, option, pairs = false) {
+	if (pairs && Array.isArray(option)) return pairedResistor(target, option, pairs);
+	const list = stockListOf(option);
+	const i = stockIndex(list, target);
+	if (i === 0) return list[0];
+	if (i === list.length) return list[list.length - 1];
+	return Math.abs(Math.log(list[i] / target)) < Math.abs(Math.log(list[i - 1] / target)) ? list[i] : list[i - 1];
+}
+
+/** The stocked resistors from `low` to `high`, both included, ascending. */
+export function stockBetween(low, high, option) {
+	const list = stockListOf(option);
+	const out = [];
+	for (let i = stockIndex(list, low * (1 - 1e-9)); i < list.length && list[i] <= high * (1 + 1e-9); i++) out.push(list[i]);
+	return out;
+}
+
+/**
+ * Two stocked resistors in a given ratio, other / base = ratio, for a part
+ * whose value only counts through a ratio (an amplifier's gain, a
+ * summer's weight). Every stocked value from `low` to `high` is tried as
+ * the base, the other one rounded to stock (two in series where `pairs`
+ * lets the name `other` pair), and the closest ratio wins, the base nearest
+ * `near` (10 kilo-ohm unless given) on a tie. Both stay inside (min, max).
+ * Returns { base, other, ratio } or null when no base keeps the other one
+ * in range.
+ */
+export function ratioPair(ratio, option, { pairs = false, other: name = 'other', low = 1e3, high = 1e5, min = 200, max = 2e6, near = 1e4 } = {}) {
+	if (!(Number.isFinite(ratio) && ratio > 0)) return null;
+	// a series repeats every decade, and so do its ratios: one decade of
+	// bases around `near` holds the best one
+	const bases = Array.isArray(option) ? stockBetween(low, high, option) : stockBetween(Math.max(low, near / Math.sqrt(10)), Math.min(high, near * Math.sqrt(10)), option);
+	let best = null;
+	for (const base of bases) {
+		const other = stockResistor(ratio * base, option, pairAllowed(pairs, name));
+		if (!(other > min && other < max)) continue;
+		const miss = Math.abs(Math.log(other / base / ratio));
+		const level = Math.abs(Math.log(base / near));
+		if (best === null || miss < best.miss - 1e-12 || (Math.abs(miss - best.miss) <= 1e-12 && level < best.level)) best = { base, other, miss, level };
+	}
+	return best && { base: best.base, other: best.other, ratio: best.other / best.base };
+}
+
 /** The two list values a resistor is built from, [larger, smaller], or null when the list has it as one part. */
 export function seriesPair(value, option) {
 	if (!Array.isArray(option) || !(value > 0)) return null;

@@ -16,9 +16,13 @@
 // low-pass prototype (a plain chain, no combiner). The narrow band-pass
 // with its MFB band-pass stages built for the TL082 runs with the
 // single-pole op-amp at that GBW (it must give the page's response) and
-// with TI's TL082 model (it must keep Amax and Amin). Skips
-// (exit 0) when no LTspice executable is found; set LTSPICE to its path
-// to point at another install.
+// with TI's TL082 model (it must keep Amax and Amin). The filter type
+// 'narrowband', one frequency picked out, runs on each of its six
+// circuits: LTspice measures its peak and -3 dB edges with an ideal
+// op-amp, the single pole and TI's TL082 model, against the page's
+// comparison table. Skips (exit 0) when no
+// LTspice executable is found; set LTSPICE to its path to point at
+// another install.
 
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -601,6 +605,101 @@ for (const { only, sides, ...spec } of filterSpecs) {
 		!!real && !!before && Math.abs(real.fl - spec.amaxDb) <= 0.6 && Math.abs(real.fh - spec.amaxDb) <= 0.6 && real.fsl >= spec.aminDbLow && real.fsh >= spec.aminDbHigh && before.fh > spec.amaxDb + 2,
 		`built for it: ${text(real)}; plain stages: ${text(before)}`
 	);
+}
+
+/* ------------------------------------------------- the narrow band-pass */
+// The reference spec (10 kHz, Q 5, K 1, one stage, E24) on each of the six
+// circuits, with the automatic capacitors and with 10 nF chosen by hand,
+// and two stages at K 10 on the gyrator (its gain stage after an
+// unbuffered tank) and on the state-variable circuit, exported as the page
+// exports them. LTspice must netlist the drawn .asc into the .cir, ideal
+// and on rails with a TL082. The .cir run with an op-amp too fast to
+// matter must give the page's response at its .meas points. Then LTspice
+// measures the response itself on a dense sweep (the peak, the -3 dB
+// edges): with an ideal op-amp it must give the comparison's figures from
+// the parts, and with the single-pole op-amp at the TL082's 3.45 MHz the
+// comparison's figures on the TL082, the centre within 0.05 % and B within
+// 0.5 %. With TI's TL082 model it must stay near that single pole (the
+// centre within 0.5 %, B within 5 %, the peak within 0.5 dB), and every
+// circuit the rule lets qualify must still hold the rule's limits.
+{
+	const { compareNarrowCircuits, designNarrowBand, narrowDefaultCircuit, NARROW_RULE } = await import('../src/lib/filter/narrowBand.js');
+	const cases = [
+		['ref', 'reference', { f0: 10000, q: 5, gain: 1, stages: 1 }, {}, null],
+		['ref10n', 'reference, 10 nF by hand', { f0: 10000, q: 5, gain: 1, stages: 1 }, { caps: [{ C: 1e-8, C1: 1e-8, C2: 1e-8 }] }, null],
+		['k10n2', 'K 10 over two stages', { f0: 10000, q: 5, gain: 10, stages: 2 }, {}, ['rlcGyrator', 'khnBp']]
+	];
+	const MEAS = ['.meas AC pk MAX mag(V(vout))', '.meas AC lo WHEN mag(V(vout))=pk/sqrt(2) RISE=1', '.meas AC hi WHEN mag(V(vout))=pk/sqrt(2) FALL=1'].join('\n');
+	const number = (log, re) => {
+		const m = re.exec(log);
+		return m ? Number(m[1]) : NaN;
+	};
+	/** The peak (dB), the -3 dB edges, their geometric centre and B, as LTspice measures them on a dense linear sweep. */
+	const ltFigures = (stem, text, f0) => {
+		const swept = text
+			.replace(/^\.ac .*$/m, `.ac lin 8001 ${0.6 * f0} ${1.5 * f0}`)
+			.replace(/^\.meas .*\r?\n/gm, '')
+			.replace(/^\.end\s*$/m, `${MEAS}\n.end\n`);
+		const file = join(dir, `${stem}.cir`);
+		writeFileSync(file, swept);
+		run(['-b', file], 600000);
+		const log = existsSync(join(dir, `${stem}.log`)) ? readFileSync(join(dir, `${stem}.log`), 'latin1').replace(/\0/g, '') : '';
+		const lo = number(log, /^lo: .*AT ([-+0-9.e]+)/im);
+		const hi = number(log, /^hi: .*AT ([-+0-9.e]+)/im);
+		return { db: number(log, /^pk: .*=\(([-+0-9.e]+)dB/im), centre: Math.sqrt(lo * hi), B: hi - lo };
+	};
+	/** The same figures from the page's: the peak in dB, the centre of its edges and B. */
+	const pageFigures = (fig) => ({ db: fig.gainDb, centre: Math.sqrt(fig.f1 * fig.f2), B: fig.B });
+	const text = (f) => (Number.isFinite(f.centre) ? `${f.centre.toFixed(1)} Hz, B ${f.B.toFixed(1)} Hz, ${f.db.toFixed(3)} dB` : 'no measurement');
+	for (const [key, label, spec, extra, only] of cases) {
+		const d = designNarrowBand(spec);
+		const rows = compareNarrowCircuits(d, extra);
+		const pick = narrowDefaultCircuit(rows);
+		for (const r of rows.filter((x) => x.ok && (!only || only.includes(x.circuit)))) {
+			const stem = `nb-${key}-${r.circuit}`;
+			const st = r.realized.stages;
+			// as the page's downloadNarrowSchematic passes them
+			const o = { realizedStages: st, filterType: 'narrowband', circuit: r.circuit, f0: d.f0, B: d.B, q: d.q, gain: d.gain, n: d.n, f1: d.f1, f2: d.f2, fp: d.f1, fs: d.f2, resistorStock: 'E24', pairs: false };
+			const tag = `${stem} (${label}, ${r.circuit}${r.realized.gainStages.length ? `, ${r.realized.gainStages.length > 1 ? `${r.realized.gainStages.length} gain stages` : 'gain stage'}` : ''}${r.circuit === pick ? ', the default' : ''})`;
+			// the drawing netlists into the .cir, ideal and on rails with a TL082
+			const parity = [];
+			for (const opamp of ['ideal', 'TL082']) {
+				const s = opamp === 'ideal' ? stem : `${stem}-tl082`;
+				const cir = filterNetlist({ ...o, opamp });
+				writeFileSync(join(dir, `${s}.asc`), filterSchematic({ ...o, opamp }));
+				writeFileSync(join(dir, `${s}.cir`), cir);
+				run(['-netlist', join(dir, `${s}.asc`)], 60000);
+				const netFile = join(dir, `${s}.net`);
+				parity.push(...(existsSync(netFile) ? sameCircuit(cir, readFileSync(netFile, 'latin1')) : ['LTspice wrote no netlist']).map((p) => `${opamp}: ${p}`));
+				if (opamp === 'TL082' && ![...cir.matchAll(/^X\S+ \S+ \S+ (\S+) (\S+) \S+ TL082$/gm)].every((m) => m[1] === 'v++' && m[2] === 'v--')) parity.push('TL082: an op-amp off the rails');
+			}
+			check(`${tag}: LTspice netlists the drawn .asc into our .cir, ideal and with a TL082 on v++ and v--`, parity.length === 0, parity.slice(0, 3).join('; '));
+			// the .meas points of the file, with an op-amp too fast to matter
+			const fast = `${stem}-fast`;
+			writeFileSync(join(dir, `${fast}.cir`), filterNetlist({ ...o, gbw: '100g' }));
+			run(['-b', join(dir, `${fast}.cir`)]);
+			const logFile = join(dir, `${fast}.log`);
+			const log = existsSync(logFile) ? readFileSync(logFile, 'latin1') : '';
+			const meas = [...log.matchAll(/^v_(\w+): V\(vout\)\s*=\(([-+0-9.e]+)dB,[^)]*\) at ([-+0-9.e]+)/gim)].map((m) => ({ name: m[1], db: Number(m[2]), f: Number(m[3]) }));
+			const worst = meas.reduce((w, m) => Math.max(w, Math.abs(m.db - magnitudePhaseAt(st, m.f).db)), 0);
+			check(`${tag}: LTspice gives the page's response at the file's .meas points`, meas.length >= 2 && worst < 0.05, meas.length ? `${meas.map((m) => `${m.name} ${m.db.toFixed(3)} dB`).join(', ')}; worst ${worst.toFixed(4)} dB off` : 'no .meas in the log');
+			// LTspice's own figures: ideal, single pole at 3.45 MHz, TI's TL082 model
+			const ideal = ltFigures(`${stem}-ideal`, filterNetlist({ ...o, ideal: true }), d.f0);
+			const single = ltFigures(`${stem}-pole`, filterNetlist({ ...o, gbw: '3.45meg' }), d.f0);
+			const ti = ltFigures(`${stem}-ti`, filterNetlist({ ...o, opamp: 'TL082' }), d.f0);
+			const pIdeal = pageFigures(r.ideal.figures);
+			const pReal = pageFigures(r.real.figures);
+			const agrees = (a, b, centreTol, bTol, dbTol) => Math.abs(a.centre / b.centre - 1) <= centreTol && Math.abs(a.B / b.B - 1) <= bTol && Math.abs(a.db - b.db) <= dbTol;
+			check(`${tag}: LTspice measures the comparison's figures, from the parts with an ideal op-amp and on the TL082's single pole`, agrees(ideal, pIdeal, 5e-4, 5e-3, 0.02) && agrees(single, pReal, 5e-4, 5e-3, 0.02), `ideal ${text(ideal)} against ${text(pIdeal)}; single pole ${text(single)} against ${text(pReal)}`);
+			const e = { f0: ti.centre / d.f0 - 1, q: ti.centre / ti.B / d.q - 1, gain: 10 ** (ti.db / 20) / d.gain - 1 };
+			const holds = Math.abs(e.f0) <= NARROW_RULE.f0Share / d.q && Math.abs(e.q) <= NARROW_RULE.qTolerance && Math.abs(e.gain) <= NARROW_RULE.gainTolerance;
+			check(
+				`${tag}: with TI's TL082 model the response stays near the single pole${r.qualifies ? ', and within the rule\'s limits, as the table says' : ''}`,
+				agrees(ti, single, 5e-3, 0.05, 0.5) && (!r.qualifies || holds),
+				`TL082 model ${text(ti)}; single pole ${text(single)}; against the spec f0 ${(100 * e.f0).toFixed(2)} %, Q ${(100 * e.q).toFixed(1)} %, K ${(100 * e.gain).toFixed(1)} %`
+			);
+		}
+	}
 }
 
 /* ------------------------------------------- real op-amps: TL082, LM741 */

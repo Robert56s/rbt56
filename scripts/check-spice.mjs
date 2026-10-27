@@ -12,7 +12,9 @@
 // transformation of one low-pass prototype, a plain chain of band-pass or
 // notch stages. A transformed band-pass whose MFB band-pass stages are
 // built for a single-pole op-amp is solved with that op-amp, as the
-// netlist's own subcircuit has it.
+// netlist's own subcircuit has it. The narrow band-pass is checked on
+// each of its six circuits, its gain stage included, and its files' notes
+// and directives are read too.
 //
 // Exits non-zero on any mismatch.
 
@@ -393,6 +395,134 @@ for (const lowSide of [true, false]) for (const q of [0.6, 0.9, 1.2]) for (const
 	check(`${label} schematic geometry`,issues.length===0,issues.slice(0,3).map(e=>e.detail).join('; '));
 	const realIssues = audit(generateSchematic({ ...opts, ideal: false, opamp: 'TL082' }));
 	check(`${label} powered TL082 schematic geometry`, realIssues.length === 0, realIssues.slice(0, 2).map(e => e.detail).join('; '));
+}
+
+// The narrow band-pass (narrowBand.js): each of the six circuits built for
+// a spread of specs, its chain handed to spice.js as the page hands it
+// (filterType 'narrowband', its f0, B, Q, K and N, the -3 dB edges as fp
+// and fs, a multiple feedback stage built for its op-amp with that GBW).
+// The netlist, solved, gives the page's response (bode.js) within 0.02 dB
+// from f0/30 to 30 f0 and point by point across the band; it is one chain
+// with the op-amps the comparison counts, and with the single-pole op-amp
+// of the TL082 it is what the comparison's TL082 figures were measured
+// on. The .asc is the same circuit, drawn clean, and the same with a
+// TL082 or an LM741 on rails. Then the files' notes and directives: a
+// narrow band-pass named as such, no response family, no placeholder, a
+// .meas at f0 and a sweep fine enough to resolve the band.
+{
+	const { designNarrowBand, narrowNetlistResponse, realizeNarrow, NARROW_CIRCUITS, NARROW_REAL_GBW } = await import('../src/lib/filter/narrowBand.js');
+	const { LAB_KIT } = await import('../src/lib/filter/eseries.js');
+	const SPECS_NB = [
+		['reference', { f0: 10000, q: 5, gain: 1, stages: 1 }, {}],
+		['K 10 over two stages', { f0: 10000, q: 5, gain: 10, stages: 2 }, {}],
+		['B 300 Hz at 2 kHz, K 0.2', { f0: 2000, bandwidth: 300, gain: 0.2, stages: 1 }, {}],
+		['Q 20 at 1 kHz, three stages', { f0: 1000, q: 20, gain: 1, stages: 3 }, {}],
+		['Q 2 at 100 Hz, K 3', { f0: 100, q: 2, gain: 3, stages: 1 }, {}],
+		['Q 8 at 50 kHz, the kit with pairs', { f0: 50000, q: 8, gain: 1, stages: 1 }, { resistorSeries: LAB_KIT.resistors, capacitors: LAB_KIT.capacitors, pairs: true }],
+		['reference, MFB built for the TL082', { f0: 10000, q: 5, gain: 1, stages: 1 }, { gbw: OPAMP_GBW.TL082 }]
+	];
+	/** What the page passes spice.js for a narrow band-pass (downloadNarrowSchematic). */
+	const narrowSpiceOpts = (d, r, opts) => {
+		const corrected = r.stages.some((s) => s.topology === 'mfbBp' && Number.isFinite(s.actual.gbw));
+		return {
+			...(corrected ? { correctedGbw: opts.gbw } : {}),
+			realizedStages: r.stages,
+			filterType: 'narrowband',
+			circuit: r.circuit,
+			f0: d.f0,
+			B: d.B,
+			q: d.q,
+			gain: d.gain,
+			n: d.n,
+			f1: d.f1,
+			f2: d.f2,
+			fp: d.f1,
+			fs: d.f2,
+			resistorStock: opts.resistorSeries ?? 'E24',
+			pairs: opts.pairs ?? false
+		};
+	};
+	const built = [];
+	const refusedNb = [];
+	for (const [label, spec, opts] of SPECS_NB) {
+		const d = designNarrowBand(spec);
+		for (const circuit of NARROW_CIRCUITS) {
+			if (opts.gbw && circuit !== 'mfbBp') continue;
+			const r = realizeNarrow(d, circuit, opts);
+			if (!r.ok) {
+				refusedNb.push(`${label} ${circuit}`);
+				continue;
+			}
+			const o = narrowSpiceOpts(d, r, opts);
+			const corrected = Boolean(o.correctedGbw);
+			const netlist = generateNetlist({ ...o, ideal: !corrected });
+			const elements = parseNetlist(netlist);
+			const model = corrected ? opampParams(netlist) : null;
+			const freqs = [];
+			for (let i = 0; i <= 40; i++) freqs.push((d.f0 / 30) * 900 ** (i / 40));
+			for (let i = 0; i <= 40; i++) freqs.push(d.f1 / 1.2 + ((d.f2 * 1.2 - d.f1 / 1.2) * i) / 40);
+			let worst = 0;
+			let worstAt = 0;
+			for (const f of freqs) {
+				const err = Math.abs(20 * Math.log10(abs(solveAt(elements, f, model))) - magnitudePhaseAt(r.stages, f).db);
+				if (err > worst) {
+					worst = err;
+					worstAt = f;
+				}
+			}
+			const opamps = elements.filter((e) => e.kind === 'OP').length;
+			const tag = `narrowband ${label}, ${circuit}${r.gainStages.length ? ` + ${r.gainStages.length > 1 ? `${r.gainStages.length} gain stages` : 'gain stage'}` : ''}`;
+			check(tag, worst < 0.02 && opamps === r.opamps, `ecart max ${worst.toFixed(4)} dB a ${worstAt.toFixed(0)} Hz, ${opamps} op-amps (${r.opamps} counted), ${elements.length} elements`);
+			// with the TL082's single pole the netlist is what the comparison measured (narrowNetlistResponse)
+			if (!corrected) {
+				const H = narrowNetlistResponse(r.stages, { gbw: NARROW_REAL_GBW });
+				let rel = 0;
+				for (const f of [d.f0 / 3, d.f1, d.f0, d.f2, 3 * d.f0]) rel = Math.max(rel, abs(sub(solveAt(elements, f, { aol: Infinity, gbw: NARROW_REAL_GBW }), H(f))) / abs(H(f)));
+				if (rel > 1e-9) check(`  single-pole TL082: the netlist is the comparison's`, false, `worst ${rel.toExponential(1)}`);
+			}
+			const asc = generateSchematic(o);
+			const wanted = buildElements(o).filter((e) => e.kind !== 'LABEL');
+			const { problems, symbols } = ascParity(asc, wanted, generateNetlist(o));
+			const issues = audit(asc);
+			const real = ['TL082', 'LM741'].map((part) => realOpampProblems(asc, generateSchematic({ ...o, opamp: part }), part));
+			const realBad = real.flatMap((x) => [...x.problems, ...x.issues.map((i) => `${i.kind}: ${i.detail}`)]);
+			check(`  .asc same circuit, drawn clean, and on rails with a TL082 and an LM741`, problems.length === 0 && issues.length === 0 && realBad.length === 0, problems.length ? problems.slice(0, 3).join('; ') : issues.length ? issues.slice(0, 2).map((i) => `${i.kind}: ${i.detail}`).join('; ') : realBad.length ? realBad.slice(0, 2).join('; ') : `${symbols} symbols`);
+			built.push({ label, circuit, d, r, o, netlist, asc });
+		}
+	}
+	check(`narrow band-pass netlists: ${built.length} chains on the six circuits solved against the page`, built.length >= 36 && NARROW_CIRCUITS.every((c) => built.some((b) => b.circuit === c)), `refused by the designers: ${refusedNb.join(', ') || 'none'}`);
+
+	// the files' words and directives, read as LTspice and a reader would:
+	// each kind of problem counted over the chains, with its first case
+	{
+		const FAMILIES = /butterworth|chebyshev|bessel|legendre|elliptic/i;
+		const kinds = new Map();
+		const note = (kind, text) => {
+			if (!kinds.has(kind)) kinds.set(kind, { count: 0, first: text });
+			kinds.get(kind).count++;
+		};
+		const notes = (text) => text.split('\n').filter((l) => /^\*/.test(l) || /^TEXT .*;/.test(l)).join('\n');
+		for (const { label, circuit, d, netlist, asc } of built) {
+			const at = `${label}, ${circuit}`;
+			for (const [name, text] of [['.cir', netlist], ['.asc', asc]]) {
+				const placeholder = /.*(undefined|NaN|\bnull\b).*/.exec(text);
+				if (placeholder) note(`the ${name} prints a placeholder`, `${at}: "${placeholder[0].trim().slice(0, 80)}"`);
+				const family = /.*(butterworth|chebyshev|bessel|legendre|elliptic).*/i.exec(notes(text));
+				if (FAMILIES.test(notes(text))) note(`the ${name} names a response family`, `${at}: "${family[0].trim().slice(0, 80)}"`);
+				if (!/narrow band-pass/i.test(notes(text))) note(`the ${name} does not say narrow band-pass`, at);
+			}
+			const f0Line = /^\.meas AC v_f0 FIND V\(vout\) AT (\S+)$/m.exec(netlist);
+			if (!f0Line || Math.abs(Number(f0Line[1]) / d.f0 - 1) > 1e-4) note('no .meas at f0', `${at}: ${(netlist.match(/^\.meas .*$/gm) ?? []).join(' | ')}`);
+			const ac = /^\.ac dec (\d+) (\S+) (\S+)$/m.exec(netlist);
+			const across = ac ? Number(ac[1]) * Math.log10(d.f2 / d.f1) : 0;
+			if (!(ac && across >= 10 && Number(ac[2]) <= d.f0 / 10 && Number(ac[3]) >= d.f0 * 10)) note('a sweep too coarse or too short', `${at}: ${ac ? `${ac[1]} points per decade, ${across.toFixed(1)} across B, ${ac[2]} to ${ac[3]} Hz` : 'no .ac line'}`);
+		}
+		check(
+			'narrow band-pass files: the notes name a narrow band-pass, with no response family and no placeholder; a .meas at f0; at least 10 points of the sweep across B, from f0/10 to 10 f0',
+			kinds.size === 0,
+			kinds.size ? [...kinds].map(([kind, { count, first }]) => `${kind} (${count} of ${built.length}, first ${first})`).join('; ') : `${built.length} chains`
+		);
+	}
 }
 
 console.log(fails === 0 ? 'netlists LTspice conformes au modele de l outil' : `${fails} failure(s)`);

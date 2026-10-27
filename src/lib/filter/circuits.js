@@ -1111,3 +1111,410 @@ export function buildGainDividerDiagram(components, { ohms = formatOhms } = {}) 
 	const top = y0 - 50;
 	return { svg: parts.join(''), viewBox: `0 ${top} ${width} ${Math.max(loopY, gnd.ports['1'].y + 20) + 34 - top}` };
 }
+
+/*
+ * The narrow band-pass stages (rlcBandPass.js, sallenKeyBandPass.js,
+ * khnBandPass.js). An input divider's Rb, when the design has one, hangs
+ * from a node right of the part already hung from the input node.
+ */
+
+/** A part hung from `node` so that its top pin lands on it, with its ground under it. */
+function hangWithGround(name, node) {
+	const part = placeSymbol(name, node.x, node.y + HANG[name] * SCALE, SCALE);
+	const gnd = placeSymbol('ground_down', part.ports['2'].x - 0.01 * SCALE, part.ports['2'].y + 0.29 * SCALE, SCALE);
+	return { part, gnd };
+}
+
+/** The label of a hung part, beside it on the right. */
+function sideLabel(text, part) {
+	return label(text, part.ports['1'].x + 12, (part.ports['1'].y + part.ports['2'].y) / 2 + 4, { anchor: 'start' });
+}
+
+/**
+ * The RLC tank: Ra from Vin to P, C hung from P (and Rb from a node right
+ * of it, past C's label). Returns the net, the parts and their ports, the
+ * labels, the last node on the line and where the last label ends.
+ */
+function tankAt(c, y0, ohms) {
+	const Vin = { x: MARGIN, y: y0 };
+	const raText = `Ra ${ohms(c.Ra)}`;
+	const Ra = placeClear((dx) => placeSymbol('resistor_right', Vin.x + 90 + dx, y0, SCALE), raText, 10, VIN_END);
+	const P = Ra.ports['2'];
+	const tank = hangWithGround('capacitor_down', P);
+	const cText = `C ${formatFarads(c.C)}`;
+	const net = createNet();
+	net.wire(Vin, Ra.ports['1']);
+	net.wire(tank.part.ports['2'], tank.gnd.ports['1']);
+	const parts = [Ra.svg, tank.part.svg, tank.gnd.svg];
+	const ports = portPoints(Ra, tank.part, tank.gnd);
+	const labels = [label('Vin', Vin.x, Vin.y - 12, { anchor: 'start' }), label(raText, P.x - 10, y0 - 22, { anchor: 'end' }), sideLabel(cText, tank.part)];
+	let last = P;
+	let labelEnd = P.x + 12 + textWidth(cText);
+	if (Number.isFinite(c.Rb) && c.Rb > 0) {
+		const Pb = { x: labelEnd + 3 * CHAR_W, y: P.y };
+		const rb = hangWithGround('resistor_down', Pb);
+		const rbText = `Rb ${ohms(c.Rb)}`;
+		net.wire(P, Pb);
+		net.wire(rb.part.ports['2'], rb.gnd.ports['1']);
+		parts.push(rb.part.svg, rb.gnd.svg);
+		ports.push(...portPoints(rb.part, rb.gnd));
+		labels.push(sideLabel(rbText, rb.part));
+		last = Pb;
+		labelEnd = Pb.x + 12 + textWidth(rbText);
+	}
+	return { net, parts, ports, labels, last, labelEnd };
+}
+
+/**
+ * The output follower of an RLC stage on the main line, its + input at
+ * column `x` (wired from `from`), or with `buffered` false the line run on
+ * to that column alone (the gain stage after it is the buffer). Returns
+ * the right end, the bottom and the labels.
+ */
+function rlcOutput(net, parts, ports, from, x, buffered) {
+	const node = { x, y: from.y };
+	net.wire(from, node);
+	if (!buffered) {
+		net.wire(node, { x: node.x + 40, y: node.y });
+		return { right: node.x + 40, bottom: node.y, labels: [label('Vout', node.x + 46, node.y + 5, { anchor: 'start' })] };
+	}
+	const { opamp, Vout, loopY } = followerAfter(net, node, parts, ports);
+	return {
+		right: Vout.x + 30,
+		bottom: loopY,
+		labels: [label('Vout', Vout.x + 36, Vout.y + 5, { anchor: 'start' }), label(BUFFER_NOTE, opamp.ports.out.x - 24, node.y - 26, { anchor: 'middle', cls: 'lbl note' })]
+	};
+}
+
+const GYRATOR_NOTE = 'gyrator: L = R1 R2 Cg';
+const GIC_NOTE = 'GIC: L = R1 R3 R4 Cg / R2';
+
+/**
+ * RLC band-pass with a gyrator inductor (rlcGyrator): the tank on the main
+ * line, and under it, from a tap, R1 on one row to the gyrator follower's
+ * output O, Cg on the row below to its + input X with R2 hung from X; the
+ * main line runs on past the gyrator to the output follower (none when
+ * `buffered` is false).
+ */
+export function buildRlcGyratorDiagram(components, { ohms = formatOhms, buffered = true } = {}) {
+	const c = components;
+	const y0 = 160;
+	const t = tankAt(c, y0, ohms);
+	const { net, parts, ports } = t;
+	const labels = [...t.labels];
+	const T = { x: Math.max(t.last.x + 60, t.labelEnd + 2 * CHAR_W), y: t.last.y };
+	net.wire(t.last, T);
+	const row1 = { x: T.x, y: y0 + 110 };
+	const row2 = { x: T.x, y: y0 + 200 };
+	net.wire(T, row1);
+	net.wire(row1, row2);
+	// R1 on the first row, its label over it
+	const r1Text = `R1 ${ohms(c.R1)}`;
+	const R1 = placeSymbol('resistor_right', row1.x + 40 + 22.56, row1.y + 1.92, SCALE);
+	net.wire(row1, R1.ports['1']);
+	// Cg on the second row to X, R2 hung from X
+	const cgText = `Cg ${formatFarads(c.Cg)}`;
+	const Cg = placeSymbol('capacitor_right', row2.x + 40 + 14.4, row2.y, SCALE);
+	net.wire(row2, Cg.ports['1']);
+	const X = { x: Math.max(Cg.ports['2'].x + 30, Cg.ports['1'].x - 10 + textWidth(cgText) + CHAR_W), y: row2.y };
+	net.wire(Cg.ports['2'], X);
+	const r2 = hangWithGround('resistor_down', X);
+	net.wire(r2.part.ports['2'], r2.gnd.ports['1']);
+	const r2Text = `R2 ${ohms(c.R2)}`;
+	// the gyrator's follower, right of R2's label
+	const dx = clearance(X.x + 12 + textWidth(r2Text) - followerOpamp(X).ports.inp2.x);
+	const g = followerOpamp(X, dx);
+	const out = g.ports.out;
+	const loopY = out.y + 60;
+	net.wire(X, g.ports.inp1);
+	net.wire(out, { x: out.x, y: loopY });
+	net.wire({ x: out.x, y: loopY }, { x: g.ports.inp2.x, y: loopY });
+	net.wire({ x: g.ports.inp2.x, y: loopY }, g.ports.inp2);
+	const O = { x: Math.max(out.x + 40, R1.ports['1'].x + textWidth(r1Text) + CHAR_W), y: out.y };
+	net.wire(out, O);
+	net.wire(O, { x: O.x, y: R1.ports['2'].y });
+	net.wire({ x: O.x, y: R1.ports['2'].y }, R1.ports['2']);
+	parts.push(R1.svg, Cg.svg, r2.part.svg, r2.gnd.svg, g.svg);
+	ports.push(...portPoints(R1, Cg, r2.part, r2.gnd, g));
+	const noteY = Math.max(loopY, r2.gnd.ports['1'].y + 20) + 26;
+	labels.push(
+		label(r1Text, R1.ports['1'].x, R1.ports['1'].y - 12, { anchor: 'start' }),
+		label(cgText, Cg.ports['1'].x - 10, row2.y - 14, { anchor: 'start' }),
+		sideLabel(r2Text, r2.part),
+		label(GYRATOR_NOTE, row2.x, noteY, { anchor: 'start', cls: 'lbl note' })
+	);
+	const right = Math.max(O.x, row2.x + textWidth(GYRATOR_NOTE)) + 50;
+	const end = rlcOutput(net, parts, ports, T, right, buffered);
+	parts.push(net.svg(), net.dots(ports), ...labels, ...end.labels);
+	const top = y0 - 50;
+	return { svg: parts.join(''), viewBox: `0 ${top} ${end.right + 60} ${noteY + 14 - top}` };
+}
+
+/**
+ * RLC band-pass with Antoniou's GIC (rlcGic): the tank on the main line;
+ * under it, from a tap, the converter's chain on one row (R1, A, R2, B,
+ * R3, D, Cg, E, R4 hung to ground), op-amp 2 above the row facing left
+ * (output to A, - from B, + from E), op-amp 1 under it facing right with
+ * its - input on top (- from B, output to D, + from the tap along a lane
+ * under the row); the main line runs on past it to the output follower
+ * (none when `buffered` is false).
+ */
+export function buildRlcGicDiagram(components, { ohms = formatOhms, buffered = true } = {}) {
+	const c = components;
+	const y0 = 150;
+	const t = tankAt(c, y0, ohms);
+	const { net, parts, ports } = t;
+	const labels = [...t.labels];
+	const T = { x: Math.max(t.last.x + 60, t.labelEnd + 2 * CHAR_W), y: t.last.y };
+	net.wire(t.last, T);
+	const yr = y0 + 150;
+	const row = { x: T.x, y: yr };
+	net.wire(T, row);
+	const texts = { R1: `R1 ${ohms(c.R1)}`, R2: `R2 ${ohms(c.R2)}`, R3: `R3 ${ohms(c.R3)}`, Cg: `Cg ${formatFarads(c.Cg)}`, R4: `R4 ${ohms(c.R4)}` };
+	// the row's nodes spaced so each label, centred over (or under) its part, clears the columns either side
+	const A = { x: row.x + Math.max(100, textWidth(texts.R1) + 24), y: yr };
+	const B = { x: A.x + Math.max(100, textWidth(texts.R2) + 24), y: yr };
+	const D = { x: B.x + Math.max(100, textWidth(texts.R3) + 24), y: yr };
+	const E = { x: D.x + Math.max(90, textWidth(texts.Cg) + 24), y: yr };
+	const between = (name, a, b) => placeSymbol(name, (a.x + b.x) / 2, yr + (name === 'resistor_right' ? 1.92 : 0), SCALE);
+	const R1 = between('resistor_right', row, A);
+	const R2 = between('resistor_right', A, B);
+	const R3 = between('resistor_right', B, D);
+	const Cg = between('capacitor_right', D, E);
+	for (const [a, part, b] of [[row, R1, A], [A, R2, B], [B, R3, D], [D, Cg, E]]) {
+		net.wire(a, part.ports['1']);
+		net.wire(part.ports['2'], b);
+	}
+	const r4 = hangWithGround('resistor_down', E);
+	net.wire(r4.part.ports['2'], r4.gnd.ports['1']);
+	// op-amp 2 above the row facing left: output over A, inputs short of B
+	const U2 = placeSymbol('opamp_no_power_left', A.x + 20 + 27.36, yr - 50, SCALE);
+	net.wire(U2.ports.out, { x: A.x, y: U2.ports.out.y });
+	net.wire({ x: A.x, y: U2.ports.out.y }, A);
+	net.wire(B, { x: B.x, y: U2.ports.inp2.y });
+	net.wire({ x: B.x, y: U2.ports.inp2.y }, U2.ports.inp2);
+	net.wire(E, { x: E.x, y: U2.ports.inp1.y });
+	net.wire({ x: E.x, y: U2.ports.inp1.y }, U2.ports.inp1);
+	// op-amp 1 under the row facing right, its - input on top
+	const U1 = placeSymbol('opamp_no_power_right', B.x + 30 + 27.36, yr + 50, SCALE, { flipY: true });
+	net.wire(B, { x: B.x, y: U1.ports.inp2.y });
+	net.wire({ x: B.x, y: U1.ports.inp2.y }, U1.ports.inp2);
+	net.wire(U1.ports.out, { x: D.x, y: U1.ports.out.y });
+	net.wire({ x: D.x, y: U1.ports.out.y }, D);
+	net.wire(row, { x: row.x, y: U1.ports.inp1.y });
+	net.wire({ x: row.x, y: U1.ports.inp1.y }, U1.ports.inp1);
+	parts.push(R1.svg, R2.svg, R3.svg, Cg.svg, r4.part.svg, r4.gnd.svg, U2.svg, U1.svg);
+	ports.push(...portPoints(R1, R2, R3, Cg, r4.part, r4.gnd, U2, U1));
+	const mid = (part) => (part.ports['1'].x + part.ports['2'].x) / 2;
+	const noteY = Math.max(U1.ports.inp1.y + 40, r4.gnd.ports['1'].y + 30);
+	labels.push(
+		label(texts.R1, mid(R1), yr + 20, { anchor: 'middle' }),
+		label(texts.R2, mid(R2), yr - 14, { anchor: 'middle' }),
+		label(texts.R3, mid(R3), yr - 14, { anchor: 'middle' }),
+		label(texts.Cg, mid(Cg), yr - 14, { anchor: 'middle' }),
+		sideLabel(texts.R4, r4.part),
+		label('A2', U2.ports.out.x + 24, U2.ports.out.y - 16, { anchor: 'middle' }),
+		label('A1', U1.ports.out.x - 24, U1.ports.out.y + 26, { anchor: 'middle' }),
+		label(GIC_NOTE, row.x, noteY, { anchor: 'start', cls: 'lbl note' })
+	);
+	const right = Math.max(E.x + 12 + textWidth(texts.R4), row.x + textWidth(GIC_NOTE)) + 50;
+	const end = rlcOutput(net, parts, ports, T, right, buffered);
+	parts.push(net.svg(), net.dots(ports), ...labels, ...end.labels);
+	const top = y0 - 50;
+	return { svg: parts.join(''), viewBox: `0 ${top} ${end.right + 60} ${noteY + 14 - top}` };
+}
+
+/**
+ * Sallen-Key band-pass (sallenKeyBp): Ra from Vin to X with C1 (and Rb)
+ * hung from it, C2 on to the + input P with R2 hung from P, the op-amp a
+ * non-inverting amplifier (Rg from its - input to ground, Rf to Vout on a
+ * rail under it), and R3 over a rail above from X to Vout.
+ */
+export function buildSallenKeyBpDiagram(components, { ohms = formatOhms } = {}) {
+	const c = components;
+	const y0 = 220;
+	const Vin = { x: MARGIN, y: y0 };
+	const raText = `Ra ${ohms(c.Ra)}`;
+	const Ra = placeClear((dx) => placeSymbol('resistor_right', Vin.x + 90 + dx, y0, SCALE), raText, 10, VIN_END);
+	const X = Ra.ports['2'];
+	const net = createNet();
+	net.wire(Vin, Ra.ports['1']);
+	const c1 = hangWithGround('capacitor_down', X);
+	net.wire(c1.part.ports['2'], c1.gnd.ports['1']);
+	const c1Text = `C1 ${formatFarads(c.C1)}`;
+	const parts = [Ra.svg, c1.part.svg, c1.gnd.svg];
+	const ports = portPoints(Ra, c1.part, c1.gnd);
+	const labels = [label('Vin', Vin.x, Vin.y - 12, { anchor: 'start' }), label(raText, X.x - 10, y0 - 22, { anchor: 'end' }), sideLabel(c1Text, c1.part)];
+	let at = X;
+	let labelEnd = X.x + 12 + textWidth(c1Text);
+	if (Number.isFinite(c.Rb) && c.Rb > 0) {
+		const Xb = { x: labelEnd + 3 * CHAR_W, y: X.y };
+		const rb = hangWithGround('resistor_down', Xb);
+		const rbText = `Rb ${ohms(c.Rb)}`;
+		net.wire(X, Xb);
+		net.wire(rb.part.ports['2'], rb.gnd.ports['1']);
+		parts.push(rb.part.svg, rb.gnd.svg);
+		ports.push(...portPoints(rb.part, rb.gnd));
+		labels.push(sideLabel(rbText, rb.part));
+		at = Xb;
+		labelEnd = Xb.x + 12 + textWidth(rbText);
+	}
+	// C2 on to P, its label over it, clear of the label before it
+	const c2Text = `C2 ${formatFarads(c.C2)}`;
+	const C2 = placeSymbol('capacitor_right', Math.max(at.x + 60, labelEnd + 2 * CHAR_W + 14.4), X.y, SCALE);
+	net.wire(at, C2.ports['1']);
+	const P = { x: Math.max(C2.ports['2'].x + 30, C2.ports['1'].x + textWidth(c2Text) + CHAR_W), y: X.y };
+	net.wire(C2.ports['2'], P);
+	const r2 = hangWithGround('resistor_down', P);
+	net.wire(r2.part.ports['2'], r2.gnd.ports['1']);
+	const r2Text = `R2 ${ohms(c.R2)}`;
+	// the op-amp, + input on P's level, far enough right that Rg and its label (left of it) clear R2's
+	const rgText = `Rg ${ohms(c.Rg)}`;
+	const rgX = Math.max(P.x + 12 + textWidth(r2Text) + 2 * CHAR_W, P.x + 12 + textWidth(rgText) + 24);
+	const opamp = placeSymbol('opamp_no_power_right', rgX + 50 + 27.36, P.y + 0.18 * SCALE, SCALE);
+	net.wire(P, opamp.ports.inp1);
+	const negNode = opamp.ports.inp2;
+	const Rg = placeSymbol('resistor_down', negNode.x - 50, negNode.y + 80, SCALE);
+	const gndRg = placeSymbol('ground_down', Rg.ports['2'].x - 0.01 * SCALE, Rg.ports['2'].y + 0.29 * SCALE, SCALE);
+	net.wire(Rg.ports['1'], { x: Rg.ports['1'].x, y: negNode.y });
+	net.wire({ x: Rg.ports['1'].x, y: negNode.y }, negNode);
+	net.wire(Rg.ports['2'], gndRg.ports['1']);
+	const rfText = `Rf ${ohms(c.Rf)}`;
+	const r3Text = `R3 ${ohms(c.R3)}`;
+	const half = placeSymbol('resistor_right', 0, 0, SCALE).ports['2'].x;
+	const Vout = { x: Math.max(opamp.ports.out.x + 80, negNode.x + 2 * (textWidth(rfText) + 5 - half)), y: opamp.ports.out.y };
+	const loopY = Rg.ports['2'].y + 40;
+	const Rf = placeSymbol('resistor_right', (negNode.x + Vout.x) / 2, loopY, SCALE);
+	net.elbow(negNode, Rf.ports['1'], 'v');
+	net.wire(Rf.ports['2'], { x: Vout.x, y: loopY });
+	net.wire({ x: Vout.x, y: loopY }, Vout);
+	net.wire(opamp.ports.out, Vout);
+	net.wire(Vout, { x: Vout.x + 40, y: Vout.y });
+	// R3 over the top from X to Vout
+	const railY = y0 - 110;
+	const R3 = placeSymbol('resistor_right', (X.x + Vout.x) / 2, railY, SCALE);
+	net.wire(X, { x: X.x, y: railY });
+	net.wire({ x: X.x, y: railY }, R3.ports['1']);
+	net.wire(R3.ports['2'], { x: Vout.x, y: railY });
+	net.wire({ x: Vout.x, y: railY }, Vout);
+	parts.push(C2.svg, r2.part.svg, r2.gnd.svg, opamp.svg, Rg.svg, gndRg.svg, Rf.svg, R3.svg);
+	ports.push(...portPoints(C2, r2.part, r2.gnd, opamp, Rg, gndRg, Rf, R3));
+	labels.push(
+		label(c2Text, C2.ports['1'].x, y0 - 24, { anchor: 'start' }),
+		sideLabel(r2Text, r2.part),
+		label(rgText, Rg.ports['1'].x - 12, (Rg.ports['1'].y + Rg.ports['2'].y) / 2, { anchor: 'end' }),
+		label(rfText, Rf.ports['1'].x, loopY - 12, { anchor: 'start' }),
+		label(r3Text, R3.ports['1'].x, railY - 12, { anchor: 'start' }),
+		label('Vout', Vout.x + 48, Vout.y + 5, { anchor: 'start' })
+	);
+	parts.push(net.svg(), net.dots(ports), ...labels);
+	const top = railY - 32;
+	return { svg: parts.join(''), viewBox: `0 ${top} ${Vout.x + 100} ${loopY + 30 - top}` };
+}
+
+/**
+ * State-variable band-pass (khnBp). Main row: R3 from Vin into the
+ * summer A3's - input M (A3 drawn with its - input on top, R7 over it
+ * from M to its output H), R1 from H into the integrator A1 (C1 over it),
+ * whose output is the band-pass, Vout; R2 from Vout into the integrator
+ * A2 (C2 over it), whose output L returns along the bottom and up through
+ * R4 into M. A3's + input P has R6 hung from it to ground, and R5 hangs
+ * from a node left of P down to a lane under the row and on up to Vout.
+ */
+export function buildKhnBpDiagram(components, { ohms = formatOhms } = {}) {
+	const c = components;
+	const y0 = 220;
+	const Vin = { x: MARGIN, y: y0 };
+	const r3Text = `R3 ${ohms(c.R3)}`;
+	const R3 = placeClear((dx) => placeSymbol('resistor_right', Vin.x + 90 + dx, y0, SCALE), r3Text, 10, VIN_END);
+	const M = R3.ports['2'];
+	const net = createNet();
+	net.wire(Vin, R3.ports['1']);
+	// A3 with its - input on top, at M's level; P left of its + input, P5 further left
+	const r4Text = `R4 ${ohms(c.R4)}`;
+	const r5Text = `R5 ${ohms(c.R5)}`;
+	const r6Text = `R6 ${ohms(c.R6)}`;
+	const p5 = M.x + 30;
+	const pX = p5 + 12 + textWidth(r5Text) + 2 * CHAR_W;
+	const A3 = placeSymbol('opamp_no_power_right', pX + 30 + 27.36, M.y + 0.09 * SCALE, SCALE, { flipY: true });
+	net.wire(M, A3.ports.inp2);
+	const P = { x: pX, y: A3.ports.inp1.y };
+	const P5 = { x: p5, y: P.y };
+	net.wire(A3.ports.inp1, P);
+	net.wire(P, P5);
+	const r6 = hangWithGround('resistor_down', P);
+	net.wire(r6.part.ports['2'], r6.gnd.ports['1']);
+	const R5 = placeSymbol('resistor_down', P5.x, P5.y + HANG.resistor_down * SCALE, SCALE);
+	// R4 hung from M, down to the return lane
+	const R4 = placeSymbol('resistor_down', M.x, M.y + HANG.resistor_down * SCALE, SCALE);
+	const H = { x: A3.ports.out.x + 30, y: A3.ports.out.y };
+	net.wire(A3.ports.out, H);
+	// A1, the integrator from H, as in the Tow-Thomas drawing
+	const r1Text = `R1 ${ohms(c.R1)}`;
+	const R1 = placeClear((dx) => placeSymbol('resistor_right', H.x + 90 + dx, H.y, SCALE), r1Text, 8, Math.max(H.x, P.x + 12 + textWidth(r6Text)));
+	net.wire(H, R1.ports['1']);
+	const N1 = R1.ports['2'];
+	const A1 = placeSymbol('opamp_no_power_right', N1.x + 110, N1.y - 0.09 * SCALE, SCALE);
+	const gnd1 = placeSymbol('ground_down', A1.ports.inp1.x - 35 - 0.01 * SCALE, A1.ports.inp1.y + 40 + 0.29 * SCALE, SCALE);
+	net.wire(N1, A1.ports.inp2);
+	net.elbow(A1.ports.inp1, gnd1.ports['1'], 'h');
+	const BP = { x: A1.ports.out.x + 30, y: A1.ports.out.y };
+	net.wire(A1.ports.out, BP);
+	// A2, the integrator from the band-pass
+	const r2Text = `R2 ${ohms(c.R2)}`;
+	const R2 = placeClear((dx) => placeSymbol('resistor_right', BP.x + 90 + dx, BP.y, SCALE), r2Text, 8, BP.x + 40 + textWidth('Vout (BP)'));
+	net.wire(BP, R2.ports['1']);
+	const N2 = R2.ports['2'];
+	const A2 = placeSymbol('opamp_no_power_right', N2.x + 110, N2.y - 0.09 * SCALE, SCALE);
+	const gnd2 = placeSymbol('ground_down', A2.ports.inp1.x - 35 - 0.01 * SCALE, A2.ports.inp1.y + 40 + 0.29 * SCALE, SCALE);
+	net.wire(N2, A2.ports.inp2);
+	net.elbow(A2.ports.inp1, gnd2.ports['1'], 'h');
+	const L = { x: A2.ports.out.x + 30, y: A2.ports.out.y };
+	net.wire(A2.ports.out, L);
+	// the feedback rails over the three op-amps
+	const railY = y0 - 80;
+	const R7 = placeSymbol('resistor_right', (M.x + H.x) / 2, railY, SCALE);
+	const C1 = placeSymbol('capacitor_right', (N1.x + BP.x) / 2, railY, SCALE);
+	const C2 = placeSymbol('capacitor_right', (N2.x + L.x) / 2, railY, SCALE);
+	for (const [a, part, b] of [[M, R7, H], [N1, C1, BP], [N2, C2, L]]) {
+		net.wire(a, { x: a.x, y: railY });
+		net.wire({ x: a.x, y: railY }, part.ports['1']);
+		net.wire(part.ports['2'], { x: b.x, y: railY });
+		net.wire({ x: b.x, y: railY }, b);
+	}
+	// the R5 lane from under R5 to Vout, and the return from L up through R4
+	const laneY = y0 + 110;
+	const bottomY = laneY + 50;
+	net.wire(R5.ports['2'], { x: P5.x, y: laneY });
+	net.wire({ x: P5.x, y: laneY }, { x: BP.x, y: laneY });
+	net.wire({ x: BP.x, y: laneY }, BP);
+	net.wire(L, { x: L.x, y: bottomY });
+	net.wire({ x: L.x, y: bottomY }, { x: M.x, y: bottomY });
+	net.wire({ x: M.x, y: bottomY }, R4.ports['2']);
+	// the output: a tap on the band-pass line
+	const tap = { x: BP.x + 30, y: BP.y };
+	const tapEnd = { x: tap.x, y: BP.y + 44 };
+	net.wire(tap, tapEnd);
+	const parts = [R3.svg, A3.svg, r6.part.svg, r6.gnd.svg, R5.svg, R4.svg, R1.svg, A1.svg, gnd1.svg, R2.svg, A2.svg, gnd2.svg, R7.svg, C1.svg, C2.svg];
+	const ports = portPoints(R3, A3, r6.part, r6.gnd, R5, R4, R1, A1, gnd1, R2, A2, gnd2, R7, C1, C2);
+	const labels = [
+		label('Vin', Vin.x, Vin.y - 12, { anchor: 'start' }),
+		label(r3Text, M.x - 10, y0 - 22, { anchor: 'end' }),
+		label(r4Text, M.x - 12, (R4.ports['1'].y + R4.ports['2'].y) / 2 + 4, { anchor: 'end' }),
+		label(r5Text, P5.x + 12, (R5.ports['1'].y + R5.ports['2'].y) / 2 + 4, { anchor: 'start' }),
+		sideLabel(r6Text, r6.part),
+		label(`R7 ${ohms(c.R7)}`, R7.ports['1'].x, railY - 12, { anchor: 'start' }),
+		label(r1Text, N1.x - 8, H.y - 22, { anchor: 'end' }),
+		label(`C1 ${formatFarads(c.C1)}`, C1.ports['1'].x, railY - 12, { anchor: 'start' }),
+		label(r2Text, N2.x - 8, BP.y - 22, { anchor: 'end' }),
+		label(`C2 ${formatFarads(c.C2)}`, C2.ports['1'].x, railY - 12, { anchor: 'start' }),
+		label('A3', A3.ports.out.x - 24, A3.ports.out.y - 22, { anchor: 'middle' }),
+		label('A1', A1.ports.out.x - 24, y0 + 30, { anchor: 'middle' }),
+		label('A2', A2.ports.out.x - 24, y0 + 30, { anchor: 'middle' }),
+		label('Vout (BP)', tapEnd.x + 6, tapEnd.y + 2, { anchor: 'start' }),
+		label('Vlp (LP)', L.x + 6, L.y - 8, { anchor: 'start' })
+	];
+	parts.push(net.svg(), net.dots(ports), ...labels);
+	const top = railY - 30;
+	return { svg: parts.join(''), viewBox: `0 ${top} ${L.x + 60} ${bottomY + 24 - top}` };
+}

@@ -48,7 +48,13 @@ const FILTER_PAIR_GROUPS = {
 	towThomasBp: [{ name: 'R1', parts: ['R1'] }, { name: 'Ra', parts: ['Ra', 'Rb'] }, { name: 'Rd', parts: ['Rd'] }],
 	mfbBp: ['R1', 'R2', 'R3'].map((n) => ({ name: n, parts: [n] })),
 	boctor: ['R1', 'R2', 'R3', 'R4', 'R5', 'R6'].map((n) => ({ name: n, parts: [n] })),
-	boctorHp: ['R1', 'R2', 'R3', 'R4', 'R5', 'R6'].map((n) => ({ name: n, parts: [n] }))
+	boctorHp: ['R1', 'R2', 'R3', 'R4', 'R5', 'R6'].map((n) => ({ name: n, parts: [n] })),
+	// the narrow band-pass stages: the parts their designers may pair
+	rlcGyrator: ['Ra', 'Rb', 'R2'].map((n) => ({ name: n, parts: [n] })),
+	rlcGic: ['Ra', 'Rb', 'R4'].map((n) => ({ name: n, parts: [n] })),
+	sallenKeyBp: ['Ra', 'Rb', 'R2', 'R3', 'Rf'].map((n) => ({ name: n, parts: [n] })),
+	khnBp: [{ name: 'R2', parts: ['R2'] }, { name: 'R3', parts: ['R3'] }, { name: 'R4', parts: ['R4', 'R7'] }, { name: 'R5', parts: ['R5'] }],
+	gainNonInv: [{ name: 'R2', parts: ['R2'] }]
 };
 
 /** The groups of a built stage whose value is two in series, each { name, parts }. A stage that fell back to the full series has none. */

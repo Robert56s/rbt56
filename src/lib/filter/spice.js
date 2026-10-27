@@ -3,8 +3,9 @@ import { renderNetlist, spiceValue } from '../spice/core';
 import { RESPONSES } from './approximations';
 import { seriesPair } from './eseries';
 import { drawFilter } from './sheet';
+import { stageElements } from './stageElements';
 
-export { spiceValue };
+export { spiceValue, stageElements };
 
 /**
  * LTspice output for a realized design, in two formats built from one
@@ -27,180 +28,6 @@ export { spiceValue };
  * stage 2).
  */
 
-/**
- * The elements of one realized stage, wired from `nIn` to `nOut`. `i` makes
- * every internal node and reference designator unique. An op-amp's nodes
- * are always listed [non-inverting, inverting, output]; each renderer maps
- * that onto its own convention.
- */
-export function stageElements(stage, i, nIn, nOut) {
-	const c = stage.components;
-	const n = (suffix) => `s${i}${suffix}`;
-	const R = (tag, a, b, value) => ({ kind: 'R', name: `R${tag}${i}`, nodes: [a, b], value });
-	const C = (tag, a, b, value) => ({ kind: 'C', name: `C${tag}${i}`, nodes: [a, b], value });
-	const op = (tag, p, m, out) => ({ kind: 'OP', name: `U${tag}${i}`, nodes: [p, m, out] });
-
-	switch (stage.topology) {
-		case 'boctor': {
-			const X = n('x'), M = n('m'), P = n('p');
-			return [C('2', nIn, X, c.C2), R('6', X, M, c.R6), C('1', M, nOut, c.C1), R('2', X, '0', c.R2), R('1', M, '0', c.R1), R('4', X, nOut, c.R4), R('3', nIn, P, c.R3), R('5', P, '0', c.R5), op('', P, M, nOut)];
-		}
-		case 'boctorHp': {
-			const X = n('x'), M = n('m'), P = n('p');
-			return [C('2', nIn, X, c.C2), R('2', X, M, c.R2), C('1', nIn, P, c.C1), R('4', M, '0', c.R4), R('5', M, nOut, c.R5), R('1', nIn, P, c.R1), R('3', P, nOut, c.R3), R('6', P, '0', c.R6), op('', P, M, nOut)];
-		}
-		case 'mfb': {
-			// R1 in to summing node A, C1 A to ground, R2 A to the virtual
-			// ground, R3 feedback to A, C2 feedback from the virtual ground.
-			const A = n('a');
-			const M = n('n');
-			return [R('1', nIn, A, c.R1), C('1', A, '0', c.C1), R('2', A, M, c.R2), R('3', nOut, A, c.R3), C('2', M, nOut, c.C2), op('', '0', M, nOut)];
-		}
-		case 'mfbHp': {
-			const A = n('a');
-			const M = n('n');
-			return [C('1', nIn, A, c.C1), R('1', A, '0', c.R1), C('2', A, M, c.C2), C('3', nOut, A, c.C3), R('2', M, nOut, c.R2), op('', '0', M, nOut)];
-		}
-		case 'sallenKey': {
-			// two equal R to the + input, Cbottom to ground, Ctop from the
-			// output back to the R-R junction, op-amp as a follower
-			const X = n('x');
-			const P = n('p');
-			return [R('1', nIn, X, c.R1), R('2', X, P, c.R2), C('b', P, '0', c.Cbottom), C('t', nOut, X, c.Ctop), op('', P, nOut, nOut)];
-		}
-		case 'sallenKeyHp': {
-			const X = n('x');
-			const P = n('p');
-			return [C('1', nIn, X, c.C1), C('2', X, P, c.C2), R('b', P, '0', c.Rbottom), R('t', nOut, X, c.Rtop), op('', P, nOut, nOut)];
-		}
-		case 'towThomas': {
-			// A1 damped integrator (output = band-pass), A2 integrator
-			// (output = low-pass, the stage output), A3 unity inverter
-			const N1 = n('n1');
-			const N2 = n('n2');
-			const B = n('bp');
-			const N4 = n('n4');
-			const N3 = n('inv');
-			return [
-				R('1', nIn, N1, c.R1),
-				R('a', N3, N1, c.Ra),
-				C('1', N1, B, c.C1),
-				R('d', N1, B, c.Rd),
-				op('a', '0', N1, B),
-				R('b', B, N2, c.Rb),
-				C('2', N2, nOut, c.C2),
-				op('b', '0', N2, nOut),
-				R('r1', nOut, N4, c.r),
-				R('r2', N4, N3, c.r),
-				op('c', '0', N4, N3)
-			];
-		}
-		case 'towThomasHp': {
-			// same loop, input through Cin: A1's output is the high-pass
-			const N1 = n('n1');
-			const N2 = n('n2');
-			const L = n('lp');
-			const N4 = n('n4');
-			const N3 = n('inv');
-			return [
-				C('in', nIn, N1, c.Cin),
-				R('a', N3, N1, c.Ra),
-				C('1', N1, nOut, c.C1),
-				R('d', N1, nOut, c.Rd),
-				op('a', '0', N1, nOut),
-				R('b', nOut, N2, c.Rb),
-				C('2', N2, L, c.C2),
-				op('b', '0', N2, L),
-				R('r1', L, N4, c.r),
-				R('r2', N4, N3, c.r),
-				op('c', '0', N4, N3)
-			];
-		}
-		case 'towThomasNotch': {
-			// the high-pass loop plus Rz from the input into A2: A1's output is the notch
-			const N1 = n('n1');
-			const N2 = n('n2');
-			const B = n('bp');
-			const N4 = n('n4');
-			const N3 = n('inv');
-			return [
-				C('in', nIn, N1, c.Cin),
-				R('z', nIn, N2, c.Rz),
-				R('a', N3, N1, c.Ra),
-				C('1', N1, nOut, c.C1),
-				R('d', N1, nOut, c.Rd),
-				op('a', '0', N1, nOut),
-				R('b', nOut, N2, c.Rb),
-				C('2', N2, B, c.C2),
-				op('b', '0', N2, B),
-				R('r1', B, N4, c.r),
-				R('r2', N4, N3, c.r),
-				op('c', '0', N4, N3)
-			];
-		}
-		case 'mfbBp': {
-			// Delyiannis-Friend: R1 in to A and R2 A to ground (the input
-			// attenuator), C2 A to the virtual ground, C1 output back to A, R3
-			// output back to the virtual ground. The order of mfbHp, so drawMfb
-			// draws it.
-			const A = n('a');
-			const M = n('n');
-			return [R('1', nIn, A, c.R1), R('2', A, '0', c.R2), C('2', A, M, c.C2), C('1', nOut, A, c.C1), R('3', M, nOut, c.R3), op('', '0', M, nOut)];
-		}
-		case 'towThomasBp': {
-			// the low-pass loop with its output taken at A1 (the band-pass):
-			// towThomasHp with R1 in place of Cin
-			const N1 = n('n1');
-			const N2 = n('n2');
-			const L = n('lp');
-			const N4 = n('n4');
-			const N3 = n('inv');
-			return [
-				R('1', nIn, N1, c.R1),
-				R('a', N3, N1, c.Ra),
-				C('1', N1, nOut, c.C1),
-				R('d', N1, nOut, c.Rd),
-				op('a', '0', N1, nOut),
-				R('b', nOut, N2, c.Rb),
-				C('2', N2, L, c.C2),
-				op('b', '0', N2, L),
-				R('r1', L, N4, c.r),
-				R('r2', N4, N3, c.r),
-				op('c', '0', N4, N3)
-			];
-		}
-		case 'firstOrder': {
-			// passive RC then the unity-gain buffer the schematic shows
-			const A = n('a');
-			return [R('', nIn, A, c.R), C('', A, '0', c.C), op('', A, nOut, nOut)];
-		}
-		case 'firstOrderHp': {
-			const A = n('a');
-			return [C('', nIn, A, c.C), R('', A, '0', c.R), op('', A, nOut, nOut)];
-		}
-		// The gain stages of a filter designed by hand (handDesign.js), each
-		// R1 and R2 as the method names them:
-		case 'gainInv': {
-			// inverting amplifier, -R2/R1: R1 in to the virtual ground, R2 back from the output
-			const M = n('n');
-			return [R('1', nIn, M, c.R1), R('2', M, nOut, c.R2), op('', '0', M, nOut)];
-		}
-		case 'gainDivider': {
-			// R2 in series, R1 to ground, then a follower: R1/(R1 + R2), the
-			// order of a first-order stage, so drawFirstOrder draws it
-			const A = n('a');
-			return [R('2', nIn, A, c.R2), R('1', A, '0', c.R1), op('', A, nOut, nOut)];
-		}
-		case 'gainNonInv': {
-			// non-inverting amplifier, 1 + R2/R1: R1 from the - input to ground, R2 back from the output
-			const M = n('n');
-			return [R('1', M, '0', c.R1), R('2', M, nOut, c.R2), op('', nIn, M, nOut)];
-		}
-		default:
-			return [];
-	}
-}
-
 /** Stages in cascade from node `from` to node `to`, numbered from `startIndex`. */
 export function chainElements(stages, from, to, startIndex = 1) {
 	const out = [];
@@ -215,8 +42,10 @@ export function chainElements(stages, from, to, startIndex = 1) {
 	return out;
 }
 
-const TYPE_LABEL = { lowpass: 'low-pass', highpass: 'high-pass', bandpass: 'band-pass', bandstop: 'band-stop' };
+const TYPE_LABEL = { lowpass: 'low-pass', highpass: 'high-pass', bandpass: 'band-pass', bandstop: 'band-stop', narrowband: 'narrow band-pass' };
 const isBand = (t) => t === 'bandpass' || t === 'bandstop';
+/** A narrow band-pass (narrowBand.js): f0, Q, B, K, n, f1 and f2 instead of edges and limits. */
+const isNarrow = (opts) => opts.filterType === 'narrowband';
 /**
  * A band filter built from one low-pass prototype (stages.js,
  * designBandPassTransformed / designBandStopTransformed); a band-stop
@@ -249,8 +78,10 @@ const correctedLine = (opts) => {
  * structure 'cascade' (a transformed band-stop, every stage a notch) one
  * chain like any other filter.
  */
-export function buildElements({ realizedStages, filterType, method, structure = method === 'transformed' ? 'cascade' : 'parallel', lpCount = 0, combinerMode = 'sum', combinerR = 10000, combinerResistors = null }) {
-	const out = [{ kind: 'V', name: 'V1', nodes: ['vin', '0'], spice: 'AC 1 SIN(0 1 1k)' }];
+export function buildElements({ realizedStages, filterType, method, structure = method === 'transformed' ? 'cascade' : 'parallel', lpCount = 0, combinerMode = 'sum', combinerR = 10000, combinerResistors = null, f0 }) {
+	// a narrow band-pass is driven at its own f0 for a time-domain run
+	const sine = filterType === 'narrowband' && Number.isFinite(f0) && f0 > 0 ? spiceValue(hz(f0)) : '1k';
+	const out = [{ kind: 'V', name: 'V1', nodes: ['vin', '0'], spice: `AC 1 SIN(0 1 ${sine})` }];
 	if (filterType === 'bandstop' && structure !== 'cascade') {
 		const lp = realizedStages.slice(0, lpCount);
 		const hp = realizedStages.slice(lpCount);
@@ -285,9 +116,15 @@ export function buildElements({ realizedStages, filterType, method, structure = 
 	return out;
 }
 
-/** The frequencies worth measuring: the spec edges, and the centre f0 of a transformed band-pass (its gain is 1 there). */
+/** The frequencies worth measuring: the spec edges, the centre f0 of a transformed band-pass (its gain is 1 there), or a narrow band-pass's -3 dB edges and f0. */
 function measurePoints(opts) {
 	const { filterType, fp, fs, fl, fh, fsl, fsh } = opts;
+	if (isNarrow(opts))
+		return [
+			['f1', hz(opts.f1)],
+			['f0', hz(opts.f0)],
+			['f2', hz(opts.f2)]
+		];
 	return isBand(filterType)
 		? [
 				['fl', fl],
@@ -302,7 +139,9 @@ function measurePoints(opts) {
 			];
 }
 
-function sweepRange({ filterType, fp, fs, fsl, fsh }) {
+function sweepRange({ filterType, fp, fs, fsl, fsh, f0 }) {
+	// a narrow band-pass: two decades either side of f0
+	if (filterType === 'narrowband') return { low: hz(f0 / 100), high: hz(f0 * 100) };
 	const low = Math.max(1, Math.round((isBand(filterType) ? fsl : Math.min(fp, fs)) / 100));
 	const high = Math.round((isBand(filterType) ? fsh : Math.max(fp, fs)) * 100);
 	return { low, high };
@@ -344,8 +183,22 @@ function limitsText(opts) {
 	return `Amax = ${pair(amaxDbHp ?? amaxDb, amaxDbLp ?? amaxDb)}, Amin = ${pair(aminDbHp ?? aminDb, aminDbLp ?? aminDb)}`;
 }
 
+/** A gain in V/V and dB, as the notes print it: 1 (0 dB), 0.2 (-14 dB). */
+const gainText = (k) => {
+	const db = 20 * Math.log10(k);
+	return `${Number(k.toPrecision(4))} (${Math.abs(db) < 0.005 ? '0' : `${db > 0 ? '+' : ''}${db.toFixed(2)}`} dB)`;
+};
+
+/** A narrow band-pass in two lines: f0, Q, B and K, then the stages and the -3 dB edges. */
+function narrowSummary(opts) {
+	const { f0, q, B, gain, n, f1, f2 } = opts;
+	const stages = n > 1 ? `${n} identical stages of Q_s = ${Number((q * Math.sqrt(2 ** (1 / n) - 1)).toPrecision(4))}` : 'one stage';
+	return [`f0 = ${hz(f0)} Hz, Q = ${Number(q.toPrecision(4))}, B = ${hz(B)} Hz, K = ${gainText(gain)} at f0`, `${stages}, -3 dB edges f1 = ${hz(f1)} Hz and f2 = ${hz(f2)} Hz`];
+}
+
 function specSummary(opts) {
 	const { filterType, fp, fs, fl, fh, fsl, fsh, topology, topologyHp, topologyLp } = opts;
+	if (isNarrow(opts)) return ['narrow band-pass', ...narrowSummary(opts), `circuit: ${stagesText(opts)}`];
 	const edges = isBand(filterType) ? `fl = ${fl} Hz, fh = ${fh} Hz, fsl = ${fsl} Hz, fsh = ${fsh} Hz` : `fp = ${fp} Hz, fs = ${fs} Hz`;
 	if (isTransformed(opts)) {
 		const { f0, B } = bandCentreOf(opts);
@@ -388,12 +241,20 @@ function headerLines(opts) {
 			...(pairs.length ? [...pairs, ''] : []),
 			...(opampModel(opamp).real
 				? [`The op-amps are ${opampPhrase(opamp)} (VPOS, VNEG), so the run shows`, 'what the part adds to the design: its gain-bandwidth, slew rate and', 'output limits. The ideal op-amp on the page gives the design itself.']
-				: [
-						'The op-amp is a generic model: open-loop gain AOL with one dominant',
-						'pole set so the gain-bandwidth product equals GBW. Change GBW to the',
-						'part that will be built (3meg = TL07x/TL08x, 8meg = OPA2134,',
-						'10meg = NE5532) and rerun to see whether the op-amp limits the design.'
-					]),
+				: isNarrow(opts)
+					? [
+							'The op-amp is a generic model: open-loop gain AOL with one pole set',
+							'so the gain-bandwidth product equals GBW. Change GBW to the part that',
+							'will be built (3meg = TL07x/TL08x, 8meg = OPA2134, 10meg = NE5532)',
+							'and rerun: a narrow band-pass moves with the op-amp, and one that',
+							'oscillates shows it in a time-domain run.'
+						]
+					: [
+							'The op-amp is a generic model: open-loop gain AOL with one dominant',
+							'pole set so the gain-bandwidth product equals GBW. Change GBW to the',
+							'part that will be built (3meg = TL07x/TL08x, 8meg = OPA2134,',
+							'10meg = NE5532) and rerun to see whether the op-amp limits the design.'
+						]),
 			...(correctedGbw(opts) ? [correctedLine(opts)] : [])
 		]
 	};
@@ -405,6 +266,8 @@ function headerLines(opts) {
  * sweep puts about 50 points across f0/Q of its sharpest stage.
  */
 function pointsPerDecade(opts) {
+	// a narrow band-pass: about 50 points between its -3 dB edges
+	if (isNarrow(opts)) return Math.max(200, Math.ceil(50 / Math.log10(opts.f2 / opts.f1) / 100) * 100);
 	if (!isTransformed(opts)) return 200;
 	const q = Math.max(0, ...(opts.realizedStages ?? []).map((s) => s.actual?.q).filter(Number.isFinite));
 	return Math.max(200, Math.ceil((50 * Math.LN10 * q) / 100) * 100);
@@ -413,6 +276,18 @@ function pointsPerDecade(opts) {
 function analysis(opts) {
 	const { low, high } = sweepRange(opts);
 	return [`.ac dec ${pointsPerDecade(opts)} ${low} ${high}`, ...measurePoints(opts).map(([name, f]) => `.meas AC v_${name} FIND V(vout) AT ${f}`)];
+}
+
+/**
+ * The commented .tran line: a 1 kHz input for 5 ms, or for a narrow
+ * band-pass an input at f0 for long enough to settle (a stage of Q_s
+ * settles in about Q_s/pi periods per time constant), at least 50 periods.
+ */
+function tranHint(opts) {
+	if (!isNarrow(opts)) return ['* uncomment the next one (1 kHz input, 5 ms):', '*.tran 0 5m 0 1u'];
+	const periods = Math.max(50, Math.ceil(10 * opts.q * opts.n));
+	const period = 1 / opts.f0;
+	return [`* uncomment the next one (an input at f0, ${periods} periods):`, `*.tran 0 ${spiceValue(Number((periods * period).toPrecision(3)))} 0 ${spiceValue(Number((period / 50).toPrecision(3)))}`];
 }
 
 /**
@@ -427,13 +302,13 @@ export function generateNetlist(opts) {
 		title,
 		comments: [...comments, '', 'Open in LTspice (File > Open, set the filter to All Files) and Run,', 'then plot V(vout). For a schematic instead, download the .asc.'],
 		params: [`.param AOL=1meg GBW=${gbw}`],
-		directives: [...analysis(opts), '', '* For a time-domain look instead, comment out the .ac line above and', '* uncomment the next one (1 kHz input, 5 ms):', '*.tran 0 5m 0 1u'],
+		directives: [...analysis(opts), '', '* For a time-domain look instead, comment out the .ac line above and', ...tranHint(opts)],
 		ideal,
 		opamp
 	});
 }
 
-const TOPOLOGY_LABEL = { mfb: 'multiple feedback', sallenKey: 'Sallen-Key', towThomas: 'Tow-Thomas', boctor: 'Boctor notch', mfbBp: 'multiple feedback band-pass', towThomasBp: 'Tow-Thomas band-pass', gainInv: 'inverting gain', gainDivider: 'divider gain', gainNonInv: 'non-inverting gain' };
+const TOPOLOGY_LABEL = { mfb: 'multiple feedback', sallenKey: 'Sallen-Key', towThomas: 'Tow-Thomas', boctor: 'Boctor notch', mfbBp: 'multiple feedback band-pass', towThomasBp: 'Tow-Thomas band-pass', gainInv: 'inverting gain', gainDivider: 'divider gain', gainNonInv: 'non-inverting gain', rlcGyrator: 'RLC with a gyrator', rlcGic: "RLC with Antoniou's GIC", sallenKeyBp: 'Sallen-Key band-pass', khnBp: 'state-variable band-pass' };
 
 /** The stage circuits actually on the sheet: the chosen topology, the notch stages, the band-pass stages, or several. */
 function stagesText({ topology, realizedStages = [] }) {
@@ -444,6 +319,10 @@ function stagesText({ topology, realizedStages = [] }) {
 /** The note on the drawn schematic: two lines (the .cir carries the longer explanation), then one per resistor built from two in series. */
 function schematicNotes(opts) {
 	const { filterType, realizedStages = [] } = opts;
+	if (isNarrow(opts)) {
+		const [spec, stages] = narrowSummary(opts);
+		return [`Active narrow band-pass filter, ${stagesText(opts)} (rbt56.com/tools/filter-design)`, `${spec}; ${stages}.`, 'Run, then plot V(vout); the .meas lines give its gain at f1, f0 and f2.', ...(correctedGbw(opts) ? [correctedLine(opts)] : []), ...pairLines(opts, 'the drawing shows their sum')];
+	}
 	const order = realizedStages.reduce((n, s) => n + (s.order ?? (/^firstOrder/.test(s.topology) ? 1 : 2)), 0);
 	const kind = `${TYPE_LABEL[filterType] ?? filterType}, ${responseText(opts)}, order ${order}, ${stagesText(opts)}`;
 	if (isTransformed(opts)) {

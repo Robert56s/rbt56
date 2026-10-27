@@ -23,6 +23,7 @@ import { designBoctorNotch } from '../src/lib/filter/boctor.js';
 import * as modulation from '../src/lib/modulation/circuits.js';
 import { designTowThomasBandPass, designTowThomasHighPass, designTowThomasLowPass, designTowThomasNotch } from '../src/lib/filter/towThomas.js';
 import { designMfbBandPass } from '../src/lib/filter/mfbBandPass.js';
+import { designNarrowBand, realizeNarrow } from '../src/lib/filter/narrowBand.js';
 import { buildAgcDiagram, buildClampDiagram, buildLimiterDiagram, buildOscillatorDiagram } from '../src/lib/oscillator/circuits.js';
 import { designOscillator, TOPOLOGIES } from '../src/lib/oscillator/topologies.js';
 import { buildTwoLevelDiagram } from '../src/lib/karnaugh/circuit.js';
@@ -40,6 +41,9 @@ function karnaughCase(n, ones, dcs, form) {
 }
 
 // ------------------------------------------------------------------ cases
+
+/** One stage of a narrow band-pass at 10 kHz, Q 5, gain K, built on a circuit as the page builds it. */
+const narrowStage = (circuit, gain) => realizeNarrow(designNarrowBand({ f0: 10000, q: 5, gain, stages: 1 }), circuit).resonators[0];
 
 const CASES = [
 	['filter/buildMfbDiagram', () => filter.buildMfbDiagram({ R1: 11000, R2: 5600, R3: 11000, C1: 1e-8, C2: 1e-9 })],
@@ -65,6 +69,23 @@ const CASES = [
 	['filter/buildMfbBpDiagram pair labels', () => filter.buildMfbBpDiagram(designMfbBandPass(2 * Math.PI * 48990, 3).components, { ohms: () => '12.1k + 3.32k' })],
 	['filter/buildTowThomasBpDiagram', () => filter.buildTowThomasBpDiagram(designTowThomasBandPass(2 * Math.PI * 48990, 2.4476).components)],
 	['filter/buildTowThomasBpDiagram pair labels', () => filter.buildTowThomasBpDiagram(designTowThomasBandPass(2 * Math.PI * 41047, 4.9719, { gain: 2.0314 }).components, { ohms: () => '12.1k + 3.32k' })],
+	// the narrow band-pass stages at 10 kHz, Q 5: the RLC with a gyrator and
+	// with a GIC (an input divider, and the tank left to the gain stage
+	// after it, no follower of its own), the Sallen-Key band-pass with and
+	// without its divider, the state-variable circuit, the gain stage, and
+	// each with the longest pair label a resistor can carry
+	['filter/buildRlcGyratorDiagram (divider)', () => filter.buildRlcGyratorDiagram(narrowStage('rlcGyrator', 0.3).components)],
+	['filter/buildRlcGyratorDiagram (no follower)', () => filter.buildRlcGyratorDiagram(narrowStage('rlcGyrator', 1).components, { buffered: false })],
+	['filter/buildRlcGicDiagram', () => filter.buildRlcGicDiagram(narrowStage('rlcGic', 1).components)],
+	['filter/buildRlcGicDiagram (divider, no follower)', () => filter.buildRlcGicDiagram(narrowStage('rlcGic', 0.3).components, { buffered: false })],
+	['filter/buildSallenKeyBpDiagram', () => filter.buildSallenKeyBpDiagram(narrowStage('sallenKeyBp', 20).components)],
+	['filter/buildSallenKeyBpDiagram (divider)', () => filter.buildSallenKeyBpDiagram(narrowStage('sallenKeyBp', 1).components)],
+	['filter/buildKhnBpDiagram', () => filter.buildKhnBpDiagram(narrowStage('khnBp', 1).components)],
+	['filter/buildGainNonInvDiagram (narrow gain stage)', () => filter.buildGainNonInvDiagram(realizeNarrow(designNarrowBand({ f0: 10000, q: 5, gain: 1, stages: 1 }), 'rlcGyrator').gainStage.components)],
+	['filter/buildRlcGyratorDiagram pair labels', () => filter.buildRlcGyratorDiagram(narrowStage('rlcGyrator', 0.3).components, { ohms: () => '12.1k + 3.32k' })],
+	['filter/buildRlcGicDiagram pair labels', () => filter.buildRlcGicDiagram(narrowStage('rlcGic', 0.3).components, { ohms: () => '12.1k + 3.32k', buffered: false })],
+	['filter/buildSallenKeyBpDiagram pair labels', () => filter.buildSallenKeyBpDiagram(narrowStage('sallenKeyBp', 1).components, { ohms: () => '12.1k + 3.32k' })],
+	['filter/buildKhnBpDiagram pair labels', () => filter.buildKhnBpDiagram(narrowStage('khnBp', 1).components, { ohms: () => '12.1k + 3.32k' })],
 	['modulation/buildJfetGainCellDiagram', () => modulation.buildJfetGainCellDiagram({ rb: 13600 })],
 	['modulation/buildGainStageDiagram', () => modulation.buildGainStageDiagram({ rtop: 8200, rbottom: 10000 })],
 	['modulation/buildHighPassDiagram', () => modulation.buildHighPassDiagram({ r: 100000, c: 2.2e-7 })],
@@ -369,6 +390,86 @@ console.log();
 		for (const i of bad) console.log(`      ! [${i.kind}] ${i.msg}`);
 	}
 	console.log(`${sweepBugs === 0 ? 'PASS' : 'FAIL'}  sweep: ${SWEEP.length} distinct stage diagrams the filter page draws with two in series allowed (${withPairs} with a pair label)`);
+	bugs += sweepBugs;
+}
+
+// Every stage the narrow band-pass draws, built as the page builds it
+// (realizeNarrow, one stage, on each of the six circuits, the gain stage
+// after one included) over f0, Q and K, on a full series and on two lists
+// with two resistors in series allowed, and drawn as the page draws it: a
+// pair labelled by its two parts, an RLC tank without its follower when the
+// gain stage after it buffers it.
+{
+	const { LAB_KIT, pairDiagramLabel } = await import('../src/lib/filter/eseries.js');
+	const { formatOhms } = await import('../src/lib/filter/format.js');
+	const { componentOptions } = await import('../src/lib/stock.js');
+	const { NARROW_CIRCUITS } = await import('../src/lib/filter/narrowBand.js');
+	const STOCKS = [
+		['E24', { resistorSeries: 'E24', capacitors: null, pairs: false }],
+		['kit', { resistorSeries: LAB_KIT.resistors, capacitors: LAB_KIT.capacitors, pairs: true }],
+		['3-digit list', componentOptions('custom', '1.21k 3.32k 12.1k 33.2k 121k 332k 1.21M', '1n 4.7n 22n 100n', true)]
+	];
+	// as CircuitDiagram.svelte picks the builder
+	const draw = (s, opts) => {
+		const c = s.components;
+		if (s.topology === 'rlcGyrator') return filter.buildRlcGyratorDiagram(c, { ...opts, buffered: s.buffered !== false });
+		if (s.topology === 'rlcGic') return filter.buildRlcGicDiagram(c, { ...opts, buffered: s.buffered !== false });
+		if (s.topology === 'sallenKeyBp') return filter.buildSallenKeyBpDiagram(c, opts);
+		if (s.topology === 'khnBp') return filter.buildKhnBpDiagram(c, opts);
+		if (s.topology === 'mfbBp') return filter.buildMfbBpDiagram(c, opts);
+		if (s.topology === 'towThomasBp') return filter.buildTowThomasBpDiagram(c, opts);
+		if (s.topology === 'gainNonInv') return filter.buildGainNonInvDiagram(c, opts);
+		throw new Error(`no diagram for ${s.topology}`);
+	};
+	const seen = new Set();
+	const SWEEP = [];
+	const kinds = new Map();
+	let withPairs = 0;
+	for (const [sn, parts] of STOCKS) {
+		for (const f0 of [50, 500, 5000, 20000, 100000]) {
+			for (const q of [0.7071, 2, 5, 10, 20]) {
+				for (const gain of [0.3, 1, 4]) {
+					const d = designNarrowBand({ f0, q, gain, stages: 1 });
+					for (const circuit of NARROW_CIRCUITS) {
+						const r = realizeNarrow(d, circuit, parts);
+						if (!r.ok) continue;
+						for (const s of r.stages) {
+							const name = `narrow/${s.topology}${s.buffered === false ? ' (no follower)' : ''} ${sn} ${f0} Hz Q ${q} K ${gain}`;
+							let diagram;
+							try {
+								diagram = draw(s, { ohms: (v) => pairDiagramLabel(v, parts.resistorSeries, formatOhms, parts.pairs && !s.stockShortfall) });
+							} catch (e) {
+								SWEEP.push([`${name} THROWS ${e.message}`, () => ({ svg: '', viewBox: '0 0 1 1' })]);
+								continue;
+							}
+							if (seen.has(diagram.svg)) continue;
+							seen.add(diagram.svg);
+							if (/<text[^>]*>[^<]* \+ [^<]*<\/text>/.test(diagram.svg)) withPairs++;
+							// an input divider: Rb of an RLC or Sallen-Key stage (a Tow-Thomas Rb is one of its integrators)
+							const kind = `${s.topology}${s.buffered === false ? ' (no follower)' : ''}${s.components.Rb && /^(rlc|sallenKeyBp)/.test(s.topology) ? ' (divider)' : ''}`;
+							kinds.set(kind, (kinds.get(kind) ?? 0) + 1);
+							SWEEP.push([name, () => diagram]);
+						}
+					}
+				}
+			}
+		}
+	}
+	let sweepBugs = 0;
+	for (const [name, build] of SWEEP) {
+		const result = checkDiagram(name, build());
+		const bad = result.issues.filter((i) => i.level === 'bug');
+		if (/ THROWS /.test(name)) {
+			sweepBugs++;
+			console.log(`FAIL  ${name}`);
+			continue;
+		}
+		if (!bad.length) continue;
+		sweepBugs += bad.length;
+		console.log(`FAIL  ${name}`);
+		for (const i of bad) console.log(`      ! [${i.kind}] ${i.msg}`);
+	}
+	console.log(`${sweepBugs === 0 ? 'PASS' : 'FAIL'}  sweep: ${SWEEP.length} distinct stage diagrams the narrow band-pass draws (${withPairs} with a pair label; ${[...kinds].map(([k, n]) => `${k} ${n}`).join(', ')})`);
 	bugs += sweepBugs;
 }
 

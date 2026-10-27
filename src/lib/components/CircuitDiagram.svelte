@@ -13,9 +13,13 @@
 		buildGainDividerDiagram,
 		buildGainInvDiagram,
 		buildGainNonInvDiagram,
+		buildKhnBpDiagram,
 		buildMfbBpDiagram,
 		buildMfbDiagram,
 		buildMfbHpDiagram,
+		buildRlcGicDiagram,
+		buildRlcGyratorDiagram,
+		buildSallenKeyBpDiagram,
 		buildSallenKeyDiagram,
 		buildSallenKeyHpDiagram,
 		buildTowThomasBpDiagram,
@@ -45,6 +49,11 @@
 		if (design.topology === 'gainInv') return buildGainInvDiagram(design.components, opts);
 		if (design.topology === 'gainNonInv') return buildGainNonInvDiagram(design.components, opts);
 		if (design.topology === 'gainDivider') return buildGainDividerDiagram(design.components, opts);
+		// the narrow band-pass stages; an RLC stage drops its output follower when the gain stage after it buffers it
+		if (design.topology === 'rlcGyrator') return buildRlcGyratorDiagram(design.components, { ...opts, buffered: design.buffered !== false });
+		if (design.topology === 'rlcGic') return buildRlcGicDiagram(design.components, { ...opts, buffered: design.buffered !== false });
+		if (design.topology === 'sallenKeyBp') return buildSallenKeyBpDiagram(design.components, opts);
+		if (design.topology === 'khnBp') return buildKhnBpDiagram(design.components, opts);
 		return null;
 	});
 </script>

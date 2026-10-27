@@ -28,6 +28,13 @@
 //    designers' lists of names, the plan on whole filters for every N
 //    against every combination of lists, the downloadable script with
 //    RESISTOR_PAIR_LIMIT, the LTspice notes and the Start here panel.
+// 12. The narrow band-pass (narrowBand.js): the four new stage designers
+//    against nodal analysis of their netlists and their own equations
+//    (pinned like the others), the simulated inductors, the
+//    sensitivities, the textbook numbers at 10 kHz, Q 5 and 10 nF, N
+//    identical stages and their bandwidth, the comparison table and its
+//    rule, the chains with their gain stage, the pairs, the capacitors by
+//    hand, the explanations and the downloadable script.
 // Exits non-zero on any failure.
 
 import { execFileSync } from 'node:child_process';
@@ -2230,6 +2237,997 @@ const PAIR_STOCKS = {
 			groupsOf(top) === 'Ra+Rd Ra' && groupsOf(one) === '- Rd' && one.measure < 0.98 * single.measure && groupsOf(four) === 'Ra+Rd Rd' && four.count === 4,
 			`N=1 ${groupsOf(one)} ${one.measure.toExponential(3)} against single parts ${single.measure.toExponential(3)}; N=4 ${groupsOf(four)} ${four.measure.toExponential(3)}`
 		);
+	}
+}
+
+/* ------------------------------------------------ 12. the narrow band-pass */
+// The fifth filter type (narrowBand.js): one frequency picked out by one
+// second-order band-pass stage, or by N identical ones, on six circuits.
+// Every netlist here is solved by the checks' own nodal solver
+// (lib-nodal.mjs), not by the tool's nodal.js.
+{
+	const { compareNarrowCircuits, designNarrowBand, narrowChainElements, narrowDefaultCircuit, narrowFigures, narrowFit, narrowIdealStages, narrowNetlistResponse, narrowShrink, narrowStability, narrowTextbook, realizeNarrow, NARROW_CIRCUITS, NARROW_GAIN_SPEED, NARROW_LABELS, NARROW_MAX_GAIN_STAGES, NARROW_REAL_GBW, NARROW_RULE } = await import('../src/lib/filter/narrowBand.js');
+	const { designRlcGic, designRlcGicFromCap, designRlcGyrator, designRlcGyratorFromCap, rlcGicActual, rlcGyratorActual } = await import('../src/lib/filter/rlcBandPass.js');
+	const { designSallenKeyBandPass, designSallenKeyBandPassFromCap, sallenKeyBpActual } = await import('../src/lib/filter/sallenKeyBandPass.js');
+	const { designKhnBandPass, designKhnBandPassFromCap, khnBpActual } = await import('../src/lib/filter/khnBandPass.js');
+	const { mfbBandPassActual } = await import('../src/lib/filter/mfbBandPass.js');
+	const { designTowThomasBandPassFromCap } = await import('../src/lib/filter/towThomas.js');
+	const { stageElements } = await import('../src/lib/filter/stageElements.js');
+	const { nodalResponse } = await import('../src/lib/filter/nodal.js');
+	const { responseAt } = await import('../src/lib/filter/bode.js');
+	const { khnBpSensitivity, rlcGicSensitivity, rlcGyratorSensitivity, sallenKeyBpSensitivity } = await import('../src/lib/filter/sensitivity.js');
+	const { explainNarrowBandCircuit, explainNarrowBandOrder, explainNarrowBandStage } = await import('../src/lib/filter/explain.js');
+	const { filterPairGroups } = await import('../src/lib/filter/pairPlan.js');
+	const { solveAt } = await import('./lib-nodal.mjs');
+
+	const TWO_PI = 2 * Math.PI;
+	const kit = LAB_KIT.resistors;
+	const relErr = (a, b) => Math.hypot(a.re - b.re, a.im - b.im) / Math.hypot(b.re, b.im);
+	const cDiv = (a, b) => {
+		const d = b.re * b.re + b.im * b.im;
+		return { re: (a.re * b.re + a.im * b.im) / d, im: (a.im * b.re - a.re * b.im) / d };
+	};
+	const cAdd = (a, b) => ({ re: a.re + b.re, im: a.im + b.im });
+	const cInv = (a) => cDiv({ re: 1, im: 0 }, a);
+	/** Elements of stageElements as lib-nodal reads them, the 1 V source on vin included. */
+	const forSolver = (els) => [
+		{ kind: 'V', name: 'V1', a: 'vin', b: '0' },
+		...els.map((e) => (e.kind === 'OP' ? { kind: 'OP', name: e.name, p: e.nodes[0], m: e.nodes[1], out: e.nodes[2] } : { kind: e.kind, name: e.name, a: e.nodes[0], b: e.nodes[1], value: e.value }))
+	];
+	/** V(vout) of one stage's netlist, from vin to vout, solved by lib-nodal (op-amps ideal, or the single-pole one given). */
+	const netH = (stage, f, opamp = null) => solveAt(forSolver(stageElements(stage, 1, 'vin', 'vout')), f, opamp);
+	/** The second-order band-pass a stage's actual figures describe: gain (omega0/Q) s / (s^2 + (omega0/Q) s + omega0^2). */
+	const bandPassOf = ({ wn, q, gain }, f) => {
+		const w = TWO_PI * f;
+		return cDiv({ re: 0, im: (gain * wn * w) / q }, { re: wn * wn - w * w, im: (wn * w) / q });
+	};
+	/** The same with the gyrator's zero at wz: k (s + wz) / (...), k set by |H(j omega0)| = gain. */
+	const gyratorOf = ({ wn, q, gain, wz }, f) => {
+		const w = TWO_PI * f;
+		const k = (gain * wn * wn) / (q * Math.hypot(wn, wz));
+		return cDiv({ re: k * wz, im: k * w }, { re: wn * wn - w * w, im: (wn * w) / q });
+	};
+	/** The input as the tank sees it: Ra || Rb and alpha = Rb / (Ra + Rb). */
+	const thevenin = ({ Ra, Rb }) => (Rb > 0 ? { R: (Ra * Rb) / (Ra + Rb), alpha: Rb / (Ra + Rb) } : { R: Ra, alpha: 1 });
+	/** alpha Z / (R + Z) = alpha / (1 + R Y), Y the tank: C in parallel with the simulated inductor's Z_in. */
+	const tankH = (c, zin, f) => {
+		const { R, alpha } = thevenin(c);
+		const y = cAdd({ re: 0, im: TWO_PI * f * c.C }, cInv(zin));
+		return cDiv({ re: alpha, im: 0 }, { re: 1 + R * y.re, im: R * y.im });
+	};
+	/** The gyrator's input impedance: R1 (1 + s R2 Cg) / (1 + s R1 Cg). */
+	const gyratorZin = ({ R1, R2, Cg }, f) => cDiv({ re: R1, im: R1 * TWO_PI * f * R2 * Cg }, { re: 1, im: TWO_PI * f * R1 * Cg });
+	/** Antoniou's converter: s Cg R1 R3 R4 / R2, an exact inductor. */
+	const gicZin = ({ R1, R2, R3, R4, Cg }, f) => ({ re: 0, im: (TWO_PI * f * Cg * R1 * R3 * R4) / R2 });
+	/** The state-variable band-pass as its own equations write it, for any parts. */
+	const khnH = ({ R1, R2, R3, R4, R5, R6, R7, C1, C2 }, f) => {
+		const w = TWO_PI * f;
+		const a2 = (R1 * R2 * R4 * C1 * C2) / R7;
+		const a1 = ((R2 * C2) / (1 + R5 / R6)) * (1 + R4 / R3 + R4 / R7);
+		return cDiv({ re: 0, im: ((R2 * R4 * C2) / R3) * w }, { re: 1 - a2 * w * w, im: a1 * w });
+	};
+	/** What the circuit's own equations give for a built stage, independent of its designer. */
+	const ownEquations = (d, f) => {
+		const c = d.components;
+		if (d.topology === 'rlcGyrator') return tankH(c, gyratorZin(c, f), f);
+		if (d.topology === 'rlcGic') return tankH(c, gicZin(c, f), f);
+		if (d.topology === 'khnBp') return khnH(c, f);
+		return null;
+	};
+	/** A stage's Q from its parts, for finite differences. */
+	const Q_OF = {
+		rlcGyrator: (c) => rlcGyratorActual(c).q,
+		rlcGic: (c) => rlcGicActual(c).q,
+		sallenKeyBp: (c) => sallenKeyBpActual(c).q,
+		khnBp: (c) => khnBpActual(c).q,
+		mfbBp: (c) => mfbBandPassActual(c).q,
+		towThomasBp: (c) => c.Rd * Math.sqrt(c.C1 / (c.C2 * c.Ra * c.Rb))
+	};
+	const SENSITIVITY = { rlcGyrator: rlcGyratorSensitivity, rlcGic: rlcGicSensitivity, sallenKeyBp: sallenKeyBpSensitivity, khnBp: khnBpSensitivity };
+	/** S^Q_x = x dQ / (Q dx) of every part, by central differences. */
+	const numericSensitivity = (topology, c) =>
+		Object.fromEntries(
+			Object.keys(c)
+				.filter((k) => Number.isFinite(c[k]) && c[k] > 0 && Q_OF[topology]({ ...c, [k]: c[k] * 1.000001 }) !== Q_OF[topology](c))
+				.map((k) => [k, Math.log(Q_OF[topology]({ ...c, [k]: c[k] * (1 + 1e-6) }) / Q_OF[topology]({ ...c, [k]: c[k] * (1 - 1e-6) })) / Math.log((1 + 1e-6) / (1 - 1e-6))])
+		);
+	/**
+	 * The peak of |H| near f0, its -3 dB edges, B and Q, and the gain signed
+	 * by H at the peak: a fine log grid from f0/span to span f0 (4 unless
+	 * given), golden section on the peak, bisection on the edges. Written
+	 * apart from narrowFigures.
+	 */
+	const measure = (H, f0, points = 1600, span = 4) => {
+		const mag = (f) => Math.hypot(H(f).re, H(f).im);
+		let best = 0;
+		let bestI = 0;
+		const at = (i) => (f0 / span) * (span * span) ** (i / points);
+		for (let i = 0; i <= points; i++) {
+			const m = mag(at(i));
+			if (m > best) {
+				best = m;
+				bestI = i;
+			}
+		}
+		let a = Math.log(at(Math.max(0, bestI - 1)));
+		let b = Math.log(at(Math.min(points, bestI + 1)));
+		for (let k = 0; k < 80; k++) {
+			const m1 = a + (b - a) / 3;
+			const m2 = b - (b - a) / 3;
+			if (mag(Math.exp(m1)) > mag(Math.exp(m2))) b = m2;
+			else a = m1;
+		}
+		const fp = Math.exp((a + b) / 2);
+		const peak = mag(fp);
+		const edge = (outer) => {
+			let x = Math.log(fp);
+			let y = Math.log(outer);
+			if (mag(outer) > peak / Math.SQRT2) return null;
+			for (let k = 0; k < 60; k++) {
+				const m = (x + y) / 2;
+				if (mag(Math.exp(m)) > peak / Math.SQRT2) x = m;
+				else y = m;
+			}
+			return Math.exp((x + y) / 2);
+		};
+		const f1 = edge(fp / 1000);
+		const f2 = edge(fp * 1000);
+		return { f0: fp, gain: Math.sign(H(fp).re) * peak, f1, f2, q: f1 && f2 ? fp / (f2 - f1) : null };
+	};
+	const pc = (x, d = 2) => `${(100 * x).toFixed(d)} %`;
+
+	// (a) The four new stage designers (the RLC with a gyrator or with
+	// Antoniou's GIC for its inductor, the Sallen-Key band-pass and the state
+	// variable circuit), automatic and from capacitors chosen by hand, over
+	// f0, Q and gain on four stocks. Every built stage's netlist, solved by
+	// lib-nodal, is the response its actual figures describe (a band-pass of
+	// that f0, Q and centre gain, positive; the gyrator's with its zero), the
+	// circuit's own equations (the RLC tank with the gyrator's exact Z_in or
+	// the GIC's s Cg R1 R3 R4 / R2; the state-variable transfer function),
+	// what bode.js plots, and what nodal.js solves, with an ideal and with a
+	// single-pole op-amp. On E24 and E96 each lands within the rounding of
+	// its targets; capacitors chosen by hand are used as given, and the
+	// automatic ones entered by hand give the same stage.
+	const DESIGNERS = {
+		rlcGyrator: { auto: designRlcGyrator, byHand: designRlcGyratorFromCap, cap: (d) => d.components.C, capsUsed: (d) => [d.components.C, d.components.Cg] },
+		rlcGic: { auto: designRlcGic, byHand: designRlcGicFromCap, cap: (d) => d.components.C, capsUsed: (d) => [d.components.C, d.components.Cg] },
+		sallenKeyBp: { auto: designSallenKeyBandPass, byHand: designSallenKeyBandPassFromCap, cap: (d) => d.components.C1, capsUsed: (d) => [d.components.C1, d.components.C2] },
+		khnBp: { auto: designKhnBandPass, byHand: designKhnBandPassFromCap, cap: (d) => d.components.C1, capsUsed: (d) => [d.components.C1, d.components.C2] }
+	};
+	const STOCKS = { E24: PAIR_STOCKS.E24, E96: PAIR_STOCKS.E96, kit: PAIR_STOCKS.lab, kitPairs: { ...PAIR_STOCKS.lab, pairs: true } };
+	const NARROW_F0 = [50, 1000, 10000, 49000, 200000];
+	const NARROW_Q = [0.7071, 2, 5, 10, 20];
+	const NARROW_GAIN = [0.4, 1, 2.03];
+	/** Every new designer over the grid, automatic and by hand, as [label, design] rows. */
+	const sweepNarrow = (opts) => {
+		const rows = [];
+		for (const [topology, { auto, byHand, cap }] of Object.entries(DESIGNERS)) {
+			for (const f0 of NARROW_F0) {
+				for (const q of NARROW_Q) {
+					for (const gain of NARROW_GAIN) {
+						const at = `${f0} Hz Q ${q} gain ${gain}`;
+						const wn = TWO_PI * f0;
+						const d = auto(wn, q, { ...opts, gain });
+						rows.push([`${topology} ${at}`, d]);
+						if (!d) continue;
+						rows.push([`${topology} by hand ${at}`, byHand(wn, q, cap(d) * 2.2, { ...opts, gain })]);
+						rows.push([`${topology} by hand, its own capacitor ${at}`, byHand(wn, q, cap(d), { ...opts, gain })]);
+					}
+				}
+			}
+		}
+		return rows;
+	};
+	// taken when the designers were added; a deliberate change to one moves them: rerun and update them.
+	// Moved once: the state-variable designer rounds its gain as the ratio R3/R0 (ratioPair), not R3 alone
+	const NARROW_DESIGNERS_BEFORE = { E24: 'e703c7c9347ed3fd', E96: '0cfa0869ce9b02e6', kit: '359158c0d60caa27', kitPairs: '2a6cd65d8098b4a2' };
+	/** The designs as text, every number at any depth to nine digits (a last-bit difference in Math.log cannot show). */
+	const narrowPrint = (rows) => createHash('sha256').update(rows.map((row) => JSON.stringify(row, (k, v) => (typeof v === 'number' ? Number(v.toPrecision(9)) : v))).join('\n')).digest('hex').slice(0, 16);
+	const opampAt = { aol: Infinity, gbw: NARROW_REAL_GBW };
+	for (const [name, opts] of Object.entries(STOCKS)) {
+		const rows = sweepNarrow(opts);
+		const built = rows.filter(([, d]) => d && d.components && d.ok !== false);
+		const wrong = [];
+		const off = [];
+		const notGiven = [];
+		let worst = { model: 0, own: 0, bode: 0, nodal: 0, single: 0 };
+		const land = { f0: 0, q: 0, gain: 0 };
+		for (const [label, d] of built) {
+			const wn = d.steps.wn;
+			const f0 = wn / TWO_PI;
+			const freqs = [f0 / 10, f0 / 2, f0 / 1.1, f0, d.actual.wn / TWO_PI, f0 * 1.1, 2 * f0, 10 * f0];
+			for (const f of freqs) {
+				const h = netH(d, f);
+				const model = d.topology === 'rlcGyrator' ? gyratorOf(d.actual, f) : bandPassOf(d.actual, f);
+				const own = ownEquations(d, f);
+				const single = netH(d, f, opampAt);
+				worst = {
+					model: Math.max(worst.model, relErr(h, model)),
+					own: Math.max(worst.own, own ? relErr(h, own) : 0),
+					bode: Math.max(worst.bode, relErr(h, responseAt([d], f))),
+					nodal: Math.max(worst.nodal, relErr(nodalResponse(stageElements(d, 1, 'vin', 'vout'), f), h)),
+					single: Math.max(worst.single, relErr(nodalResponse(stageElements(d, 1, 'vin', 'vout'), f, { gbw: NARROW_REAL_GBW }), single))
+				};
+			}
+			// non-inverting: H at its own f0 is the positive centre gain
+			const top = netH(d, d.actual.wn / TWO_PI);
+			if (!(top.re > 0 && Math.abs(Math.hypot(top.re, top.im) / d.actual.gain - 1) < 1e-9)) wrong.push(`${label}: H(j omega0) = ${top.re.toFixed(4)} ${top.im >= 0 ? '+' : '-'} j ${Math.abs(top.im).toFixed(4)} against ${d.actual.gain}`);
+			if (/by hand/.test(label)) {
+				const given = /its own capacitor/.test(label) ? null : d.steps.C;
+				if (!(d.ok && d.manual && DESIGNERS[d.topology].capsUsed(d).every((v) => v === d.steps.C))) notGiven.push(`${label}: ${JSON.stringify(DESIGNERS[d.topology].capsUsed(d))}`);
+				if (given === null) {
+					const auto = built.find(([l]) => l === label.replace(' by hand, its own capacitor', ''));
+					if (!opts.pairs && auto && JSON.stringify(auto[1].components) !== JSON.stringify(d.components)) notGiven.push(`${label}: not the automatic stage`);
+				}
+				continue;
+			}
+			const q = d.steps.q;
+			const gain = d.steps.gainTarget;
+			const ef = Math.abs(d.actual.wn / wn - 1);
+			const eq = Math.abs(d.actual.q / q - 1);
+			// the gain is the circuit's own unless the design sets it: the state-variable stage, an input divider
+			const eg = d.topology === 'khnBp' || d.steps.divider ? Math.abs(d.actual.gain / gain - 1) : 0;
+			land.f0 = Math.max(land.f0, ef);
+			land.q = Math.max(land.q, eq);
+			land.gain = Math.max(land.gain, eg);
+			// the Sallen-Key's Q follows K - 1 some 2 sqrt(2) Q - 1 times over: held to its own 25 % limit on E24
+			const sk = d.topology === 'sallenKeyBp' && name === 'E24';
+			const lim = name === 'E24' ? { f0: 0.025, q: sk ? 0.25 : 0.04, gain: sk ? 0.25 : 0.05 } : name === 'E96' ? { f0: 0.01, q: 0.015, gain: 0.025 } : null;
+			if (lim && (ef > lim.f0 || eq > lim.q || eg > lim.gain)) off.push(`${label}: f0 ${pc(ef)}, Q ${pc(eq)}, gain ${pc(eg)}`);
+		}
+		const print = narrowPrint(rows);
+		const solved = worst.model < 1e-9 && worst.own < 1e-9 && worst.bode < 1e-9 && worst.nodal < 1e-9 && worst.single < 1e-9;
+		check(
+			`narrow band-pass designers, ${name}: ${built.length} of ${rows.length} stages built, each netlist the response of its actual figures, of its own equations, of bode.js and of nodal.js (ideal and single-pole), non-inverting${STOCKS[name].resistorSeries === 'E24' || STOCKS[name].resistorSeries === 'E96' ? ', on target within the rounding' : ''}, capacitors by hand as given, all as pinned`,
+			solved && wrong.length === 0 && off.length === 0 && notGiven.length === 0 && print === NARROW_DESIGNERS_BEFORE[name],
+			[
+				wrong[0],
+				off[0],
+				notGiven[0],
+				solved ? null : `worst against its figures ${worst.model.toExponential(1)}, its equations ${worst.own.toExponential(1)}, bode ${worst.bode.toExponential(1)}, nodal.js ${worst.nodal.toExponential(1)}, single pole ${worst.single.toExponential(1)}`,
+				`worst f0 ${pc(land.f0)}, Q ${pc(land.q)}, set gain ${pc(land.gain)}; ${print}, expected ${NARROW_DESIGNERS_BEFORE[name]}`
+			]
+				.filter(Boolean)
+				.join('; ')
+		);
+	}
+
+	// The two simulated inductors on their own, a series resistor Rs from vin
+	// to the port: Z = Rs V / (1 - V) at the port is the gyrator's
+	// R1 (1 + s R2 Cg) / (1 + s R1 Cg) and the GIC's s Cg R1 R3 R4 / R2
+	{
+		const Rs = 1000;
+		const portZ = (els, f) => {
+			const v = solveAt(forSolver([{ kind: 'R', name: 'Rs', nodes: ['vin', 'vout'], value: Rs }, ...els]), f);
+			return cDiv({ re: Rs * v.re, im: Rs * v.im }, { re: 1 - v.re, im: -v.im });
+		};
+		let worst = 0;
+		for (const [R1, R2, R3, R4, Cg] of [[50, 50660, 1500, 1800, 1e-8], [330, 1.2e6, 10000, 4700, 2.2e-9], [1000, 82000, 2200, 22000, 4.7e-7]]) {
+			const gyr = [
+				{ kind: 'R', name: 'R1', nodes: ['vout', 'o'], value: R1 },
+				{ kind: 'C', name: 'Cg', nodes: ['vout', 'x'], value: Cg },
+				{ kind: 'R', name: 'R2', nodes: ['x', '0'], value: R2 },
+				{ kind: 'OP', name: 'Ug', nodes: ['x', 'o', 'o'] }
+			];
+			const gic = [
+				{ kind: 'R', name: 'R1', nodes: ['vout', 'a'], value: R1 * 10 },
+				{ kind: 'R', name: 'R2', nodes: ['a', 'b'], value: R2 / 10 },
+				{ kind: 'R', name: 'R3', nodes: ['b', 'd'], value: R3 },
+				{ kind: 'C', name: 'Cg', nodes: ['d', 'e'], value: Cg },
+				{ kind: 'R', name: 'R4', nodes: ['e', '0'], value: R4 },
+				{ kind: 'OP', name: 'U1', nodes: ['vout', 'b', 'd'] },
+				{ kind: 'OP', name: 'U2', nodes: ['e', 'b', 'a'] }
+			];
+			for (const f of [10, 300, 3000, 10000, 100000]) {
+				worst = Math.max(worst, relErr(portZ(gyr, f), gyratorZin({ R1, R2, Cg }, f)), relErr(portZ(gic, f), gicZin({ R1: R1 * 10, R2: R2 / 10, R3, R4, Cg }, f)));
+			}
+		}
+		check("simulated inductors: the gyrator's port is R1 (1 + s R2 Cg) / (1 + s R1 Cg) and the GIC's s Cg R1 R3 R4 / R2, by nodal analysis", worst < 1e-9, `worst ${worst.toExponential(1)}`);
+	}
+
+	// Q's sensitivity to each part (sensitivity.js) against central
+	// differences of the stage's own Q, on the stages built above for E24
+	{
+		let worst = 0;
+		let compared = 0;
+		let where = '';
+		for (const [, d] of sweepNarrow(STOCKS.E24).filter(([l, x]) => x && x.components && !/by hand/.test(l))) {
+			const formula = SENSITIVITY[d.topology](d.components);
+			const numeric = numericSensitivity(d.topology, d.components);
+			for (const k of new Set([...Object.keys(formula), ...Object.keys(numeric)])) {
+				compared++;
+				const e = Math.abs((formula[k] ?? 0) - (numeric[k] ?? 0));
+				if (e > worst) {
+					worst = e;
+					where = `${d.topology} ${k}: ${formula[k]} against ${numeric[k]}`;
+				}
+			}
+		}
+		check('narrow band-pass sensitivities: every S^Q of the four new stages equals a central difference of its Q', worst < 1e-5 && compared > 1000, `${compared} parts, worst ${worst.toExponential(1)}${worst >= 1e-5 ? ` at ${where}` : ''}`);
+	}
+
+	// (b) The textbook numbers at f0 = 10 kHz, Q = 5, C = 10 nF, and what
+	// nodal analysis makes of them: the plain RLC (L = 25.33 mH, R = Q
+	// sqrt(L/C) = 7.958 kOhm, through a GIC set to that L), the gyrator at R1 =
+	// 50 Ohm, R2 = 50.66 kOhm (its exact Z_in loses 2 to 3 dB, moves the peak up
+	// and lowers Q), the equal-part Sallen-Key (R = 2.251 kOhm, K_a = 3.717,
+	// centre gain K_a/(4 - K_a) = 2 sqrt(2) Q - 1 = 13.14, S^Q_K the same), the
+	// two-resistor multiple feedback form (159.2 Ohm and 15.92 kOhm, centre gain
+	// -2Q^2 = -50), the state-variable circuit at unity gain (7.958 kOhm and
+	// 318.3 Ohm) and with the design rule R3 = Q R0 / K, R5/R6 = 2Q + K - 1 for
+	// several K and Q, its low-pass and high-pass outputs where they belong,
+	// and the Tow-Thomas (R = 1.592 kOhm, Rd = R1 = 7.958 kOhm).
+	{
+		const w0 = TWO_PI * 10000;
+		const C = 1e-8;
+		const tb = narrowTextbook(w0, 5, C);
+		const near = (a, b, tol) => Math.abs(a / b - 1) <= tol;
+		const problems = [];
+		const want = [
+			['L', tb.rlc.L, 0.025330],
+			['R', tb.rlc.R, 7957.7],
+			['gyrator R1', tb.gyrator.R1, 50],
+			['gyrator R2', tb.gyrator.R2, 50660],
+			['Sallen-Key R', tb.sallenKey.R, 2250.8],
+			['Sallen-Key K', tb.sallenKey.K, 3.7172],
+			['Sallen-Key centre gain', tb.sallenKey.ownGain, 13.142],
+			['Sallen-Key S^Q_K', tb.sallenKey.sensitivityK, 13.142],
+			['MFB R1', tb.mfbTwoResistor.R1, 159.15],
+			['MFB R3', tb.mfbTwoResistor.R3, 15915],
+			['MFB gain', tb.mfbTwoResistor.gain, -50],
+			['KHN R1', tb.khnRatio.R1, 7957.7],
+			['KHN R2', tb.khnRatio.R2, 318.31],
+			['Tow-Thomas R', tb.towThomas.R, 1591.5],
+			['Tow-Thomas Rd', tb.towThomas.Rd, 7957.7],
+			['Tow-Thomas R1', tb.towThomas.R1, 7957.7]
+		];
+		for (const [label, got, expected] of want) if (!near(got, expected, 2e-4)) problems.push(`${label} ${got} against ${expected}`);
+		const tt = designTowThomasBandPassFromCap(w0, 5, C).theoretical;
+		if (!(near(tt.Ra, 1591.5, 2e-4) && near(tt.Rd, 7957.7, 2e-4) && near(tt.R1, 7957.7, 2e-4))) problems.push(`Tow-Thomas designer ${JSON.stringify(tt)}`);
+		const fig = (stage) => measure((f) => netH(stage, f), 10000);
+		const X = 1 / (w0 * C);
+		// the plain RLC: a GIC of four equal resistors X is L = X / omega0 exactly
+		const rlc = fig({ topology: 'rlcGic', components: { Ra: tb.rlc.R, C, R1: X, R2: X, R3: X, R4: X, Cg: C } });
+		if (!(near(rlc.f0, 10000, 1e-6) && near(rlc.q, 5, 1e-6) && near(rlc.gain, 1, 1e-9))) problems.push(`RLC ${JSON.stringify(rlc)}`);
+		// the gyrator at the textbook values
+		const gy = fig({ topology: 'rlcGyrator', components: { Ra: tb.rlc.R, C, R1: 50, R2: tb.gyrator.R2, Cg: C } });
+		const gyDb = 20 * Math.log10(gy.gain);
+		if (!(gyDb < -2 && gyDb > -3 && gy.f0 > 10000 && gy.f0 < 10100 && gy.q < 4.2 && gy.q > 3.4)) problems.push(`textbook gyrator ${gyDb.toFixed(2)} dB at ${gy.f0.toFixed(1)} Hz, Q ${gy.q?.toFixed(3)}`);
+		// the equal-part Sallen-Key
+		const R = tb.sallenKey.R;
+		const sk = { topology: 'sallenKeyBp', components: { Ra: R, C1: C, C2: C, R2: R, R3: R, Rg: 1000, Rf: (tb.sallenKey.K - 1) * 1000 } };
+		const skFig = fig(sk);
+		const skS = sallenKeyBpSensitivity(sk.components);
+		const K = tb.sallenKey.K;
+		if (!(near(skFig.f0, 10000, 1e-6) && near(skFig.q, 5, 1e-6) && near(skFig.gain, K / (4 - K), 1e-9) && near(skS.Rf, (K - 1) / (4 - K), 1e-9))) problems.push(`Sallen-Key ${JSON.stringify(skFig)}, S_Rf ${skS.Rf}`);
+		// the two-resistor multiple feedback form: no resistor to ground
+		const mfb = fig({ topology: 'mfbBp', components: { R1: tb.mfbTwoResistor.R1, R2: Infinity, R3: tb.mfbTwoResistor.R3, C1: C, C2: C } });
+		if (!(near(mfb.f0, 10000, 1e-6) && near(mfb.q, 5, 1e-6) && near(mfb.gain, -50, 1e-9))) problems.push(`MFB two-resistor ${JSON.stringify(mfb)}`);
+		// the state-variable circuit: unity gain from the integrators, then the design rule
+		const khnUnity = fig({ topology: 'khnBp', components: { R1: tb.khnRatio.R1, R2: tb.khnRatio.R2, R3: 1e4, R4: 1e4, R5: 2e4, R6: 1e4, R7: 1e4, C1: C, C2: C } });
+		if (!(near(khnUnity.f0, 10000, 1e-6) && near(khnUnity.q, 5, 1e-6) && near(khnUnity.gain, 1, 1e-9))) problems.push(`KHN unity ${JSON.stringify(khnUnity)}`);
+		let rules = 0;
+		for (const k of [0.5, 1, 4]) {
+			for (const qq of [2, 5, 20]) {
+				const c = { R1: X, R2: X, R3: (qq * 1e4) / k, R4: 1e4, R5: (2 * qq + k - 1) * 1e4, R6: 1e4, R7: 1e4, C1: C, C2: C };
+				const r = fig({ topology: 'khnBp', components: c });
+				rules++;
+				if (!(near(r.f0, 10000, 1e-6) && near(r.q, qq, 1e-6) && near(r.gain, k, 1e-9))) problems.push(`KHN rule K ${k} Q ${qq}: ${JSON.stringify(r)}`);
+			}
+		}
+		// its outputs: the summer's (s1hp) passes high frequencies, the second integrator's (s1lp) low ones
+		const khn = { topology: 'khnBp', components: { R1: X, R2: X, R3: 5e4, R4: 1e4, R5: 1e5, R6: 1e4, R7: 1e4, C1: C, C2: C } };
+		const out = (node, f) => Math.hypot(nodalResponse(stageElements(khn, 1, 'vin', 'vout'), f, { output: node }).re, nodalResponse(stageElements(khn, 1, 'vin', 'vout'), f, { output: node }).im);
+		if (!(out('s1lp', 100) > 100 * out('s1lp', 1e6) && out('s1hp', 1e6) > 100 * out('s1hp', 100))) problems.push('KHN low-pass and high-pass outputs swapped');
+		check(
+			'narrow band-pass, the textbook numbers at 10 kHz, Q 5, 10 nF and nodal analysis of each circuit: L 25.33 mH and R 7.958 kOhm, the gyrator at 50 Ohm and 50.66 kOhm 2 to 3 dB short, the Sallen-Key at 2.251 kOhm and K = 3.717 with centre gain 13.14, the two-resistor MFB at -50, the state-variable rule for nine K and Q, the Tow-Thomas',
+			problems.length === 0 && rules === 9,
+			problems.length ? problems.slice(0, 3).join('; ') : `textbook gyrator ${gyDb.toFixed(2)} dB at ${gy.f0.toFixed(1)} Hz, Q ${gy.q.toFixed(3)}`
+		);
+	}
+
+	// (c) N identical stages: each takes Q_s = Q sqrt(2^(1/N) - 1) and K^(1/N),
+	// all on f0, and the chain of the ideal stages (narrowIdealStages through
+	// bode.js) is K at f0, 3.0103 dB down at f1 and f2 with f1 f2 = f0^2 and
+	// f2 - f1 = B, falls 20 N dB per decade far from f0, and narrowFigures
+	// reads it so. The spec by B is the spec by Q; a figure out of range is
+	// refused.
+	{
+		const problems = [];
+		let designs = 0;
+		for (const f0 of [1000, 10000]) {
+			for (const q of [0.7, 5, 30]) {
+				for (const gain of [0.5, 1, 8]) {
+					for (let n = 1; n <= 6; n++) {
+						const d = designNarrowBand({ f0, q, gain, stages: n });
+						designs++;
+						const where = `f0 ${f0} Q ${q} K ${gain} N ${n}`;
+						const shrink = Math.sqrt(2 ** (1 / n) - 1);
+						const sameStages = d.stages.length === n && d.stages.every((s, i) => s.index === i && s.wn === TWO_PI * f0 && Math.abs(s.q / (q * shrink) - 1) < 1e-12 && Math.abs(s.gain / gain ** (1 / n) - 1) < 1e-12 && s.filterType === 'bandpass' && s.order === 2);
+						if (!sameStages || Math.abs(narrowShrink(n) / shrink - 1) > 1e-12 || Math.abs(d.B - f0 / q) > 1e-9 * f0) problems.push(`${where}: stages`);
+						if (Math.abs((d.f1 * d.f2) / (f0 * f0) - 1) > 1e-12 || Math.abs((d.f2 - d.f1) / d.B - 1) > 1e-12 || d.skirtDbPerDecade !== -20 * n) problems.push(`${where}: edges ${d.f1} ${d.f2}`);
+						const ideal = narrowIdealStages(d);
+						const db = (f) => magnitudePhaseAt(ideal, f).db;
+						const k = 20 * Math.log10(gain);
+						if (Math.abs(db(f0) - k) > 1e-9 || Math.abs(db(d.f1) - k + 10 * Math.log10(2)) > 1e-9 || Math.abs(db(d.f2) - k + 10 * Math.log10(2)) > 1e-9 || !(db(f0 * 1.001) < db(f0) && db(f0 / 1.001) < db(f0))) problems.push(`${where}: ${db(f0).toFixed(4)} dB at f0, ${(db(f0) - db(d.f1)).toFixed(5)} dB down at f1`);
+						// far from f0, on the complex response (the dB of bode.js stops at -240 dB)
+						const far = (f) => 20 * Math.log10(Math.hypot(responseAt(ideal, f).re, responseAt(ideal, f).im));
+						const slope = far(f0 * 1e3) - far(f0 * 1e4);
+						const slopeLow = far(f0 / 1e4) - far(f0 / 1e3);
+						if (Math.abs(slope - 20 * n) > 1e-3 || Math.abs(slopeLow + 20 * n) > 1e-3) problems.push(`${where}: skirts ${slope.toFixed(3)} and ${slopeLow.toFixed(3)} dB per decade`);
+						const fig = narrowFigures((f) => responseAt(ideal, f), f0);
+						if (Math.abs(fig.f0 / f0 - 1) > 1e-6 || Math.abs(fig.q / q - 1) > 1e-6 || Math.abs(fig.gain / gain - 1) > 1e-9 || Math.abs(fig.f1 / d.f1 - 1) > 1e-6 || Math.abs(fig.f2 / d.f2 - 1) > 1e-6) problems.push(`${where}: narrowFigures ${JSON.stringify(fig)}`);
+					}
+				}
+			}
+		}
+		const byB = designNarrowBand({ f0: 10000, bandwidth: 2000, gain: 1, stages: 2 });
+		const byQ = designNarrowBand({ f0: 10000, q: 5, gain: 1, stages: 2 });
+		if (byB.by !== 'b' || byQ.by !== 'q' || JSON.stringify({ ...byB, by: 'q' }) !== JSON.stringify(byQ)) problems.push('the spec by B is not the spec by Q');
+		const refused = [{ f0: 10000, q: 5, stages: 0 }, { f0: 10000, q: 5, stages: 7 }, { f0: 10000, q: 5, stages: 2.5 }, { f0: -1, q: 5 }, { f0: 10000, q: 0 }, { f0: 10000 }, { f0: 10000, q: 5, gain: 0 }, { f0: NaN, q: 5 }].filter((s) => designNarrowBand(s) !== null);
+		if (refused.length) problems.push(`not refused: ${JSON.stringify(refused[0])}`);
+		check(
+			`N identical stages: ${designs} designs, Q_s = Q sqrt(2^(1/N) - 1) and K^(1/N) each, the chain K at f0 and 3.0103 dB down at f1 and f2 (f1 f2 = f0^2, f2 - f1 = B), skirts of 20 N dB per decade, read back by narrowFigures; B gives the design Q does; out-of-range figures refused`,
+			problems.length === 0,
+			problems.slice(0, 3).join('; ')
+		);
+	}
+
+	// (d) The comparison table and its rule (compareNarrowCircuits,
+	// narrowDefaultCircuit), on the reference spec and others, each row
+	// checked from the chain it built: the op-amps and parts counted from its
+	// netlist, its spread, the figures with ideal op-amps measured on bode.js
+	// and on a single-pole op-amp of the TL082's 3.45 MHz measured on the
+	// whole chain's netlist solved by lib-nodal (not stage by stage), its
+	// worst Q sensitivity by central differences, whether it qualifies under
+	// NARROW_RULE (both sets of figures within |error| <= limit, no
+	// oscillation on the TL082, whose poles section (d4) checks apart), and
+	// the circuit the rule picks. At the reference spec (10 kHz, Q 5, K 1,
+	// one stage, E24) the multiple feedback band-pass, one op-amp, is the
+	// default.
+	{
+		const OPAMPS = { rlcGyrator: (s) => (s.buffered === false ? 1 : 2), rlcGic: (s) => (s.buffered === false ? 2 : 3), sallenKeyBp: () => 1, mfbBp: () => 1, khnBp: () => 3, towThomasBp: () => 3, gainNonInv: () => 1 };
+		const cases = [
+			['reference, E24', { f0: 10000, q: 5, gain: 1, stages: 1 }, PAIR_STOCKS.E24],
+			['reference, MFB built for the TL082', { f0: 10000, q: 5, gain: 1, stages: 1 }, { ...PAIR_STOCKS.E24, gbw: OPAMP_GBW.TL082 }],
+			['K 4 over two stages, E24', { f0: 10000, q: 5, gain: 4, stages: 2 }, PAIR_STOCKS.E24],
+			['B 500 Hz, K 0.3, the kit with pairs', { f0: 3000, bandwidth: 500, gain: 0.3, stages: 1 }, { ...PAIR_STOCKS.lab, pairs: true }],
+			['Q 20 at 1 kHz, K 10, E96', { f0: 1000, q: 20, gain: 10, stages: 1 }, PAIR_STOCKS.E96],
+			['Q 10 at 100 kHz, E24 (none qualifies)', { f0: 100000, q: 10, gain: 1, stages: 1 }, PAIR_STOCKS.E24]
+		];
+		const problems = [];
+		const table = [];
+		let rowsChecked = 0;
+		for (const [label, spec, opts] of cases) {
+			const d = designNarrowBand(spec);
+			const rows = compareNarrowCircuits(d, opts);
+			if (rows.map((r) => r.circuit).join() !== NARROW_CIRCUITS.join()) problems.push(`${label}: rows ${rows.map((r) => r.circuit)}`);
+			const mine = [];
+			for (const r of rows) {
+				if (!r.ok) {
+					if (!(typeof r.why === 'string' && r.why.length && r.qualifies === false)) problems.push(`${label} ${r.circuit}: refused without a reason`);
+					continue;
+				}
+				rowsChecked++;
+				const at = `${label} ${r.circuit}`;
+				const st = r.realized.stages;
+				const els = narrowChainElements(st);
+				const opamps = els.filter((e) => e.kind === 'OP').length;
+				const counted = st.reduce((n, s) => n + OPAMPS[s.topology](s), 0);
+				const values = (kind) => els.filter((e) => e.kind === kind).map((e) => e.value);
+				const ratio = (v) => Math.max(...v) / Math.min(...v);
+				if (opamps !== r.opamps || counted !== r.opamps || r.parts.resistors !== values('R').length || r.parts.capacitors !== values('C').length || r.parts.total !== els.length - opamps || Math.abs(r.spread.resistors / ratio(values('R')) - 1) > 1e-12) problems.push(`${at}: counts ${r.opamps} op-amps (${opamps}, ${counted}), ${JSON.stringify(r.parts)}`);
+				// identical stages, the gain stages last when there are any, an RLC tank before them unbuffered
+				const res = r.realized.resonators;
+				const gs = r.realized.gainStages;
+				if (res.length !== d.n || !res.every((s) => JSON.stringify(s.components) === JSON.stringify(res[0].components))) problems.push(`${at}: stages not identical`);
+				if (gs.length && (gs.some((g, k) => st[st.length - gs.length + k] !== g || g.topology !== 'gainNonInv') || r.realized.gainStage !== gs[0] || (/^rlc/.test(r.circuit) && st[st.length - gs.length - 1].buffered !== false))) problems.push(`${at}: gain stages`);
+				// the figures, measured apart
+				const ideal = measure((f) => responseAt(st, f), d.f0);
+				const all = forSolver(els);
+				const real = measure((f) => solveAt(all, f, { aol: Infinity, gbw: NARROW_REAL_GBW }), d.f0, 800);
+				const same = (a, b) => Math.abs(a.f0 / b.f0 - 1) < 2e-6 && Math.abs(a.q / b.q - 1) < 2e-5 && Math.abs(a.gain / b.gain - 1) < 1e-6;
+				if (!same(ideal, r.ideal.figures)) problems.push(`${at}: ideal figures ${JSON.stringify(r.ideal.figures)} against ${JSON.stringify(ideal)}`);
+				if (!same(real, r.real.figures)) problems.push(`${at}: real figures ${JSON.stringify(r.real.figures)} against ${JSON.stringify(real)}`);
+				// the worst part for Q
+				const numeric = numericSensitivity(res[0].topology, res[0].components);
+				const worst = Object.entries(numeric).reduce((w, [part, v]) => (w === null || Math.abs(v) > Math.abs(w.value) ? { part, value: v } : w), null);
+				// a tie (R5 and R6 of the state-variable circuit) may name either part
+				const named = r.sensitivity.worst;
+				if (!(worst && Math.abs(Math.abs(named.value) - Math.abs(worst.value)) < 1e-5 && Math.abs(numeric[named.part] - named.value) < 1e-5)) problems.push(`${at}: worst part ${JSON.stringify(named)} against ${JSON.stringify(worst)}`);
+				// the rule, applied to the figures measured here: |error| within each limit, from the parts and on the TL082
+				const errOf = (m) => ({ f0: m.f0 / d.f0 - 1, q: m.q / d.q - 1, gain: Math.abs(m.gain) / d.gain - 1 });
+				const fitOf = (e) => Math.max(Math.abs(e.f0) / (NARROW_RULE.f0Share / d.q), Math.abs(e.q) / NARROW_RULE.qTolerance, Math.abs(e.gain) / NARROW_RULE.gainTolerance);
+				const oscillates = Boolean(r.stability?.oscillates);
+				const fit = Math.max(fitOf(errOf(ideal)), oscillates ? Infinity : fitOf(errOf(real)));
+				const qualifies = fit <= 1 && !oscillates && Math.abs(worst.value) <= NARROW_RULE.sensitivityMax;
+				if (qualifies !== r.qualifies || (qualifies && r.reasons.length) || (!qualifies && !r.reasons.length) || (Number.isFinite(fit) ? Math.abs(fit / r.fit.rule - 1) > 1e-4 : r.fit.rule !== Infinity)) problems.push(`${at}: qualifies ${r.qualifies} (${r.reasons.join(', ')}), measured ${qualifies}, fit ${fit} against ${r.fit.rule}`);
+				mine.push({ circuit: r.circuit, qualifies, oscillates, opamps, fit, parts: els.length - opamps });
+			}
+			// the rule's pick: the fewest op-amps among those that qualify, then the closest, then fewer parts; else the closest that does not oscillate
+			const steady = mine.filter((m) => !m.oscillates);
+			const pool = mine.some((m) => m.qualifies) ? mine.filter((m) => m.qualifies) : steady.length ? steady : mine;
+			const pick = [...pool].sort((a, b) => (mine.some((m) => m.qualifies) ? a.opamps - b.opamps : 0) || a.fit - b.fit || a.parts - b.parts)[0]?.circuit ?? null;
+			const chosen = narrowDefaultCircuit(rows);
+			if (chosen !== pick) problems.push(`${label}: default ${chosen}, the rule gives ${pick}`);
+			table.push(`${label}: ${chosen} (${mine.filter((m) => m.qualifies).map((m) => m.circuit).join(', ') || 'none'} qualify)`);
+		}
+		const reference = compareNarrowCircuits(designNarrowBand({ f0: 10000, q: 5, gain: 1, stages: 1 }), PAIR_STOCKS.E24);
+		check(
+			`narrow band-pass comparison: ${rowsChecked} rows over ${cases.length} specs, each counted from its netlist, its figures measured on bode.js and on its whole netlist with the single-pole TL082, its worst Q sensitivity, its verdict and the default as the rule says; the reference spec builds all six and defaults to the multiple feedback band-pass`,
+			problems.length === 0 && reference.every((r) => r.ok) && narrowDefaultCircuit(reference) === 'mfbBp',
+			problems.length ? problems.slice(0, 3).join('; ') : table.join('; ')
+		);
+	}
+
+	// (d3) Where the op-amp moves the peak far (a slow op-amp against f0 Q),
+	// the table's figures are still those of the true peak: its f0, its
+	// gain and its Q, measured here from f0/10 to 10 f0
+	{
+		const problems = [];
+		const shown = [];
+		for (const [label, spec, opts] of [
+			['Q 10 at 100 kHz, E24', { f0: 100000, q: 10, gain: 1, stages: 1 }, PAIR_STOCKS.E24],
+			['Q 10 at 100 kHz, the kit with pairs', { f0: 100000, q: 10, gain: 1, stages: 1 }, { ...PAIR_STOCKS.lab, pairs: true }],
+			['Q 5 at 200 kHz, E24', { f0: 200000, q: 5, gain: 1, stages: 1 }, PAIR_STOCKS.E24]
+		]) {
+			const d = designNarrowBand(spec);
+			for (const r of compareNarrowCircuits(d, opts).filter((x) => x.ok)) {
+				const H = narrowNetlistResponse(r.realized.stages, { gbw: NARROW_REAL_GBW });
+				const m = measure(H, d.f0, 3000, 10);
+				const t = r.real.figures;
+				shown.push(`${r.circuit} ${(100 * (m.f0 / d.f0 - 1)).toFixed(1)} %`);
+				if (!(Math.abs(t.f0 / m.f0 - 1) < 1e-4 && Math.abs(Math.abs(t.gain) / Math.abs(m.gain) - 1) < 1e-4 && (t.q === null) === (m.q === null) && (m.q === null || Math.abs(t.q / m.q - 1) < 1e-3))) problems.push(`${label}, ${r.circuit}: the table says ${t.f0.toFixed(0)} Hz, ${t.gainDb.toFixed(2)} dB, Q ${t.q?.toFixed(3)}; the peak is at ${m.f0.toFixed(0)} Hz, ${(20 * Math.log10(Math.abs(m.gain))).toFixed(2)} dB, Q ${m.q?.toFixed(3)}`);
+			}
+		}
+		check('narrow band-pass comparison on a slow op-amp: the figures on the TL082 are those of the true peak, however far the op-amp moves it', problems.length === 0, problems.length ? problems.slice(0, 2).join('; ') : `peaks moved ${shown.join(', ')}`);
+	}
+
+	// (e) The chain built on each circuit, N = 1, 2 and 6, K = 0.3, 1 and 10,
+	// E24: a stage that cannot reach its gain by its form (an RLC, a
+	// Sallen-Key past its own 2 sqrt(2) Q_s - 1, a multiple feedback stage
+	// past its ceiling) is followed by non-inverting gain stages that
+	// lands the chain on K within its ratio's rounding; with no gain stage
+	// the chain's gain is the product of its stages' own; the identical
+	// stages keep Q = Q_s / sqrt(2^(1/N) - 1) of the chain; and nodal.js,
+	// stage by stage, solves the chain as lib-nodal does whole.
+	{
+		const problems = [];
+		let chains = 0;
+		let withGain = 0;
+		const worst = { gain: 0, q: 0, single: 0 };
+		for (const circuit of NARROW_CIRCUITS) {
+			for (const n of [1, 2, 6]) {
+				for (const gain of [0.3, 1, 10]) {
+					const d = designNarrowBand({ f0: 10000, q: 5, gain, stages: n });
+					const r = realizeNarrow(d, circuit, PAIR_STOCKS.E24);
+					const at = `${circuit} N ${n} K ${gain}`;
+					if (!r.ok) {
+						problems.push(`${at}: ${r.why}`);
+						continue;
+					}
+					chains++;
+					const fig = measure((f) => responseAt(r.stages, f), 10000);
+					const own = r.stageGains.reduce((p, g) => p * g, 1);
+					if (r.gainStages.length) {
+						withGain++;
+						const gs = r.gainStages;
+						const made = gs.slice(0, -1).reduce((p, g) => p * g.actual.gain, 1);
+						const e = Math.abs(Math.abs(fig.gain) / gain - 1);
+						worst.gain = Math.max(worst.gain, e);
+						if (!(gs.every((g) => g.topology === 'gainNonInv' && Math.abs(g.actual.gain / (1 + g.components.R2 / g.components.R1) - 1) < 1e-12) && Math.abs((made * gs[gs.length - 1].steps.gainTarget) / (gain / own) - 1) < 1e-9 && e < 0.03)) problems.push(`${at}: gain stages ${JSON.stringify(gs.map((g) => g.actual))} for ${gain / own}, chain ${pc(e)} off K`);
+					} else if (Math.abs(Math.abs(fig.gain) / own - 1) > 0.02) problems.push(`${at}: chain gain ${fig.gain} against its stages' ${own}`);
+					// the stages' own Q, narrowed by the shrink factor
+					const stage = measure((f) => responseAt([r.resonators[0]], f), 10000);
+					const eq = Math.abs(fig.q / (stage.q / d.shrink) - 1);
+					worst.q = Math.max(worst.q, eq);
+					if (eq > 0.002) problems.push(`${at}: chain Q ${fig.q} against ${stage.q / d.shrink}`);
+					// nodal.js stage by stage, lib-nodal on the whole chain, single-pole op-amps
+					if (n <= 2) {
+						const H = narrowNetlistResponse(r.stages, { gbw: NARROW_REAL_GBW });
+						const all = forSolver(narrowChainElements(r.stages));
+						for (const f of [3000, 9000, 10000, 11000, 30000]) worst.single = Math.max(worst.single, relErr(H(f), solveAt(all, f, opampAt)));
+					}
+				}
+			}
+		}
+		check(
+			`narrow band-pass chains: ${chains} built on the six circuits, ${withGain} with the gain stage, which lands K within its ratio's rounding; without it the chain gives its stages' own; Q of N identical stages is Q_s / sqrt(2^(1/N) - 1); nodal.js stage by stage equals the whole netlist`,
+			problems.length === 0 && chains === 54 && withGain > 0 && worst.single < 1e-9,
+			problems.length ? problems.slice(0, 3).join('; ') : `worst K with a gain stage ${pc(worst.gain)}, Q ${pc(worst.q, 3)}, single pole ${worst.single.toExponential(1)}`
+		);
+	}
+
+	// (e4) A large K: a chain whose stages fall short of K by their form is
+	// never built without the gain stage that makes up the rest; when no
+	// gain stage can, it is refused rather than shown that far off
+	{
+		const problems = [];
+		const shown = [];
+		for (const gain of [300, 1000, 5000]) {
+			const d = designNarrowBand({ f0: 10000, q: 5, gain, stages: 1 });
+			for (const circuit of ['rlcGyrator', 'rlcGic', 'sallenKeyBp', 'mfbBp']) {
+				const r = realizeNarrow(d, circuit, PAIR_STOCKS.E24);
+				if (!r.ok) {
+					shown.push(`${circuit} K ${gain} refused`);
+					continue;
+				}
+				const chain = Math.abs(measure((f) => responseAt(r.stages, f), d.f0).gain);
+				shown.push(`${circuit} K ${gain} ${chain.toPrecision(4)}`);
+				if (Math.abs(chain / gain - 1) > 0.1) problems.push(`${circuit} at K ${gain}: built with ${r.gainStages.length ? `gain stages of ${r.gainStages.map((g) => g.actual.gain.toFixed(1)).join(', ')}` : 'no gain stage'}, the chain passes ${chain.toPrecision(4)} at its peak`);
+			}
+		}
+		check('narrow band-pass, a large K: a chain that falls short of K by its form comes with the gain stage that makes up the rest, or is refused', problems.length === 0, problems.length ? problems.slice(0, 3).join('; ') : shown.join(', '));
+	}
+
+	// (e5) The gain split over identical amplifiers: one amplifier of gain g
+	// keeps g / sqrt(1 + (g f0/GBW)^2) on a single-pole TL082, so the chain
+	// takes the fewest amplifiers (up to NARROW_MAX_GAIN_STAGES) whose g f0
+	// stays within NARROW_GAIN_SPEED GBW; the chain still lands on K with
+	// ideal op-amps, and on the TL082 the amplifiers lose under 2 % at f0
+	{
+		const problems = [];
+		const shown = [];
+		for (const [f0, gain, circuit, stages] of [
+			[10000, 10, 'rlcGic', 1],
+			[40000, 100, 'rlcGic', 1],
+			[40000, 100, 'rlcGyrator', 1],
+			[10000, 1000, 'rlcGic', 1],
+			[95000, 20, 'rlcGic', 2],
+			[3000, 300, 'sallenKeyBp', 1]
+		]) {
+			const d = designNarrowBand({ f0, q: 5, gain, stages });
+			const r = realizeNarrow(d, circuit, PAIR_STOCKS.E24);
+			const at = `${circuit} K ${gain} at ${f0} Hz`;
+			if (!r.ok) {
+				problems.push(`${at}: ${r.why}`);
+				continue;
+			}
+			const gs = r.gainStages;
+			const rest = gain / r.stageGains.reduce((p, g) => p * g, 1);
+			const quick = (m) => rest ** (1 / m) * f0 <= NARROW_GAIN_SPEED * NARROW_REAL_GBW;
+			let fewest = 1;
+			while (fewest < NARROW_MAX_GAIN_STAGES && !quick(fewest)) fewest++;
+			const chain = Math.abs(measure((f) => responseAt(r.stages, f), f0).gain);
+			const loss = gs.reduce((p, g) => p * Math.hypot(1, (g.actual.gain * f0) / NARROW_REAL_GBW), 1);
+			shown.push(`${at}: ${gs.length} x ${gs.map((g) => g.actual.gain.toFixed(2)).join(', ')}`);
+			if (gs.length !== fewest || !gs.every((g, k) => k === gs.length - 1 || JSON.stringify(g.components) === JSON.stringify(gs[0].components))) problems.push(`${at}: ${gs.length} gain stages for ${rest.toPrecision(4)}, the fewest quick enough is ${fewest}`);
+			if (Math.abs(chain / gain - 1) > 0.03) problems.push(`${at}: the chain passes ${chain.toPrecision(4)}`);
+			if (quick(gs.length) && loss - 1 > 0.02) problems.push(`${at}: the amplifiers lose ${pc(loss - 1)} on the TL082`);
+		}
+		check('narrow band-pass gain stages: split over the fewest identical amplifiers that keep g f0 within GBW/10 on the TL082, the last one taking the rounding, the chain on K', problems.length === 0, problems.length ? problems.slice(0, 3).join('; ') : shown.join('; '));
+	}
+
+	// (d4) The poles. narrowStability (nodal.js's nodalPoles) counts the
+	// poles in the right half plane of every distinct stage on the
+	// single-pole TL082; here they are counted apart, by the argument
+	// principle on det(G + s C) of the stage's netlist, around the right
+	// half plane. A magnitude response cannot tell a pole pair from its
+	// mirror image, so the table must not rank such a circuit by it: at 95
+	// kHz, Q 20 the state-variable and Tow-Thomas stages oscillate on a
+	// TL082 and the default is another circuit
+	{
+		const cx2 = (re, im = 0) => ({ re, im });
+		const cmul = (a, b) => cx2(a.re * b.re - a.im * b.im, a.re * b.im + a.im * b.re);
+		const cdiv = (a, b) => {
+			const q = b.re * b.re + b.im * b.im;
+			return cx2((a.re * b.re + a.im * b.im) / q, (a.im * b.re - a.re * b.im) / q);
+		};
+		const cabs = (a) => Math.hypot(a.re, a.im);
+		/** det(Y(s)) of a stage, vin shorted, single-pole op-amps of gbw (Hz), unknowns the node voltages and the op-amp currents. */
+		const detAt = (els, s, gbw) => {
+			const index = new Map();
+			const nodeOf = (n) => (n === '0' || n === 'vin' ? -1 : index.has(n) ? index.get(n) : (index.set(n, index.size), index.size - 1));
+			for (const e of els) e.nodes.forEach(nodeOf);
+			const ops = els.filter((e) => e.kind === 'OP');
+			const n = index.size;
+			const size = n + ops.length;
+			const M = Array.from({ length: size }, () => Array.from({ length: size }, () => cx2(0)));
+			const put = (r, c, y) => {
+				if (r >= 0 && c >= 0) M[r][c] = cx2(M[r][c].re + y.re, M[r][c].im + y.im);
+			};
+			const stampY = (a, b, y) => {
+				put(a, a, y);
+				put(b, b, y);
+				put(a, b, cx2(-y.re, -y.im));
+				put(b, a, cx2(-y.re, -y.im));
+			};
+			for (const e of els) {
+				const [a, b] = e.nodes.map(nodeOf);
+				if (e.kind === 'R') stampY(a, b, cx2(1 / e.value));
+				if (e.kind === 'C') stampY(a, b, cmul(s, cx2(e.value)));
+			}
+			ops.forEach((e, k) => {
+				const row = n + k;
+				const [pp, m, o] = e.nodes.map(nodeOf);
+				put(o, row, cx2(1));
+				put(row, pp, cx2(1));
+				put(row, m, cx2(-1));
+				put(row, o, cdiv(cx2(-s.re, -s.im), cx2(2 * Math.PI * gbw)));
+			});
+			let det = cx2(1);
+			for (let c = 0; c < size; c++) {
+				let pv = c;
+				for (let r = c + 1; r < size; r++) if (cabs(M[r][c]) > cabs(M[pv][c])) pv = r;
+				if (cabs(M[pv][c]) === 0) return cx2(0);
+				if (pv !== c) {
+					[M[pv], M[c]] = [M[c], M[pv]];
+					det = cx2(-det.re, -det.im);
+				}
+				det = cmul(det, M[c][c]);
+				for (let r = c + 1; r < size; r++) {
+					const f = cdiv(M[r][c], M[c][c]);
+					for (let k = c; k < size; k++) M[r][k] = cx2(M[r][k].re - cmul(f, M[c][k]).re, M[r][k].im - cmul(f, M[c][k]).im);
+				}
+			}
+			return det;
+		};
+		/** Zeros of det in the right half plane: its winding along -jR..+jR (log spaced) and the right half circle of radius R. */
+		const rhp = (els, gbw, w0) => {
+			const R = 400 * 2 * Math.PI * gbw;
+			const N = 20000;
+			const ys = [];
+			for (let i = 0; i <= N; i++) ys.push(R * 1e-9 ** (i / N));
+			const path = [...ys.map((y) => cx2(1e-9 * w0, y)), ...ys.slice().reverse().map((y) => cx2(1e-9 * w0, -y))];
+			for (let i = 0; i <= 4000; i++) {
+				const th = -Math.PI / 2 + (Math.PI * i) / 4000;
+				path.push(cx2(R * Math.cos(th), R * Math.sin(th)));
+			}
+			let wind = 0;
+			let prev = null;
+			for (const s of path) {
+				const dd = detAt(els, s, gbw);
+				const a = Math.atan2(dd.im, dd.re);
+				if (prev !== null) {
+					let da = a - prev;
+					while (da > Math.PI) da -= 2 * Math.PI;
+					while (da < -Math.PI) da += 2 * Math.PI;
+					wind += da;
+				}
+				prev = a;
+			}
+			return Math.abs(Math.round(wind / (2 * Math.PI)));
+		};
+		const problems = [];
+		let stagesCounted = 0;
+		let unstable = 0;
+		const defaults = [];
+		for (const [f0, q, gain] of [
+			[95000, 20, 1],
+			[95000, 9.5, 1],
+			[150000, 20, 10],
+			[40000, 5, 100],
+			[10000, 5, 1]
+		]) {
+			const d = designNarrowBand({ f0, q, gain, stages: 1 });
+			const rows = compareNarrowCircuits(d, PAIR_STOCKS.E24);
+			for (const r of rows.filter((x) => x.ok)) {
+				const seen = new Set();
+				let count = 0;
+				for (const st of r.realized.stages) {
+					const els = stageElements(st, 1, 'vin', 'vout').filter((e) => ['R', 'C', 'OP'].includes(e.kind));
+					const key = JSON.stringify(els);
+					if (seen.has(key)) continue;
+					seen.add(key);
+					stagesCounted++;
+					count += rhp(els, NARROW_REAL_GBW, TWO_PI * f0);
+				}
+				const said = r.stability?.oscillates;
+				if (count) unstable++;
+				if (Boolean(count) !== Boolean(said)) problems.push(`${f0} Hz Q ${q} K ${gain} ${r.circuit}: ${count} poles in the right half plane, narrowStability says ${said ? 'it oscillates' : 'stable'}`);
+				if (said && (r.qualifies || !r.reasons.some((x) => /^oscillates/.test(x)))) problems.push(`${f0} Hz Q ${q} K ${gain} ${r.circuit}: oscillates yet ${r.qualifies ? 'qualifies' : `not said: ${r.reasons.join(', ')}`}`);
+				// the chain the page shows says the same
+				if (Boolean(narrowStability(r.realized.stages, { gbw: NARROW_REAL_GBW, f0 })?.oscillates) !== Boolean(said)) problems.push(`${f0} Hz ${r.circuit}: the chain and the row disagree`);
+			}
+			const pick = narrowDefaultCircuit(rows);
+			defaults.push(`${f0 / 1000} kHz Q ${q} K ${gain}: ${pick}`);
+			if (rows.some((x) => x.ok && !x.stability?.oscillates) && rows.find((x) => x.circuit === pick)?.stability?.oscillates) problems.push(`${f0} Hz Q ${q}: the default ${pick} oscillates`);
+		}
+		const ref = compareNarrowCircuits(designNarrowBand({ f0: 95000, q: 20, gain: 1, stages: 1 }), PAIR_STOCKS.E24);
+		const flagged = ['khnBp', 'towThomasBp'].every((c) => ref.find((x) => x.circuit === c)?.stability?.oscillates);
+		check(
+			`narrow band-pass poles: ${stagesCounted} distinct stages on the single-pole TL082, ${unstable} chains oscillating, each as the argument principle counts them; an oscillating row never qualifies and never becomes the default while a stable one is built; at 95 kHz, Q 20 the state-variable and Tow-Thomas stages oscillate`,
+			problems.length === 0 && flagged && unstable > 0,
+			problems.length ? problems.slice(0, 3).join('; ') : defaults.join(', ')
+		);
+	}
+
+	// (e2) Pairs: on the kit with pairs, every resistor of every chain is a
+	// kit value or two of them in series; a list of names lets only those
+	// groups pair (filterPairGroups names them), which is how the page's
+	// "Up to N pairs" builds a narrow band-pass
+	{
+		const problems = [];
+		let paired = 0;
+		let lists = 0;
+		for (const circuit of NARROW_CIRCUITS) {
+			for (const [f0, q, gain] of [[10000, 5, 1], [3000, 8, 4], [500, 2, 0.4]]) {
+				const d = designNarrowBand({ f0, q, gain, stages: 1 });
+				const full = realizeNarrow(d, circuit, { ...PAIR_STOCKS.lab, pairs: true });
+				if (!full.ok) continue;
+				const names = [...new Set(full.stages.flatMap((s) => filterPairGroups(s, kit).map((g) => g.name)))];
+				const tries = [true, [], ...names.map((n) => [n])];
+				for (const list of tries) {
+					const r = list === true ? full : realizeNarrow(d, circuit, { ...PAIR_STOCKS.lab, pairs: list });
+					if (!r.ok) continue;
+					lists++;
+					for (const s of r.stages) {
+						if (s.stockShortfall) continue;
+						for (const [part, v] of Object.entries(s.components)) {
+							if (!/^R/.test(part)) continue;
+							const pair = seriesPair(v, kit);
+							if (pair) paired++;
+							if (!pair && !kit.some((x) => Math.abs(x / v - 1) < 1e-9)) problems.push(`${circuit} ${f0} Hz [${list}] ${s.topology} ${part} = ${v} is neither a kit value nor two`);
+							if (pair && list !== true) {
+								const group = filterPairGroups(s, kit).find((g) => g.parts.includes(part));
+								if (!group || !list.includes(group.name)) problems.push(`${circuit} ${f0} Hz [${list}] ${s.topology} ${part} pairs`);
+							}
+						}
+					}
+				}
+			}
+		}
+		check('narrow band-pass pairs: on the kit every resistor is a kit value or two in series, and a list of names lets only those groups pair', problems.length === 0 && paired > 10 && lists > 30, problems.length ? problems.slice(0, 3).join('; ') : `${lists} chains, ${paired} paired resistors`);
+	}
+
+	// (e3) Capacitors chosen by hand: a chain either uses them exactly, every
+	// stage they were given for, or is refused with the reason and the
+	// designer's own answer, which the page turns into its message
+	{
+		const problems = [];
+		const seen = { used: 0, refused: 0 };
+		const d = designNarrowBand({ f0: 10000, q: 5, gain: 1, stages: 2 });
+		for (const circuit of NARROW_CIRCUITS) {
+			for (const C of [1e-12, 4.7e-9, 1e-8, 1e-5]) {
+				const cap = circuit === 'mfbBp' ? { C1: C, C2: C / 2.2 } : { C };
+				for (const gbw of circuit === 'mfbBp' ? [null, OPAMP_GBW.TL082] : [null]) {
+					const r = realizeNarrow(d, circuit, { ...PAIR_STOCKS.E24, gbw, caps: [cap, null] });
+					const at = `${circuit} C ${C}${gbw ? ' TL082' : ''}`;
+					if (r.ok) {
+						seen.used++;
+						const c = r.resonators[0].components;
+						const used = circuit === 'mfbBp' ? c.C1 === cap.C1 && c.C2 === cap.C2 : (c.C ?? c.C1) === C && Object.entries(c).filter(([k]) => /^C/.test(k)).every(([, v]) => v === C);
+						if (!used || r.resonators[0].manual !== true) problems.push(`${at}: built on ${JSON.stringify(Object.fromEntries(Object.entries(c).filter(([k]) => /^C/.test(k))))}`);
+					} else {
+						seen.refused++;
+						if (!(/stage 1: the capacitors chosen by hand cannot build this stage/.test(r.why) && r.failure && r.failure.ok === false)) problems.push(`${at}: refused as ${r.why}, ${JSON.stringify(r.failure)}`);
+					}
+				}
+			}
+		}
+		check('narrow band-pass, capacitors by hand: used exactly as given, or the chain is refused with the reason and the designer\'s own answer', problems.length === 0 && seen.used > 0 && seen.refused > 0, problems.length ? problems.slice(0, 3).join('; ') : `${seen.used} built on them, ${seen.refused} refused`);
+	}
+
+	// (d2) Across the range the page takes: f0 from 10 Hz to 1 MHz, Q from 0.5
+	// to 60, K from 0.01 to 100, one stage or six, the comparison never
+	// throws, every row is built with finite figures or refused with a
+	// reason, and the default is a circuit that was built
+	{
+		const problems = [];
+		let specs = 0;
+		let rows = 0;
+		let built = 0;
+		for (const f0 of [10, 10000, 1e6]) {
+			for (const q of [0.5, 10, 60]) {
+				for (const gain of [0.01, 1, 100]) {
+					for (const stages of [1, 6]) {
+						const at = `f0 ${f0} Q ${q} K ${gain} N ${stages}`;
+						specs++;
+						try {
+							const d = designNarrowBand({ f0, q, gain, stages });
+							const list = compareNarrowCircuits(d, PAIR_STOCKS.E24);
+							const pick = narrowDefaultCircuit(list);
+							for (const r of list) {
+								rows++;
+								if (r.ok) {
+									built++;
+									const finite = [r.ideal.figures.f0, r.ideal.figures.gain, r.real.figures.f0, r.real.figures.gain, r.opamps, r.parts.total].every(Number.isFinite);
+									if (!finite) problems.push(`${at} ${r.circuit}: figures ${JSON.stringify(r.ideal.figures)}`);
+								} else if (!(typeof r.why === 'string' && r.why.length > 5 && !/undefined|NaN/.test(r.why))) problems.push(`${at} ${r.circuit}: refused as ${r.why}`);
+							}
+							if (list.some((r) => r.ok) ? !list.find((r) => r.circuit === pick)?.ok : pick !== null) problems.push(`${at}: default ${pick}`);
+						} catch (e) {
+							problems.push(`${at}: throws ${e.message}`);
+						}
+					}
+				}
+			}
+		}
+		check(`narrow band-pass across the range: ${specs} specs, ${built} of ${rows} rows built with finite figures, the rest refused with a reason, never an exception, the default always built`, problems.length === 0 && built > rows / 2, problems.slice(0, 3).join('; '));
+	}
+
+	// (f) The explanations of panels 02 to 04 (explainNarrowBandOrder,
+	// explainNarrowBandStage, explainNarrowBandCircuit for every stage of
+	// every circuit, the gain stage included, automatic and with capacitors
+	// by hand, the MFB built for the TL082): strict KaTeX, plain words, none
+	// of the words the site avoids
+	{
+		const blocks = [];
+		for (const spec of [{ f0: 10000, q: 5, gain: 1, stages: 1 }, { f0: 10000, q: 5, gain: 4, stages: 3 }, { f0: 300, bandwidth: 20, gain: 0.2, stages: 2 }, { f0: 200000, q: 0.8, gain: 60, stages: 6 }]) {
+			const d = designNarrowBand(spec);
+			blocks.push(...explainNarrowBandOrder(d));
+			d.stages.forEach((_, i) => blocks.push(...explainNarrowBandStage(d, i)));
+			for (const stock of [PAIR_STOCKS.E24, { ...PAIR_STOCKS.lab, pairs: true }]) {
+				for (const circuit of NARROW_CIRCUITS) {
+					for (const gbw of circuit === 'mfbBp' ? [null, OPAMP_GBW.TL082] : [null]) {
+						for (const byHand of [false, true]) {
+							const caps = byHand ? d.stages.map(() => (circuit === 'mfbBp' ? { C1: 1e-8, C2: 1e-8 } : { C: 1e-8 })) : [];
+							const r = realizeNarrow(d, circuit, { ...stock, gbw, caps });
+							if (!r.ok) continue;
+							r.stages.forEach((s, i) => blocks.push(...explainNarrowBandCircuit(s, s.topology === 'gainNonInv' ? null : d.stages[i], { design: d, realized: r, gbw })));
+						}
+					}
+				}
+			}
+		}
+		let texBad = 0;
+		for (const b of blocks.filter((x) => x.type === 'eq')) {
+			try {
+				katex.renderToString(b.tex, { throwOnError: true, strict: 'error' });
+			} catch (e) {
+				texBad++;
+				if (texBad < 3) console.log('   KATEX', b.tex.slice(0, 90), e.message.slice(0, 80));
+			}
+		}
+		const words = blocks.filter((b) => b.type !== 'eq' && (/undefined|NaN|Infinity|\bnull\b/.test(b.text) || /[–—]|\byou(r)?\b|resonan|discriminant|dominant|\bcourse\b|professor|\bslides?\b|\blab\b/i.test(b.text)));
+		const eqs = blocks.filter((b) => b.type === 'eq').length;
+		check(`narrow band-pass explanations: ${eqs} equations render under strict KaTeX, ${blocks.length - eqs} paragraphs in plain words`, eqs > 1000 && texBad === 0 && words.length === 0, words.length ? words[0].text.slice(0, 120) : `${texBad} TeX failures`);
+	}
+
+	// (g) The downloadable script for a narrow band-pass: it rebuilds the
+	// circuit the page shows (the rule's pick, or the one the menu names,
+	// capacitors by hand included), prints its figures from the parts as the
+	// page computes them, and ends OK or NOT MET as the rule's limits say;
+	// with RESISTOR_PAIR_LIMIT it keeps to that many pairs
+	{
+		const dir = mkdtempSync(join(tmpdir(), 'rbt56-narrow-'));
+		const run = (name, code) => {
+			const file = join(dir, `${name}.js`);
+			writeFileSync(file, code);
+			try {
+				return execFileSync(process.execPath, [file], { encoding: 'utf8', stdio: 'pipe' });
+			} catch (e) {
+				return `ERROR ${e.stderr || e.message}`;
+			}
+		};
+		const cases = [
+			['reference, auto', { f0: 10000, q: 5, gain: 1, stages: 1 }, 'auto', {}, PAIR_STOCKS.E24, null],
+			['gyrator, K 4 over three stages', { f0: 10000, q: 5, gain: 4, stages: 3 }, 'rlcGyrator', {}, PAIR_STOCKS.E24, null],
+			['state variable by B, K 0.2', { f0: 2000, bandwidth: 250, gain: 0.2, stages: 2 }, 'khnBp', {}, PAIR_STOCKS.E96, null],
+			['GIC, 10 nF by hand on stage 1', { f0: 10000, q: 5, gain: 1, stages: 2 }, 'rlcGic', { 0: { C: 1e-8 } }, PAIR_STOCKS.E24, null],
+			['MFB built for the TL082, the kit', { f0: 10000, q: 8, gain: 1, stages: 1 }, 'mfbBp', {}, PAIR_STOCKS.lab, OPAMP_GBW.TL082],
+			['Sallen-Key, Q 20, 100 kHz', { f0: 100000, q: 20, gain: 1, stages: 1 }, 'sallenKeyBp', {}, PAIR_STOCKS.E24, null]
+		];
+		const problems = [];
+		const verdicts = [];
+		for (const [label, spec, menu, caps, stock, gbw] of cases) {
+			const d = designNarrowBand(spec);
+			const opts = { ...stock, gbw };
+			const circuit = menu === 'auto' ? narrowDefaultCircuit(compareNarrowCircuits(d, opts)) : menu;
+			const r = realizeNarrow(d, circuit, { ...opts, caps: d.stages.map((_, i) => caps[i] ?? null) });
+			const out = run(label.replace(/\W+/g, '-'), generateScript({ filterType: 'narrowband', f0: spec.f0, narrowBy: spec.q ? 'q' : 'b', q: spec.q ?? null, bandwidth: spec.bandwidth ?? null, gain: spec.gain, stages: spec.stages, circuit, circuitMenu: menu, opampGbw: gbw, capOverrides: caps, resistorStock: stock.resistorSeries, resistorPairs: false, capacitorStock: stock.capacitors }));
+			if (/^ERROR/.test(out)) {
+				problems.push(`${label}: ${out.slice(0, 160)}`);
+				continue;
+			}
+			const fig = narrowFigures((f) => responseAt(r.stages, f), d.f0);
+			const m = /from the parts: peak at ([\d.]+) Hz, (-?[\d.]+) dB.*Q = ([\d.]+)/.exec(out);
+			if (!out.includes(`this script builds: ${NARROW_LABELS[circuit]}`)) problems.push(`${label}: builds another circuit`);
+			if (!m || Math.abs(Number(m[1]) - fig.f0) > 0.051 || Math.abs(Number(m[2]) - fig.gainDb) > 0.0051 || Math.abs(Number(m[3]) - fig.q) > 5.1e-5) problems.push(`${label}: figures ${m ? m.slice(1).join(', ') : 'missing'} against ${fig.f0.toFixed(1)} Hz, ${fig.gainDb.toFixed(2)} dB, Q ${fig.q.toFixed(4)}`);
+			// the verdict covers both sets of figures: from the parts, and on the TL082 (where an oscillation fails it)
+			const verdict = narrowFit({ f0: fig.f0 / d.f0 - 1, q: fig.q / d.q - 1, gain: Math.abs(fig.gain) / d.gain - 1 }, d) <= 1 ? 'OK' : 'NOT MET';
+			const rf = narrowFigures(narrowNetlistResponse(r.stages, { gbw: NARROW_REAL_GBW }), d.f0);
+			const oscillates = narrowStability(r.stages, { gbw: NARROW_REAL_GBW, f0: d.f0 })?.oscillates;
+			const onTl = oscillates ? 'it oscillates, NOT MET' : narrowFit({ f0: rf.f0 / d.f0 - 1, q: rf.q / d.q - 1, gain: Math.abs(rf.gain) / d.gain - 1 }, d) <= 1 ? 'OK' : 'NOT MET';
+			const last = out.trim().split('\n').pop();
+			if (!(last.startsWith('verdict: from the rounded parts, ') && last.endsWith(`: ${verdict}; on a TL082: ${onTl}`))) problems.push(`${label}: ${last} where the page says ${verdict}, ${onTl} on a TL082`);
+			verdicts.push(`${label} ${verdict} / ${onTl}`);
+		}
+		// a limit of one pair on the kit
+		const limited = run('pair-limit', generateScript({ filterType: 'narrowband', f0: 10000, narrowBy: 'q', q: 5, bandwidth: null, gain: 1, stages: 2, circuit: 'sallenKeyBp', circuitMenu: 'sallenKeyBp', opampGbw: null, capOverrides: {}, resistorStock: kit, resistorPairs: true, resistorPairLimit: 1, capacitorStock: LAB_KIT.capacitors }));
+		const pairsPrinted = (limited.match(/in series\)/g) ?? []).length;
+		if (/^ERROR/.test(limited) || !/^const RESISTOR_PAIR_LIMIT = 1;/m.test(generateScript({ filterType: 'narrowband', f0: 10000, narrowBy: 'q', q: 5, gain: 1, stages: 1, circuit: 'mfbBp', circuitMenu: 'auto', capOverrides: {}, resistorStock: kit, resistorPairs: true, resistorPairLimit: 1, capacitorStock: null })) || pairsPrinted > 1) problems.push(`pair limit: ${pairsPrinted} pairs printed${/^ERROR/.test(limited) ? `, ${limited.slice(0, 120)}` : ''}`);
+		check('downloadable script, narrow band-pass: rebuilds the circuit shown, prints its figures as the page computes them, ends OK or NOT MET as the rule says, and keeps to RESISTOR_PAIR_LIMIT', problems.length === 0, problems.length ? problems.slice(0, 2).join('; ') : verdicts.join(', '));
 	}
 }
 

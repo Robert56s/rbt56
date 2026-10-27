@@ -419,6 +419,87 @@ function checkText(where, text) {
 	}
 }
 
+/* ------------------------------------------------- the narrow band-pass */
+// The fifth filter type, as the page calls it: filterBasics({ filterType:
+// 'narrowband', design, stock, pairs, pairLimit }) opens with its own
+// line, the design's f0, Q, B, K and N in it, then steps of its own: the
+// band and Q, one stage, several, the six circuits and the panels, with
+// none of the passband, stopband, Amax, order or response of the four
+// other types, which a narrow band-pass has not. Every spec the page can hold (Q or
+// B, K from 0.01 to 100, one to six stages, f0 from 50 Hz to 455 kHz),
+// every stock and pair setting, and the fields emptied (no design) must
+// render clean; the page must offer the type and call the basics with it.
+{
+	const { designNarrowBand } = await import('../src/lib/filter/narrowBand.js');
+	const before = problems.length;
+	let configs = 0;
+	const widgets = new Set();
+	const lines = new Map();
+	const specs = [
+		{ f0: 10000, q: 5, gain: 1, stages: 1 },
+		{ f0: 10000, bandwidth: 2000, gain: 0.2, stages: 3 },
+		{ f0: 455000, q: 60, gain: 100, stages: 6 },
+		{ f0: 50, q: 0.6, gain: 0.01, stages: 2 },
+		{ f0: 1234.5, q: 7.25, gain: 3.3, stages: 4 },
+		{ f0: 3000, bandwidth: 700, gain: 1.5, stages: 5 }
+	];
+	for (const spec of specs) {
+		const design = designNarrowBand(spec);
+		for (const stock of ['E24', 'E96', 'lab', 'labR', 'custom']) {
+			for (const [pairs, pairLimit] of [[false, null], [true, null], [true, 2]]) {
+				configs++;
+				const blocks = filterBasics({ filterType: 'narrowband', design, stock, pairs, pairLimit });
+				for (const w of inspect(`narrowband ${JSON.stringify(spec)}/${stock}/${pairs}/${pairLimit}`, blocks) ?? []) widgets.add(w);
+				if (stock === 'E24' && !pairs) lines.set(JSON.stringify(spec), blocks);
+			}
+		}
+	}
+	// the fields emptied or out of range: no design, and the line without numbers
+	const empty = [null, undefined, designNarrowBand({ f0: 10000, q: 0 }), designNarrowBand({ f0: 10000, q: 5, stages: 7 })];
+	for (const design of empty) {
+		configs++;
+		const blocks = filterBasics({ filterType: 'narrowband', design, stock: 'E24' });
+		inspect(`narrowband no design (${design})`, blocks);
+		lines.set(`empty ${configs}`, blocks);
+	}
+	check(`narrow band-pass basics: ${configs} configurations clean (every spec, stock and pair setting, the fields emptied)`, problems.length === before, `${problems.length - before} problems`);
+
+	// its own line comes first and carries the design's numbers; its own steps follow, none of the other types' words
+	const text = (blocks) => blocks.map((b) => b.p ?? b.h ?? b.intro ?? '').join(' ');
+	const ref = lines.get(JSON.stringify(specs[0]));
+	const three = lines.get(JSON.stringify(specs[1]));
+	const six = lines.get(JSON.stringify(specs[2]));
+	const emptyBlocks = [...lines].filter(([k]) => k.startsWith('empty')).map(([, b]) => b);
+	const heads = ref.filter((b) => b.h).map((b) => b.h);
+	const foreign = /low-pass|high-pass|passband|stopband|Amax|Amin|\bfp\b|\bfs\b|Butterworth|Chebyshev|order n|Topology menu|no valid design/;
+	const allText = [...lines.values()].map(text).join(' ');
+	check(
+		'narrow band-pass basics: the heading "A narrow band-pass", then its line with f0, Q, B, K and N (10 kHz, Q 5, B 2 kHz, K 1, one stage; K 0.2, -14 dB, three stages; six stages in words), then its own steps (the band and Q, one stage, several, the six circuits, the panels, its words) with none of the four other types\' passband, stopband, Amax, order or response; no numbers without a design',
+		ref[0].h === 'A narrow band-pass' &&
+			/f0 = 10(\.0)? kHz/.test(text(ref.slice(0, 2))) &&
+			/Q = 5\b/.test(text(ref.slice(0, 2))) &&
+			/B = 2(\.00)? kHz/.test(text(ref.slice(0, 2))) &&
+			/K = 1, 0 dB/.test(text(ref.slice(0, 2))) &&
+			/one stage/.test(text(ref.slice(0, 2))) &&
+			/K = 0\.2, -14(\.0)? dB/.test(text(three.slice(0, 2))) &&
+			/three identical stages/.test(text(three.slice(0, 2))) &&
+			/six identical stages/.test(text(six.slice(0, 2))) &&
+			['What a filter does', 'Decibels and the band', 'One stage', 'Several stages', 'From stages to parts', 'Reading the rest of the page', 'Words used on this page'].every((x) => heads.includes(x)) &&
+			ref.some((b) => b.terms?.some(([w]) => w === 'bandwidth (B)')) &&
+			!foreign.test(allText) &&
+			emptyBlocks.every((b) => b[0].h === 'A narrow band-pass' && !/ Here f0 = /.test(text(b.slice(0, 2)))),
+		foreign.test(allText) ? `foreign words: ${allText.match(foreign)[0]}` : text(ref.slice(1, 2)).slice(0, 300)
+	);
+
+	// the page offers the type and calls the basics with it
+	const { readFileSync } = await import('node:fs');
+	const page = readFileSync(new URL('../src/routes/(site)/tools/filter-design/+page.svelte', import.meta.url), 'utf8');
+	check(
+		'narrow band-pass basics: the page offers "Narrow band-pass" in its Filter type menu and calls filterBasics with the type, its design, the stock and the pairs',
+		/<option value="narrowband">Narrow band-pass<\/option>/.test(page) && /filterBasics\(\{ filterType: 'narrowband', design: narrowDesign, stock, pairs: componentOpts\.pairs, pairLimit: componentOpts\.pairLimit \}\)/.test(page)
+	);
+}
+
 /* ------------------------------------------------------------ modulation */
 {
 	// the engines the AM page runs, loaded here so the section stands alone

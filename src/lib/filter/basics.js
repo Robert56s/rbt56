@@ -9,7 +9,7 @@
  * to its symbolic line.
  *
  * All arguments are optional, so a caller may pass a subset:
- *   filterType      'lowpass' | 'highpass' | 'bandpass' | 'bandstop'
+ *   filterType      'lowpass' | 'highpass' | 'bandpass' | 'bandstop' | 'narrowband'
  *   response        'butterworth' | 'chebyshev' | 'legendre' | 'bessel' | 'inverseChebyshev' | 'elliptic'
  *                   (for a band type, the low-pass side's, which the figures follow)
  *   topology        'mfb' | 'sallenKey' | 'towThomas'
@@ -33,6 +33,10 @@
  *                   figures and counts follow the prototype (passband edge B, stopband edge
  *                   Omega B, its own Amax and Amin) instead of a low-pass side
  *   topologyNotch   transformed only: the Notch stages menu, 'boctor' | 'towThomas'
+ * For 'narrowband' only design (designNarrowBand's result, for the numbers
+ * of its line) is read: the type gets a line of its own, then short
+ * steps of its own (the band and Q, one stage, several, the six circuits,
+ * the panels), every one true of the page in that mode.
  */
 
 import { RESPONSES } from './approximations';
@@ -47,7 +51,7 @@ const widget = (name, props) => ({ widget: name, props });
 const terms = (list) => ({ terms: list });
 
 const TWO_PI = 2 * Math.PI;
-const TYPES = ['lowpass', 'highpass', 'bandpass', 'bandstop'];
+const TYPES = ['lowpass', 'highpass', 'bandpass', 'bandstop', 'narrowband'];
 const C_RC = 10e-9; // the capacitor of the one-section example, 10 nF
 const MAX_ORDER = 16; // the page's limit
 // the stand-in used by the figures when the page has no valid design
@@ -860,6 +864,88 @@ const BAND_TERMS = [
 	['prototype', 'the low-pass a band filter is built from by transformation, with its passband edge at B']
 ];
 
+/** The counts of a narrow band-pass, which takes up to six stages. */
+const NARROW_COUNT = ['no', 'one', 'two', 'three', 'four', 'five', 'six'];
+
+/**
+ * The short line a narrow band-pass gets before its basics, with the
+ * page's own numbers when its design is valid.
+ */
+function narrowTypeLine(design) {
+	const ok = Boolean(design) && design.filterType === 'narrowband' && allPos(design.f0, design.q, design.B, design.gain) && isNum(design.n) && design.n >= 1;
+	const db = ok ? 20 * Math.log10(design.gain) : NaN;
+	const count = ok ? (design.n === 1 ? 'one stage' : `${NARROW_COUNT[design.n] ?? design.n} identical stages`) : '';
+	const here = ok
+		? ` Here f0 = ${hzText(design.f0)} and Q = ${trim3(design.q)}, so B = ${hzText(design.B)}; K = ${trim3(design.gain)}, ${Math.abs(db) < 0.05 ? '0 dB' : `${db > 0 ? '+' : ''}${db.toFixed(1)} dB`}, with ${count}.`
+		: '';
+	return [
+		h('A narrow band-pass'),
+		p(
+			`This page is set to narrow band-pass: it picks out one frequency, f0, with one second-order band-pass stage or a few identical ones in series. Q = f0/B says how narrow it is, B being the width of the band between the two points 3 dB below the peak, and K is the gain at f0.${here} The steps below introduce it; panels 02 to 07 then build it.`
+		)
+	];
+}
+
+// the words of a narrow band-pass page
+const NARROW_TERMS = [
+	['dB', 'a voltage ratio counted in steps, 20 per factor of ten; 3 dB is about 0.71, 40 dB is 0.01'],
+	['decade', 'a factor of ten in frequency, one grid line to the next on the Bode plot'],
+	['Bode plot', 'gain in dB against frequency on a log axis; panel 05 draws it from the rounded parts'],
+	['centre (f0)', 'the frequency the filter picks out, where its gain peaks at K'],
+	['-3 dB edges (f1, f2)', 'the two frequencies where the gain is 3 dB under its peak, one either side of f0; f1 f2 = f0^2'],
+	['bandwidth (B)', 'the width of the band between the edges, B = f2 - f1'],
+	['Q', 'the sharpness of the band, f0/B; one stage of a chain has its own, lower Q_s'],
+	['gain (K)', 'the gain at f0, in V/V or in dB'],
+	['stage', 'one second-order band-pass block with its op-amps; N identical ones in series narrow the band'],
+	['op-amp', 'the amplifier chip each stage is built around; it is what makes the filter active'],
+	['gain-bandwidth (GBW)', "an op-amp's gain times the frequency where it holds it; 3.45 MHz for a TL082, which moves a narrow band-pass as f0 times Q grows"]
+];
+
+/**
+ * The basics of a narrow band-pass: its line, then steps of its own. The
+ * steps of the four other types speak of passbands, stopbands, Amax, an
+ * order and a response, which this type has none of.
+ */
+function narrowBasics(design) {
+	return [
+		...narrowTypeLine(design),
+		h('What a filter does'),
+		p(
+			'Any signal is a sum of sine waves at different frequencies. A recorded voice holds low notes and high notes at once. A sensor wire carries a slow reading plus fast noise picked up along the way. A filter is a circuit whose gain, output amplitude divided by input amplitude, depends on frequency: near 1 for the frequencies that should pass, near 0 for the rest.'
+		),
+		p(
+			'A narrow band-pass keeps one tone and turns down everything else: a pilot tone, a carrier, one note out of a mix. Active means the circuit is built around an op-amp, a small amplifier chip, with resistors and capacitors around it instead of coils.'
+		),
+		h('Decibels and the band'),
+		p(
+			'Gain ratios run from 1 down to 0.001 and lower, which is awkward on one graph. The page counts them in decibels instead: 20 times the logarithm of the ratio. A ratio of 1 is 0 dB, 0.5 is about 6 dB down, 0.1 is 20 dB down, 0.01 is 40 dB down. Every factor of ten is another 20 dB, so a plot of dB against a log frequency axis turns the curves into near straight lines. That plot is a Bode plot, and panel 05 draws one.'
+		),
+		p(
+			'A band-pass peaks at f0 and falls away on both sides. Its band runs between the two frequencies where it is 3 dB under its peak, about 0.71 of it: f1 below f0 and f2 above. Their difference is the bandwidth B, and Q = f0/B says how narrow the band is: at Q = 5 the band is a fifth of f0 wide. On a log axis the two edges sit symmetric about f0.'
+		),
+		eq('Q = \\dfrac{f_0}{B}, \\qquad B = f_2 - f_1, \\qquad f_1 f_2 = f_0^2', 'The width of the band and its sharpness:'),
+		h('One stage'),
+		p(
+			'One second-order stage, an op-amp or a few with resistors and capacitors, makes the peak: a gain of K at f0, falling 20 dB per decade on each side far from it. Its Q sets the width. The higher the Q, the narrower the band, and the more a part a little off moves f0 and Q: a stage Q of 5 to 10 builds reliably.'
+		),
+		eq('H(s) = K\\,\\dfrac{\\frac{\\omega_0}{Q}\\,s}{s^2 + \\frac{\\omega_0}{Q}\\,s + \\omega_0^2}, \\qquad \\omega_0 = 2\\pi f_0', 'One stage in the standard band-pass form, exactly K at f0:'),
+		h('Several stages'),
+		p(
+			"N identical stages in series multiply their responses: far from f0 the chain falls N times faster, 20 N dB per decade, and its band is narrower than one stage's. So for the same overall Q each stage gets a lower Q, easier to hold with real parts, for N times the op-amps. Panel 02 works it out."
+		),
+		h('From stages to parts'),
+		p(
+			"Six circuits can build a stage: an RLC with its inductor made of op-amps (a gyrator, or Antoniou's GIC), the Sallen-Key, the multiple feedback, the state-variable and the Tow-Thomas band-pass. Panel 04 builds the spec on all six from the parts in stock, measures each one with ideal op-amps and on a TL082, and picks one by a rule it states; the Circuit menu in panel 01 picks another."
+		),
+		h('Reading the rest of the page'),
+		p(
+			'01 Specification holds f0, Q or B, K and N. 02 Stages gives the Q and the gain of each stage. 03 Transfer function writes H(s) with its numbers. 04 Components compares the six circuits and builds the one chosen, its parts rounded to values in stock, with what the rounding costs. 05 Bode plot is the report card: the curve from the rounded parts with f0, f1, f2 and the gain marked, and the figures on a TL082 under it. 06 Download exports the circuit as an LTspice file and the same calculation as a standalone script. 07 Next steps lists what to check on the bench. Every Show the math block is optional reading.'
+		),
+		h('Words used on this page'),
+		terms(NARROW_TERMS)
+	];
+}
+
 export function filterBasics({
 	filterType,
 	response,
@@ -896,6 +982,8 @@ export function filterBasics({
 	topologyNotch
 } = {}) {
 	const type = TYPES.includes(filterType) ? filterType : 'lowpass';
+	// a narrow band-pass: its own line and steps
+	if (type === 'narrowband') return narrowBasics(design);
 	const transformed = (type === 'bandpass' || type === 'bandstop') && (method === 'transformed' || design?.method === 'transformed');
 	const side = sideOf({ type, fp, fs, fl, fh, fsl, fsh, lpFp, lpFs, design, transformed });
 	// the prototype's own limits: Amax, and the Amin it is designed with (a fitted floor kept to two decimals, rounded down)

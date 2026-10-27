@@ -33,6 +33,12 @@
 			prototype that a band frequency lands on when the band filter is built by transformation
 			(sections 25 and 26).
 		</p>
+		<p class="note">
+			For the narrow band-pass (sections 28 and 29): f<sub>0</sub> is the centre, B the bandwidth
+			between the two points 3 dB below the peak, Q = f<sub>0</sub>/B, K the gain wanted at
+			f<sub>0</sub>, N the number of identical stages, and Q<sub>s</sub>, K<sub>s</sub> the Q and
+			the gain of one of them.
+		</p>
 	</section>
 	<section class="panel">
 		<h2>Boctor notch sections</h2>
@@ -1416,6 +1422,238 @@
 				2 or more; under 3 the correction leans on the exact GBW. Use the part's single-pole
 				figure: 3.45 MHz for the TL082 model, 1 MHz for the LM741. Another op-amp needs another
 				correction.
+			</p>
+		</div>
+	</section>
+	<section class="panel" id="narrow-band-pass">
+		<div class="panel-head">
+			<span class="num">28</span>
+			<h2>Narrow band-pass: one peak, one stage or N identical ones</h2>
+		</div>
+
+		<div class="formula">
+			<h3>The second-order band-pass and its gain at f0</h3>
+			<p class="note">
+				A narrow band-pass picks out one frequency, f0, with one second-order band-pass stage. The
+				denominator is the standard second-order one, damping &xi; = 1/(2Q); the numerator is
+				proportional to s, which makes the gain zero at DC and far above f0. At s = j&omega;0 the
+				s&sup2; term and the constant cancel, so the stage gives exactly K there, with no phase
+				shift. Far from f0 it falls 20 dB per decade on each side.
+			</p>
+			<Equation tex={String.raw`\begin{gathered} H(s) = K\,\dfrac{\frac{\omega_0}{Q}\,s}{s^2 + \frac{\omega_0}{Q}\,s + \omega_0^2} = K\,\dfrac{2\xi\omega_0\,s}{s^2 + 2\xi\omega_0\,s + \omega_0^2} \\[6pt] \xi = \dfrac{1}{2Q}, \qquad H(j\omega_0) = K \end{gathered}`} />
+			<p class="note">
+				<strong>How to use:</strong> read f0, Q and K straight off a stage's H(s) once its
+				denominator is in this form. Mind the numerator: with &omega;0&sup2; on top instead of
+				2&xi;&omega;0 s, the same denominator is a low-pass, not a band-pass.
+			</p>
+		</div>
+
+		<div class="formula">
+			<h3>Q, the bandwidth B and the band edges</h3>
+			<p class="note">
+				B is the width between the two points 3 dB below the peak. The edges are symmetric on a
+				log axis: their product is f0&sup2; and their difference is B.
+			</p>
+			<Equation tex={String.raw`\begin{gathered} Q = \dfrac{f_0}{B}, \qquad f_1 f_2 = f_0^2, \qquad f_2 - f_1 = B \\[6pt] f_{1,2} = f_0\left(\sqrt{1 + \dfrac{1}{4Q^2}} \mp \dfrac{1}{2Q}\right) \end{gathered}`} />
+			<p class="note">
+				<strong>How to use:</strong> the spec gives either Q or B, and the other follows. At
+				f0 = 10 kHz and Q = 5, B = 2 kHz and the edges sit at 9.05 kHz and 11.05 kHz, not at
+				f0 &plusmn; 1 kHz.
+			</p>
+		</div>
+
+		<div class="formula">
+			<h3>N identical stages: the shrink factor</h3>
+			<p class="note">
+				N identical stages in series multiply their responses. With x = Q_s (f/f0 &minus; f0/f), one
+				stage gives |H|&sup2; = K_s&sup2;/(1 + x&sup2;), and the chain is 3 dB down where
+				(1 + x&sup2;)<sup>N</sup> = 2. The edges keep f0 at their geometric centre, and the band
+				is narrower than one stage's by a factor that depends on N alone.
+			</p>
+			<Equation tex={String.raw`\begin{gathered} (1 + x^2)^N = 2 \ \Rightarrow\ x = \pm\sqrt{2^{1/N} - 1} \\[6pt] B = B_s\sqrt{2^{1/N} - 1} = \dfrac{f_0}{Q_s}\sqrt{2^{1/N} - 1} \end{gathered}`} />
+			<Equation tex={String.raw`\begin{gathered} Q_s = Q\sqrt{2^{1/N} - 1}, \qquad K_s = K^{1/N} \\[6pt] \text{far from } f_0:\ -20N\ \text{dB per decade} \end{gathered}`} />
+			<p class="note">
+				<strong>How to use:</strong> give every stage the same f0, the lower Q_s and the gain
+				K<sup>1/N</sup>. The factor is 1, 0.6436, 0.5098, 0.4350, 0.3856 and 0.3499 for N = 1 to
+				6: two stages at Q = 5 take Q_s = 3.218 each. The cost is N times the op-amps; the gain is
+				steeper skirts for the same bandwidth, 27.7 dB down an octave off with two stages against
+				17.6 dB with one. A stage Q of 5 to 10 builds reliably: tolerances move f0 and lower Q,
+				more so the higher the Q.
+			</p>
+		</div>
+	</section>
+
+	<section class="panel">
+		<div class="panel-head">
+			<span class="num">29</span>
+			<h2>Narrow band-pass circuits</h2>
+		</div>
+		<p class="note">
+			Six circuits build one stage. Every example below is the same stage: f0 = 10 kHz, Q = 5,
+			C = 10 nF, so the capacitor's reactance at f0 is X = 1/(&omega;0 C) = 1.592 k&Omega;. The
+			tool picks C from the stock first, as here, then solves and rounds the resistors.
+		</p>
+
+		<div class="formula">
+			<h3>Passive RLC, the principle</h3>
+			<p class="note">
+				R from the input to the output node P, L and C both from P to ground. At f0 the currents in
+				L and C cancel, their parallel impedance is very large, and P follows the input: gain 1.
+			</p>
+			<Equation tex={String.raw`\begin{gathered} H(s) = \dfrac{sL/R}{s^2LC + sL/R + 1}, \qquad H(j\omega_0) = 1 \\[6pt] \omega_0 = \dfrac{1}{\sqrt{LC}}, \qquad Q = R\sqrt{\dfrac{C}{L}} \ \Rightarrow\ R = Q\sqrt{\dfrac{L}{C}} \end{gathered}`} />
+			<Equation tex={String.raw`L = \dfrac{X}{\omega_0} = 25.33\ \text{mH}, \qquad R = Q\,X = 7.958\ \text{k}\Omega`} />
+			<p class="note">
+				<strong>How to use:</strong> mind which way up the square root goes. R = Q sqrt(C/L) is
+				a slip: sqrt(C/L) is a conductance, so that product is not in ohms. For a gain &alpha;
+				under 1, split R into Ra from the input to P and Rb from P to ground, with
+				Ra || Rb = R: Ra = R/&alpha;, Rb = R/(1 &minus; &alpha;). No real inductor is used: one of
+				the two circuits below takes its place, and P, a high impedance, ends in a follower or in
+				the gain stage.
+			</p>
+		</div>
+
+		<div class="formula">
+			<h3>Gyrator inductor (one op-amp)</h3>
+			<p class="note">
+				R1 from P to a follower's output, Cg from P to its + input X, R2 from X to ground. The
+				follower copies V_X, and the impedance seen from P is close to an inductor with a series
+				loss R1:
+			</p>
+			<Equation tex={String.raw`Z_{in} = R_1\,\dfrac{1 + sR_2C_g}{1 + sR_1C_g} \approx R_1 + s\,R_1R_2C_g, \qquad L = R_1R_2C_g`} />
+			<p class="note">
+				With R1 = 50 &Omega; and Cg = C = 10 nF, the plain recipe gives R2 = L/(R1 Cg) =
+				50.66 k&Omega; and R = 7.958 k&Omega;. The exact Z_in then moves the peak to 10.03 kHz,
+				drops Q to 3.82 and the gain to &minus;2.4 dB. The exact stage is still second order, with a
+				zero at 1/(R2 Cg):
+			</p>
+			<Equation tex={String.raw`\begin{gathered} H(s) = \alpha\,\dfrac{R_1(1 + sR_2C_g)}{s^2\,CRR_1R_2C_g + s\,(R_1R_2C_g + RR_1C_g + CRR_1) + R_1 + R} \\[6pt] \omega_0^2 = \dfrac{1 + R_1/R}{R_1R_2CC_g}, \qquad \dfrac{\omega_0}{Q} = \dfrac{1}{RC} + \dfrac{1}{R_2C} + \dfrac{1}{R_2C_g} \end{gathered}`} />
+			<Equation tex={String.raw`\begin{gathered} Ck\,h^2 - \left(\dfrac{1}{R_1} + \dfrac{C\omega_0}{Q}\right)h + \omega_0^2CC_g = 0 \\[6pt] h = \dfrac{1}{R_2}, \quad k = \dfrac{1}{C} + \dfrac{1}{C_g}, \qquad \dfrac{1}{R} = C\left(\dfrac{\omega_0}{Q} - hk\right) \end{gathered}`} />
+			<Equation tex={String.raw`|H(j\omega_0)| = \alpha\,\dfrac{\sqrt{(1/RC)^2 + (1/\omega_0RR_2CC_g)^2}}{\omega_0/Q}`} />
+			<p class="note">
+				<strong>How to use:</strong> solve R2 and R from the exact expression, the smaller root
+				h (the larger R2) for the smaller loss: R2 = 50.88 k&Omega; and R = 11.58 k&Omega; put f0
+				and Q on target, with 0.688 (&minus;3.3 dB) left at f0 for a gain stage to make up. Keep R1
+				small next to X and R2 large next to it, but not too small: a real op-amp's lag works in
+				Z_in as a capacitance 1/(2&pi; GBW R1) across the tank, which moves f0 down by about
+				1/(2 &omega;T R1 C), &omega;T = 2&pi; GBW. The tool weighs both and keeps the worse of the two
+				misses, from the parts and on a TL082, as small as it can. At 10 kHz, Q = 5 that leaves the
+				TL082 within 2 % of f0.
+			</p>
+			<Equation tex={String.raw`C_{op} = \dfrac{1}{2\pi\,\text{GBW}\,R_1}, \qquad \dfrac{\Delta f_0}{f_0} \approx -\dfrac{1}{2\,\omega_T R_1 C}`} />
+		</div>
+
+		<div class="formula">
+			<h3>Antoniou's generalized impedance converter (two op-amps)</h3>
+			<p class="note">
+				A chain from P to ground: R1, R2, R3, Cg, R4. Op-amp 1: + on P, &minus; between R2 and R3,
+				output between R3 and Cg. Op-amp 2: + between Cg and R4, &minus; on the same node as op-amp
+				1's, output between R1 and R2. Ideal op-amps hold every input node at V_P, and the currents
+				follow one another up the chain:
+			</p>
+			<Equation tex={String.raw`\begin{gathered} I_{R_4} = \dfrac{V_P}{R_4}, \qquad V_1 = V_P\left(1 + \dfrac{1}{sC_gR_4}\right) \\[6pt] V_2 = V_P\left(1 - \dfrac{R_2}{sC_gR_3R_4}\right), \qquad Z_{in} = \dfrac{R_1V_P}{V_P - V_2} = s\,\dfrac{C_gR_1R_3R_4}{R_2} \end{gathered}`} />
+			<Equation tex={String.raw`L = \dfrac{C_gR_1R_3R_4}{R_2}, \qquad C_g = C,\ \ R_1 = R_3 \ \Rightarrow\ \dfrac{R_4}{R_2} = \dfrac{L}{C_gR_1^2}`} />
+			<p class="note">
+				<strong>How to use:</strong> an exact, lossless grounded inductor with ideal op-amps.
+				With Cg = C and all four resistors equal to X = 1.592 k&Omega;, L = X/&omega;0 = 25.33 mH
+				exactly. Build R1 = R3 at a stocked value, R4/R2 as the stocked ratio closest to the one L
+				asks for, then solve R = Q sqrt(L/C) against the L built. Every part enters Q as a plain
+				power: sensitivities of 1/2, and 1 for R.
+			</p>
+		</div>
+
+		<div class="formula">
+			<h3>Sallen-Key band-pass (one op-amp)</h3>
+			<p class="note">
+				A non-inverting amplifier of gain K = 1 + Rf/Rg. Ra from the input to X, C1 from X to
+				ground, C2 from X to the + input P, R2 from P to ground, R3 from X to the output. With
+				G1 = 1/Ra (plus 1/Rb when the input is divided):
+			</p>
+			<Equation tex={String.raw`\begin{gathered} H(s) = \dfrac{\frac{K}{R_aC_1}\,s}{s^2 + \frac{\omega_0}{Q}\,s + \omega_0^2}, \qquad \omega_0^2 = \dfrac{G_1 + 1/R_3}{C_1C_2R_2} \\[6pt] \dfrac{\omega_0}{Q} = \dfrac{G_1 + (1 - K)/R_3}{C_1} + \dfrac{1}{C_2R_2} + \dfrac{1}{C_1R_2} \end{gathered}`} />
+			<Equation tex={String.raw`\begin{gathered} R_a = R_2 = R_3 = R, \quad C_1 = C_2 = C, \quad \tau = RC: \\[6pt] H(s) = \dfrac{K\tau s}{(\tau s)^2 + \tau(4 - K)s + 2}, \qquad \omega_0 = \dfrac{\sqrt{2}}{\tau}, \qquad Q = \dfrac{\sqrt{2}}{4 - K} \end{gathered}`} />
+			<Equation tex={String.raw`\begin{gathered} H(j\omega_0) = \dfrac{K}{4 - K} = 2\sqrt{2}\,Q - 1, \qquad S^Q_K = \dfrac{K}{4 - K} \\[6pt] R = \dfrac{\sqrt{2}}{\omega_0 C} = 2.251\ \text{k}\Omega, \qquad K = 4 - \dfrac{\sqrt{2}}{Q} = 3.717 \end{gathered}`} />
+			<Equation tex={String.raw`\begin{gathered} K_{lim} = 1 + R_3G_1 + \dfrac{R_3}{R_2}\left(1 + \dfrac{C_1}{C_2}\right) \quad (4 \text{ with equal parts}) \\[6pt] S^Q_K = \dfrac{K}{K_{lim} - K} \end{gathered}`} />
+			<p class="note">
+				<strong>How to use:</strong> K sets Q and must stay under K_lim, where ω0/Q falls to zero
+				and the circuit oscillates: 4 with equal parts, closer once they are rounded (3.62 for
+				R3 = 5.1 kΩ, R2 = 5.6 kΩ and Ra || Rb = 6.4 kΩ, for example). The circuit's own gain at f0 is 13.14 (+22.4 dB) at Q = 5, not 1, and Q moves
+				13.14 % for 1 % on K: Rf/Rg = 2.717 has to be held to a fraction of a percent. For a gain
+				K0 under the circuit's own, split the input into Ra = 13.14 R/K0 and
+				Rb = R/(1 &minus; K0/13.14), so that Ra || Rb = R; above it, a gain stage follows. Round R3 first,
+				then the input, then R2 for f0, then Rf/Rg for Q.
+			</p>
+		</div>
+
+		<div class="formula">
+			<h3>Multiple feedback band-pass (one op-amp)</h3>
+			<p class="note">
+				The three-resistor form of section 27 sets f0, Q and the gain. Without R2 to ground it is
+				the two-resistor form, whose gain is fixed: the ceiling of the three-resistor one.
+			</p>
+			<Equation tex={String.raw`\begin{gathered} \omega_0 = \dfrac{1}{\sqrt{R_1R_3C_1C_2}}, \qquad Q = \dfrac{\sqrt{R_3/R_1}}{\sqrt{C_1/C_2} + \sqrt{C_2/C_1}} \\[6pt] H_0 = -\dfrac{R_3C_2}{R_1(C_1 + C_2)} \end{gathered}`} />
+			<Equation tex={String.raw`\begin{gathered} C_1 = C_2 = C: \quad R_1 = \dfrac{1}{2Q\,\omega_0C} = 159.2\ \Omega, \quad R_3 = \dfrac{2Q}{\omega_0C} = 15.92\ \text{k}\Omega \\[6pt] H_0 = -\dfrac{R_3}{2R_1} = -2Q^2 = -50 \end{gathered}`} />
+			<p class="note">
+				<strong>How to use:</strong> the two-resistor form gives &minus;50 (+34 dB, inverting) at
+				Q = 5, not 1. For any gain under the ceiling Q&sup2;(1 + C2/C1), use the three-resistor
+				form of section 27 (R2 divides the input); past it, build the stage for gain 1 and add a
+				gain stage. The spread, R3/R1 = 4Q&sup2; here and R3/R2 about the same in the
+				three-resistor form, and the noise gain 1 + Q&sup2;(1 + C2/C1) at f0 grow fast with Q.
+			</p>
+		</div>
+
+		<div class="formula">
+			<h3>State variable, KHN (three op-amps)</h3>
+			<p class="note">
+				A1 integrates (R1 in from A3, C1 across): its output is the band-pass. A2 integrates it
+				again (R2 in, C2 across): its output is the low-pass. A3 sums: on its &minus; input R3 from
+				the input, R4 from A2 and R7 from its own output; on its + input R5 from the band-pass and R6
+				to ground. A3's output is the high-pass. These labels follow from the circuit: one more
+				integration of the band-pass can only give the low-pass.
+			</p>
+			<Equation tex={String.raw`\dfrac{V_{bp}}{V_{in}} = \dfrac{\frac{R_2R_4C_2}{R_3}\,s}{\frac{R_1R_2R_4C_1C_2}{R_7}\,s^2 + \frac{R_2C_2}{1 + R_5/R_6}\left(1 + \frac{R_4}{R_3} + \frac{R_4}{R_7}\right)s + 1}`} />
+			<Equation tex={String.raw`\begin{gathered} \omega_0 = \sqrt{\dfrac{R_7}{R_1R_2R_4C_1C_2}}, \qquad Q = \dfrac{1 + R_5/R_6}{1 + R_4/R_3 + R_4/R_7}\sqrt{\dfrac{R_1R_4C_1}{R_2R_7C_2}} \\[6pt] K = \dfrac{R_4}{R_3}\,\dfrac{1 + R_5/R_6}{1 + R_4/R_3 + R_4/R_7} \end{gathered}`} />
+			<Equation tex={String.raw`\begin{gathered} C_1 = C_2 = C, \quad R_1 = R_2 = R, \quad R_4 = R_7 = R_0: \\[6pt] \omega_0 = \dfrac{1}{RC}, \qquad R_3 = \dfrac{Q\,R_0}{K}, \qquad \dfrac{R_5}{R_6} = 2Q + K - 1 \end{gathered}`} />
+			<p class="note">
+				<strong>How to use:</strong> R sets f0 (R = X = 1.592 k&Omega;), R3 the gain and R5/R6 the
+				Q: for K = 1, R3 = 5 R0 and R5/R6 = 10. The gain at f0 is positive. The other way to unity
+				gain, R5/R6 = 2 with R3 = R4 = R7, leaves Q = sqrt(R1 C1/(R2 C2)): with equal capacitors
+				R1 = Q/(&omega;0 C) = 7.958 k&Omega; and R2 = 1/(Q &omega;0 C) = 318.3 &Omega;, a Q&sup2;
+				spread. Every sensitivity stays at 1 or under.
+			</p>
+		</div>
+
+		<div class="formula">
+			<h3>Tow-Thomas band-pass (three op-amps)</h3>
+			<p class="note">
+				The two-integrator loop of section 19, the band-pass taken at the output of A1: Rd across
+				C1 sets the damping, R1 brings the input in.
+			</p>
+			<Equation tex={String.raw`\begin{gathered} \omega_0 = \dfrac{1}{RC}, \qquad Q = \dfrac{R_d}{R}, \qquad H_0 = -\dfrac{R_d}{R_1} \\[6pt] R = 1.592\ \text{k}\Omega, \qquad R_d = Q\,R = 7.958\ \text{k}\Omega, \qquad R_1 = \dfrac{R_d}{K} = 7.958\ \text{k}\Omega \end{gathered}`} />
+			<p class="note">
+				<strong>How to use:</strong> three independent knobs, R for f0, Rd for Q, R1 for the
+				gain, and sensitivities of 1/2 and 1 whatever the Q. The stage inverts. Round R, then Rd
+				against the rounded R, then R1 against the rounded Rd.
+			</p>
+		</div>
+
+		<div class="formula">
+			<h3>The gain stage, and choosing a circuit</h3>
+			<p class="note">
+				When the stages cannot reach K by their form (an RLC, a Sallen-Key with its own gain under
+				K, a multiple feedback stage past its ceiling), a non-inverting amplifier follows the last
+				stage. It takes the rounding of every stage into its target, and its + input buffers an RLC
+				tank, so that stage needs no follower of its own.
+			</p>
+			<Equation tex={String.raw`K_g = 1 + \dfrac{R_2}{R_1} = \dfrac{K}{\prod_i |H_i(j\omega_0)|}, \qquad S^Q_x = \dfrac{x}{Q}\,\dfrac{\partial Q}{\partial x}`} />
+			<p class="note">
+				<strong>How to use:</strong> the tool builds all six from the stock and measures each from
+				its parts with ideal op-amps and on a single-pole op-amp of the TL082's measured
+				gain-bandwidth, 3.45 MHz, whose poles it also checks for an oscillation. A circuit
+				qualifies when, both ways, it keeps f0 within a tenth of the bandwidth and Q and K within
+				10 %, when it does not oscillate, and when its Q moves at most 2 % for 1 % on any one part.
+				The fewest op-amps win among those, then the closest fit, then the fewest parts; when none
+				qualifies, the closest fit that does not oscillate. A gain stage of gain g on that op-amp
+				keeps 1/√(1 + (g·f0/GBW)²) of it at f0, so a large gain at a high f0 is split over two or
+				three identical stages, each with g·f0 under GBW/10.
 			</p>
 		</div>
 	</section>
