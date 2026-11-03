@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cours 8 - Gaz quantique et radiation du corps noir | ELE2307</title>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<link rel="stylesheet" href="assets/style.css?v=10">
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="index.html">ELE2307 <small>Thermodynamique statistique et semiconducteurs</small></a>
+  <nav>
+    <a href="index.html">Accueil</a>
+    <a href="cours1.html">Cours 1</a>
+    <a href="cours2.html">Cours 2</a>
+    <a href="cours3.html">Cours 3</a>
+    <a href="cours4.html">Cours 4</a>
+    <a href="cours5.html">Cours 5</a>
+    <a href="cours6.html">Cours 6</a>
+    <a href="cours7.html">Cours 7</a>
+    <a href="cours8.html">Cours 8</a>
+    <a href="formulaire.html">Formulaire</a>
+    <a href="intra.html">Intra</a>
+    <a href="errata.html">Errata</a>
+    <button class="theme-btn" type="button">Thème</button>
+  </nav>
+</header>
+
+<main class="layout">
+<aside class="toc"></aside>
+<article class="content">
+
+<div class="course-hero">
+  <div class="kicker">Cours 8 - Chapitre 8 du cours</div>
+  <h1>Gaz quantique et radiation du corps noir</h1>
+  <p class="meta">Stowe, chapitre 20 « Quantum gases », sections A et B (p. 422 à 426) et chapitre 21 « Blackbody radiation » (p. 438 à 456) | Diapos « Cours 8 » (22 pages) | Exercices faits en classe : 11 et 13 p. 453, 20 p. 455, et le dernier exercice du cours 6</p>
+  <p><span class="pill accent">Spin et dégénérescence</span><span class="pill accent">Densité d'états</span><span class="pill accent">Distribution dN/dε</span><span class="pill accent">Loi de Planck</span><span class="pill accent">Loi de Stefan-Boltzmann</span><span class="pill accent">Loi de Wien</span><span class="pill accent">Émissivité et effet de serre</span></p>
+  <p class="small">Fil conducteur : au cours 7 on a trouvé le nombre d'occupation \(\bar n(\varepsilon)\) d'un état. Il manquait le second ingrédient, le spectre des états accessibles \(g(\varepsilon)\). Pour un gaz, il se calcule depuis l'espace des phases ; le produit \(g\bar n\) donne la distribution des particules. Appliqué aux photons d'une cavité chaude, ce calcul donne le spectre du corps noir, la première preuve de la quantification de l'énergie, puis les lois de Stefan-Boltzmann et de Wien qui servent partout, du refroidissement d'un composant au climat de la Terre.</p>
+</div>
+
+<h2>0. D'où vient ce cours</h2>
+<p>Le chapitre 20 construit la densité d'états d'un gaz de particules libres et la multiplie par le nombre d'occupation du cours 7 pour obtenir le nombre de particules par unité d'énergie. Le chapitre 21 applique ce résultat au cas le plus simple et le plus célèbre, le gaz de photons : bosons sans masse, à potentiel chimique nul, dans une cavité à la température \(T\). On en tire la loi de Planck, l'énergie totale \(u = aT^4\), le flux \(J = \sigma T^4\) et la loi de Wien, puis les notions d'émissivité, d'écran thermique et d'effet de serre.</p>
+<div class="box def"><span class="label">Constantes et repères du chapitre</span>
+  <p>\(h = 6{,}626\times10^{-34}\) J s ; \(c = 2{,}998\times10^{8}\) m/s ; \(hc = 1{,}986\times10^{-25}\) J m \(= 1240\) eV nm (pour passer de \(\lambda\) à \(\varepsilon\) : \(\varepsilon\,[\text{eV}] = 1240/\lambda\,[\text{nm}]\)). Constante de radiation \(a = 7{,}56\times10^{-16}\) J/(m³ K⁴) ; constante de Stefan-Boltzmann \(\sigma = 5{,}67\times10^{-8}\) W/(m² K⁴) ; constante de Wien \(2{,}90\times10^{-3}\) m K.</p>
+</div>
+
+<h2>1. Notion de spin</h2>
+<p>Les particules élémentaires possèdent des états supplémentaires dus à leur spin, un moment cinétique intrinsèque associé à une rotation de la particule sur elle-même. Pour un <strong>fermion</strong> (électron, proton, neutron), \(S = \pm\tfrac{1}{2}\hbar\) : deux orientations. Chaque état d'énergie a donc une <em>dégénérescence</em> de deux : deux électrons de spins opposés peuvent y cohabiter sans violer le principe d'exclusion. L'électron étant chargé, son spin crée un moment magnétique mesurable.</p>
+<p>Pour un <strong>boson</strong> massif de spin 1, le spin peut prendre trois valeurs \((-1, 0, 1)\hbar\). Pour une particule sans masse comme le photon, seules deux orientations existent, \(S_{photon} = \pm\hbar\) : on parle de polarisation circulaire gauche ou droite selon le sens de rotation du champ électromagnétique autour de la direction de propagation. Règle générale : \(2s + 1\) orientations pour une particule massive de spin \(s\), \(2s\) pour une particule sans masse.</p>
+<div class="box tip"><span class="label">Où ça entre dans les formules</span>
+  <p>Le spin multiplie le nombre d'états : un facteur \(2_{spin}\) (ou \(2s + 1\)) devant la densité d'états. C'est le « 2 » de \(g(\varepsilon) = 2\times\dfrac{2\pi V(2m)^{3/2}}{h^3}\sqrt{\varepsilon}\) pour les électrons et du \(8\pi V\) des photons.</p>
+</div>
+
+<h2>2. La distribution des particules</h2>
+<h3>2.1 Densité d'états d'un gaz</h3>
+<p>Chaque état quantique occupe un volume \(h^3\) de l'espace des phases (cours 2) : le nombre d'états dans \(d^3r\,d^3p\) est \(d^3r\,d^3p/h^3\). Pour un gaz, positions et directions sont libres : on intègre sur tout le volume \(V\) et sur tous les angles de \(\vec p\) (\(p^2\,dp\,\sin\theta\,d\theta\,d\varphi \to 4\pi p^2\,dp\)) :</p>
+<div class="formula"><div class="title">Nombre d'états et densité d'états \(g(\varepsilon)\)</div>
+\[\sum_{\text{états}} = \frac{4\pi V}{h^3}\int p^2\,dp, \qquad g(\varepsilon) = \frac{d}{d\varepsilon}\left(\sum_{\text{états}}\right)\]
+\[\text{non relativiste } \left(\varepsilon = \frac{p^2}{2m}\right) : g(\varepsilon) = 2_{spin}\,\frac{2\pi V(2m)^{3/2}}{h^3}\sqrt{\varepsilon}, \qquad \text{relativiste } (\varepsilon = pc) : g(\varepsilon) = 2_{spin}\,\frac{4\pi V}{h^3c^3}\varepsilon^2\]
+<div class="cond">\(g(\varepsilon)\,d\varepsilon\) est le nombre d'états d'énergie comprise entre \(\varepsilon\) et \(\varepsilon + d\varepsilon\). Le photon, sans masse et à la vitesse \(c\), est toujours relativiste. Forme générale \(g = C\varepsilon^{\alpha}\) avec \(\alpha = 1/2\) (particules massives lentes) ou \(\alpha = 2\) (particules relativistes).</div>
+</div>
+<h3>2.2 Nombre de particules par unité d'énergie</h3>
+<div class="formula"><div class="title">Distribution des particules et valeurs moyennes</div>
+\[\frac{dN}{d\varepsilon} = g(\varepsilon)\,\bar n(\varepsilon) = \frac{C\varepsilon^{\alpha}}{e^{\beta(\varepsilon - \mu)} \pm 1}, \qquad \frac{dE}{d\varepsilon} = \varepsilon\,g(\varepsilon)\,\bar n(\varepsilon), \qquad \bar f = \frac{1}{N}\int f(\varepsilon)\,g(\varepsilon)\,\bar n(\varepsilon)\,d\varepsilon\]
+<div class="cond">+ pour les fermions, − pour les bosons. Aux basses énergies l'exponentielle compte peu et \(dN/d\varepsilon \approx \varepsilon^{\alpha}\) ; aux hautes énergies elle domine et \(dN/d\varepsilon \approx e^{-\beta\varepsilon}\).</div>
+</div>
+<p>Les figures des diapos (figures 20.1 à 20.3 du manuel) se lisent comme un produit : une courbe de densité d'états (\(\sqrt{\varepsilon}\) ou \(\varepsilon^2\)) multipliée par la courbe du nombre d'occupation.</p>
+<ul>
+  <li><strong>Fermions à basse température :</strong> \(\bar n\) est une marche (1 sous \(\mu\), 0 au-dessus), donc \(dN/d\varepsilon\) suit \(g(\varepsilon)\) jusqu'à \(\mu\) puis tombe brutalement. Tous les états sont pleins jusqu'au niveau de Fermi : c'est le gaz dégénéré des électrons d'un métal (cours 9).</li>
+  <li><strong>Fermions à haute température :</strong> la marche s'adoucit sur plusieurs \(kT\), la distribution prend une forme en cloche qui tend vers \(\sqrt{\varepsilon}\,e^{-\beta\varepsilon}\), la distribution classique de Maxwell-Boltzmann.</li>
+  <li><strong>Bosons à basse température :</strong> \(\bar n\) est très grand près de \(\mu\) (juste sous le fondamental) : les particules s'entassent aux plus basses énergies, le pic est serré près de \(\varepsilon = 0\).</li>
+  <li><strong>Bosons à haute température :</strong> la distribution s'élargit et rejoint, elle aussi, la forme classique.</li>
+  <li><strong>Gaz relativistes :</strong> mêmes allures avec \(g \propto \varepsilon^2\), donc un départ plus plat à l'origine et un pic plus haut en énergie (bosons relativistes à \(\mu = 0\) : le gaz de photons, section 3).</li>
+</ul>
+<div class="widget" data-widget="gas-distribution"></div>
+
+<h2>3. La radiation du corps noir</h2>
+<h3>3.1 Un problème historique</h3>
+<p>Un <strong>corps noir</strong> est une cavité aux parois conductrices de chaleur qui, chauffée, émet des photons par une petite ouverture. La mesure de son spectre a été la première observation des propriétés quantiques de la matière. La théorie classique de Rayleigh-Jeans comptait les modes d'ondes électromagnétiques de la cavité, en nombre croissant comme \(\varepsilon^2\), et donnait à chacun une énergie de l'ordre de \(kT\) par équipartition : la densité d'énergie devait croître sans limite avec la fréquence, c'est la « catastrophe ultraviolette ». Or les mesures de Lummer et Pringsheim (1899) montraient un maximum puis une décroissance. En 1900, Max Planck postula que l'énergie d'un mode de fréquence \(\nu\) ne peut varier que par paquets \(\varepsilon = h\nu\), avec \(h = 6{,}63\times10^{-34}\) J s pour reproduire les mesures : les modes de haute fréquence, trop coûteux, restent vides.</p>
+<h3>3.2 Le gaz de photons</h3>
+<p>Dans le langage du cours 7, les photons sont des bosons relativistes à deux polarisations : \(g(\varepsilon) = 8\pi V\varepsilon^2/(h^3c^3)\) et \(\bar n = 1/(e^{\beta(\varepsilon - \mu)} - 1)\). Reste \(\mu\). Dans la cavité à \(T\) donnée, l'énergie et le volume sont fixes mais le nombre de photons ne l'est pas : les parois en absorbent et en émettent sans cesse. Du premier principe, \(T\,dS = dE + p\,dV - \mu\,dN = -\mu\,dN\) ; à l'équilibre l'entropie est maximale pour toute variation de \(N\), donc</p>
+<div class="formula"><div class="title">Potentiel chimique des photons et loi de Planck</div>
+\[\mu = -T\left(\frac{\partial S}{\partial N}\right)_{E,V} = 0, \qquad dE = g(\varepsilon)\,\bar n(\varepsilon)\,\varepsilon\,d\varepsilon \ \Rightarrow\ du = \frac{dE}{V} = \frac{8\pi}{h^3c^3}\,\frac{\varepsilon^3\,d\varepsilon}{e^{\beta\varepsilon} - 1}\]
+<div class="cond">\(u\) est la densité d'énergie (J/m³) et \(du/d\varepsilon\) la densité spectrale d'énergie. Elle ne dépend que de \(T\), pas de la forme ni de la matière de la cavité.</div>
+</div>
+<h3>3.3 Densité totale d'énergie</h3>
+<div class="formula"><div class="title">Loi de Stefan-Boltzmann pour la densité d'énergie</div>
+\[u = \frac{8\pi}{h^3c^3}\int_0^{\infty}\frac{\varepsilon^3\,d\varepsilon}{e^{\beta\varepsilon} - 1} = \frac{8\pi(kT)^4}{h^3c^3}\int_0^{\infty}\frac{x^3\,dx}{e^x - 1} = \frac{8\pi^5k^4}{15h^3c^3}\,T^4 = aT^4, \qquad a = 7{,}56\times10^{-16}\ \frac{\text{J}}{\text{m}^3\,\text{K}^4}\]
+<div class="cond">Changement de variable \(x = \beta\varepsilon\) et intégrale connue \(\int_0^{\infty}x^3/(e^x - 1)\,dx = \pi^4/15\). L'énergie d'une cavité de volume \(V\) est \(E = aVT^4\) : doubler \(T\) multiplie l'énergie par 16.</div>
+</div>
+<h3>3.4 En longueur d'onde et loi de Wien</h3>
+<p>La radiation se mesure au wattmètre en fonction de la longueur d'onde. Avec \(\varepsilon = h\nu = hc/\lambda\), \(|d\varepsilon| = (hc/\lambda^2)\,d\lambda\) et \(\mu = 0\) :</p>
+<div class="formula"><div class="title">Densité spectrale en longueur d'onde et loi du déplacement de Wien</div>
+\[\frac{du}{d\lambda} = 8\pi hc\,\frac{\lambda^{-5}}{e^{hc/\lambda kT} - 1}, \qquad \left(\frac{d^2u}{d\lambda^2}\right)_{\lambda_{max}} = 0 \ \Rightarrow\ \lambda_{max} = \frac{hc}{4{,}965\,kT} \approx \frac{hc}{5kT} = \frac{2{,}90\times10^{-3}\ \text{m K}}{T}\]
+<div class="cond">Les diapos écrivent \(hc/5kT\), le facteur exact est 4,965. Le maximum de \(du/d\varepsilon\) est ailleurs : \(\varepsilon_{max} = 2{,}82\,kT\), soit une longueur d'onde \(hc/(2{,}82kT) = 5{,}1\times10^{-3}\ \text{m K}/T\), parce que les deux distributions ne sont pas la même fonction (facteur \(hc/\lambda^2\) du changement de variable, ex. 5 et 6).</div>
+</div>
+<div class="box ex"><span class="label">Ordres de grandeur</span>
+  <p>Soleil (5800 K) : \(\lambda_{max} = 500\) nm, en plein visible ; c'est pour cela que l'œil est sensible là. Filament d'ampoule (2800 K) : 1 µm, surtout infrarouge, d'où le mauvais rendement lumineux. Corps humain (310 K) : 9,3 µm, infrarouge thermique (caméras thermiques). Fond cosmologique (2,7 K) : 1,1 mm, micro-ondes. Métal chauffé en forge : rouge sombre vers 550 °C, orange vers 900 °C, blanc au-delà de 1300 °C.</p>
+</div>
+<div class="widget" data-widget="planck-spectrum"></div>
+
+<h2>4. Flux d'énergie</h2>
+<p>Le flux d'énergie à travers une surface est la densité d'énergie des photons fois leur vitesse dans la direction considérée. La moitié des photons de la cavité vont vers \(+z\), soit une densité \(u_z = u/2\), et leur vitesse moyenne selon \(z\) est \(c\,\overline{\cos\theta} = c/2\) sur un hémisphère (ex. 24). D'où</p>
+<div class="formula"><div class="title">Loi de Stefan-Boltzmann pour le flux</div>
+\[J_z = u_z\,v_z = \frac{u}{2}\cdot\frac{c}{2} = \frac{ca}{4}T^4 = \sigma T^4, \qquad \sigma = \frac{ca}{4} = 5{,}67\times10^{-8}\ \frac{\text{W}}{\text{m}^2\,\text{K}^4}\]
+<div class="cond">\(J\) : puissance par unité de surface émise par un corps noir (W/m²). Puissance totale d'un objet de surface \(A\) : \(P = JA\). À distance \(d\) d'une source sphérique de rayon \(R\) : \(J(d) = P/(4\pi d^2) = J_{surface}(R/d)^2\).</div>
+</div>
+<div class="box ex"><span class="label">Exemples des diapos (exercices D1 et D2)</span>
+  <p>Surface du Soleil à 5800 K : \(J = \sigma T^4 = 6{,}4\times10^{7}\) W/m², soit \(4\times10^{26}\) W pour toute la surface, et \(1{,}4\) kW/m² à la distance de la Terre. L'intérieur du Soleil, gaz de photons à \(10^{7}\) K dans \(1{,}4\times10^{27}\) m³, contient \(aT^4V = 1{,}1\times10^{40}\) J, de quoi rayonner pendant un million d'années si la fusion s'arrêtait.</p>
+</div>
+<div class="box tip"><span class="label">Ne pas confondre</span>
+  <p>\(u = aT^4\) est une énergie par unité de volume (J/m³, à l'intérieur d'une cavité), \(J = \sigma T^4\) une puissance par unité de surface (W/m², ce qui sort par un trou ou par une surface noire). Le lien est \(\sigma = ca/4\). Et \(T\) est toujours en kelvins : \(T^4\) ne pardonne rien.</p>
+</div>
+
+<h2>5. Émissivité</h2>
+<h3>5.1 Bon absorbeur, bon émetteur</h3>
+<p>Le corps noir réémet toute l'énergie qu'il absorbe. Un matériau réel est caractérisé par son <strong>émissivité</strong> \(e(T, \varepsilon)\), entre 0 (n'émet rien) et 1 (corps noir), qui dépend du matériau, de la température et de la longueur d'onde. Le spectre d'une cavité ne dépend pas de ses parois : à l'équilibre, chaque paroi doit remettre dans le gaz de photons exactement ce qu'elle en retire, à chaque longueur d'onde. C'est le <em>principe du bilan détaillé</em> (loi de Kirchhoff) : l'absorptivité et l'émissivité sont égales à chaque \(\lambda\). Balfour Stewart l'avait constaté dès 1858 : le noir de fumée, qui absorbe tout, est aussi le meilleur émetteur.</p>
+<div class="formula"><div class="title">Flux d'un corps réel et échange net</div>
+\[J = e\,\sigma T^4, \qquad J_{net} = e\,\sigma\left(T^4 - T_{env}^4\right), \qquad \text{pour } \Delta T \ll T : J_{net} \approx 4e\sigma T^3\,\Delta T\]
+<div class="cond">Un objet reçoit aussi le rayonnement de son environnement ; s'il a la même émissivité aux deux températures, le bilan net est la différence des \(T^4\). La forme linéarisée est la loi de Newton du refroidissement (ex. 21) : à 290 K, \(4\sigma T^3 = 5{,}5\) W/(m² K).</div>
+</div>
+<div class="box ex"><span class="label">Applications</span>
+  <ul>
+    <li><strong>Isolation :</strong> une théière argentée (\(e\) faible) garde le thé chaud ; un radiateur peint en noir échange bien ; une couverture de survie réfléchit l'infrarouge du corps.</li>
+    <li><strong>Avions furtifs :</strong> revêtements qui absorbent les ondes radar et contrôlent l'émission infrarouge.</li>
+    <li><strong>Corps humain :</strong> peau à 300 K dans une pièce à 290 K, 2 m², \(e \approx 1\) dans l'infrarouge : 58 W/m², 116 W, environ 2400 kcal par jour (exercice D7). Nu dans l'espace : 920 W.</li>
+  </ul>
+</div>
+<h3>5.2 Écrans thermiques</h3>
+<p>Entre deux surfaces à \(T_0\) et \(T_{n+1}\), on intercale \(n\) feuilles de même émissivité. En régime permanent le même flux traverse chaque couche : \(J = e\sigma(T_0^4 - T_1^4) = e\sigma(T_1^4 - T_2^4) = \cdots\) Comme la somme des \(n + 1\) différences vaut \(T_0^4 - T_{n+1}^4\), le flux est divisé par \(n + 1\) par rapport au cas sans feuille, et les \(T_i^4\) sont régulièrement espacés. C'est le principe des vêtements en couches et des isolants multicouches des satellites.</p>
+<h3>5.3 Effet de serre</h3>
+<p>Le rayonnement solaire (visible) traverse l'atmosphère, est absorbé par le sol, qui réémet dans l'infrarouge (\(T \approx 300\) K, \(\lambda_{max} \approx 10\) µm). L'atmosphère, comme la vitre d'une serre, est transparente au visible mais absorbe une fraction \(x\) de l'infrarouge sortant \(J_o\) et le réémet moitié vers le haut, moitié vers le sol. Bilan du sol à l'équilibre :</p>
+<div class="formula"><div class="title">Modèle à une couche de l'effet de serre</div>
+\[J_o = J_i + \frac{x}{2}J_o \ \Rightarrow\ J_o = \frac{J_i}{1 - x/2} = \frac{2}{2 - x}J_i, \qquad J_o = e\sigma T_{sol}^4 \ \Rightarrow\ T_{sol} = T_0\left(\frac{2}{2 - x}\right)^{1/4}\]
+<div class="cond">\(J_i\) : flux solaire absorbé par le sol ; \(T_0\) : température sans atmosphère (\(x = 0\)). Pour \(x = 1\), le sol rayonne deux fois plus et sa température monte d'un facteur \(2^{1/4} = 1{,}19\). Le même bilan écrit du point de vue de la couche, \((1 - x)J_o + (x/2)J_o = J_i\), donne le même résultat.</div>
+</div>
+<div class="box ex"><span class="label">La Terre (exercices D3 et D4)</span>
+  <p>Flux solaire moyen au sol 175 W/m², 90 % absorbé, émissivité infrarouge 0,9 : sans atmosphère \(T_0 = (175/\sigma)^{1/4} = 236\) K (\(-37\) °C) ; si l'atmosphère absorbe tout l'infrarouge sortant, \(280\) K (\(7\) °C). La Terre réelle est à 288 K : plusieurs couches absorbantes (vapeur d'eau, CO₂, nuages) renvoient plus de la moitié vers le sol.</p>
+</div>
+<div class="widget" data-widget="greenhouse"></div>
+<div class="widget" data-widget="heat-shields"></div>
+<div class="widget" data-widget="stefan-flux"></div>
+
+<h2>6. Complément : entropie et détente du gaz de photons</h2>
+<p>Comme \(\mu = 0\), le premier principe s'écrit \(dE = dQ - p\,dV\) et, avec \(E = aVT^4\), \(C_V = (\partial E/\partial T)_V = 4aVT^3\), d'où \(S = \int_0^T C_V\,dT/T = \tfrac{4}{3}aVT^3\). Une détente adiabatique quasi statique conserve \(S\), donc \(VT^3 = \) constante : le gaz de photons se refroidit en poussant les parois (\(p = u/3\) pour un gaz relativiste). C'est ainsi que le fond cosmologique, issu du Big Bang, est passé de milliers de kelvins à 2,7 K en suivant l'expansion de l'Univers, \(T \propto 1/R\). Dans une détente libre, au contraire, l'énergie est conservée et \(VT^4 = \) constante. Deux autres résultats utiles : le nombre de photons par m³ vaut \(2{,}03\times10^{7}\,T^3\) (\(4\times10^{8}\) photons/m³ pour le fond cosmologique) et l'énergie moyenne par photon \(2{,}70\,kT\), toutes deux obtenues en intégrant \(g\bar n\) et \(\varepsilon g\bar n\) (ex. 14).</p>
+
+<h2>7. À retenir</h2>
+<ul class="summary-list">
+  <li>Spin : facteur \(2_{spin}\) devant la densité d'états (2 pour les fermions et le photon, \(2s + 1\) pour un boson massif).</li>
+  <li>Densité d'états d'un gaz : \(g \propto \sqrt{\varepsilon}\) (non relativiste), \(g \propto \varepsilon^2\) (relativiste) ; distribution \(dN/d\varepsilon = g\bar n\).</li>
+  <li>Photons : bosons, \(\mu = 0\), \(\varepsilon = hc/\lambda\) ; loi de Planck \(du/d\varepsilon = (8\pi/h^3c^3)\,\varepsilon^3/(e^{\beta\varepsilon} - 1)\).</li>
+  <li>\(u = aT^4\), \(J = \sigma T^4\) avec \(\sigma = ca/4\) ; \(\lambda_{max} = 2{,}9\times10^{-3}\ \text{m K}/T\) ; \(\varepsilon_{max} = 2{,}82\,kT\).</li>
+  <li>Émissivité \(e\) : \(J = e\sigma T^4\), échange net \(e\sigma(T^4 - T_{env}^4)\) ; bon absorbeur = bon émetteur.</li>
+  <li>\(n\) feuilles divisent le flux radiatif par \(n + 1\) ; effet de serre \(T_{sol} = T_0[2/(2 - x)]^{1/4}\).</li>
+</ul>
+
+<section class="quiz" data-quiz-id="c8" id="quiz-c8">
+<h2>Quiz rapide - Cours 8</h2>
+<p class="small">Une seule bonne réponse par question. Cliquez pour vérifier immédiatement.</p>
+
+<div class="q" data-answer="1">
+  <p class="q-text">Pourquoi un état d'énergie peut-il contenir deux électrons ?</p>
+  <ul class="choices"><li>Parce que les électrons sont des bosons</li><li>Parce que le spin ±½ ħ donne deux orientations, donc deux états distincts de même énergie</li><li>Parce que l'énergie n'est pas quantifiée</li><li>Parce que les électrons sont sans masse</li></ul>
+  <div class="explain">Dégénérescence de spin : deux états distincts (spins opposés) ont la même énergie, et chacun accepte un fermion.</div>
+</div>
+
+<div class="q" data-answer="2">
+  <p class="q-text">Combien d'orientations de spin a un photon ?</p>
+  <ul class="choices"><li>1</li><li>3, comme tout boson de spin 1</li><li>2, parce qu'il est sans masse</li><li>Une infinité</li></ul>
+  <div class="explain">Un boson massif de spin 1 a \(2s + 1 = 3\) orientations ; une particule sans masse n'en a que \(2s = 2\), les polarisations circulaires gauche et droite.</div>
+</div>
+
+<div class="q" data-answer="0">
+  <p class="q-text">La densité d'états d'un gaz de particules massives lentes varie comme</p>
+  <ul class="choices"><li>\(\sqrt{\varepsilon}\)</li><li>\(\varepsilon^2\)</li><li>\(e^{-\beta\varepsilon}\)</li><li>une constante</li></ul>
+  <div class="explain">\(\varepsilon = p^2/2m\) donne \(p^2\,dp \propto \sqrt{\varepsilon}\,d\varepsilon\). Le \(\varepsilon^2\) est le cas relativiste (\(\varepsilon = pc\)).</div>
+</div>
+
+<div class="q" data-answer="3">
+  <p class="q-text">Le nombre de particules par unité d'énergie, \(dN/d\varepsilon\), vaut</p>
+  <ul class="choices"><li>\(g(\varepsilon)\) seulement</li><li>\(\bar n(\varepsilon)\) seulement</li><li>\(g(\varepsilon) + \bar n(\varepsilon)\)</li><li>\(g(\varepsilon)\,\bar n(\varepsilon)\)</li></ul>
+  <div class="explain">Nombre d'états dans \(d\varepsilon\) fois nombre moyen de particules par état.</div>
+</div>
+
+<div class="q" data-answer="1">
+  <p class="q-text">Pourquoi le potentiel chimique des photons est-il nul ?</p>
+  <ul class="choices"><li>Parce que les photons n'ont pas de masse</li><li>Parce que leur nombre n'est pas conservé : à l'équilibre \((\partial S/\partial N)_{E,V} = 0\)</li><li>Parce que leur énergie est nulle</li><li>Parce qu'ils sont des fermions</li></ul>
+  <div class="explain">Les parois absorbent et émettent librement des photons ; l'entropie est maximale par rapport à \(N\), donc \(\mu = -T(\partial S/\partial N) = 0\).</div>
+</div>
+
+<div class="q" data-answer="2">
+  <p class="q-text">La « catastrophe ultraviolette » de la théorie classique, c'est</p>
+  <ul class="choices"><li>l'absence de rayonnement au-dessus de 1000 K</li><li>un maximum trop élevé dans le visible</li><li>une densité d'énergie qui croît sans limite aux hautes fréquences, chaque mode recevant \(kT\)</li><li>la disparition du rayonnement infrarouge</li></ul>
+  <div class="explain">Rayleigh-Jeans : modes en \(\varepsilon^2\) fois \(kT\) chacun. Planck résout le problème avec \(\varepsilon = h\nu\) : les modes de haute énergie sont trop coûteux pour être excités.</div>
+</div>
+
+<div class="q" data-answer="1">
+  <p class="q-text">On double la température d'un four. L'énergie du gaz de photons et le flux émis sont multipliés par</p>
+  <ul class="choices"><li>2 et 2</li><li>16 et 16</li><li>8 et 4</li><li>4 et 16</li></ul>
+  <div class="explain">\(u = aT^4\) et \(J = \sigma T^4\) : facteur \(2^4 = 16\) pour les deux. Le maximum \(\varepsilon_{max} = 2{,}82\,kT\) ne fait que doubler (ex. 13).</div>
+</div>
+
+<div class="q" data-answer="0">
+  <p class="q-text">Le maximum de \(du/d\lambda\) du Soleil (5800 K) se trouve vers</p>
+  <ul class="choices"><li>500 nm, dans le vert</li><li>5 µm, dans l'infrarouge</li><li>50 nm, dans l'ultraviolet</li><li>1 mm, dans les micro-ondes</li></ul>
+  <div class="explain">\(\lambda_{max} = 2{,}9\times10^{-3}/5800 = 5{,}0\times10^{-7}\) m. À 300 K on serait vers 10 µm, à 2,7 K vers 1 mm.</div>
+</div>
+
+<div class="q" data-answer="2">
+  <p class="q-text">Le maximum de \(du/d\varepsilon\) et celui de \(du/d\lambda\) correspondent-ils à la même longueur d'onde ?</p>
+  <ul class="choices"><li>Oui, toujours</li><li>Oui, sauf à basse température</li><li>Non : \(\varepsilon_{max} = 2{,}82\,kT\) alors que \(hc/\lambda_{max} = 4{,}965\,kT\), à cause du facteur \(hc/\lambda^2\) du changement de variable</li><li>Non, parce que \(\mu \ne 0\)</li></ul>
+  <div class="explain">Ce sont deux fonctions différentes de la même courbe ; leurs maximums tombent à des endroits différents (ex. 5 et 6 du chap. 21).</div>
+</div>
+
+<div class="q" data-answer="1">
+  <p class="q-text">D'où vient le facteur \(1/4\) dans \(J = uc/4\) ?</p>
+  <ul class="choices"><li>Des quatre directions de l'espace</li><li>De la moitié des photons qui vont vers la surface, dont la vitesse moyenne selon la normale est \(c\,\overline{\cos\theta} = c/2\)</li><li>De la dégénérescence de spin</li><li>De l'intégrale \(\pi^4/15\)</li></ul>
+  <div class="explain">\(u_z = u/2\) et \(v_z = c/2\) : \(J = (u/2)(c/2) = uc/4 = \sigma T^4\) avec \(\sigma = ca/4\).</div>
+</div>
+
+<div class="q" data-answer="3">
+  <p class="q-text">Quel est l'ordre de grandeur du flux émis par une surface noire à 300 K ?</p>
+  <ul class="choices"><li>4,6 W/m²</li><li>46 W/m²</li><li>4,6 kW/m²</li><li>460 W/m²</li></ul>
+  <div class="explain">\(\sigma T^4 = 5{,}67\times10^{-8}\times8{,}1\times10^{9} = 459\) W/m². L'échange net avec une pièce à 290 K n'est que de 58 W/m², parce que la pièce rayonne presque autant.</div>
+</div>
+
+<div class="q" data-answer="0">
+  <p class="q-text">Le principe du bilan détaillé implique que</p>
+  <ul class="choices"><li>un matériau qui absorbe bien une longueur d'onde l'émet aussi bien</li><li>tous les corps émettent comme un corps noir</li><li>l'émissivité vaut toujours 1 dans l'infrarouge</li><li>un corps réfléchissant émet davantage</li></ul>
+  <div class="explain">À l'équilibre dans une cavité, absorbé = émis à chaque \(\lambda\), sinon l'objet modifierait le spectre, qui ne dépend que de \(T\).</div>
+</div>
+
+<div class="q" data-answer="2">
+  <p class="q-text">Trois feuilles entre deux surfaces divisent le flux radiatif par</p>
+  <ul class="choices"><li>3</li><li>8</li><li>4</li><li>2</li></ul>
+  <div class="explain">Facteur \(1/(n + 1)\) avec \(n = 3\). Les \(T^4\) des feuilles sont régulièrement espacés (ex. 27 : 279, 253 et 214 K entre 300 et 100 K).</div>
+</div>
+
+<div class="q" data-answer="1">
+  <p class="q-text">Dans le modèle à une couche, si l'atmosphère absorbe tout l'infrarouge sortant (\(x = 1\)), la température du sol est multipliée par</p>
+  <ul class="choices"><li>2</li><li>\(2^{1/4} \approx 1{,}19\)</li><li>\(\sqrt{2}\)</li><li>1, rien ne change</li></ul>
+  <div class="explain">\(J_o = 2J_i\) et \(J_o \propto T^4\), donc \(T_{sol} = 2^{1/4}T_0\) : de 236 K à 280 K pour la Terre.</div>
+</div>
+
+<div class="q" data-answer="3">
+  <p class="q-text">Le flux solaire reçu à la distance de la Terre (1,4 kW/m²) se calcule par</p>
+  <ul class="choices"><li>\(\sigma T_{Terre}^4\)</li><li>\(aT_{Soleil}^4\)</li><li>\(\sigma T_{Soleil}^4\) directement</li><li>\(\sigma T_{Soleil}^4\,(R_{Soleil}/d)^2\), la puissance totale étalée sur la sphère de rayon \(d\)</li></ul>
+  <div class="explain">\(6{,}4\times10^{7}\times(7\times10^{8}/1{,}5\times10^{11})^2 = 1{,}4\times10^{3}\) W/m² (ex. 16).</div>
+</div>
+
+<div class="q" data-answer="0">
+  <p class="q-text">Dans une détente adiabatique du gaz de photons (expansion de l'Univers), quelle grandeur est constante ?</p>
+  <ul class="choices"><li>\(VT^3\), parce que \(S = \tfrac{4}{3}aVT^3\)</li><li>\(VT^4\)</li><li>\(T\)</li><li>\(pV\)</li></ul>
+  <div class="explain">Entropie constante donc \(VT^3\) constant et \(T \propto 1/R\). \(VT^4\) constant correspond à une détente libre (énergie conservée).</div>
+</div>
+</section>
+
+<h2 id="dev-c8">Exercices à développement (à faire sur papier)</h2>
+<p>Exemples des diapos et exercices faits en classe (11 et 13 p. 453, 20 p. 455 du chapitre 21, plus deux exercices du corrigé du professeur). Le professeur a aussi repris le dernier exercice du cours 6 (réseau de résistances thermiques, voir la page du cours 6). Les valeurs ont été recalculées.</p>
+<div class="exo-tools" data-scope="dev-c8-list">
+  <button class="btn secondary" type="button" data-action="open-all">Tout ouvrir</button>
+  <button class="btn secondary" type="button" data-action="close-all">Tout fermer</button>
+  <div class="progress-bar"><span></span></div><span class="progress-label small"></span>
+</div>
+<div id="dev-c8-list">
+
+<article class="exo" data-exo-id="c8-d1">
+  <header><span class="tag">Diapo 18 - Ex. 1</span><span class="tag theme">Flux d'énergie</span><h4>D1. Flux à la surface du Soleil</h4></header>
+  <div class="enonce"><p>La surface du Soleil peut être considérée comme un corps noir à 5800 K. Calculer le flux d'énergie qui quitte la surface du Soleil par m², puis la puissance totale rayonnée (rayon \(7\times10^{8}\) m).</p></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>Loi de Stefan-Boltzmann, \(J = \sigma T^4\), puis \(P = J\times4\pi R^2\).</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>\(T^4 = 5800^4 = 1{,}13\times10^{15}\) K⁴ ; \(J = \sigma T^4 = 5{,}67\times10^{-8}\times1{,}13\times10^{15} = 6{,}4\times10^{7}\) W/m².</li>
+      <li>Surface \(4\pi R^2 = 4\pi(7\times10^{8})^2 = 6{,}2\times10^{18}\) m² ; \(P = 6{,}4\times10^{7}\times6{,}2\times10^{18} = 4{,}0\times10^{26}\) W.</li>
+    </ol>
+    <p class="answer">\(J = 6{,}4\times10^{7}\) W/m² | \(P = 4\times10^{26}\) W</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c8-d2">
+  <header><span class="tag">Diapo 18 - Ex. 2</span><span class="tag theme">Densité d'énergie</span><h4>D2. Le gaz de photons à l'intérieur du Soleil</h4></header>
+  <div class="enonce"><p>La radiation à l'intérieur du Soleil peut être considérée comme un gaz de photons à \(10^{7}\) K. Sachant que le volume du Soleil est de \(1{,}4\times10^{27}\) m³, calculer l'énergie contenue dans ce gaz de photons. Pendant combien de temps cette énergie permettrait-elle au Soleil de rayonner au rythme actuel (D1) ?</p></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>Ici c'est la densité d'énergie \(u = aT^4\) (J/m³), pas le flux. \(E = uV\).</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>\(u = aT^4 = 7{,}56\times10^{-16}\times10^{28} = 7{,}6\times10^{12}\) J/m³.</li>
+      <li>\(E = uV = 7{,}6\times10^{12}\times1{,}4\times10^{27} = 1{,}1\times10^{40}\) J.</li>
+      <li>Au rythme de \(4\times10^{26}\) W : \(t = E/P = 2{,}7\times10^{13}\) s \(= 8{,}7\times10^{5}\) ans (1 an \(= 3{,}16\times10^{7}\) s). C'est l'ex. 12 du chapitre 21.</li>
+    </ol>
+    <p class="answer">\(E \approx 1\times10^{40}\) J, soit environ un million d'années de rayonnement</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c8-d3">
+  <header><span class="tag">Diapo 22 - Ex. 3</span><span class="tag theme">Émissivité, bilan radiatif</span><h4>D3. Température de la Terre sans atmosphère</h4></header>
+  <div class="enonce"><p>En moyenne, le flux d'énergie solaire atteignant la surface de la Terre est de 175 W/m². De ce flux, 90 % est absorbé et 10 % réfléchi. Si l'émissivité de la Terre dans l'infrarouge est \(e = 0{,}9\), quelle serait la température de surface s'il n'y avait pas d'atmosphère ?</p></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>Équilibre : flux absorbé = flux émis \(e\sigma T^4\). L'absorptivité (0,9) et l'émissivité (0,9) sont égales, ce n'est pas un hasard (bilan détaillé).</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>Absorbé : \(0{,}9\times175 = 157{,}5\) W/m². Émis : \(e\sigma T^4 = 0{,}9\,\sigma T^4\).</li>
+      <li>Égalité : \(0{,}9\,\sigma T^4 = 0{,}9\times175 \Rightarrow T^4 = 175/\sigma = 175/5{,}67\times10^{-8} = 3{,}09\times10^{9}\) K⁴.</li>
+      <li>\(T = 236\) K \(= -37\) °C. Le facteur 0,9 se simplifie : seul compte le flux incident quand absorptivité et émissivité sont égales.</li>
+    </ol>
+    <p class="answer">\(T_0 \approx 236\) K (\(-37\) °C)</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c8-d4">
+  <header><span class="tag">Diapo 22 - Ex. 4</span><span class="tag theme">Effet de serre</span><h4>D4. La Terre avec une atmosphère qui absorbe tout l'infrarouge</h4></header>
+  <div class="enonce"><p>Refaire le calcul de D3 en considérant que 100 % de la radiation infrarouge sortante est absorbée par l'atmosphère, qui en réémet la moitié vers l'espace et la moitié vers le sol.</p></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>Le sol reçoit maintenant le Soleil plus la moitié de ce qu'il émet : \(J_o = J_i + J_o/2\).</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>Bilan du sol avec \(x = 1\) : \(J_o = J_i + \tfrac{1}{2}J_o \Rightarrow J_o = 2J_i = 2\times157{,}5 = 315\) W/m².</li>
+      <li>\(J_o = e\sigma T^4 \Rightarrow T^4 = 315/(0{,}9\times5{,}67\times10^{-8}) = 6{,}17\times10^{9}\) K⁴, \(T = 280\) K \(= 7\) °C.</li>
+      <li>Autrement dit \(T = 2^{1/4}T_0 = 1{,}19\times236 = 280\) K. La Terre réelle (288 K) est encore plus chaude : l'atmosphère renvoie plus de la moitié de l'infrarouge vers le sol (plusieurs couches).</li>
+    </ol>
+    <p class="answer">\(T = 2^{1/4}T_0 \approx 280\) K (\(7\) °C)</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c8-d5">
+  <header><span class="tag">Classe - Chap. 21, ex. 11, p. 453</span><span class="tag theme">Densité d'énergie, adiabatique</span><h4>D5. L'énergie du fond cosmologique</h4></header>
+  <div class="enonce"><p>Calculer l'énergie totale contenue dans le rayonnement de fond à 2,7 K laissé par le Big Bang. L'Univers a un rayon d'environ 14 milliards d'années-lumière (1 année-lumière \(= 9{,}5\times10^{15}\) m). Estimer la température de l'Univers juste après l'explosion, quand son volume était de 1 m³, en supposant que toute l'énergie du rayonnement actuel s'y trouvait déjà et en ignorant le couplage avec la matière.</p></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>\(E = aT^4V\) aujourd'hui ; même \(E\) dans 1 m³ hier.</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>\(u = aT^4 = 7{,}56\times10^{-16}\times2{,}7^4 = 4{,}0\times10^{-14}\) J/m³.</li>
+      <li>\(R = 14\times10^{9}\times9{,}5\times10^{15} = 1{,}33\times10^{26}\) m ; \(V = \tfrac{4}{3}\pi R^3 = 9{,}9\times10^{78}\) m³ ; \(E = uV = 4{,}0\times10^{65}\) J.</li>
+      <li>Dans 1 m³ : \(aT^4 = E \Rightarrow T = (E/a)^{1/4} = (5{,}3\times10^{80})^{1/4} = 1{,}5\times10^{20}\) K.</li>
+      <li>Le manuel répond \(4{,}0\times10^{66}\) J et \(1{,}5\times10^{20}\) K : la température n'est cohérente qu'avec \(10^{65}\) J, l'exposant 66 est une coquille (errata). Remarque : avec la détente adiabatique \(VT^3 = \) cste, on trouverait plutôt \(T = 2{,}7\times(V/1)^{1/3} = 5{,}8\times10^{26}\) K, l'hypothèse « énergie conservée » de l'énoncé correspond à une détente libre.</li>
+    </ol>
+    <p class="answer">\(E \approx 4\times10^{65}\) J | \(T \approx 1{,}5\times10^{20}\) K</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c8-d6">
+  <header><span class="tag">Classe - Chap. 21, ex. 13, p. 453</span><span class="tag theme">Lois d'échelle</span><h4>D6. On double la température d'un four</h4></header>
+  <div class="enonce"><p>Si l'on double la température d'un four, par quel facteur augmentent (a) l'énergie totale du gaz de photons, (b) la position du maximum \(\varepsilon_{max}\) de la distribution d'énergie, (c) le rythme auquel l'énergie frappe une paroi du four ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(E = aVT^4\) : facteur \(2^4 = 16\).</li>
+      <li>(b) \(\varepsilon_{max} = 2{,}82\,kT\) : facteur 2 (et \(\lambda_{max}\) est divisée par 2).</li>
+      <li>(c) \(J = \sigma T^4\) : facteur 16. Le nombre de photons, lui, croît comme \(T^3\) (facteur 8) et leur énergie moyenne \(2{,}70\,kT\) comme \(T\) (facteur 2) : \(8\times2 = 16\), cohérent.</li>
+    </ol>
+    <p class="answer">(a) 16 | (b) 2 | (c) 16</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c8-d7">
+  <header><span class="tag">Classe - Chap. 21, ex. 20, p. 455</span><span class="tag theme">Échange net</span><h4>D7. Ce que votre corps rayonne</h4></header>
+  <div class="enonce"><p>La température de la peau est d'environ 300 K, celle des vêtements et de l'environnement immédiat de 290 K. La peau (2 m²) se comporte comme un corps noir dans l'infrarouge. (a) Rythme net auquel le corps rayonne de l'énergie vers l'environnement ? (b) Une « calorie alimentaire » vaut 1 kcal \(= 4{,}2\times10^{3}\) J : combien d'énergie alimentaire faut-il par jour pour compenser cette perte ?</p></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>Le corps émet \(\sigma T^4\) mais reçoit \(\sigma T_{env}^4\) : seule la différence compte.</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(J_{net} = \sigma(300^4 - 290^4) = 5{,}67\times10^{-8}\times(8{,}10\times10^{9} - 7{,}07\times10^{9}) = 58{,}2\) W/m² ; \(P = 58{,}2\times2 = 116\) W.</li>
+      <li>(b) Par jour : \(116\times86\,400 = 1{,}0\times10^{7}\) J \(= 2400\) kcal, à peu près la ration quotidienne. Le même calcul avec \(4\sigma T^3\Delta T\) (loi de Newton, \(T = 295\) K) donne 58 W/m² aussi.</li>
+    </ol>
+    <p class="answer">(a) 58 W/m², 116 W | (b) \(10^{7}\) J \(\approx 2400\) kcal par jour</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c8-d8">
+  <header><span class="tag">Corrigé du prof - Chap. 21, ex. 6, p. 452</span><span class="tag theme">Loi de Wien</span><h4>D8. Les deux maximums du spectre</h4></header>
+  <div class="enonce"><p>Sachant que \(du/d\varepsilon\) culmine à \(\varepsilon_{max} = 2{,}82\,kT\), on écrit \(\lambda_{max} = C/T\) pour la longueur d'onde où \(du/d\varepsilon\) est maximale. (a) Valeur de \(C\) en mm K ? (b) À quelle longueur d'onde \(du/d\varepsilon\) culmine-t-elle pour le fond cosmologique à 2,735 K ? (c) Pour le Soleil à 5800 K ? (d) Mêmes questions pour la distribution en longueur d'onde \(du/d\lambda\).</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(\varepsilon_{max} = hc/\lambda = 2{,}82\,kT \Rightarrow \lambda = hc/(2{,}82\,kT)\), donc \(C = hc/(2{,}82\,k) = 1{,}99\times10^{-25}/(2{,}82\times1{,}381\times10^{-23}) = 5{,}1\times10^{-3}\) m K \(= 5{,}1\) mm K.</li>
+      <li>(b) \(5{,}1/2{,}735 = 1{,}9\) mm. (c) \(5{,}1\times10^{-3}/5800 = 8{,}8\times10^{-7}\) m \(= 880\) nm (infrarouge proche).</li>
+      <li>(d) \(du/d\lambda\) culmine à \(hc/(4{,}965\,kT) = 2{,}90\times10^{-3}/T\) : 1,06 mm pour 2,735 K et 500 nm pour 5800 K. Même courbe physique, deux maximums différents selon la variable.</li>
+    </ol>
+    <p class="answer">(a) 5,1 mm K | (b) 1,9 mm | (c) 880 nm | (d) 1,1 mm et 500 nm</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c8-d9">
+  <header><span class="tag">Corrigé du prof - Chap. 21, ex. 18, p. 454</span><span class="tag theme">Bilan d'une planète</span><h4>D9. La Terre vue de l'espace</h4></header>
+  <div class="enonce"><p>Supposons que la Terre rayonne comme un corps noir de rayon \(6{,}4\times10^{6}\) m à la température effective de 240 K (ce n'est pas la température au sol : l'infrarouge sortant part surtout de la haute atmosphère). (a) Flux d'énergie quittant la Terre ? (b) Puissance totale émise ? (c) Le flux solaire à notre distance est de 1,4 kW/m² et la température moyenne de la Terre est stable : quelle fraction du rayonnement solaire incident est absorbée ? (Attention, la surface qui intercepte le Soleil n'est pas celle qui émet.)</p></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>La Terre intercepte un disque \(\pi R^2\) et émet par une sphère \(4\pi R^2\).</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(J = \sigma T^4 = 5{,}67\times10^{-8}\times240^4 = 188\) W/m².</li>
+      <li>(b) \(P = J\times4\pi R^2 = 188\times5{,}15\times10^{14} = 9{,}7\times10^{16}\) W.</li>
+      <li>(c) Puissance solaire interceptée : \(1400\times\pi R^2\) ; absorbée : fraction \(f\) de celle-ci ; à l'équilibre elle égale l'émission \(188\times4\pi R^2\). D'où \(f = 4\times188/1400 = 0{,}54\). En moyenne sur toute la surface, le Soleil apporte \(1400/4 = 350\) W/m² et la Terre en absorbe 188. Le corrigé du professeur s'arrête à 350 W/m² sans donner la fraction (errata).</li>
+    </ol>
+    <p class="answer">(a) 188 W/m² | (b) \(9{,}7\times10^{16}\) W | (c) 54 %</p>
+  </div></details>
+</article>
+
+</div>
+
+<h2 id="sugg-c8">Exercices suggérés</h2>
+<p>Liste officielle pour le cours 8 : chapitre 20, exercices 5, 6, 7 et 9 ; chapitre 21, exercices 10, 12, 16, 17 et 21. Les pairs ont un corrigé du professeur (manuscrit), les impairs une réponse à la fin du manuel ; tout a été recalculé.</p>
+<div class="exo-tools" data-scope="sugg-c8-list">
+  <button class="btn secondary" type="button" data-action="open-all">Tout ouvrir</button>
+  <button class="btn secondary" type="button" data-action="close-all">Tout fermer</button>
+  <div class="progress-bar"><span></span></div><span class="progress-label small"></span>
+</div>
+<div id="sugg-c8-list">
+
+<article class="exo" data-exo-id="c8-s1">
+  <header><span class="tag">Chap. 20, ex. 5 (avec l'ex. 4), p. 435</span><span class="tag theme">Densité d'états et distribution</span><h4>Molécules d'air et électrons d'un métal à l'énergie \(kT\)</h4></header>
+  <div class="enonce"><p>À 295 K, estimer la densité d'états à \(\varepsilon = kT\) pour (a) les molécules d'air d'une pièce de 30 m³ (sans spin, \(m = 4{,}8\times10^{-26}\) kg), (b) les électrons d'un métal de \(10^{-5}\) m³ (ex. 4). En déduire la distribution \(dN/d\varepsilon\), en particules par eV, autour de \(kT\) pour (a) les molécules d'air, bosons avec \(\mu = -0{,}01\) eV, (b) les électrons, fermions avec \(\mu = +0{,}08\) eV (ex. 5).</p></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>\(g(\varepsilon) = 2_{spin}\,2\pi V(2m)^{3/2}\sqrt{\varepsilon}/h^3\) en J⁻¹ ; multiplier par \(1{,}602\times10^{-19}\) J/eV pour l'avoir en eV⁻¹.</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>\(kT = 1{,}381\times10^{-23}\times295 = 4{,}07\times10^{-21}\) J \(= 0{,}0254\) eV ; \(h^3 = 2{,}91\times10^{-100}\) J³ s³.</li>
+      <li>(a) Air : \((2m)^{3/2} = (9{,}6\times10^{-26})^{3/2} = 2{,}97\times10^{-38}\) ; \(C = 2\pi\times30\times2{,}97\times10^{-38}/2{,}91\times10^{-100} = 1{,}9\times10^{64}\) J\(^{-3/2}\) ; \(g(kT) = C\sqrt{kT} = 1{,}9\times10^{64}\times6{,}4\times10^{-11} = 1{,}2\times10^{54}\) J⁻¹ \(= 2{,}0\times10^{35}\) eV⁻¹.</li>
+      <li>(b) Électrons (spin 2) : \((2m_e)^{3/2} = 2{,}46\times10^{-45}\) ; \(C = 2\times2\pi\times10^{-5}\times2{,}46\times10^{-45}/2{,}91\times10^{-100} = 1{,}06\times10^{51}\) ; \(g(kT) = 6{,}8\times10^{40}\) J⁻¹ \(= 1{,}1\times10^{22}\) eV⁻¹.</li>
+      <li>Air, bosons : \(\bar n = 1/(e^{(kT + 0{,}01)/kT} - 1) = 1/(e^{1{,}39} - 1) = 0{,}33\) ; \(dN/d\varepsilon = 2{,}0\times10^{35}\times0{,}33 = 6{,}5\times10^{34}\) particules/eV.</li>
+      <li>Électrons, fermions : \(\bar n = 1/(e^{(0{,}0254 - 0{,}08)/0{,}0254} + 1) = 1/(e^{-2{,}15} + 1) = 0{,}90\) ; \(dN/d\varepsilon = 1{,}1\times10^{22}\times0{,}90 = 9{,}7\times10^{21}\) particules/eV. (Valeurs du manuel : \(6{,}49\times10^{34}\) et \(0{,}96\times10^{22}\).)</li>
+    </ol>
+    <p class="answer">(a) \(g = 1{,}2\times10^{54}\) J⁻¹, \(dN/d\varepsilon = 6{,}5\times10^{34}\) eV⁻¹ | (b) \(g = 6{,}8\times10^{40}\) J⁻¹, \(dN/d\varepsilon = 9{,}7\times10^{21}\) eV⁻¹</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c8-s2">
+  <header><span class="tag">Chap. 20, ex. 6, p. 435</span><span class="tag theme">Allure des distributions</span><h4>Densité d'états linéaire en énergie</h4></header>
+  <div class="enonce"><p>Esquisser des diagrammes semblables aux figures 20.1 et 20.2 (densité d'états × nombre d'occupation = distribution) pour des fermions et des bosons, aux limites de basse et de haute température, si la densité d'états croît linéairement avec l'énergie, \(g(\varepsilon) = C\varepsilon\).</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>Fermions, basse \(T\) : \(\bar n\) est une marche, donc \(dN/d\varepsilon = C\varepsilon\) de 0 à \(\mu\) (un triangle) puis zéro ; la chute se fait sur quelques \(kT\).</li>
+      <li>Fermions, haute \(T\) : \(\bar n\) décroît doucement ; \(dN/d\varepsilon \approx C\varepsilon\,e^{-\beta(\varepsilon - \mu)}\), courbe en cloche partant de 0, maximum vers \(\varepsilon = kT\), queue exponentielle.</li>
+      <li>Bosons, basse \(T\) : \(\bar n \approx kT/(\varepsilon - \mu)\) près de \(\mu \lesssim 0\), donc \(dN/d\varepsilon \approx CkT\,\varepsilon/(\varepsilon - \mu)\) : part d'une valeur finie (ou d'un pic si \(\mu \to 0\)) et décroît ; les particules sont concentrées aux basses énergies.</li>
+      <li>Bosons, haute \(T\) : même cloche que les fermions, \(C\varepsilon\,e^{-\beta(\varepsilon - \mu)}\). La règle générale : \(\varepsilon^{\alpha}\) aux basses énergies (ici \(\alpha = 1\)), \(e^{-\beta\varepsilon}\) aux hautes énergies. La démo « dN/dε » de la page montre les cas \(\alpha = 1/2\) et \(2\) ; le cas linéaire est entre les deux.</li>
+    </ol>
+    <p class="answer">Mêmes allures que les figures 20.1 et 20.2 avec un départ linéaire au lieu de \(\sqrt{\varepsilon}\)</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c8-s3">
+  <header><span class="tag">Chap. 20, ex. 7, p. 435</span><span class="tag theme">Valeur moyenne</span><h4>Énergie moyenne avec une densité d'états constante ou linéaire</h4></header>
+  <div class="enonce"><p>La densité d'états d'un système est constante, \(g(\varepsilon) = C_1\), et le nombre d'occupation vaut \(\bar n(\varepsilon) = C_2e^{-\beta\varepsilon}\). (a) Énergie moyenne par particule en fonction de \(C_1\), \(C_2\) et \(kT\) ? (b) Même question pour \(g(\varepsilon) = C_1\varepsilon\).</p></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>\(\bar\varepsilon = \int\varepsilon\,g\bar n\,d\varepsilon/\int g\bar n\,d\varepsilon\) ; \(\int_0^{\infty}\varepsilon^n e^{-\beta\varepsilon}d\varepsilon = n!/\beta^{n+1}\).</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(\bar\varepsilon = \dfrac{C_1C_2\int_0^{\infty}\varepsilon e^{-\beta\varepsilon}d\varepsilon}{C_1C_2\int_0^{\infty}e^{-\beta\varepsilon}d\varepsilon} = \dfrac{1/\beta^2}{1/\beta} = \dfrac{1}{\beta} = kT\). Les constantes se simplifient.</li>
+      <li>(b) \(\bar\varepsilon = \dfrac{\int\varepsilon^2e^{-\beta\varepsilon}d\varepsilon}{\int\varepsilon e^{-\beta\varepsilon}d\varepsilon} = \dfrac{2/\beta^3}{1/\beta^2} = 2kT\). Avec \(g \propto \sqrt{\varepsilon}\) on aurait \(\tfrac{3}{2}kT\) (gaz classique) et avec \(g \propto \varepsilon^2\), \(3kT\) : plus la densité d'états croît vite, plus l'énergie moyenne est élevée.</li>
+    </ol>
+    <p class="answer">(a) \(kT\) | (b) \(2kT\)</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c8-s4">
+  <header><span class="tag">Chap. 20, ex. 9, p. 436</span><span class="tag theme">Limite des basses énergies</span><h4>Bosons à potentiel chimique nul aux très basses énergies</h4></header>
+  <div class="enonce"><p>Montrer que, pour un système de bosons avec \(\mu = 0\), la distribution \(dN/d\varepsilon\) est proportionnelle à \(\varepsilon^{\alpha - 1}\) aux très basses énergies, \(\varepsilon \ll kT\).</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>\(\bar n = 1/(e^{\beta\varepsilon} - 1)\) et, pour \(\beta\varepsilon \ll 1\), \(e^{\beta\varepsilon} \approx 1 + \beta\varepsilon\), donc \(\bar n \approx 1/(\beta\varepsilon) = kT/\varepsilon\).</li>
+      <li>\(dN/d\varepsilon = g\bar n = C\varepsilon^{\alpha}\times kT/\varepsilon = CkT\,\varepsilon^{\alpha - 1}\).</li>
+      <li>Pour les photons (\(\alpha = 2\)) la distribution part linéairement en \(\varepsilon\), et la densité d'énergie \(\varepsilon\,dN/d\varepsilon \propto \varepsilon^2\) : c'est la limite de Rayleigh-Jeans, valable seulement à basse énergie.</li>
+    </ol>
+    <p class="answer">\(dN/d\varepsilon \approx CkT\,\varepsilon^{\alpha - 1}\)</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c8-s5">
+  <header><span class="tag">Chap. 21, ex. 10, p. 453</span><span class="tag theme">Densité d'énergie</span><h4>Rayonnement fossile contre matière</h4></header>
+  <div class="enonce"><p>Quelle est la densité d'énergie du rayonnement de fond à 2,735 K laissé par le Big Bang ? Comment se compare-t-elle à la densité d'énergie de masse (\(mc^2\)) de la matière de l'Univers, en moyenne 0,2 proton (surtout dans des atomes d'hydrogène) par mètre cube ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>\(u = aT^4 = 7{,}56\times10^{-16}\times2{,}735^4 = 4{,}2\times10^{-14}\) J/m³ (0,26 eV/cm³).</li>
+      <li>Matière : \(m_pc^2 = 1{,}673\times10^{-27}\times(3{,}0\times10^{8})^2 = 1{,}5\times10^{-10}\) J (938 MeV) ; \(0{,}2\times1{,}5\times10^{-10} = 3{,}0\times10^{-11}\) J/m³.</li>
+      <li>Rapport : la matière contient environ 700 fois plus d'énergie que le rayonnement (univers « dominé par la matière »). Le corrigé du professeur prend \(mc^2 = 5\times10^{-13}\) J et conclut à l'inverse (errata).</li>
+    </ol>
+    <p class="answer">\(u_{rad} = 4{,}2\times10^{-14}\) J/m³, environ 700 fois moins que la matière (\(3\times10^{-11}\) J/m³)</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c8-s6">
+  <header><span class="tag">Chap. 21, ex. 12, p. 453</span><span class="tag theme">Flux et densité d'énergie</span><h4>Combien de temps le Soleil peut-il briller sur ses réserves de photons ?</h4></header>
+  <div class="enonce"><p>La surface du Soleil rayonne comme un corps noir à 5800 K ; son rayon est \(7\times10^{8}\) m. (a) Combien de joules par seconde le Soleil rayonne-t-il ? (b) À l'intérieur, la moyenne de \(T^4\) sur le volume vaut \((10^{7}\ \text{K})^4\) : énergie totale du gaz de photons ? (c) Si la fusion s'arrêtait demain, pendant combien d'années le Soleil pourrait-il rayonner au rythme actuel avec cette énergie (1 an \(= 3{,}16\times10^{7}\) s) ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(P = \sigma T^4\times4\pi R^2 = 6{,}4\times10^{7}\times6{,}16\times10^{18} = 4{,}0\times10^{26}\) W.</li>
+      <li>(b) \(u = a\overline{T^4} = 7{,}56\times10^{12}\) J/m³ ; \(V = \tfrac{4}{3}\pi R^3 = 1{,}44\times10^{27}\) m³ ; \(E = 1{,}1\times10^{40}\) J.</li>
+      <li>(c) \(t = E/P = 1{,}1\times10^{40}/4{,}0\times10^{26} = 2{,}7\times10^{13}\) s \(= 8{,}7\times10^{5}\) ans. Les photons mettent en fait des dizaines de milliers d'années à diffuser du cœur à la surface.</li>
+    </ol>
+    <p class="answer">(a) \(4\times10^{26}\) W | (b) \(1{,}1\times10^{40}\) J | (c) \(\approx 9\times10^{5}\) ans (corrigé du professeur identique)</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c8-s7">
+  <header><span class="tag">Chap. 21, ex. 16, p. 454</span><span class="tag theme">Flux à distance</span><h4>La constante solaire</h4></header>
+  <div class="enonce"><p>Le rayon du Soleil est \(7\times10^{8}\) m et celui de l'orbite terrestre \(1{,}5\times10^{11}\) m. Le flux d'énergie quittant la surface du Soleil est \(6{,}4\times10^{7}\) W/m². Quel est le flux d'énergie solaire à la distance de la Terre ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>La puissance totale \(P = J_s\,4\pi R^2\) se répartit, à la distance \(d\), sur la sphère \(4\pi d^2\) : \(J(d) = J_s(R/d)^2\).</li>
+      <li>\(J = 6{,}4\times10^{7}\times(7\times10^{8}/1{,}5\times10^{11})^2 = 6{,}4\times10^{7}\times2{,}18\times10^{-5} = 1{,}4\times10^{3}\) W/m² : la « constante solaire ».</li>
+    </ol>
+    <p class="answer">\(1{,}4\) kW/m² (corrigé du professeur identique)</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c8-s8">
+  <header><span class="tag">Chap. 21, ex. 17, p. 454</span><span class="tag theme">Raisonnement</span><h4>Refroidir un café en deux minutes</h4></header>
+  <div class="enonce"><p>Vous avez une demi-tasse de café très chaud, une demi-tasse d'eau à température ambiante et seulement deux minutes pour obtenir le café le plus froid possible. Faut-il ajouter l'eau tout de suite puis attendre, ou attendre deux minutes puis ajouter l'eau ? Pourquoi ?</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>Le café perd de la chaleur d'autant plus vite qu'il est chaud : \(J_{net} = e\sigma(T^4 - T_{env}^4)\) pour le rayonnement (et la convection suit aussi \(\Delta T\)).</li>
+      <li>Attendre d'abord : pendant les deux minutes le café, encore très chaud, rayonne un maximum ; l'eau ajoutée ensuite retire la même quantité d'énergie dans les deux scénarios. Ajouter l'eau d'abord abaisse \(T\) et ralentit la perte pendant l'attente.</li>
+    </ol>
+    <p class="answer">Attendre deux minutes, puis ajouter l'eau</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="c8-s9">
+  <header><span class="tag">Chap. 21, ex. 21, p. 455</span><span class="tag theme">Loi de Newton du refroidissement</span><h4>Démontrer la loi de Newton à partir de Stefan-Boltzmann</h4></header>
+  <div class="enonce"><p>La loi de Newton dit que le rythme de refroidissement d'un objet est proportionnel à l'écart de température \(\Delta T\) avec son environnement. (a) Un corps noir de surface \(A\) à \(T + \Delta T\) est dans un environnement à \(T\) : calculer la différence entre émission et absorption au premier ordre en \(\Delta T/T\), en fonction de \(\sigma\), \(A\), \(T\) et \(\Delta T\). (b) L'objet a une capacité thermique \(C\) : montrer que \(d(\Delta T)/dt = -\text{constante}\times\Delta T\) et donner la constante. (c) Montrer que \(\Delta T\) décroît exponentiellement.</p></div>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>(a) \(P_{net} = \sigma A[(T + \Delta T)^4 - T^4] = \sigma A[4T^3\Delta T + 6T^2\Delta T^2 + \cdots] \approx 4\sigma AT^3\,\Delta T\).</li>
+      <li>(b) L'énergie perdue abaisse la température : \(C\,\dfrac{d(\Delta T)}{dt} = -P_{net} = -4\sigma AT^3\,\Delta T\), soit \(\dfrac{d(\Delta T)}{dt} = -C_1\,\Delta T\) avec \(C_1 = \dfrac{4\sigma AT^3}{C}\).</li>
+      <li>(c) \(\dfrac{d(\Delta T)}{\Delta T} = -C_1\,dt \Rightarrow \Delta T = \Delta T_0\,e^{-C_1t}\) : décroissance exponentielle de constante de temps \(1/C_1 = C/(4\sigma AT^3)\). Ordre de grandeur : à 290 K, \(4\sigma T^3 = 5{,}5\) W/(m² K), comparable à un coefficient de convection naturelle, ce qui montre que le rayonnement compte autant que la convection pour un objet à température ambiante.</li>
+    </ol>
+    <p class="answer">(a) \(4\sigma AT^3\Delta T\) | (b) \(C_1 = 4\sigma AT^3/C\) | (c) \(\Delta T = \Delta T_0e^{-C_1t}\)</p>
+  </div></details>
+</article>
+
+</div>
+
+</article>
+</main>
+<footer class="footer">ELE2307 - site d'étude personnel généré à partir des diapos du cours, des corrigés du professeur et du manuel de Stowe. Vérifiez toujours avec les documents officiels sur Moodle.</footer>
+<script defer src="assets/katex/katex.min.js"></script>
+<script defer src="assets/katex/contrib/auto-render.min.js"></script>
+<script defer src="assets/app.js?v=4"></script>
+<script defer src="assets/widgets.js?v=5"></script>
+<script defer src="assets/widgets4.js?v=1"></script>
+</body>
+</html>

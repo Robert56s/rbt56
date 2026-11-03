@@ -19,6 +19,7 @@
     <a href="cours5.html">Cours 5</a>
     <a href="cours6.html">Cours 6</a>
     <a href="cours7.html">Cours 7</a>
+    <a href="cours8.html">Cours 8</a>
     <a href="formulaire.html">Formulaire</a>
     <a href="intra.html">Intra</a>
     <a href="errata.html">Errata</a>
@@ -316,6 +317,51 @@
   <tr><th class="notion">Potentiel chimique (complément)</th>
     <td class="f"><p>\(\displaystyle N = \sum_s \bar n_s\) ; faible densité : \(\displaystyle \mu = kT\ln\frac{N}{\sum_s e^{-\beta\varepsilon_s}}\)</p><p>Bosons dégénérés : \(\mu \approx -kT/N\) ; fermions dégénérés : \(\displaystyle \mu_{T=0} = \varepsilon_F \approx \frac{h^2}{2m}\left(\frac{N}{V}\right)^{2/3}\)</p></td>
     <td class="rem">\(\mu\) est fixé par le nombre total de particules ; \(\varepsilon_F\) énergie de Fermi (cuivre : ordre de 10 eV, soit \(10^5\) K)</td></tr>
+</table>
+</section>
+
+<section class="form-section">
+<h2>Cours 8 - Gaz quantique et radiation du corps noir</h2>
+<table class="formulaire">
+  <tr><th class="notion">Spin et dégénérescence</th>
+    <td class="f">Fermions : \(S = \pm\tfrac{1}{2}\hbar\), 2 orientations ; bosons massifs de spin 1 : \(2s + 1 = 3\) ; photon (sans masse) : 2 polarisations</td>
+    <td class="rem">facteur \(2_{spin}\) (ou \(2s+1\)) devant la densité d'états ; deux électrons de spins opposés par état d'énergie</td></tr>
+  <tr><th class="notion">Densité d'états d'un gaz</th>
+    <td class="f"><p>\(\displaystyle \sum_{\text{états}} = \frac{4\pi V}{h^3}\int p^2\,dp\)</p><p>Non relativiste (\(\varepsilon = p^2/2m\)) : \(\displaystyle g(\varepsilon) = 2_{spin}\,\frac{2\pi V(2m)^{3/2}}{h^3}\sqrt{\varepsilon}\)</p><p>Relativiste (\(\varepsilon = pc\)) : \(\displaystyle g(\varepsilon) = 2_{spin}\,\frac{4\pi V}{h^3c^3}\varepsilon^2\)</p></td>
+    <td class="rem">\(g(\varepsilon)\,d\varepsilon\) = nombre d'états entre \(\varepsilon\) et \(\varepsilon + d\varepsilon\) ; forme générale \(g = C\varepsilon^{\alpha}\), \(\alpha = 1/2\) ou 2</td></tr>
+  <tr><th class="notion">Distribution des particules</th>
+    <td class="f"><p>\(\displaystyle \frac{dN}{d\varepsilon} = g(\varepsilon)\,\bar n(\varepsilon) = \frac{C\varepsilon^{\alpha}}{e^{\beta(\varepsilon - \mu)} \pm 1}\) ; \(\displaystyle \frac{dE}{d\varepsilon} = \varepsilon\,g\,\bar n\)</p><p>\(\displaystyle \bar f = \frac{1}{N}\int f(\varepsilon)\,g(\varepsilon)\,\bar n(\varepsilon)\,d\varepsilon\)</p></td>
+    <td class="rem">+ fermions, − bosons ; basses énergies \(dN/d\varepsilon \approx \varepsilon^{\alpha}\), hautes énergies \(\approx e^{-\beta\varepsilon}\) ; fermions à basse \(T\) : plein jusqu'à \(\mu\)</td></tr>
+  <tr><th class="notion">Photons</th>
+    <td class="f">\(\varepsilon = h\nu = hc/\lambda\) ; bosons, \(\mu = 0\) ; \(\displaystyle g(\varepsilon) = \frac{8\pi V}{h^3c^3}\varepsilon^2\)</td>
+    <td class="rem">\(\mu = 0\) car le nombre de photons n'est pas conservé : \(\mu = -T(\partial S/\partial N)_{E,V} = 0\) à l'équilibre ; \(hc = 1240\) eV nm</td></tr>
+  <tr><th class="notion">Loi de Planck (densité spectrale d'énergie)</th>
+    <td class="f"><p>\(\displaystyle du = \frac{dE}{V} = \frac{8\pi}{h^3c^3}\,\frac{\varepsilon^3\,d\varepsilon}{e^{\beta\varepsilon} - 1}\)</p><p>\(\displaystyle \frac{du}{d\lambda} = 8\pi hc\,\frac{\lambda^{-5}}{e^{hc/\lambda kT} - 1}\)</p></td>
+    <td class="rem">\(u\) : énergie par unité de volume ; passage \(\varepsilon \to \lambda\) avec \(|d\varepsilon| = (hc/\lambda^2)\,d\lambda\) ; limite classique (Rayleigh-Jeans) \(8\pi kT\lambda^{-4}\) diverge aux courtes \(\lambda\)</td></tr>
+  <tr><th class="notion">Densité totale d'énergie</th>
+    <td class="f">\(\displaystyle u = \frac{8\pi(kT)^4}{h^3c^3}\int_0^{\infty}\frac{x^3\,dx}{e^x - 1} = \frac{8\pi^5k^4}{15h^3c^3}T^4 = aT^4\), \(a = 7{,}56\times10^{-16}\) J/(m³ K⁴)</td>
+    <td class="rem">\(\displaystyle \int_0^{\infty}\frac{x^3dx}{e^x - 1} = \frac{\pi^4}{15}\) ; \(E = aVT^4\) pour une cavité de volume \(V\)</td></tr>
+  <tr><th class="notion">Loi du déplacement de Wien</th>
+    <td class="f"><p>\(\displaystyle \lambda_{max} = \frac{hc}{4{,}965\,kT} \approx \frac{hc}{5kT} = \frac{2{,}90\times10^{-3}\ \text{m K}}{T}\)</p><p>Maximum de \(du/d\varepsilon\) : \(\varepsilon_{max} = 2{,}82\,kT\), soit \(\lambda = 5{,}1\times10^{-3}\ \text{m K}/T\)</p></td>
+    <td class="rem">Soleil 5800 K : 500 nm ; corps humain 310 K : 9,3 µm ; fond cosmologique 2,7 K : 1,1 mm ; les maximums en \(\lambda\) et en \(\varepsilon\) ne coïncident pas</td></tr>
+  <tr><th class="notion">Flux d'énergie, loi de Stefan-Boltzmann</th>
+    <td class="f">\(\displaystyle J = u_zv_z = \frac{u}{2}\cdot\frac{c}{2} = \frac{ca}{4}T^4 = \sigma T^4\), \(\sigma = \frac{ca}{4} = 5{,}67\times10^{-8}\) W/(m² K⁴)</td>
+    <td class="rem">moitié des photons vers la surface, \(\overline{\cos\theta} = 1/2\) sur un hémisphère ; \(P = JA\) ; Soleil 5800 K : \(6{,}4\times10^{7}\) W/m²</td></tr>
+  <tr><th class="notion">Flux à distance d'une source sphérique</th>
+    <td class="f">\(\displaystyle J(d) = \frac{P}{4\pi d^2} = J_{surface}\left(\frac{R}{d}\right)^2\)</td>
+    <td class="rem">Soleil vu de la Terre : \(1{,}4\) kW/m² ; une planète intercepte \(\pi R^2 J\) et rayonne sur \(4\pi R^2\)</td></tr>
+  <tr><th class="notion">Émissivité</th>
+    <td class="f">\(J = e\,\sigma T^4\), \(0 \le e(T, \varepsilon) \le 1\) ; échange net : \(J_{net} = e\,\sigma(T^4 - T_{env}^4)\) ; \(\Delta T \ll T\) : \(J_{net} \approx 4e\sigma T^3\,\Delta T\)</td>
+    <td class="rem">bilan détaillé : à l'équilibre, absorbé = émis à chaque longueur d'onde (bon absorbeur = bon émetteur, Stewart 1858, Kirchhoff) ; corps noir \(e = 1\) ; loi de Newton du refroidissement</td></tr>
+  <tr><th class="notion">Écrans thermiques (feuilles)</th>
+    <td class="f">\(\displaystyle J_{n\ \text{feuilles}} = \frac{1}{n+1}\,e\sigma(T_0^4 - T_{n+1}^4)\) ; \(T_i^4\) régulièrement espacés entre \(T_0^4\) et \(T_{n+1}^4\)</td>
+    <td class="rem">même flux à travers chaque couche en régime permanent ; vêtements en couches, isolants multicouches</td></tr>
+  <tr><th class="notion">Effet de serre</th>
+    <td class="f">\(\displaystyle J_o = \frac{J_i}{1 - x/2} = \frac{2}{2 - x}J_i\) ; \(\displaystyle T_{sol} = T_0\left(\frac{2}{2 - x}\right)^{1/4}\)</td>
+    <td class="rem">\(J_i\) flux absorbé par le sol, \(x\) fraction de l'infrarouge sortant absorbée par la couche, réémise moitié vers le haut, moitié vers le bas ; Terre : 236 K sans atmosphère, 280 K pour \(x = 1\)</td></tr>
+  <tr><th class="notion">Gaz de photons (complément)</th>
+    <td class="f">\(C_V = 4aVT^3\) ; \(S = \tfrac{4}{3}aVT^3\) ; adiabatique : \(VT^3 = \) cste ; détente libre : \(VT^4 = \) cste ; \(N/V = 2{,}03\times10^{7}\,T^3\) m⁻³ ; \(\bar\varepsilon_{photon} = 2{,}70\,kT\)</td>
+    <td class="rem">\(p = u/3\) pour un gaz relativiste ; l'expansion de l'Univers refroidit le fond cosmologique comme \(1/R\)</td></tr>
 </table>
 </section>
 
