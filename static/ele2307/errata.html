@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Errata | ELE2307</title>
 <link rel="stylesheet" href="assets/katex/katex.min.css">
-<link rel="stylesheet" href="assets/style.css?v=10">
+<link rel="stylesheet" href="assets/style.css?v=11">
 </head>
 <body>
 <header class="site-header">
@@ -20,6 +20,7 @@
     <a href="cours6.html">Cours 6</a>
     <a href="cours7.html">Cours 7</a>
     <a href="cours8.html">Cours 8</a>
+    <a href="cours9.html">Cours 9</a>
     <a href="formulaire.html">Formulaire</a>
     <a href="intra.html">Intra</a>
     <a href="errata.html">Errata</a>
@@ -52,8 +53,9 @@
   <tr><td>Corrigé cours 6</td><td class="num">1</td><td>Exposant d'une résistance (sans impact)</td></tr>
   <tr><td>Corrigés cours 7 (chap. 15 et 19)</td><td class="num">7</td><td>Chap. 19 ex. 2 (formule des fermions pour des bosons), chap. 15 ex. 50 (masse), chap. 19 ex. 28 (b)</td></tr>
   <tr><td>Corrigés cours 8 (chap. 20 et 21)</td><td class="num">3</td><td>Chap. 21 ex. 10 (énergie des protons, conclusion inversée)</td></tr>
+  <tr><td>Corrigés cours 9 (chap. 23)</td><td class="num">4</td><td>Ex. 26 (a) : bande interdite de 1,0 eV et non 0,41 eV ; ex. 22 (b) et (c)</td></tr>
   <tr><td>Liste d'exercices suggérés</td><td class="num">1</td><td>Exercice 13 du chap. 5 listé deux fois</td></tr>
-  <tr><td>Manuel (Stowe)</td><td class="num">9</td><td>Formule de la gaussienne et dérivation de σ (corrigées par le prof)</td></tr>
+  <tr><td>Manuel (Stowe)</td><td class="num">10</td><td>Formule de la gaussienne et dérivation de σ (corrigées par le prof)</td></tr>
   <tr><td>Sujet d'intra 2021 (pratique)</td><td class="num">1</td><td>QCM 9 : deux réponses défendables</td></tr>
 </table>
 
@@ -323,7 +325,37 @@
   <p><strong>À lire :</strong> 350 W/m² est le flux solaire moyenné sur toute la surface terrestre (\(1400\ \text{W/m}^2\times\pi R^2/4\pi R^2\)). La question demande la fraction absorbée : la Terre émet 188 W/m² sur toute sa surface, donc elle absorbe \(188/350 = 0{,}54\), soit 54 % du rayonnement solaire incident (le reste est réfléchi : albédo d'environ 0,3 en réalité, l'écart venant de la température effective choisie).</p>
 </article>
 
-<h2>10. Liste d'exercices suggérés</h2>
+<h2>10. Corrigés du cours 9 (chapitre 23, manuscrits)</h2>
+
+<article class="err">
+  <header><span class="tag">Chap. 23, ex. 26 (a)</span><span class="tag conf-certain">Certain</span><h4>Bande interdite de 1,0 eV et non 0,41 eV</h4></header>
+  <p><strong>Écrit :</strong> \(\varepsilon_{gap} = kT\ln\dfrac{N_c^2}{n_en_h} = 0{,}41\) eV.</p>
+  <p><strong>À lire :</strong> la formule est bonne, mais avec \(n_e = 10^{21}\) m⁻³, \(n_h = 10^{13}\) m⁻³ et \(N_c = 2{,}51\times10^{25}\) m⁻³ à 300 K : \(\ln(6{,}3\times10^{50}/10^{34}) = 38{,}7\) et \(\varepsilon_{gap} = 0{,}02585\times38{,}7 = 1{,}00\) eV. (La valeur 0,41 correspond à peu près à un logarithme décimal pris à la place du logarithme népérien.)</p>
+  <p><strong>Impact :</strong> facteur 2,4 sur la réponse. Les parties (b) et (c) (\(\mathcal N_d = 2\times10^{21}\) m⁻³, 0,26 eV) sont justes.</p>
+</article>
+
+<article class="err">
+  <header><span class="tag">Chap. 23, ex. 22 (b)</span><span class="tag conf-probable">Probable</span><h4>Distance du niveau de Fermi à la bande de conduction</h4></header>
+  <p><strong>Écrit :</strong> « \(\varepsilon_{donneurs} - \mu = \varepsilon_c - \mu - (\varepsilon_c - \varepsilon_{donneur}) = 0{,}08\) eV, donc \(\varepsilon_c - \mu = 0{,}04\) eV », puis \(T \approx 48\) K.</p>
+  <p><strong>À lire :</strong> si \(\mu\) est à 0,08 eV sous le niveau donneur, lui-même à 0,04 eV sous \(\varepsilon_c\), alors \(\varepsilon_c - \mu = 0{,}08 + 0{,}04 = 0{,}12\) eV (addition, pas soustraction). Avec \(T = (\varepsilon_c - \mu)/(k\ln(2N_c/\mathcal N_d))\) on obtient 137 K en prenant \(N_c\) à 300 K, 153 K avec \(N_c(T)\).</p>
+  <p><strong>Impact :</strong> température trois fois trop basse.</p>
+</article>
+
+<article class="err">
+  <header><span class="tag">Chap. 23, ex. 22 (c)</span><span class="tag conf-probable">Probable</span><h4>Électrons venant de la bande de valence dans un matériau dopé</h4></header>
+  <p><strong>Écrit :</strong> « pour le semiconducteur intrinsèque, \(n_e = N_ce^{-\beta(\varepsilon_c - \mu)} = 4{,}9\times10^{18}\) électrons par m³ ».</p>
+  <p><strong>À lire :</strong> \(4{,}8\times10^{18}\) m⁻³ est bien \(n_i\) pour 0,8 eV à 300 K, mais ce n'est pas le nombre d'électrons venus de la bande de valence dans le matériau dopé. Ce nombre est celui des trous, fixé par la loi d'action de masse : \(n_h = n_i^2/n_e = (4{,}8\times10^{18})^2/10^{21} = 2{,}3\times10^{16}\) m⁻³. La présence des électrons des donneurs fait reculer les excitations à travers la bande interdite.</p>
+  <p><strong>Impact :</strong> facteur 200 ; c'est précisément le sens physique de la loi d'action de masse.</p>
+</article>
+
+<article class="err">
+  <header><span class="tag">Chap. 23, ex. 24 (d)</span><span class="tag conf-probable">Probable</span><h4>Formules extrinsèques utilisées au-delà de la transition</h4></header>
+  <p><strong>Écrit :</strong> à 500 K, « \(\varepsilon_c - \mu = -0{,}66\) eV, \(n_e = 1{,}25\times10^{19}\) m⁻³, \(n_h = 2{,}1\times10^{21}\) m⁻³ », puis en (e) une transition à 439 K.</p>
+  <p><strong>À lire :</strong> la partie (e) montre que le matériau (\(\mathcal N_d = 2{,}51\times10^{19}\) m⁻³) est déjà intrinsèque à 500 K : les formules \(n_e = \mathcal N_d/2\) et \(\mu = \varepsilon_c - kT\ln(2N_c/\mathcal N_d)\) ne s'appliquent plus. Elles donneraient d'ailleurs un niveau de Fermi à 0,66 eV sous \(\varepsilon_c\) (signe positif), plus bas que le milieu de la bande interdite (0,55 eV), et plus de trous que d'électrons dans un type N. À 500 K : \(n_e \approx n_h \approx n_i = 1{,}5\times10^{20}\) m⁻³ et \(\mu\) au milieu de la bande interdite.</p>
+  <p><strong>Impact :</strong> un ordre de grandeur sur chaque concentration et un régime mal identifié.</p>
+</article>
+
+<h2>11. Liste d'exercices suggérés</h2>
 
 <article class="err">
   <header><span class="tag">Liste d'exercices suggérés, cours 2, chapitre 5</span><span class="tag conf-probable">Probable</span><h4>Exercice 13 listé deux fois</h4></header>
@@ -331,7 +363,7 @@
   <p><strong>À lire :</strong> le second est vraisemblablement l'exercice 16 (combustion du carbone, p. 94-95), seul exercice de la section C qui traite d'une réaction. C'est celui qui est corrigé dans le cours 2 du site.</p>
 </article>
 
-<h2>11. Manuel de Stowe : erreurs signalées par le professeur ou constatées</h2>
+<h2>12. Manuel de Stowe : erreurs signalées par le professeur ou constatées</h2>
 
 <article class="err">
   <header><span class="tag">Manuel, p. 42 (chap. 3)</span><span class="tag conf-certain">Certain, corrigé par le prof</span><h4>Dérivation de l'écart type du critère unique</h4></header>
@@ -381,7 +413,13 @@
   <p><strong>À lire :</strong> avec \(R = 14\times10^{9}\) années-lumière \(= 1{,}33\times10^{26}\) m, \(V = \tfrac{4}{3}\pi R^3 = 9{,}9\times10^{78}\) m³ et \(u = aT^4 = 4{,}0\times10^{-14}\) J/m³ à 2,7 K, l'énergie vaut \(4{,}0\times10^{65}\) J. La température « quand l'Univers avait 1 m³ », \(T = (E/a)^{1/4} = 1{,}5\times10^{20}\) K, n'est cohérente qu'avec \(10^{65}\) J (avec \(10^{66}\) J on trouverait \(2{,}7\times10^{20}\) K) : l'exposant 66 est une coquille.</p>
 </article>
 
-<h2>12. Remarques diverses</h2>
+<article class="err">
+  <header><span class="tag">Stowe, chap. 23, ex. 11 (c), réponse p. 549</span><span class="tag conf-probable">Probable</span><h4>Facteur de température oublié dans une réponse</h4></header>
+  <p><strong>Écrit :</strong> « 11. (a) \(4{,}9\times10^{16}\)/m³ (b) \(1{,}0\times10^{8}\)/m³ (c) \(1{,}1\times10^{21}\)/m³ ».</p>
+  <p><strong>À lire :</strong> les réponses (a) et (b), à 290 K, tiennent compte de \(N_c \propto T^{3/2}\) (sans ce facteur on trouverait \(5{,}1\times10^{16}\)). La réponse (c), à 580 K, vaut \(2{,}51\times10^{25}\,e^{-10{,}0} = 1{,}1\times10^{21}\) seulement si on l'oublie ; avec \(N_c(580\ \text{K}) = 6{,}75\times10^{25}\) m⁻³, comme le demande la consigne de la section, on obtient \(3{,}1\times10^{21}\) m⁻³.</p>
+</article>
+
+<h2>13. Remarques diverses</h2>
 
 <article class="err">
   <header><span class="tag">TD1, énoncé PDF</span><span class="tag theme">Remarque</span><h4>Phrase cachée destinée aux outils d'IA</h4></header>

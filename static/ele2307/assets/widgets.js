@@ -36,8 +36,9 @@
     if (!isFinite(x)) return String(x);
     const e = Math.floor(Math.log10(Math.abs(x)));
     if (e >= -2 && e < 5) return fr(x, Math.max(0, sig - 1 - e));
-    const m = x / Math.pow(10, e);
-    return `${fr(m, sig - 1)} × 10${sup(e)}`;
+    let m = Number((x / Math.pow(10, e)).toFixed(sig - 1)), ee = e;
+    if (Math.abs(m) >= 10) { m /= 10; ee += 1; }
+    return `${fr(m, sig - 1)} × 10${sup(ee)}`;
   }
   // 10^(grand nombre) : 10^(3,7 × 10²⁵)
   function pow10str(log10) {

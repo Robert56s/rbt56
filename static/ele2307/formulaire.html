@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Formulaire | ELE2307</title>
 <link rel="stylesheet" href="assets/katex/katex.min.css">
-<link rel="stylesheet" href="assets/style.css?v=10">
+<link rel="stylesheet" href="assets/style.css?v=11">
 </head>
 <body>
 <header class="site-header">
@@ -20,6 +20,7 @@
     <a href="cours6.html">Cours 6</a>
     <a href="cours7.html">Cours 7</a>
     <a href="cours8.html">Cours 8</a>
+    <a href="cours9.html">Cours 9</a>
     <a href="formulaire.html">Formulaire</a>
     <a href="intra.html">Intra</a>
     <a href="errata.html">Errata</a>
@@ -362,6 +363,54 @@
   <tr><th class="notion">Gaz de photons (complément)</th>
     <td class="f">\(C_V = 4aVT^3\) ; \(S = \tfrac{4}{3}aVT^3\) ; adiabatique : \(VT^3 = \) cste ; détente libre : \(VT^4 = \) cste ; \(N/V = 2{,}03\times10^{7}\,T^3\) m⁻³ ; \(\bar\varepsilon_{photon} = 2{,}70\,kT\)</td>
     <td class="rem">\(p = u/3\) pour un gaz relativiste ; l'expansion de l'Univers refroidit le fond cosmologique comme \(1/R\)</td></tr>
+</table>
+</section>
+
+<section class="form-section">
+<h2>Cours 9 - Propriétés électriques de la matière</h2>
+<table class="formulaire">
+  <tr><th class="notion">Niveau de Fermi</th>
+    <td class="f">\(\displaystyle \bar n(\varepsilon) = \frac{1}{e^{\beta(\varepsilon - \mu)} + 1}\) ; \(\bar n(\mu) = \tfrac{1}{2}\)</td>
+    <td class="rem">\(\mu\) : niveau de Fermi ; métal si \(\mu\) est dans une bande, semiconducteur ou isolant s'il est dans la bande interdite \(\varepsilon_{gap} = \varepsilon_c - \varepsilon_v\)</td></tr>
+  <tr><th class="notion">Occupation au bord des bandes</th>
+    <td class="f">\(\bar n_e \approx e^{-\beta(\varepsilon - \mu)}\) pour \(\varepsilon \ge \varepsilon_c\) ; \(\bar n_h = 1 - \bar n_e \approx e^{\beta(\varepsilon - \mu)}\) pour \(\varepsilon \le \varepsilon_v\)</td>
+    <td class="rem">si \(\mu\) est à plusieurs \(kT\) des deux bandes (non dégénéré) ; \(kT = 0{,}0259\) eV à 300 K</td></tr>
+  <tr><th class="notion">Densité d'états de la bande de conduction</th>
+    <td class="f">\(\displaystyle g(\varepsilon) = \frac{4\pi(2m^*)^{3/2}}{h^3}\sqrt{\varepsilon - \varepsilon_c}\)</td>
+    <td class="rem">par unité de volume, spin inclus ; \(m^*\) masse effective</td></tr>
+  <tr><th class="notion">Concentrations d'électrons et de trous</th>
+    <td class="f"><p>\(n_e = N_C\,e^{-\beta(\varepsilon_c - \mu)}\) ; \(n_h = N_V\,e^{\beta(\varepsilon_v - \mu)}\)</p><p>\(\displaystyle N_C = \frac{2(2\pi m_e^*kT)^{3/2}}{h^3}\) ; \(\displaystyle N_V = \frac{2(2\pi m_h^*kT)^{3/2}}{h^3}\)</p></td>
+    <td class="rem">\(N_{C,V} = 2{,}51\times10^{25}\ \text{m}^{-3}\) \(\times\,(m^*T/300\,m)^{3/2}\) ; \(1\ \text{cm}^{-3} = 10^{6}\ \text{m}^{-3}\) ; Si réel : \(N_C = 2{,}86\times10^{19}\) cm⁻³</td></tr>
+  <tr><th class="notion">Loi d'action de masse</th>
+    <td class="f">\(n_e\,n_h = N_CN_V\,e^{-\beta(\varepsilon_c - \varepsilon_v)} = n_i^2\) ; \(n_i = \sqrt{N_CN_V}\,e^{-\varepsilon_{gap}/2kT}\)</td>
+    <td class="rem">vraie avec ou sans dopage, à l'équilibre ; Si à 300 K : \(n_i = 1{,}5\times10^{10}\) cm⁻³ (mesuré), Ge \(2{,}5\times10^{13}\), GaAs \(2\times10^{6}\)</td></tr>
+  <tr><th class="notion">Niveau de Fermi intrinsèque</th>
+    <td class="f">\(\displaystyle \mu = \frac{\varepsilon_c + \varepsilon_v}{2} + \frac{kT}{2}\ln\frac{N_V}{N_C} = \frac{\varepsilon_c + \varepsilon_v}{2} + \frac{3kT}{4}\ln\frac{m_h^*}{m_e^*}\)</td>
+    <td class="rem">pratiquement au milieu de la bande interdite</td></tr>
+  <tr><th class="notion">Dopage de type N</th>
+    <td class="f">\(n_e \approx N_D\) ; \(n_h = n_i^2/N_D\) ; \(\displaystyle \mu = \varepsilon_c - kT\ln\frac{N_C}{N_D}\)</td>
+    <td class="rem">donneurs à 5 électrons de valence (As, P), niveau \(\varepsilon_d\) à 0,03 eV sous \(\varepsilon_c\) ; manuel : états donneurs \(\mathcal N_d = 2N_D\), donc \(\ln(2N_c/\mathcal N_d)\)</td></tr>
+  <tr><th class="notion">Dopage de type P</th>
+    <td class="f">\(n_h \approx N_A\) ; \(n_e = n_i^2/N_A\) ; \(\displaystyle \mu = \varepsilon_v + kT\ln\frac{N_V}{N_A}\)</td>
+    <td class="rem">accepteurs à 3 électrons de valence (B), niveau \(\varepsilon_a\) à 0,05 eV au-dessus de \(\varepsilon_v\)</td></tr>
+  <tr><th class="notion">Régimes en température</th>
+    <td class="f">ionisation → extrinsèque (\(n \approx N_D\)) → intrinsèque (\(n \approx n_i\)) ; \(\displaystyle T_{intrinsèque} \approx \frac{\varepsilon_{gap}}{2k\ln(N_C/N_D)}\)</td>
+    <td class="rem">transition quand \(n_i(T) = N_D\) ; \(N_C\) dépend de \(T\) (itérer)</td></tr>
+  <tr><th class="notion">Courant de dérive</th>
+    <td class="f">\(\vec J = \sigma\vec E\) ; \(\sigma = 1/\rho = e\,n\,\mu\) ; \(\sigma = e(n_e\mu_e + n_h\mu_h)\) ; \(v_d = \mu E\)</td>
+    <td class="rem">\(\mu\) : mobilité en m²/(V s) ; Si : \(\mu_n = 1350\), \(\mu_p = 480\) cm²/(V s) ; métaux : \(\sigma \approx C/T\)</td></tr>
+  <tr><th class="notion">Modèle de Drude, résistance</th>
+    <td class="f">\(\displaystyle I = J_xA = e\,n\,A\,v_d = e\,n\,A\,\mu E_x\) ; \(\displaystyle R = \frac{V}{I} = \frac{L}{e\,n\,A\,\mu} = \frac{\rho L}{A}\)</td>
+    <td class="rem">barreau de longueur \(L\) et de section \(A\)</td></tr>
+  <tr><th class="notion">Courant de diffusion (loi de Fick)</th>
+    <td class="f">\(\displaystyle \phi = -D\frac{dn}{dx}\), \(D = \bar\ell^{\,2}/2\tau\) ; \(\displaystyle J_{n,\,diff} = eD_n\frac{dn}{dx}\) ; \(\displaystyle J_{p,\,diff} = -eD_p\frac{dp}{dx}\)</td>
+    <td class="rem">flux vers les faibles concentrations ; le courant des électrons est opposé à leur flux</td></tr>
+  <tr><th class="notion">Courants totaux</th>
+    <td class="f">\(\displaystyle J_n = e\,n\,\mu_nE + eD_n\frac{dn}{dx}\) ; \(\displaystyle J_p = e\,p\,\mu_pE - eD_p\frac{dp}{dx}\)</td>
+    <td class="rem">dérive + diffusion ; les deux courants de dérive sont dans le sens de \(E\)</td></tr>
+  <tr><th class="notion">Relation d'Einstein</th>
+    <td class="f">\(\displaystyle \frac{D_n}{\mu_n} = \frac{D_p}{\mu_p} = \frac{kT}{e}\)</td>
+    <td class="rem">25,9 mV à 300 K ; Si : \(D_n = 35\), \(D_p = 12{,}5\) cm²/s</td></tr>
 </table>
 </section>
 
