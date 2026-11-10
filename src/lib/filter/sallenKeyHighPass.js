@@ -1,4 +1,4 @@
-import { anyPairAllowed, capacitorCandidates, nearestCapacitor, pairAllowed, pairedResistor, smallCapPenalty } from './eseries';
+import { anyPairAllowed, capacitorCandidates, nearestCapacitor, pairAllowed, pairedResistor, smallCapPenalty, stockNeighbours } from './eseries';
 
 /**
  * Sallen-Key high-pass, unity-gain simplified form: two equal capacitors C
@@ -104,5 +104,55 @@ export function designSallenKeyHighPassFromCap(wn, q, C, { resistorSeries = 'E24
 		actual: { wn: r.wn, q: r.q, gain: 1 },
 		steps: { ratio: resistorRatioHp(q), C, RtopTarget: Rtop, RbottomTarget: Rbottom, resistorSeries },
 		outOfRange
+	};
+}
+
+/* ------------------------------------------------- candidates for a joint search */
+
+/**
+ * Every way the stock builds this stage, each judged on its rounded parts
+ * (partSearch.js): every capacitor C (the one typed by hand, `caps.C`, when
+ * there is one), R_top rounded to the stocked values just below and above
+ * its ideal value, and R_bottom the same around 4 Q^2 R_top (the rounded
+ * one) and around the value that keeps f0 exact on it (stockNeighbours: two
+ * in series too where `pairs` lets them). Both stay in [rMin, rMax).
+ * Returns light records { miss, wn, q, pairs, small, level, parts }, parts
+ * = { C, Rtop, Rbottom, RtopN, RbottomN }, unsorted;
+ * sallenKeyHighPassFromParts builds one.
+ */
+export function sallenKeyHighPassCandidates(wn, q, { resistorSeries = 'E24', capacitors = null, pairs = false, caps = null, rMin = SK_HP_R_MIN, rMax = SK_HP_R_MAX } = {}) {
+	const inRange = (r) => r.value >= rMin * (1 - 1e-9) && r.value < rMax;
+	const pairTop = pairAllowed(pairs, 'Rtop');
+	const pairBottom = pairAllowed(pairs, 'Rbottom');
+	const out = [];
+	for (const C of caps?.C > 0 ? [caps.C] : capacitorCandidates(capacitors)) {
+		const { Rtop, Rbottom } = solveSkHpResistors(wn, q, C);
+		if (Rtop < rMin / 2 || Rtop > rMax * 2 || Rbottom < rMin / 2 || Rbottom > rMax * 2) continue;
+		const small = smallCapPenalty(C) > 0;
+		for (const t of stockNeighbours(Rtop, resistorSeries, pairTop).filter(inRange)) {
+			const seen = new Set();
+			const bottoms = [...stockNeighbours(resistorRatioHp(q) * t.value, resistorSeries, pairBottom), ...stockNeighbours(1 / (wn * wn * C * C * t.value), resistorSeries, pairBottom)].filter((r) => inRange(r) && !seen.has(r.value) && seen.add(r.value));
+			for (const bt of bottoms) {
+				const wnA = 1 / (C * Math.sqrt(t.value * bt.value));
+				const qA = 0.5 * Math.sqrt(bt.value / t.value);
+				const miss = Math.max(Math.abs(Math.log(wnA / wn)), Math.abs(Math.log(qA / q)));
+				out.push({ miss, wn: wnA, q: qA, pairs: (t.pair ? 1 : 0) + (bt.pair ? 1 : 0), small, level: Math.log(t.value / SK_HP_R_SWEET) ** 2 + Math.log(bt.value / SK_HP_R_SWEET) ** 2, parts: { C, Rtop, Rbottom, RtopN: t.value, RbottomN: bt.value } });
+			}
+		}
+	}
+	return out;
+}
+
+/** The stage a record of sallenKeyHighPassCandidates stands for, in the shape designSallenKeyHighPass returns (with ok, manual and outOfRange for a capacitor typed by hand). */
+export function sallenKeyHighPassFromParts(wn, q, parts, { resistorSeries = 'E24', manual = false } = {}) {
+	const { C, Rtop, Rbottom, RtopN, RbottomN } = parts;
+	return {
+		topology: 'sallenKeyHp',
+		order: 2,
+		theoretical: { Rtop, Rbottom, C1: C, C2: C, ratio: resistorRatioHp(q) },
+		components: { Rtop: RtopN, Rbottom: RbottomN, C1: C, C2: C },
+		actual: { wn: 1 / (C * Math.sqrt(RtopN * RbottomN)), q: 0.5 * Math.sqrt(RbottomN / RtopN), gain: 1 },
+		steps: { ratio: resistorRatioHp(q), C, RtopTarget: Rtop, RbottomTarget: Rbottom, resistorSeries },
+		...(manual ? { ok: true, manual: true, outOfRange: !(RtopN > SK_HP_R_MIN && RtopN < SK_HP_R_MAX && RbottomN > SK_HP_R_MIN && RbottomN < SK_HP_R_MAX) } : {})
 	};
 }

@@ -1,4 +1,4 @@
-import { anyPairAllowed, capacitorCandidates, nearestCapacitor, pairAllowed, pairedResistor, smallCapPenalty } from './eseries';
+import { anyPairAllowed, capacitorCandidates, nearestCapacitor, pairAllowed, pairedResistor, smallCapPenalty, stockNeighbours } from './eseries';
 
 /**
  * Multiple-feedback (MFB) high-pass, the standard equal-capacitor layout:
@@ -116,5 +116,57 @@ export function designMfbHighPassFromCap(wn, q, C, { resistorSeries = 'E24', cap
 		actual: { wn: r.wn, q: r.q, gain: -1 },
 		steps: { a, b, C, resistorSeries },
 		outOfRange
+	};
+}
+
+/* ------------------------------------------------- candidates for a joint search */
+
+/**
+ * Every way the stock builds this stage, each judged on its rounded parts
+ * (partSearch.js): every capacitor C (the one typed by hand, `caps.C`, when
+ * there is one), R2 rounded to the stocked values just below and above its
+ * ideal value, and R1 the same around its ideal value and around the one
+ * that keeps f0 exact on the rounded R2 (stockNeighbours: two in series too
+ * where `pairs` lets them). Every resistor stays in [rMin, rMax).
+ * Returns light records { miss, wn, q, pairs, small, level, parts }, parts
+ * = { C, R1, R2, R1n, R2n }, unsorted; mfbHighPassFromParts builds one.
+ */
+export function mfbHighPassCandidates(wn, q, { resistorSeries = 'E24', capacitors = null, pairs = false, caps = null, rMin = MFB_HP_R_MIN, rMax = MFB_HP_R_MAX } = {}) {
+	const a = wn / q;
+	const b = wn * wn;
+	const inRange = (r) => r.value >= rMin * (1 - 1e-9) && r.value < rMax;
+	const pairR1 = pairAllowed(pairs, 'R1');
+	const pairR2 = pairAllowed(pairs, 'R2');
+	const out = [];
+	for (const C of caps?.C > 0 ? [caps.C] : capacitorCandidates(capacitors)) {
+		const { R1, R2 } = solveMfbHpResistors(a, b, C);
+		if (R1 < rMin / 2 || R1 > rMax * 2 || R2 < rMin / 2 || R2 > rMax * 2) continue;
+		const small = smallCapPenalty(C) > 0;
+		for (const r2 of stockNeighbours(R2, resistorSeries, pairR2).filter(inRange)) {
+			const seen = new Set();
+			const r1s = [...stockNeighbours(R1, resistorSeries, pairR1), ...stockNeighbours(1 / (b * r2.value * C * C), resistorSeries, pairR1)].filter((r) => inRange(r) && !seen.has(r.value) && seen.add(r.value));
+			for (const r1 of r1s) {
+				const wnA = 1 / (C * Math.sqrt(r1.value * r2.value));
+				const qA = (wnA * r2.value * C) / 3;
+				const miss = Math.max(Math.abs(Math.log(wnA / wn)), Math.abs(Math.log(qA / q)));
+				out.push({ miss, wn: wnA, q: qA, pairs: (r1.pair ? 1 : 0) + (r2.pair ? 1 : 0), small, level: mfbHpSweetSpotScore(r1.value, r2.value), parts: { C, R1, R2, R1n: r1.value, R2n: r2.value } });
+			}
+		}
+	}
+	return out;
+}
+
+/** The stage a record of mfbHighPassCandidates stands for, in the shape designMfbHighPass returns (with ok, manual and outOfRange for a capacitor typed by hand). */
+export function mfbHighPassFromParts(wn, q, parts, { resistorSeries = 'E24', manual = false } = {}) {
+	const { C, R1, R2, R1n, R2n } = parts;
+	const wnA = 1 / (C * Math.sqrt(R1n * R2n));
+	return {
+		topology: 'mfbHp',
+		order: 2,
+		theoretical: { R1, R2, C1: C, C2: C, C3: C },
+		components: { R1: R1n, R2: R2n, C1: C, C2: C, C3: C },
+		actual: { wn: wnA, q: (wnA * R2n * C) / 3, gain: -1 },
+		steps: { a: wn / q, b: wn * wn, C, resistorSeries },
+		...(manual ? { ok: true, manual: true, outOfRange: scoreMfbHpResistors(R1n, R2n) === Infinity } : {})
 	};
 }

@@ -213,12 +213,28 @@ export function mfbBpLoopGain(wn, q, ratio, gbw) {
  * Whether capacitors C1 and C2 may build the stage for a single-pole
  * op-amp of gain-bandwidth gbw: the circuit-alone targets exist, fit as
  * mfbBpFits asks, and leave a loop gain of at least MFB_BP_LOOP_MIN.
- * Returns those targets, or null.
+ * Returns those targets, or null. `solved`, a Map, keeps the targets of
+ * each ratio for the next pairs of the same stage.
  */
-export function mfbBpFitsWith(wn, q, gain, C1, C2, gbw) {
-	const pre = mfbBandPassPredistorted(wn, q, gain, C2 / C1, gbw);
+export function mfbBpFitsWith(wn, q, gain, C1, C2, gbw, solved = null) {
+	// a ratio out of bounds fails mfbBpFits whatever the targets: no need to solve them
+	if (!mfbBpRatioFits(C1, C2)) return null;
+	// the targets depend on C2/C1 alone: a search over the pairs solves each ratio once (solved, by ratio)
+	const ratio = C2 / C1;
+	let pre;
+	if (solved && solved.has(ratio)) pre = solved.get(ratio);
+	else {
+		pre = mfbBandPassPredistorted(wn, q, gain, ratio, gbw);
+		if (solved) solved.set(ratio, pre);
+	}
 	if (!pre || !mfbBpFits(pre.wn, pre.q, pre.gain, C1, C2)) return null;
 	return mfbBpLoopGain(pre.wn, pre.q, C2 / C1, gbw) >= MFB_BP_LOOP_MIN ? pre : null;
+}
+
+/** Whether C2/C1 is within MFB_BP_CAP_RATIO either way. */
+function mfbBpRatioFits(C1, C2) {
+	const ratio = C2 / C1;
+	return ratio <= MFB_BP_CAP_RATIO * (1 + 1e-9) && ratio >= 1 / (MFB_BP_CAP_RATIO * (1 + 1e-9));
 }
 
 /** The ideal parts for capacitors C1 and C2 (R2 is Infinity at or past the gain ceiling). */
@@ -229,8 +245,7 @@ function mfbBpIdeal(wn, q, gain, C1, C2) {
 
 /** Whether capacitors C1 and C2 may build this stage: their ratio in bounds and every ideal resistor in range. */
 export function mfbBpFits(wn, q, gain, C1, C2) {
-	const ratio = C2 / C1;
-	if (!(ratio <= MFB_BP_CAP_RATIO * (1 + 1e-9) && ratio >= 1 / (MFB_BP_CAP_RATIO * (1 + 1e-9)))) return false;
+	if (!mfbBpRatioFits(C1, C2)) return false;
 	const { R1, R2, R3 } = mfbBpIdeal(wn, q, gain, C1, C2);
 	return mfbBpInRange(R1) && mfbBpInRange(R2) && mfbBpInRange(R3);
 }
@@ -399,6 +414,23 @@ function mfbBpCorrectedResult(wn, q, gain, gbw, pre, C1, C2, ideal, parts, resis
 	};
 }
 
+// What a set of parts does with the op-amp (mfbBandPassEffective, a cubic
+// solved), kept by parts: a pair limit asks one stage for many lists of
+// names to pair, and most capacitor pairs round to the same parts in them
+// all. Cleared when full.
+const MFB_BP_EFFECTIVE = new Map();
+const MFB_BP_EFFECTIVE_SIZE = 20000;
+function mfbBpEffectiveKept(parts, C1, C2, gbw) {
+	const key = `${parts.R1} ${parts.R2} ${parts.R3} ${C1} ${C2} ${gbw}`;
+	let found = MFB_BP_EFFECTIVE.get(key);
+	if (!found) {
+		if (MFB_BP_EFFECTIVE.size >= MFB_BP_EFFECTIVE_SIZE) MFB_BP_EFFECTIVE.clear();
+		found = mfbBandPassEffective({ ...parts, C1, C2 }, gbw);
+		MFB_BP_EFFECTIVE.set(key, found);
+	}
+	return found;
+}
+
 /**
  * The search of designMfbBandPass for a single-pole op-amp of gain-bandwidth
  * gbw: each pair solved for its own circuit-alone targets, scored with the
@@ -408,16 +440,17 @@ function mfbBpCorrectedResult(wn, q, gain, gbw, pre, C1, C2, ideal, parts, resis
 function mfbBpSearchWith(wn, q, size, gbw, resistorSeries, capacitors, pairs) {
 	const caps = capacitorCandidates(capacitors);
 	const f0Weight = mfbBpF0Weight(q);
+	const solved = new Map();
 	let best = null;
 	for (const C1 of caps) {
 		for (const C2 of caps) {
-			const pre = mfbBpFitsWith(wn, q, size, C1, C2, gbw);
+			const pre = mfbBpFitsWith(wn, q, size, C1, C2, gbw, solved);
 			if (!pre) continue;
 			const ideal = mfbBpIdeal(pre.wn, pre.q, pre.gain, C1, C2);
 			const parts = mfbBpRound(ideal, pre.wn, pre.q, pre.gain, C1, C2, resistorSeries, pairs, f0Weight);
 			if (!mfbBpBuilt(parts) || mfbBpClamped(ideal, parts, resistorSeries, pairs)) continue;
 			const outside = [parts.R1, parts.R2, parts.R3].every(mfbBpInRange) ? 0 : MFB_BP_OUTSIDE;
-			const miss = mfbBpMiss(mfbBandPassEffective({ ...parts, C1, C2 }, gbw), wn, q, size, f0Weight);
+			const miss = mfbBpMiss(mfbBpEffectiveKept(parts, C1, C2, gbw), wn, q, size, f0Weight);
 			const level = (Math.log(parts.R1 / MFB_BP_R_SWEET) ** 2 + Math.log(parts.R2 / MFB_BP_R_SWEET) ** 2 + Math.log(parts.R3 / MFB_BP_R_SWEET) ** 2) / 3;
 			const score = level + 1000 * miss * miss + smallCapPenalty(C1, C2) + outside + MFB_BP_UNEQUAL * Math.log(C1 / C2) ** 2;
 			if (!Number.isFinite(score)) continue;

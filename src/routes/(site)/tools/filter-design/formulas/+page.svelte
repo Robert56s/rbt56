@@ -109,7 +109,8 @@
 				Every design here is built on one magnitude response (section 3 and section 4 say where
 				each comes from). At fp it loses exactly Amax dB by the definition of epsilon; the only
 				condition left is the stopband, at least Amin dB at fs, and that condition contains n.
-				At fs the frequency ratio is 1/k.
+				At fs the frequency ratio is 1/k. Once n is rounded up, section 30 places the design
+				between those two ends.
 			</p>
 			<Equation
 				tex={`\\text{Butterworth:}\\ 10\\log_{10}\\!\\left(1 + \\varepsilon^2 \\left(\\tfrac{1}{k}\\right)^{2n}\\right) \\ge A_{min} \\ \\Rightarrow\\ 2n\\log\\!\\left(\\tfrac{1}{k}\\right) \\ge \\log\\!\\left[\\dfrac{10^{A_{min}/10}-1}{\\varepsilon^2}\\right]`}
@@ -330,7 +331,8 @@
 			<p class="note">
 				<strong>How to use:</strong> compute once per design, then reuse it below. With the common
 				Amax = 3 dB the Butterworth factor is within 0.1% of 1, which is why fp is so often called
-				the 3 dB cutoff; at Amax = 1 dB and n = 5 it is already 1.145.
+				the 3 dB cutoff; at Amax = 1 dB and n = 5 it is already 1.145. A design centred in its
+				template (section 30) multiplies omega_c by sigma, or divides it for a high-pass.
 			</p>
 		</div>
 
@@ -1654,6 +1656,95 @@
 				qualifies, the closest fit that does not oscillate. A gain stage of gain g on that op-amp
 				keeps 1/√(1 + (g·f0/GBW)²) of it at f0, so a large gain at a high f0 is split over two or
 				three identical stages, each with g·f0 under GBW/10.
+			</p>
+		</div>
+	</section>
+
+	<section class="panel">
+		<div class="panel-head">
+			<span class="num">30</span>
+			<h2>Placement in the template</h2>
+		</div>
+		<p class="note">
+			The order is a whole number, so it usually does more than the spec asks. Between the design
+			that loses exactly Amax at the passband edge and the one that loses exactly Amin at the
+			stopband edge there is room for one free parameter. "Place the design" picks a point in it:
+			on the passband edge (the textbook way, all the room to the stopband), or centred, the
+			geometric middle, so that the ideal design keeps a margin at both edges for rounding and part
+			tolerances. A band filter places each side, or its prototype, in its own template.
+		</p>
+
+		<div class="formula">
+			<h3>Frequency scale (Butterworth, Bessel, Legendre, inverse Chebyshev)</h3>
+			<p class="note">
+				Every frequency of the prototype is multiplied by sigma (divided for a high-pass), so the
+				point f<sub>A</sub> where exactly Amax is lost moves from fp towards the stopband. sigma = 1
+				is the passband edge; sigma<sub>s</sub> leaves exactly Amin at fs.
+			</p>
+			<Equation tex={`\\sigma \\in [1,\\ \\sigma_s], \\qquad \\sigma = \\sqrt{\\sigma_s}`} />
+			<Equation tex={`\\text{low-pass:}\\ \\ f_A = \\sigma f_p,\\ \\ \\omega_c \\to \\sigma\\,\\omega_c, \\qquad \\text{high-pass:}\\ \\ f_A = \\dfrac{f_p}{\\sigma},\\ \\ \\omega_c \\to \\dfrac{\\omega_c}{\\sigma}`} />
+			<p class="note">
+				For a Butterworth both ends have a closed form, with epsilon from each limit
+				(&epsilon;<sub>p</sub> from Amax, &epsilon;<sub>s</sub> from Amin; the exponent of f<sub>3dB</sub>
+				changes sign for a high-pass):
+			</p>
+			<Equation tex={`\\varepsilon = \\sqrt{10^{A/10} - 1}, \\qquad \\sigma_s = \\dfrac{1}{k}\\left(\\dfrac{\\varepsilon_p}{\\varepsilon_s}\\right)^{1/n}`} />
+			<Equation tex={`f_{3\\,dB} = \\sqrt{f_p f_s}\\,\\left(\\varepsilon_p\\,\\varepsilon_s\\right)^{\\mp 1/(2n)}\\quad (- \\text{ low-pass},\\ + \\text{ high-pass})`} />
+			<p class="note">
+				<strong>How to use:</strong> at Amax = 3 dB, Amin = 40 dB, fp = 10 kHz, fs = 35 kHz and n =
+				4, sigma<sub>s</sub> = 1.1062 and sigma = 1.0517: the -3 dB frequency moves from 10005.9 Hz
+				to 10523.6 Hz, and the ideal design keeps 0.79 dB at fp and 1.75 dB at fs. The other
+				responses find sigma<sub>s</sub> by bisection on their prototype.
+			</p>
+		</div>
+
+		<div class="formula">
+			<h3>Ripple (Chebyshev, elliptic)</h3>
+			<p class="note">
+				An equiripple passband keeps its edge on fp, and the ripple takes the room instead: epsilon
+				from Amax at one end (&epsilon;<sub>max</sub>), the one that leaves exactly Amin at the stopband edge at the
+				other (&epsilon;<sub>min</sub>). An elliptic stopband follows from the ripple at a fixed order and selectivity.
+			</p>
+			<Equation tex={`\\varepsilon \\in [\\varepsilon_{\\min},\\ \\varepsilon_{\\max}], \\qquad \\varepsilon = \\sqrt{\\varepsilon_{\\min}\\,\\varepsilon_{\\max}}, \\qquad A_r = 10\\log_{10}(1 + \\varepsilon^2)`} />
+			<Equation tex={`\\text{Chebyshev:}\\quad \\varepsilon_{\\min} = \\dfrac{\\sqrt{10^{A_{min}/10} - 1}}{\\cosh\\!\\left(n\\,\\operatorname{acosh}(1/k)\\right)}`} />
+			<p class="note">
+				<strong>How to use:</strong> build the prototype with the ripple A<sub>r</sub> in place of
+				Amax. At Amax = 1 dB, Amin = 40 dB, 10 kHz and 35 kHz, A<sub>r</sub> = 0.196 dB: 0.80 dB
+				to spare at fp and 7.49 dB at fs.
+			</p>
+		</div>
+	</section>
+
+	<section class="panel">
+		<div class="panel-head">
+			<span class="num">31</span>
+			<h2>Choosing the parts</h2>
+		</div>
+		<div class="formula">
+			<h3>The whole filter against its template</h3>
+			<p class="note">
+				Each stage lists the ways the stock builds it: every capacitor choice its circuit allows,
+				both roots of the multiple feedback quadratic, each resistor rounded just below and just
+				above its ideal value, two in series where allowed. The designer's own pick is always in the
+				list. A search over the stages then keeps the set whose cascade (the summed branches of a
+				band-stop) meets the template best, measured from the top of the passband, in this order:
+			</p>
+			<Equation tex={`m = \\min\\Big(\\min_{\\text{passband}}\\big(A_{max} - A(f)\\big),\\ \\min_{\\text{stopband}}\\big(A(f) - A_{min}\\big)\\Big)`} />
+			<p class="note">
+				1. the template met over the whole passband and the whole stopband; 2. the larger
+				min(m, m<sub>ideal</sub>), the ideal design's own margin at its placement (0 on the passband
+				edge), so no more margin is sought than the design has; 3. the response closest to the ideal
+				one; 4. fewer resistors two in series. Resistors stay at 1 k&Omega; or more, and every op-amp
+				output drives 2 k&Omega; or more over the passband (a TL082 swings &plusmn;10 V only into
+				2 k&Omega;; a passband that runs up is read to about 200 kHz, where it stops swinging its
+				full range, and at least a decade), read at the largest signal the filter passes there: an output that swings less
+				than the input draws less current, and counts as the resistor that would draw as much at
+				full swing. Where only parts past those limits meet the template, they are kept and flagged.
+			</p>
+			<p class="note">
+				<strong>How to use:</strong> the passband verdict reads the worst loss anywhere in the
+				passband, not only at fp: a rounded Chebyshev can dip past Amax inside its passband while
+				its edge holds.
 			</p>
 		</div>
 	</section>

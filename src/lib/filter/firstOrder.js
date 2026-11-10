@@ -1,4 +1,4 @@
-import { capacitorCandidates, nearestCapacitor, pairAllowed, pairedResistor, smallCapPenalty } from './eseries';
+import { capacitorCandidates, nearestCapacitor, pairAllowed, pairedResistor, smallCapPenalty, stockNeighbours } from './eseries';
 
 /**
  * First-order low-pass stage: H(s) = 1 / (RCs + 1), used for the leftover
@@ -73,5 +73,46 @@ export function designFirstOrderLowPassFromCap(tau, C, { resistorSeries = 'E24',
 		actual: { tau: R * C },
 		steps: { tau, C, Rtarget, resistorSeries },
 		outOfRange
+	};
+}
+
+/* ------------------------------------------------- candidates for a joint search */
+
+/**
+ * Every way the stock builds this stage, each judged on its rounded parts
+ * (partSearch.js): every capacitor C (the one typed by hand, `caps.C`, when
+ * there is one) and R rounded to the stocked values just below and above
+ * tau / C (stockNeighbours: two in series too where `pairs` lets them), R
+ * in [rMin, rMax). Returns light records { miss, tau, pairs, small, level,
+ * parts }, parts = { C, Rtarget, R }, unsorted; firstOrderFromParts builds
+ * one.
+ */
+export function firstOrderCandidates(tau, { resistorSeries = 'E24', capacitors = null, pairs = false, caps = null, rMin = FO_R_MIN, rMax = FO_R_MAX } = {}) {
+	const pairR = pairAllowed(pairs, 'R');
+	const out = [];
+	for (const C of caps?.C > 0 ? [caps.C] : capacitorCandidates(capacitors)) {
+		const Rtarget = tau / C;
+		if (Rtarget < rMin / 2 || Rtarget > rMax * 2) continue;
+		const small = smallCapPenalty(C) > 0;
+		for (const r of stockNeighbours(Rtarget, resistorSeries, pairR)) {
+			if (!(r.value >= rMin * (1 - 1e-9) && r.value < rMax)) continue;
+			const tauA = r.value * C;
+			out.push({ miss: Math.abs(Math.log(tauA / tau)), tau: tauA, pairs: r.pair ? 1 : 0, small, level: Math.log(r.value / FO_R_SWEET) ** 2, parts: { C, Rtarget, R: r.value } });
+		}
+	}
+	return out;
+}
+
+/** The stage a record of firstOrderCandidates stands for, in the shape designFirstOrderLowPass returns (with ok, manual and outOfRange for a capacitor typed by hand). */
+export function firstOrderFromParts(tau, parts, { resistorSeries = 'E24', manual = false } = {}) {
+	const { C, Rtarget, R } = parts;
+	return {
+		topology: 'firstOrder',
+		order: 1,
+		theoretical: { R: Rtarget, C },
+		components: { R, C },
+		actual: { tau: R * C },
+		steps: { tau, C, Rtarget, resistorSeries },
+		...(manual ? { ok: true, manual: true, outOfRange: !(Rtarget > FO_R_MIN && Rtarget < FO_R_MAX) } : {})
 	};
 }

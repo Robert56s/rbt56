@@ -1,4 +1,5 @@
 import { besselPolynomial, ellipK, ellipKp, legendrePolynomial, RESPONSES } from './approximations';
+import { placedRipple, placedScale } from './explainPlacement';
 import { formatFarads, formatHz, formatOhms, formatSeconds } from './format';
 
 /**
@@ -123,11 +124,11 @@ export function explainModernApproximation(design) {
 		const reached = design.prototype?.aminReached;
 		blocks.push(
 			p(
-				'Elliptic (W. Cauer, 1930s) spends the freedom on both bands at once: ripple of exactly Amax across the passband, an equal ripple across the stopband, and zeros of transmission in the stopband as in the inverse Chebyshev. For a given order no filter falls faster from passband to stopband. Chebyshev\'s polynomial becomes an elliptic rational function R_n, built from Jacobi elliptic functions:'
+				`Elliptic (W. Cauer, 1930s) spends the freedom on both bands at once: ripple of exactly ${placedRipple(design) === null ? 'Amax' : `Ar = ${n4(placedRipple(design))} dB (centred in the template, panel 02: the middle of the room the order leaves under Amax = ${amaxDb} dB)`} across the passband, an equal ripple across the stopband, and zeros of transmission in the stopband as in the inverse Chebyshev. For a given order no filter falls faster from passband to stopband. Chebyshev's polynomial becomes an elliptic rational function R_n, built from Jacobi elliptic functions:`
 			),
-			eq('\\left|H(j\\omega)\\right|^2 = \\dfrac{1}{1 + \\varepsilon_p^2\\, R_n^2(\\omega/\\omega_p)}, \\qquad \\varepsilon_p = \\sqrt{10^{A_{max}/10} - 1}'),
+			eq(`\\left|H(j\\omega)\\right|^2 = \\dfrac{1}{1 + \\varepsilon_p^2\\, R_n^2(\\omega/\\omega_p)}, \\qquad \\varepsilon_p = ${placedRipple(design) === null ? '\\sqrt{10^{A_{max}/10} - 1}' : `\\varepsilon = \\sqrt{10^{A_r/10} - 1} = ${n4(ripple(placedRipple(design)))}`}`),
 			p(
-				'R_n swings between -1 and 1 in the passband (the Amax ripple) and stays above 1/k1 in the stopband (the stopband ripple, infinite at the zeros), with k1 = εp/εs the discrimination. The selectivity k = ωp/ωs of the spec and k1 are tied to the order by the degree equation (panel 02). Solved for k1 with this whole order and the spec\'s k, it says how deep the stopband gets; with n rounded up that is more than Amin, so the extra order becomes margin in the stopband:'
+				`R_n swings between -1 and 1 in the passband (the ${placedRipple(design) === null ? 'Amax' : 'Ar'} ripple) and stays above 1/k1 in the stopband (the stopband ripple, infinite at the zeros), with k1 = εp/εs the discrimination${placedRipple(design) === null ? '' : ' (εp the ripple factor of Ar, the ε panel 02 chose; εs that of Amin)'}. The selectivity k = ωp/ωs of the spec and k1 are tied to the order by the degree equation (panel 02). Solved for k1 with this whole order and the spec\'s k, it says how deep the stopband gets; with n rounded up that is more than Amin, so the extra order becomes margin in the stopband:`
 			),
 			eq(
 				`k = ${n4(Math.sqrt(m))}, \\quad k_1 = ${n4(k1)} \\ \\Rightarrow\\ A_{min}' = 10\\log_{10}\\!\\left(1 + \\dfrac{\\varepsilon_p^2}{k_1^2}\\right) = ${n2(reached)}\\ \\text{dB} \\ge ${aminDb}\\ \\text{dB}`
@@ -147,6 +148,13 @@ export function explainModernApproximation(design) {
 			eq(sectionsTex(design)),
 			p(
 				'Each pole pair is built with one pair of zeros as a notch stage; with an even order the passband ripples above its DC value, and the top of the passband is the reference for Amax and Amin, as for an even-order Chebyshev.'
+			)
+		);
+	}
+	if (placedScale(design) !== 1) {
+		blocks.push(
+			p(
+				`Centred in the template (panel 02), the design is then moved by the scale σ = ${n4(placedScale(design))}: every frequency of the prototype is ${hp ? 'divided' : 'multiplied'} by it, so Amax is lost at ${hp ? 'fp/σ' : 'σ fp'} instead of fp${response === 'inverseChebyshev' ? ' and the zeros move with the poles' : ''}, and the design keeps a margin at both edges.`
 			)
 		);
 	}
@@ -277,7 +285,7 @@ export function modernStageBlocks(design, stageIndex) {
 	const B = hp ? s.bHp : s.b;
 	blocks.push(
 		p(
-			`Denormalizing replaces s by s/ωc with ωc = 2πfp (the prototype already loses exactly Amax at 1 rad/s, so no extra factor): ωc = ${n2(design.wc)} rad/s. Matching the standard form gives the stage's corner and Q${hasZero ? ', and the zero moves with it' : ''}:`
+			`Denormalizing replaces s by s/ωc with ${placedScale(design) !== 1 ? `ωc = 2πfp${hp ? '/' : '·'}σ (the prototype loses exactly Amax at 1 rad/s, and the scale σ = ${n4(placedScale(design))} of panel 02 centres it in the template)` : 'ωc = 2πfp (the prototype already loses exactly Amax at 1 rad/s, so no extra factor)'}: ωc = ${n2(design.wc)} rad/s. Matching the standard form gives the stage's corner and Q${hasZero ? ', and the zero moves with it' : ''}:`
 		),
 		eq(
 			`\\omega_n = \\omega_c\\sqrt{b${hp ? '_{hp}' : ''}} = ${n2(stage.wn)}\\ \\text{rad/s}\\ \\ (f_0 = ${formatHz(stage.wn / (2 * Math.PI))}), \\qquad Q = \\dfrac{\\sqrt{b${hp ? '_{hp}' : ''}}}{a${hp ? '_{hp}' : ''}} = \\dfrac{${n4(Math.sqrt(B))}}{${n4(A)}} = ${n4(stage.q)}`
@@ -306,10 +314,10 @@ export function modernRealPoleBlocks(design, stage) {
 		eq(`s = -b_{\\text{real}} = -${n4(stage.normalized.breal)}`),
 		...(hp
 			? [
-					p('For a high-pass it is flipped with s -> 1/s, which moves it to 1/b_real, then denormalized with ωc = 2πfp:'),
+					p(`For a high-pass it is flipped with s -> 1/s, which moves it to 1/b_real, then denormalized with ${placedScale(design) !== 1 ? `ωc = 2πfp/σ, σ = ${n4(placedScale(design))} from panel 02` : 'ωc = 2πfp'}:`),
 					eq(`b_{\\text{real,hp}} = \\dfrac{1}{${n4(stage.normalized.breal)}} = ${n4(stage.normalized.brealHp)}, \\qquad \\tau = \\dfrac{1}{\\omega_c\\, b_{\\text{real,hp}}}, \\qquad H(s) = \\dfrac{\\tau s}{\\tau s + 1}`)
 				]
-			: [p('Denormalized with ωc = 2πfp (no extra factor for this response):'), eq('\\tau = \\dfrac{1}{\\omega_c\\, b_{\\text{real}}}, \\qquad H(s) = \\dfrac{1}{\\tau s + 1}')]),
+			: [p(placedScale(design) !== 1 ? `Denormalized with ωc = 2πfp·σ, σ = ${n4(placedScale(design))} from panel 02:` : 'Denormalized with ωc = 2πfp (no extra factor for this response):'), eq('\\tau = \\dfrac{1}{\\omega_c\\, b_{\\text{real}}}, \\qquad H(s) = \\dfrac{1}{\\tau s + 1}')]),
 		eq(`\\omega_c = ${n2(design.wc)}\\ \\text{rad/s} \\ \\Rightarrow\\ \\tau = ${formatSeconds(stage.tau)}`)
 	];
 }
@@ -392,7 +400,7 @@ export function explainTowThomasNotch(stageDesign, targetWn, targetQ, targetWz, 
 		p(rule),
 		eq(ruleTex),
 		p(
-			`This stage's target: f0 = ${formatHz(f0)}, Q = ${targetQ.toFixed(4)}, zero at ${formatHz(targetWz / (2 * Math.PI))}. ${stageDesign.manual ? 'C below was entered by hand.' : `C is picked so that R lands near 10 kilo-ohm${low ? ' and a stocked Cin comes close to its ideal ratio' : ''}.`} R and Rd follow as in any Tow-Thomas stage:`
+			`This stage's target: f0 = ${formatHz(f0)}, Q = ${targetQ.toFixed(4)}, zero at ${formatHz(targetWz / (2 * Math.PI))}. ${stageDesign.manual ? 'C below was entered by hand.' : context?.searched ? 'The search over the whole filter tried the capacitors in stock, and each resistor just below and just above its ideal value; it kept these, with which the whole filter meets the template best.' : `C is picked so that R lands near 10 kilo-ohm${low ? ' and a stocked Cin comes close to its ideal ratio' : ''}.`} R and Rd follow as in any Tow-Thomas stage:`
 		),
 		eq(`C = ${formatFarads(st.C)}\\ \\Rightarrow\\ R = \\dfrac{1}{\\omega_n C} = ${formatOhms(st.Rtarget)} \\rightarrow ${formatOhms(c.Ra)}, \\qquad R_d = QR \\rightarrow ${formatOhms(c.Rd)}`),
 		...rounded,

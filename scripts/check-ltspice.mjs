@@ -13,7 +13,8 @@
 // filter exports are netlisted the same way, and their .cir run through an
 // AC sweep whose .meas points must match the page's response; a band filter
 // both ways the page builds it, the cascade and the transformation of one
-// low-pass prototype (a plain chain, no combiner). The narrow band-pass
+// low-pass prototype (a plain chain, no combiner), and the parts the page
+// picks on the whole filter (its part search) the same way. The narrow band-pass
 // with its MFB band-pass stages built for the TL082 runs with the
 // single-pole op-amp at that GBW (it must give the page's response) and
 // with TI's TL082 model (it must keep Amax and Amin). The filter type
@@ -531,6 +532,40 @@ for (const { only, sides, ...spec } of filterSpecs) {
 		const log = existsSync(logFile) ? readFileSync(logFile, 'latin1') : '';
 		const meas = [...log.matchAll(/^v_(\w+): V\(vout\)\s*=\(([-+0-9.e]+)dB,[^)]*\) at ([-+0-9.e]+)/gim)].map((m) => ({ name: m[1], db: Number(m[2]), f: Number(m[3]) }));
 		const worst = meas.reduce((w, m) => Math.max(w, Math.abs(m.db - predicted(m.f))), 0);
+		check(`${stem}: LTspice gives the page's response at the band edges`, meas.length >= 2 && worst < 0.05, meas.length ? `${meas.map((m) => `${m.name} ${m.db.toFixed(2)} dB`).join(', ')}; worst ${worst.toFixed(3)} dB off` : 'no .meas in the log');
+	}
+}
+
+// The parts the page shows (the part search on the whole filter,
+// lib-parts.mjs), centred as the page opens, and the default low-pass on
+// the passband edge too: every topology, the notches, a band-stop's
+// branches with the search's combiner, a transformation, the stocks, pairs
+// and capacitors typed. LTspice netlists the drawn .asc into the .cir, and
+// the .cir with an op-amp too fast to matter gives the page's response (the
+// one its verdict reads) at every .meas point.
+{
+	const { PAGE_CASES, pageNetlistOpts, pageParts } = await import('./lib-parts.mjs');
+	const runs = PAGE_CASES.filter(([, s]) => !Number.isFinite(s.opampGbw)).map(([label, spec]) => [label, { ...spec, placement: 'centred' }]);
+	runs.push([`${PAGE_CASES[0][0]}, edge`, { ...PAGE_CASES[0][1], placement: 'edge' }]);
+	for (const [label, args] of runs) {
+		const page = pageParts(args);
+		const opts = pageNetlistOpts(args, page);
+		const stem = `flt-page-${label.replace(/\W+/g, '-')}`;
+		const asc = join(dir, `${stem}.asc`);
+		const cir = join(dir, `${stem}.cir`);
+		writeFileSync(asc, filterSchematic(opts));
+		writeFileSync(cir, filterNetlist(opts));
+		run(['-netlist', asc], 60000);
+		const netFile = join(dir, `${stem}.net`);
+		const problems = existsSync(netFile) ? sameCircuit(readFileSync(cir, 'utf8'), readFileSync(netFile, 'latin1')) : ['LTspice wrote no netlist'];
+		check(`${stem}: LTspice netlists the drawn .asc into our .cir`, problems.length === 0, problems.slice(0, 3).join('; '));
+		const fast = `${stem}-fast`;
+		writeFileSync(join(dir, `${fast}.cir`), filterNetlist({ ...opts, gbw: '100g' }));
+		run(['-b', join(dir, `${fast}.cir`)]);
+		const logFile = join(dir, `${fast}.log`);
+		const log = existsSync(logFile) ? readFileSync(logFile, 'latin1') : '';
+		const meas = [...log.matchAll(/^v_(\w+): V\(vout\)\s*=\(([-+0-9.e]+)dB,[^)]*\) at ([-+0-9.e]+)/gim)].map((m) => ({ name: m[1], db: Number(m[2]), f: Number(m[3]) }));
+		const worst = meas.reduce((w, m) => Math.max(w, Math.abs(m.db - page.result.measure.gainDbAt(m.f))), 0);
 		check(`${stem}: LTspice gives the page's response at the band edges`, meas.length >= 2 && worst < 0.05, meas.length ? `${meas.map((m) => `${m.name} ${m.db.toFixed(2)} dB`).join(', ')}; worst ${worst.toFixed(3)} dB off` : 'no .meas in the log');
 	}
 }

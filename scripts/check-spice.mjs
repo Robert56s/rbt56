@@ -525,5 +525,65 @@ for (const lowSide of [true, false]) for (const q of [0.6, 0.9, 1.2]) for (const
 	}
 }
 
+// The parts the page shows (the part search on the whole filter,
+// lib-parts.mjs): placed on the passband edge and centred, on the page's
+// settings (every topology, the notches, a band-stop's two branches with the
+// search's combiner, both transformations, the stocks, pairs, capacitors
+// typed). The netlist the page writes for them, solved here (with the
+// single-pole op-amp where MFB band-pass stages are built for one), gives
+// the page's response, the one its verdict reads (measureFilter); the .asc
+// is the same circuit and drawn clean; a pair's note names its two parts.
+{
+	const { PAGE_CASES, pageNetlistOpts, pageParts } = await import('./lib-parts.mjs');
+	const { seriesPair } = await import('../src/lib/filter/eseries.js');
+	let ran = 0;
+	let paired = 0;
+	for (const [label, spec] of PAGE_CASES) {
+		for (const placement of ['edge', 'centred']) {
+			const args = { ...spec, placement };
+			const page = pageParts(args);
+			if (page.result.stages.some((s) => !s)) {
+				check(`page's parts, ${label}, ${placement}: built`, false, 'a stage the page cannot build');
+				continue;
+			}
+			const opts = pageNetlistOpts(args, page);
+			// stages built for an op-amp keep its single pole, as the page's own figures do
+			const netlist = generateNetlist(opts.correctedGbw ? opts : { ...opts, ideal: true });
+			const model = opts.correctedGbw ? opampParams(netlist) : null;
+			const elements = parseNetlist(netlist);
+			const t = page.result.measure.template;
+			const lo = Math.min(...t.stop.map((r) => r.from), ...t.pass.map((r) => r.from)) * 2;
+			const hi = Math.max(...t.stop.map((r) => r.to), ...t.pass.map((r) => r.to)) / 2;
+			let worst = 0;
+			let worstAt = 0;
+			for (let i = 0; i <= 40; i++) {
+				const f = lo * (hi / lo) ** (i / 40);
+				const sim = 20 * Math.log10(Math.max(abs(solveAt(elements, f, model)), 1e-15));
+				const want = page.result.measure.gainDbAt(f);
+				if (sim < -200 && want < -200) continue;
+				if (Math.abs(sim - want) > worst) {
+					worst = Math.abs(sim - want);
+					worstAt = f;
+				}
+			}
+			const asc = generateSchematic(opts);
+			const wanted = buildElements({ realizedStages: opts.realizedStages, filterType: opts.filterType, method: opts.method, lpCount: opts.lpCount, combinerMode: opts.combinerMode, combinerR: opts.combinerR, combinerResistors: opts.combinerResistors }).filter((e) => e.kind !== 'LABEL');
+			const { problems } = ascParity(asc, wanted, generateNetlist(opts));
+			const issues = audit(asc);
+			// every resistor of the list's stages that is two in series gets its note
+			const notes = Array.isArray(opts.resistorStock) && opts.pairs ? opts.realizedStages.flatMap((s) => (s.stockShortfall ? [] : Object.entries(s.components).filter(([n, v]) => /^R/.test(n) && seriesPair(v, opts.resistorStock)))) : [];
+			const noted = (netlist.match(/in series \(their sum is used below\)/g) ?? []).length;
+			paired += noted;
+			ran++;
+			check(
+				`page's parts, ${label}, ${placement}: the netlist gives the page's response, the .asc is the same circuit, drawn clean`,
+				worst < 0.02 && problems.length === 0 && issues.length === 0 && noted === notes.length,
+				`ecart max ${worst.toFixed(4)} dB a ${worstAt.toFixed(0)} Hz${problems.length ? `; ${problems[0]}` : ''}${issues.length ? `; ${issues[0].kind}: ${issues[0].detail}` : ''}${noted !== notes.length ? `; ${noted} pair notes for ${notes.length} pairs` : ''}`
+			);
+		}
+	}
+	check(`page's parts: ${ran} designs exported as the page exports them`, ran === 2 * PAGE_CASES.length && paired > 0, `${paired} pair notes`);
+}
+
 console.log(fails === 0 ? 'netlists LTspice conformes au modele de l outil' : `${fails} failure(s)`);
 process.exit(fails === 0 ? 0 : 1);

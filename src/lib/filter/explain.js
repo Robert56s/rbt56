@@ -1,5 +1,6 @@
 import { pairLabel, seriesPair } from './eseries';
 import { explainModernApproximation, explainModernOrder, isClassic, modernRealPoleBlocks, modernStageBlocks } from './explainResponses';
+import { placedRipple, placedScale } from './explainPlacement';
 import { formatFarads, formatHz, formatOhms, formatSeconds } from './format';
 import { narrowStageSensitivity, narrowTextbook, NARROW_GAIN_SPEED } from './narrowBand';
 import { sallenKeyBpLimit } from './sallenKeyBandPass';
@@ -37,6 +38,9 @@ function pairsSentence(parts, series) {
 	if (paired.length === 0) return '';
 	return `${paired.map(([name, v]) => `${name} = ${ohms(v, series)}`).join(' and ')} ${paired.length > 1 ? 'are each' : 'is'} two resistors in series, since no single value on hand comes within 2 %.`;
 }
+
+/** Where a stage the search over the whole filter picked says how, in place of its designer's own rule. */
+const SEARCH_KEPT = 'with which the whole filter meets the template best';
 
 /** eps = sqrt(10^(Amax/10) - 1), the one number the passband spec turns into. */
 function rippleFactor(amaxDb) {
@@ -84,12 +88,21 @@ export function explainApproximation(design) {
 			),
 			p('Putting C_n squared in the denominator, with x = ω/ωp so that the passband is exactly |x| ≤ 1, gives the Chebyshev response:'),
 			eq('\\left|H(j\\omega)\\right|^2 = \\dfrac{1}{1 + \\varepsilon^2\\, C_n^2\\!\\left(\\dfrac{\\omega}{\\omega_p}\\right)}'),
-			p(
-				'Inside the passband C_n squared swings between 0 and 1, so |H|^2 swings between 1 and 1/(1+ε^2): that swing is the ripple, and requiring it to be exactly Amax dB fixes ε from the spec. At the edge ω = ωp, C_n is exactly 1, so the loss there is exactly Amax too:'
-			),
-			eq(
-				`10\\log_{10}\\!\\left(1 + \\varepsilon^2\\right) = A_{max} \\ \\Rightarrow\\ \\varepsilon = \\sqrt{10^{A_{max}/10} - 1} = \\sqrt{10^{${design.amaxDb}/10} - 1} = ${n4(eps)}`
-			),
+			...(placedRipple(design) === null
+				? [
+						p(
+							'Inside the passband C_n squared swings between 0 and 1, so |H|^2 swings between 1 and 1/(1+ε^2): that swing is the ripple, and requiring it to be exactly Amax dB fixes ε from the spec. At the edge ω = ωp, C_n is exactly 1, so the loss there is exactly Amax too:'
+						),
+						eq(
+							`10\\log_{10}\\!\\left(1 + \\varepsilon^2\\right) = A_{max} \\ \\Rightarrow\\ \\varepsilon = \\sqrt{10^{A_{max}/10} - 1} = \\sqrt{10^{${design.amaxDb}/10} - 1} = ${n4(eps)}`
+						)
+					]
+				: [
+						p(
+							`Inside the passband C_n squared swings between 0 and 1, so |H|^2 swings between 1 and 1/(1+ε^2): that swing is the ripple Ar, and at the edge ω = ωp, where C_n is exactly 1, the loss is Ar too. Centred in the template (panel 02), the ripple is not the whole Amax = ${design.amaxDb} dB but the middle of the room the order leaves, Ar = ${n4(placedRipple(design))} dB, which fixes ε:`
+						),
+						eq(`10\\log_{10}\\!\\left(1 + \\varepsilon^2\\right) = A_r \\ \\Rightarrow\\ \\varepsilon = \\sqrt{10^{A_r/10} - 1} = \\sqrt{10^{${n4(placedRipple(design))}/10} - 1} = ${n4(eps)}`)
+					]),
 			p(
 				'Past ωp the cosine turns into a hyperbolic cosine and C_n grows like cosh(n acosh(ω/ωp)): that is where the acosh in the order formula of the previous panel comes from.'
 			),
@@ -138,7 +151,7 @@ export function explainApproximation(design) {
 			`\\omega_0 = \\omega_p\\, \\varepsilon^{-1/n}, \\qquad s_i = \\omega_0\\left(-\\sin\\theta_i + j\\cos\\theta_i\\right), \\qquad \\theta_i = \\dfrac{(2i+1)\\pi}{2n}, \\quad i = 0, 1, \\ldots, n-1`
 		),
 		p(
-			`The radius ω0 is also the frequency where exactly 3 dB is lost (put ω = ω0 in the response: the bracket becomes ε^2 ε^(-2) = 1, so |H|^2 = 1/2). Only when Amax = 3.0103 dB is ε = 1 and ω0 = ωp; here ε = ${n4(eps)}, so the pole circle sits at ${n4(design.wcScale)} times ${hp ? 'below' : 'past'} fp. The stages below work in the normalized prototype, ω0 = 1, which is the "unit circle" they refer to; the real frequency scale is put back in by the denormalization step of each stage. Each pair of poles at ± θ_i becomes one second-order stage; for odd n the pole at θ = 90° (s = -1) has no partner and becomes the first-order stage.`
+			`The radius ω0 is also the frequency where exactly 3 dB is lost (put ω = ω0 in the response: the bracket becomes ε^2 ε^(-2) = 1, so |H|^2 = 1/2). Only when Amax = 3.0103 dB is ε = 1 and ω0 = ωp; here ε = ${n4(eps)}, so the pole circle sits at ${n4(design.wcScale)} times ${hp ? 'below' : 'past'} fp.${placedScale(design) !== 1 ? ` Centred in the template (panel 02), the point where Amax is lost moves from fp to ${hp ? 'fp/σ' : 'σ fp'}, σ = ${n4(placedScale(design))}, and the circle with it, to ${n4(hp ? design.wcScale / placedScale(design) : design.wcScale * placedScale(design))} times fp.` : ''} The stages below work in the normalized prototype, ω0 = 1, which is the "unit circle" they refer to; the real frequency scale is put back in by the denormalization step of each stage. Each pair of poles at ± θ_i becomes one second-order stage; for odd n the pole at θ = 90° (s = -1) has no partner and becomes the first-order stage.`
 		)
 	);
 	if (hp) {
@@ -269,14 +282,28 @@ function cutoffBlocks(design) {
 		];
 	}
 	const sign = hp ? '+' : '-';
-	return [
+	const sigma = placedScale(design);
+	const blocks = [
 		p(
 			`For a Butterworth response the pole circle derived at the top of this panel has radius ω0 = ωp ε^(${sign}1/n), not ωp itself (they only coincide for Amax = 3.0103 dB). That radius is what the normalized prototype gets scaled by, so this is the step where Amax reaches the component values; ${hp ? 'for a high-pass the exponent flips sign, the poles move inward' : 'for a smaller Amax the poles move outward'}:`
-		),
-		eq(
-			`\\omega_c = \\omega_0 = 2\\pi f_p \\, \\varepsilon^{${sign}1/n} = 2\\pi \\times ${design.fp} \\times ${n4(design.eps)}^{${sign}1/${design.n}} = ${n2(wp)} \\times ${n4(design.wcScale)} = ${n2(design.wc)}\\ \\text{rad/s}\\ \\ (f_{3\\,dB} = ${formatHz(design.wc / (2 * Math.PI))})`
 		)
 	];
+	if (sigma === 1) {
+		blocks.push(
+			eq(
+				`\\omega_c = \\omega_0 = 2\\pi f_p \\, \\varepsilon^{${sign}1/n} = 2\\pi \\times ${design.fp} \\times ${n4(design.eps)}^{${sign}1/${design.n}} = ${n2(wp)} \\times ${n4(design.wcScale)} = ${n2(design.wc)}\\ \\text{rad/s}\\ \\ (f_{3\\,dB} = ${formatHz(design.wc / (2 * Math.PI))})`
+			)
+		);
+		return blocks;
+	}
+	// centred in the template: the scale sigma of panel 02 moves every frequency
+	blocks.push(
+		p(`Centred in the template (panel 02), every frequency is then ${hp ? 'divided' : 'multiplied'} by the scale σ = ${n4(sigma)}, so that Amax is lost at ${hp ? 'fp/σ' : 'σ fp'} and the design keeps a margin at both edges:`),
+		eq(
+			`\\omega_c = 2\\pi f_p \\, \\varepsilon^{${sign}1/n}\\,${hp ? '/\\,\\sigma' : '\\sigma'} = ${n2(wp)} \\times ${n4(design.wcScale)} ${hp ? '/' : '\\times'} ${n4(sigma)} = ${n2(design.wc)}\\ \\text{rad/s}\\ \\ (f_{3\\,dB} = ${formatHz(design.wc / (2 * Math.PI))})`
+		)
+	);
+	return blocks;
 }
 
 /** Pole-placement math (a, b) for one second-order stage, shared by low-pass and high-pass. */
@@ -426,8 +453,29 @@ export function explainHpStage(design, stageIndex) {
  * where the page shows what the rounded stage does (this tool's "actual"
  * row and Bode plot by default; the AM tool passes its own).
  */
-export function explainMfb(stageDesign, targetWn, targetQ, { shownIn = 'which is what the "actual" row above and the Bode plot further down are built from' } = {}) {
+export function explainMfb(stageDesign, targetWn, targetQ, { shownIn = 'which is what the "actual" row above and the Bode plot further down are built from', searched = false } = {}) {
 	const st = stageDesign.steps;
+	// which root of the quadratic the parts come from: +1, -1, or 0 for the
+	// double root of a pair under the 8 Q^2 bar (its Delta taken as 0)
+	const sq = Math.sqrt(Math.max(0, st.discriminant));
+	const root = st.doubleRoot ? 0 : (st.root ?? (Math.abs(st.x - (st.a * st.C1 + sq) / 4) <= 1e-9 * Math.abs(st.x) ? 1 : -1));
+	const xTex = root === 0 ? '\\dfrac{aC_1}{4}' : `\\dfrac{aC_1 ${root > 0 ? '+' : '-'} \\sqrt{\\Delta}}{4}`;
+	const capsText = stageDesign.manual
+		? searched
+			? `The quadratic has a real solution only when C1/C2 >= 8Q^2. C1 and C2 below were entered by hand; the search over the whole filter tried both roots with them${root === 0 ? ' (here the double root: the pair sits under that bar, within 4Q^2)' : ''}, and each resistor just below and just above its ideal value, and kept these, ${SEARCH_KEPT}:`
+			: 'The quadratic has a real solution only when C1/C2 >= 8Q^2. C1 and C2 below were entered by hand; the resistors are solved directly from them:'
+		: searched
+			? 'The quadratic has a real solution only when C1/C2 >= 8Q^2. The search over the whole filter tried every capacitor pair in stock with C1/C2 from 4Q^2 up, both roots, and each resistor just below and just above its ideal value; it kept these, with which the whole filter meets the template best:'
+			: 'A quadratic only has a real solution when its discriminant is positive, which here means C1/C2 >= 8Q^2. This tool searches a preferred capacitor series for a pair that clears that bar and lands both resistors in a sane 200 ohm to 2 megohm range:';
+	const rootText =
+		root === 0
+			? 'This pair sits a little under the bar, so Δ is negative: taken as 0, it leaves the one double root, for a Q somewhat short of its target.'
+			: root < 0
+				? 'Of the two roots, this stage takes the one with the minus sign: its rounded resistors serve the whole filter better.'
+				: '';
+	const roundText = searched
+		? `R1 is rounded to a ${stockValue(st.resistorSeries)} just below or just above its ideal value, and R2 to one next to its own or to the value that keeps f0 exact with the rounded R1${pairedTail(st.resistorSeries, [stageDesign.components.R1, stageDesign.components.R2])}; the search kept ${ohms(stageDesign.components.R1, st.resistorSeries)} and ${ohms(stageDesign.components.R2, st.resistorSeries)}.`
+		: `Real resistors only come in standard values, so R1 and R2 get rounded to the nearest ${stockValue(st.resistorSeries)}${pairedTail(st.resistorSeries, [stageDesign.components.R1, stageDesign.components.R2])}: ${ohms(stageDesign.components.R1, st.resistorSeries)} and ${ohms(stageDesign.components.R2, st.resistorSeries)}.`;
 	const blocks = [
 		p(
 			'The MFB (multiple-feedback) low-pass has one internal node, call it S: R1 from the input to S, C1 from S to ground, R2 from S to the op-amp\'s inverting input, R3 from the output back to S, and C2 from the inverting input to the output. The non-inverting input is grounded, so with negative feedback the inverting input is a virtual ground (0 V, no current into it). Two current balances (KCL) describe the whole circuit, one at S and one at the inverting input:'
@@ -448,22 +496,15 @@ export function explainMfb(stageDesign, targetWn, targetQ, { shownIn = 'which is
 			'Five parts, two equations: three choices are free. Choosing R1 = R3 forces the DC gain c/b to exactly -1 (the stage inverts, which does not matter for a low-pass magnitude), and picking C1 and C2 leaves two equations in two unknowns, R1 and R2. Writing x = 1/R1 = 1/R3 and y = 1/R2, the a equation says 2x + y = aC1 and the b equation says xy = bC1C2; eliminating y gives one quadratic in x:'
 		),
 		eq('2x^2 - (aC_1)\\,x + bC_1C_2 = 0'),
-		p(
-			stageDesign.manual
-				? 'A quadratic only has a real solution when its discriminant is positive, which here means C1/C2 >= 8Q^2. C1 and C2 below were entered by hand; the resistors are solved directly from them:'
-				: 'A quadratic only has a real solution when its discriminant is positive, which here means C1/C2 >= 8Q^2. This tool searches a preferred capacitor series for a pair that clears that bar and lands both resistors in a sane 200 ohm to 2 megohm range:'
-		),
+		p(capsText),
 		eq(
 			`C_1 = ${formatFarads(st.C1)},\\ \\ C_2 = ${formatFarads(st.C2)}\\ \\ \\left(\\text{ratio } ${(st.C1 / st.C2).toFixed(1)}\\text{:1, needs} \\geq 8Q^2 = ${(8 * targetQ * targetQ).toFixed(1)}\\text{:1}\\right)`
 		),
-		eq(`\\Delta = (aC_1)^2 - 8bC_1C_2 = ${exp4(st.discriminant)}`),
-		eq(
-			`x = \\dfrac{aC_1 + \\sqrt{\\Delta}}{4} = ${exp4(st.x)}\\ \\ \\Rightarrow\\ \\ R_1 = R_3 = \\dfrac{1}{x} = ${formatOhms(stageDesign.theoretical.R1)}`
-		),
+		eq(`\\Delta = (aC_1)^2 - 8bC_1C_2 = ${exp4(st.discriminant)}${root === 0 ? ' \\ \\rightarrow\\ 0' : ''}`),
+		...(rootText ? [p(rootText)] : []),
+		eq(`x = ${xTex} = ${exp4(st.x)}\\ \\ \\Rightarrow\\ \\ R_1 = R_3 = \\dfrac{1}{x} = ${formatOhms(stageDesign.theoretical.R1)}`),
 		eq(`R_2 = \\dfrac{1}{y} = \\dfrac{1}{aC_1 - 2x} = ${formatOhms(stageDesign.theoretical.R2)}`),
-		p(
-			`Real resistors only come in standard values, so R1 and R2 get rounded to the nearest ${stockValue(st.resistorSeries)}${pairedTail(st.resistorSeries, [stageDesign.components.R1, stageDesign.components.R2])}: ${ohms(stageDesign.components.R1, st.resistorSeries)} and ${ohms(stageDesign.components.R2, st.resistorSeries)}. Plugging those rounded values back into a and b (not the target ones) gives what this stage will actually do, ${shownIn}:`
-		),
+		p(`${roundText} Plugging those rounded values back into a and b (not the target ones) gives what this stage will actually do, ${shownIn}:`),
 		eq(
 			`f_0' = ${formatHz(stageDesign.actual.wn / (2 * Math.PI))},\\quad Q' = ${stageDesign.actual.q.toFixed(4)}`
 		)
@@ -472,7 +513,7 @@ export function explainMfb(stageDesign, targetWn, targetQ, { shownIn = 'which is
 }
 
 /** Sallen-Key low-pass component derivation for one realized stage. */
-export function explainSallenKey(stageDesign, targetQ) {
+export function explainSallenKey(stageDesign, targetQ, { searched = false } = {}) {
 	const st = stageDesign.steps;
 	const blocks = [
 		p(
@@ -498,7 +539,9 @@ export function explainSallenKey(stageDesign, targetQ) {
 				]
 			: [
 					p(
-						'That leaves only one free choice: C_bottom. Once it is picked (from a preferred series), C_top is whatever the ratio above says it has to be, rounded to the nearest E12 value. R is then solved from the ωn equation using the two capacitor values that will actually be used, so that C_top\'s rounding cannot shift f0:'
+						searched
+							? `That leaves only one free choice: C_bottom. The search over the whole filter tried every C_bottom in stock with the two stocked C_top on each side of the ratio, and R just below and just above the value those two ask for; it kept these, ${SEARCH_KEPT}. R is solved from the ωn equation with the two capacitor values that will actually be used:`
+							: 'That leaves only one free choice: C_bottom. Once it is picked (from a preferred series), C_top is whatever the ratio above says it has to be, rounded to the nearest E12 value. R is then solved from the ωn equation using the two capacitor values that will actually be used, so that C_top\'s rounding cannot shift f0:'
 					),
 					eq(
 						`C_{bottom} = ${formatFarads(st.Cbottom)}\\ \\ \\Rightarrow\\ \\ C_{top} = \\text{ratio} \\times C_{bottom} = ${formatFarads(st.Ctarget)}\\ \\rightarrow\\ \\text{E12: } ${formatFarads(st.CtopRounded)}`
@@ -506,7 +549,7 @@ export function explainSallenKey(stageDesign, targetQ) {
 					eq(`R = \\dfrac{1}{\\omega_n\\sqrt{C_{top}C_{bottom}}} = ${formatOhms(st.Rtarget)}`)
 				]),
 		p(
-			`Rounded to the nearest preferred values: R = ${ohms(stageDesign.components.R1, st.resistorSeries)}, C_top = ${formatFarads(stageDesign.components.Ctop)}. Recomputing ωn and Q from those rounded values (not the targets) gives what this stage will actually do:`
+			`${searched ? 'Rounded to the stocked values the search kept' : 'Rounded to the nearest preferred values'}: R = ${ohms(stageDesign.components.R1, st.resistorSeries)}, C_top = ${formatFarads(stageDesign.components.Ctop)}. Recomputing ωn and Q from those rounded values (not the targets) gives what this stage will actually do:`
 		),
 		eq(
 			`f_0' = ${formatHz(stageDesign.actual.wn / (2 * Math.PI))},\\quad Q' = ${stageDesign.actual.q.toFixed(4)}`
@@ -558,7 +601,7 @@ function bufferBlocks(stageDesign, kind) {
 }
 
 /** First-order RC derivation for one realized stage. */
-export function explainFirstOrder(stageDesign) {
+export function explainFirstOrder(stageDesign, { searched = false } = {}) {
 	const st = stageDesign.steps;
 	const blocks = [
 		p(
@@ -569,7 +612,9 @@ export function explainFirstOrder(stageDesign) {
 		p(
 			stageDesign.manual
 				? 'C below was entered by hand instead of picked from a preferred series; R is solved from it the same way, then rounded in turn:'
-				: 'C is picked from a preferred capacitor series first, and R is solved from it; R then gets rounded in turn, same as every other stage in this design:'
+				: searched
+					? `The search over the whole filter tried the capacitors in stock, R solved from each and rounded just below and just above; it kept these, ${SEARCH_KEPT}:`
+					: 'C is picked from a preferred capacitor series first, and R is solved from it; R then gets rounded in turn, same as every other stage in this design:'
 		),
 		eq(`C = ${formatFarads(st.C)}\\ \\ \\Rightarrow\\ \\ R = \\dfrac{\\tau}{C} = ${formatOhms(st.Rtarget)}`),
 		p(`Rounded to R = ${ohms(stageDesign.components.R, st.resistorSeries)}.`),
@@ -580,7 +625,7 @@ export function explainFirstOrder(stageDesign) {
 }
 
 /** MFB high-pass component derivation for one realized stage. */
-export function explainMfbHp(stageDesign, targetWn, targetQ) {
+export function explainMfbHp(stageDesign, targetWn, targetQ, { searched = false } = {}) {
 	const st = stageDesign.steps;
 	const blocks = [
 		p(
@@ -604,10 +649,12 @@ export function explainMfbHp(stageDesign, targetWn, targetQ) {
 		p(
 			stageDesign.manual
 				? `C below was entered by hand instead of searched for: ${formatFarads(st.C)}.`
-				: `This tool searches a preferred capacitor series for a C that lands both resistors in a sane 200 ohm to 2 megohm range: ${formatFarads(st.C)}.`
+				: searched
+					? `The search over the whole filter tried the capacitors in stock and each resistor just below and just above its ideal value; it kept C = ${formatFarads(st.C)}, ${SEARCH_KEPT}.`
+					: `This tool searches a preferred capacitor series for a C that lands both resistors in a sane 200 ohm to 2 megohm range: ${formatFarads(st.C)}.`
 		),
 		p(
-			`Real resistors only come in standard values, so R1 and R2 get rounded to the nearest ${stockValue(st.resistorSeries)}${pairedTail(st.resistorSeries, [stageDesign.components.R1, stageDesign.components.R2])}: ${ohms(stageDesign.components.R1, st.resistorSeries)} and ${ohms(stageDesign.components.R2, st.resistorSeries)}. Plugging those rounded values back into a and b (not the target ones) gives what this stage will actually do, which is what the "actual" row above and the Bode plot further down are built from:`
+			`${searched ? `R1 and R2 are each rounded to the ${stockValue(st.resistorSeries)} just below or just above${pairedTail(st.resistorSeries, [stageDesign.components.R1, stageDesign.components.R2])}, whichever the search kept` : `Real resistors only come in standard values, so R1 and R2 get rounded to the nearest ${stockValue(st.resistorSeries)}${pairedTail(st.resistorSeries, [stageDesign.components.R1, stageDesign.components.R2])}`}: ${ohms(stageDesign.components.R1, st.resistorSeries)} and ${ohms(stageDesign.components.R2, st.resistorSeries)}. Plugging those rounded values back into a and b (not the target ones) gives what this stage will actually do, which is what the "actual" row above and the Bode plot further down are built from:`
 		),
 		eq(
 			`f_0' = ${formatHz(stageDesign.actual.wn / (2 * Math.PI))},\\quad Q' = ${stageDesign.actual.q.toFixed(4)}`
@@ -617,7 +664,7 @@ export function explainMfbHp(stageDesign, targetWn, targetQ) {
 }
 
 /** Sallen-Key high-pass component derivation for one realized stage. */
-export function explainSallenKeyHp(stageDesign, targetQ) {
+export function explainSallenKeyHp(stageDesign, targetQ, { searched = false } = {}) {
 	const st = stageDesign.steps;
 	const blocks = [
 		p(
@@ -637,12 +684,14 @@ export function explainSallenKeyHp(stageDesign, targetQ) {
 		p(
 			stageDesign.manual
 				? 'C below was entered by hand instead of searched for; both resistors are solved directly from it and the target:'
-				: 'Unlike low-pass, both resistors follow directly from the one free choice, C (the two capacitors are equal by design, so there is nothing to derive a ratio for):'
+				: searched
+					? `Unlike low-pass, both resistors follow directly from the one free choice, C (the two capacitors are equal by design). The search over the whole filter tried the capacitors in stock and each resistor just below and just above its ideal value; it kept these, ${SEARCH_KEPT}:`
+					: 'Unlike low-pass, both resistors follow directly from the one free choice, C (the two capacitors are equal by design, so there is nothing to derive a ratio for):'
 		),
 		eq(`R_{top} = \\dfrac{1}{2Q\\,\\omega_n\\,C} = ${formatOhms(st.RtopTarget)}`),
 		eq(`R_{bottom} = 4Q^2 \\times R_{top} = ${formatOhms(st.RbottomTarget)}`),
 		p(
-			`Rounded to the nearest preferred values: R_top = ${ohms(stageDesign.components.Rtop, st.resistorSeries)}, R_bottom = ${ohms(stageDesign.components.Rbottom, st.resistorSeries)}, C = ${formatFarads(stageDesign.components.C1)}. Recomputing ωn and Q from those rounded values (not the targets) gives what this stage will actually do:`
+			`${searched ? 'Rounded to the stocked values the search kept' : 'Rounded to the nearest preferred values'}: R_top = ${ohms(stageDesign.components.Rtop, st.resistorSeries)}, R_bottom = ${ohms(stageDesign.components.Rbottom, st.resistorSeries)}, C = ${formatFarads(stageDesign.components.C1)}. Recomputing ωn and Q from those rounded values (not the targets) gives what this stage will actually do:`
 		),
 		eq(
 			`f_0' = ${formatHz(stageDesign.actual.wn / (2 * Math.PI))},\\quad Q' = ${stageDesign.actual.q.toFixed(4)}`
@@ -652,7 +701,7 @@ export function explainSallenKeyHp(stageDesign, targetQ) {
 }
 
 /** First-order high-pass RC derivation for one realized stage. */
-export function explainFirstOrderHp(stageDesign) {
+export function explainFirstOrderHp(stageDesign, { searched = false } = {}) {
 	const st = stageDesign.steps;
 	const blocks = [
 		p(
@@ -663,7 +712,9 @@ export function explainFirstOrderHp(stageDesign) {
 		p(
 			stageDesign.manual
 				? 'C below was entered by hand instead of picked from a preferred series; R is solved from it the same way, then rounded in turn:'
-				: 'C is picked from a preferred capacitor series first, and R is solved from it; R then gets rounded in turn, same as every other stage in this design:'
+				: searched
+					? `The search over the whole filter tried the capacitors in stock, R solved from each and rounded just below and just above; it kept these, ${SEARCH_KEPT}:`
+					: 'C is picked from a preferred capacitor series first, and R is solved from it; R then gets rounded in turn, same as every other stage in this design:'
 		),
 		eq(`C = ${formatFarads(st.C)}\\ \\ \\Rightarrow\\ \\ R = \\dfrac{\\tau}{C} = ${formatOhms(st.Rtarget)}`),
 		p(`Rounded to R = ${ohms(stageDesign.components.R, st.resistorSeries)}.`),
@@ -690,7 +741,7 @@ function towThomasComparison(targetQ) {
 }
 
 /** Tow-Thomas low-pass component derivation for one realized stage. */
-export function explainTowThomas(stageDesign, targetWn, targetQ) {
+export function explainTowThomas(stageDesign, targetWn, targetQ, { searched = false } = {}) {
 	const st = stageDesign.steps;
 	const c = stageDesign.components;
 	const paired = pairsSentence([['R', c.Ra], ['Rd', c.Rd]], st.resistorSeries);
@@ -717,7 +768,7 @@ export function explainTowThomas(stageDesign, targetWn, targetQ) {
 		),
 		eq('\\omega_n = \\dfrac{1}{RC}, \\qquad Q = \\dfrac{R_d}{R}, \\qquad \\text{DC gain} = \\dfrac{R}{R_1} = 1'),
 		p(
-			`This stage's target is f0 = ${formatHz(f0)} (omega_n = ${n2(targetWn)} rad/s), Q = ${targetQ.toFixed(4)}. ${stageDesign.manual ? 'C below was entered by hand; both capacitors take that value.' : 'C is picked from a preferred series so that R lands near 10 kilo-ohm, then'} R follows from omega_n, Rd from Q against the ROUNDED R (so the realized Q = Rd/R lands as close as the series allows), and r is any equal pair:`
+			`This stage's target is f0 = ${formatHz(f0)} (omega_n = ${n2(targetWn)} rad/s), Q = ${targetQ.toFixed(4)}. ${stageDesign.manual ? 'C below was entered by hand; both capacitors take that value.' : searched ? `The search over the whole filter tried the capacitors in stock, and R and Rd each just below and just above their ideal values; it kept these, ${SEARCH_KEPT}.` : 'C is picked from a preferred series so that R lands near 10 kilo-ohm, then'} R follows from omega_n, Rd from Q against the ROUNDED R${searched ? '' : ' (so the realized Q = Rd/R lands as close as the series allows)'}, and r is any equal pair:`
 		),
 		eq(`C = ${formatFarads(st.C)}\\ \\ \\Rightarrow\\ \\ R = \\dfrac{1}{\\omega_n C} = ${formatOhms(st.Rtarget)} \\rightarrow ${formatOhms(st.Rrounded)}`),
 		eq(`R_d = Q \\times R = ${targetQ.toFixed(4)} \\times ${formatOhms(st.Rrounded)} = ${formatOhms(st.RdTarget)} \\rightarrow ${formatOhms(c.Rd)}, \\qquad R_1 = R_a = R_b = ${formatOhms(c.Ra)}, \\qquad r = ${formatOhms(c.r)}`),
@@ -734,7 +785,7 @@ export function explainTowThomas(stageDesign, targetWn, targetQ) {
 }
 
 /** Tow-Thomas high-pass (feedforward input capacitor) derivation for one realized stage. */
-export function explainTowThomasHp(stageDesign, targetWn, targetQ) {
+export function explainTowThomasHp(stageDesign, targetWn, targetQ, { searched = false } = {}) {
 	const st = stageDesign.steps;
 	const c = stageDesign.components;
 	const paired = pairsSentence([['R', c.Ra], ['Rd', c.Rd]], st.resistorSeries);
@@ -753,7 +804,7 @@ export function explainTowThomasHp(stageDesign, targetWn, targetQ) {
 		p('omega_n and Q are the same expressions as the low-pass form; the high-frequency gain is Cin/C1, so Cin = C gives a unity-magnitude, inverting high-pass. With equal capacitors and equal resistors:'),
 		eq('\\omega_n = \\dfrac{1}{RC}, \\qquad Q = \\dfrac{R_d}{R}, \\qquad H(\\infty) = -\\dfrac{C_{in}}{C} = -1'),
 		p(
-			`This stage's target is f0 = ${formatHz(f0)} (omega_n = ${n2(targetWn)} rad/s), Q = ${targetQ.toFixed(4)}. ${stageDesign.manual ? 'C below was entered by hand; all three capacitors take that value.' : 'C is picked from a preferred series so that R lands near 10 kilo-ohm, then'} R follows from omega_n and Rd from Q against the rounded R:`
+			`This stage's target is f0 = ${formatHz(f0)} (omega_n = ${n2(targetWn)} rad/s), Q = ${targetQ.toFixed(4)}. ${stageDesign.manual ? 'C below was entered by hand; all three capacitors take that value.' : searched ? `The search over the whole filter tried the capacitors in stock, and R and Rd each just below and just above their ideal values; it kept these, ${SEARCH_KEPT}.` : 'C is picked from a preferred series so that R lands near 10 kilo-ohm, then'} R follows from omega_n and Rd from Q against the rounded R:`
 		),
 		eq(`C_{in} = C_1 = C_2 = ${formatFarads(st.C)}\\ \\ \\Rightarrow\\ \\ R = \\dfrac{1}{\\omega_n C} = ${formatOhms(st.Rtarget)} \\rightarrow ${formatOhms(st.Rrounded)}`),
 		eq(`R_d = Q \\times R = ${targetQ.toFixed(4)} \\times ${formatOhms(st.Rrounded)} = ${formatOhms(st.RdTarget)} \\rightarrow ${formatOhms(c.Rd)}, \\qquad R_a = R_b = ${formatOhms(c.Ra)}, \\qquad r = ${formatOhms(c.r)}`),
@@ -904,7 +955,11 @@ export function explainBandTransform(design) {
 				: `\\Omega_{sl} = \\dfrac{|${hzNum(fsl)}^2 - ${hzNum(f0)}^2|}{${hzNum(fsl)} \\times ${hzNum(B)}} = ${n4(design.omegaLow)}, \\qquad \\Omega_{sh} = \\dfrac{|${hzNum(fsh)}^2 - ${hzNum(f0)}^2|}{${hzNum(fsh)} \\times ${hzNum(B)}} = ${n4(design.omegaHigh)}`
 		),
 		p(
-			`With n = ${design.n} the prototype is designed like any low-pass of this tool, with its passband edge at B and Amax = ${design.amaxDb} dB, so Amax lands exactly on fl and fh whatever the response.`
+			placedScale(design.lowpass) !== 1
+				? `With n = ${design.n} the prototype is designed like any low-pass of this tool, with its passband edge at B and Amax = ${design.amaxDb} dB, then centred in its template (panel 02): every frequency of the prototype is multiplied by σ = ${n4(placedScale(design.lowpass))}, so Amax is lost at Ω = σ, which lands just outside fl and fh.`
+				: placedRipple(design.lowpass) !== null
+					? `With n = ${design.n} the prototype is designed like any low-pass of this tool, with its passband edge at B and, centred in its template (panel 02), a ripple of ${n4(placedRipple(design.lowpass))} dB under Amax = ${design.amaxDb} dB: that ripple is lost exactly at fl and fh.`
+					: `With n = ${design.n} the prototype is designed like any low-pass of this tool, with its passband edge at B and Amax = ${design.amaxDb} dB, so Amax lands exactly on fl and fh whatever the response.`
 		)
 	];
 

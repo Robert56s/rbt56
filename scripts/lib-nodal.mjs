@@ -68,6 +68,12 @@ export function opampParams(text) {
  * A(s) = AOL / (1 + s AOL / (2 pi GBW)).
  */
 export function solveAt(elements, freqHz, opamp = null) {
+	const v = solveNodes(elements, freqHz, opamp);
+	return v.get('vout') ?? cx(0);
+}
+
+/** The same solve, every node's voltage: a Map from node name to { re, im }. */
+export function solveNodes(elements, freqHz, opamp = null) {
 	const w = 2 * Math.PI * freqHz;
 	const nodes = new Map();
 	const idx = (n) => {
@@ -154,8 +160,7 @@ export function solveAt(elements, freqHz, opamp = null) {
 		for (let c = r + 1; c < size; c++) s = sub(s, mul(A[r][c], x[c]));
 		x[r] = abs(A[r][r]) < 1e-18 ? cx(0) : div(s, A[r][r]);
 	}
-	const vout = nodes.get('vout');
-	return vout === undefined ? cx(0) : x[vout];
+	return new Map([...nodes].map(([name, k]) => [name, x[k]]));
 }
 
 /**

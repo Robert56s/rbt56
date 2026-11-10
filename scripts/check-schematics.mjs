@@ -391,6 +391,73 @@ console.log();
 	}
 	console.log(`${sweepBugs === 0 ? 'PASS' : 'FAIL'}  sweep: ${SWEEP.length} distinct stage diagrams the filter page draws with two in series allowed (${withPairs} with a pair label)`);
 	bugs += sweepBugs;
+
+	// The parts the page shows now come from its part search on the whole
+	// filter (partSearch.js), which can land on other values than the
+	// designers above (a 150 k with 47 pF, a 220 ohm under the floor where
+	// the template needs it): every stage of the page's settings
+	// (lib-parts.mjs) and of a sweep of low-pass and high-pass designs,
+	// every response and topology, each stock, both placements, drawn as
+	// the page draws it (a stage on the full grid without pair labels)
+	const { PAGE_CASES, pageParts } = await import('./lib-parts.mjs');
+	const drawAny = (d, opts) => (d.topology === 'boctor' || d.topology === 'boctorHp' ? buildBoctorDiagram(d.components, { ...opts, highPass: d.topology === 'boctorHp' }) : draw(d, opts));
+	const PAGE_SWEEP = [];
+	const pageSeen = new Set();
+	let pagePairs = 0;
+	const addPage = (name, args) => {
+		let result;
+		try {
+			result = pageParts(args).result;
+		} catch (e) {
+			PAGE_SWEEP.push([`${name} THROWS ${e.message}`, () => ({ svg: '', viewBox: '0 0 1 1' })]);
+			return;
+		}
+		const option = args.resistorStock ?? 'E24';
+		result.stages.forEach((s, i) => {
+			if (!s) return;
+			let diagram;
+			try {
+				diagram = drawAny(s, { ohms: (v) => pairDiagramLabel(v, option, formatOhms, Boolean(args.resistorPairs) && !s.stockShortfall) });
+			} catch (e) {
+				PAGE_SWEEP.push([`${name} stage ${i + 1} THROWS ${e.message}`, () => ({ svg: '', viewBox: '0 0 1 1' })]);
+				return;
+			}
+			if (pageSeen.has(diagram.svg)) return;
+			pageSeen.add(diagram.svg);
+			if (/<text[^>]*>[^<]* \+ [^<]*<\/text>/.test(diagram.svg)) pagePairs++;
+			PAGE_SWEEP.push([`${name} stage ${i + 1} (${s.topology})`, () => diagram]);
+		});
+	};
+	for (const placement of ['edge', 'centred']) {
+		for (const [label, spec] of PAGE_CASES) addPage(`filter/page ${label} ${placement}`, { ...spec, placement });
+		for (const [sn, parts] of STOCKS) {
+			const stock = { resistorStock: parts.resistorSeries, capacitorStock: parts.capacitors, resistorPairs: parts.pairs };
+			for (const response of ['butterworth', 'chebyshev', 'legendre', 'bessel', 'inverseChebyshev', 'elliptic']) {
+				const zeros = response === 'inverseChebyshev' || response === 'elliptic';
+				for (const topology of zeros ? ['towThomas', 'boctor'] : ['mfb', 'sallenKey', 'towThomas']) {
+					for (const [filterType, fp, fs] of [['lowpass', 1000, 2500], ['highpass', 20000, 8000]]) {
+						addPage(`filter/page ${filterType} ${response} ${topology} ${sn} ${placement}`, { filterType, response, topology, amaxDb: 1, aminDb: 40, fp, fs, order: null, capOverrides: {}, placement, ...stock });
+					}
+				}
+			}
+		}
+	}
+	let pageBugs = 0;
+	for (const [name, build] of PAGE_SWEEP) {
+		const result = checkDiagram(name, build());
+		const bad = result.issues.filter((i) => i.level === 'bug');
+		if (/ THROWS /.test(name)) {
+			pageBugs++;
+			console.log(`FAIL  ${name}`);
+			continue;
+		}
+		if (!bad.length) continue;
+		pageBugs += bad.length;
+		console.log(`FAIL  ${name}`);
+		for (const i of bad) console.log(`      ! [${i.kind}] ${i.msg}`);
+	}
+	console.log(`${pageBugs === 0 ? 'PASS' : 'FAIL'}  sweep: ${PAGE_SWEEP.length} distinct stage diagrams of the parts the page's part search picks, both placements (${pagePairs} with a pair label)`);
+	bugs += pageBugs;
 }
 
 // Every stage the narrow band-pass draws, built as the page builds it

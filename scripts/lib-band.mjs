@@ -38,15 +38,16 @@ export const BAND_SPEC_NAMES = { narrowBp: 'narrow band-pass', defaultBp: 'defau
  * The transformed design of a band spec, written either way: with an Amin
  * per edge (aminDbLow, aminDbHigh), per side as the cascade takes it
  * (aminDbHp at fsl, aminDbLp at fsh), or one aminDb. One Amax: amaxDb, or
- * the smaller of the two sides', as the page does.
+ * the smaller of the two sides', as the page does. `placement` places the
+ * prototype in its template ('edge', the library's default, or 'centred').
  */
-export function designTransformed(spec, response, order = null) {
+export function designTransformed(spec, response, order = null, placement = 'edge') {
 	const { filterType, fl, fh, fsl, fsh } = spec;
 	const amaxDb = spec.amaxDb ?? Math.min(spec.amaxDbHp, spec.amaxDbLp);
-	if (filterType === 'bandstop') return designBandStopTransformed({ response, amaxDb, aminDb: spec.aminDb, fl, fh, fsl, fsh, order });
+	if (filterType === 'bandstop') return designBandStopTransformed({ response, amaxDb, aminDb: spec.aminDb, fl, fh, fsl, fsh, order, placement });
 	const aminDbLow = spec.aminDbLow ?? spec.aminDbHp ?? spec.aminDb;
 	const aminDbHigh = spec.aminDbHigh ?? spec.aminDbLp ?? spec.aminDb;
-	return designBandPassTransformed({ response, amaxDb, aminDbLow, aminDbHigh, fl, fh, fsl, fsh, order });
+	return designBandPassTransformed({ response, amaxDb, aminDbLow, aminDbHigh, fl, fh, fsl, fsh, order, placement });
 }
 
 /** The page's menus for a transformed design: the band-pass stages' circuit and the notch stages'. */

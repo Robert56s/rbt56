@@ -36,7 +36,8 @@
 	import { onMount, tick } from 'svelte';
 	import { isRestricted, PAIR_LIMIT_MAX, parseStock, STOCK_CHOICES } from '$lib/stock';
 
-	let { id = 'stock', stock = $bindable(), resistorText = $bindable(), capacitorText = $bindable(), pairs = $bindable(false), pairLimit = $bindable(null) } = $props();
+	// judgedOn: 'targets' when each part is kept for what it does to its own stage, 'template' when a search keeps the set that meets the whole filter's template best
+	let { id = 'stock', stock = $bindable(), resistorText = $bindable(), capacitorText = $bindable(), pairs = $bindable(false), pairLimit = $bindable(null), judgedOn = 'targets' } = $props();
 
 	const resistorCount = $derived(parseStock(resistorText, 'resistor').length);
 	const capacitorCount = $derived(parseStock(capacitorText, 'capacitor').length);
@@ -171,11 +172,22 @@
 	<p class="note">
 		{#if mode === 'single'}
 			Each resistor is a single value from the list.
+		{:else if mode === 'help' && judgedOn === 'template'}
+			Where the closest single resistor misses its value by more than 2 %, two resistors in series
+			may stand in for it, and the search keeps them where the whole filter meets its template
+			better with them. Capacitors stay single parts. The tables give both values, such as
+			64.2 kΩ (56.0 kΩ + 8.20 kΩ).
 		{:else if mode === 'help'}
 			Where the closest single resistor misses a part that sets the result (a frequency, a Q, a
 			gain, a bias) by more than 2 %, two resistors in series stand in for it, as long as the pair
 			at least halves the miss and the circuit as a whole comes out no worse. Capacitors stay
 			single parts. The tables give both values, such as 64.2 kΩ (56.0 kΩ + 8.20 kΩ).
+		{:else if judgedOn === 'template'}
+			Two resistors in series may stand in where the closest single one misses its value by more
+			than 2 %. The whole circuit holds at most {pairLimit} {plural(pairLimit)}, and each resistor built
+			from two counts as one pair. The search keeps the set of parts that meets the template best
+			within that, which may use fewer pairs or none, and every other resistor is a single part.
+			Capacitors are never paired.
 		{:else}
 			Two resistors in series stand in where the closest single one misses a part that sets the
 			result by more than 2 %. The whole circuit holds at most {pairLimit} {plural(pairLimit)}, and each

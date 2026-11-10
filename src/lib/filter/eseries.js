@@ -89,16 +89,23 @@ export function nearestValue(target, values) {
 	return best;
 }
 
-/** Nearest stocked resistor: `option` is a series name or an explicit list of ohms. */
+/**
+ * Nearest stocked resistor: `option` is a series name or an explicit list of
+ * ohms. Found by bisection in the sorted stock (stockResistor below), which
+ * gives the value a pass over every one would, the lower one on a tie.
+ */
 export function nearestResistor(target, option) {
-	if (Array.isArray(option)) return nearestValue(target, normalizeList(option));
-	return nearestInSeries(target, SERIES[option] ?? SERIES.E24);
+	return stockNearestOf(stockListOf(option), target);
 }
 
-/** Nearest stocked capacitor: `option` is null (the E12 grid) or an explicit list of farads. */
+/** Nearest stocked capacitor: `option` is null (the E12 grid, 1 pF to 820 uF) or an explicit list of farads, by bisection the same way. */
 export function nearestCapacitor(target, option) {
-	if (Array.isArray(option)) return nearestValue(target, normalizeList(option));
-	return nearestInSeries(target, SERIES.E12, -12, -3);
+	return stockNearestOf(Array.isArray(option) ? stockListOf(option) : stockCapacitorGrid(), target);
+}
+
+/** stockNearestIn, and the smallest value for a target that is not a finite positive number, as a pass over every value gives. */
+function stockNearestOf(list, target) {
+	return target > 0 && target < Infinity ? stockNearestIn(list, target) : list[0];
 }
 
 /**
@@ -232,17 +239,55 @@ function stockIndex(list, target) {
 }
 
 /**
- * The stocked resistor for a target: nearestResistor's value (the lower
- * one on a tie, as it keeps the first it finds), or pairedResistor's when
- * `pairs` lets a list pair it.
+ * The stocked resistor for a target: the nearest single value (the lower
+ * one on a tie), or pairedResistor's when `pairs` lets a list pair it.
  */
 export function stockResistor(target, option, pairs = false) {
 	if (pairs && Array.isArray(option)) return pairedResistor(target, option, pairs);
-	const list = stockListOf(option);
+	return stockNearestIn(stockListOf(option), target);
+}
+
+/** The value of a sorted list nearest a target by relative (log) distance, the lower one on a tie (the first, below it, for a target that is not a positive number). */
+function stockNearestIn(list, target) {
 	const i = stockIndex(list, target);
 	if (i === 0) return list[0];
 	if (i === list.length) return list[list.length - 1];
 	return Math.abs(Math.log(list[i] / target)) < Math.abs(Math.log(list[i - 1] / target)) ? list[i] : list[i - 1];
+}
+
+/** The E12 capacitor grid nearestCapacitor rounds to without a list, built once. */
+let stockCapacitors = null;
+function stockCapacitorGrid() {
+	if (!stockCapacitors) stockCapacitors = seriesValues(SERIES.E12, -12, -3);
+	return stockCapacitors;
+}
+
+/**
+ * The stocked resistors a search can round a target to: the value just
+ * below it and the one just above (one value when the target is stocked),
+ * by bisection. With `pairs` and a list, also the sums of two in series
+ * just below and just above, under pairedResistor's rule: only where the
+ * nearest single value misses by more than PAIR_TRIGGER, and each only when
+ * it at least halves that miss. Returns [{ value, pair }], pair true for a
+ * sum of two.
+ */
+export function stockNeighbours(target, option, pairs = false) {
+	if (!(target > 0)) return [];
+	const list = stockListOf(option);
+	const i = stockIndex(list, target);
+	const out = [];
+	if (i > 0) out.push({ value: list[i - 1], pair: false });
+	if (i < list.length) out.push({ value: list[i], pair: false });
+	if (!pairs || !Array.isArray(option)) return out;
+	const miss = Math.min(...out.map((r) => Math.abs(Math.log(r.value / target))));
+	if (miss <= Math.log(1 + PAIR_TRIGGER)) return out;
+	const table = pairTable(option);
+	const j = firstPairAtOrAbove(table, target);
+	for (const p of [table[j - 1], table[j]]) {
+		if (!p || out.some((r) => r.value === p.sum) || list.includes(p.sum)) continue;
+		if (Math.abs(Math.log(p.sum / target)) <= miss / 2) out.push({ value: p.sum, pair: true });
+	}
+	return out;
 }
 
 /** The stocked resistors from `low` to `high`, both included, ascending. */
@@ -282,7 +327,10 @@ export function ratioPair(ratio, option, { pairs = false, other: name = 'other',
 /** The two list values a resistor is built from, [larger, smaller], or null when the list has it as one part. */
 export function seriesPair(value, option) {
 	if (!Array.isArray(option) || !(value > 0)) return null;
-	if (normalizeList(option).some((v) => Math.abs(v / value - 1) < 1e-9)) return null;
+	// a value of the list itself is one part (the sorted list, around where the value would sit)
+	const list = stockListOf(option);
+	const i = stockIndex(list, value);
+	for (let j = Math.max(0, i - 1); j <= Math.min(list.length - 1, i + 1); j++) if (Math.abs(list[j] / value - 1) < 1e-9) return null;
 	const table = pairTable(option);
 	const p = table[firstPairAtOrAbove(table, value * (1 - 1e-9))];
 	return p && Math.abs(p.sum / value - 1) < 1e-9 ? [p.a, p.b] : null;

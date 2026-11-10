@@ -19,7 +19,57 @@
  * Elements of any other kind are skipped.
  */
 export function nodalResponse(elements, freqHz, { input = 'vin', output = 'vout', gbw = null, aol = Infinity } = {}) {
-	const w = 2 * Math.PI * freqHz;
+	const net = nodalNetlist(elements, { input, gbw, aol });
+	const { xr, xi } = nodalAt(net, freqHz);
+	const o = net.index.get(output);
+	return o === undefined ? { re: 0, im: 0 } : { re: xr[o], im: xi[o] };
+}
+
+/**
+ * The same solve read out in full, for the currents: every node's voltage
+ * (a Map by node name), the current the 1 V source delivers into the
+ * input, and for each op-amp the voltage of its output and the current it
+ * delivers into what hangs on it, all { re, im }. An op-amp's load is
+ * |voltage| / |current| of its output.
+ */
+export function nodalSolve(elements, freqHz, opts = {}) {
+	const net = nodalNetlist(elements, { input: 'vin', gbw: null, aol: Infinity, ...opts });
+	const { xr, xi } = nodalAt(net, freqHz);
+	const voltages = new Map([...net.index].map(([name, i]) => [name, { re: xr[i], im: xi[i] }]));
+	return { voltages, ...nodalCurrents(net, xr, xi) };
+}
+
+/** nodalSolve at several frequencies, the netlist read once; each result holds the source's and the op-amps' figures, without the Map of voltages. */
+export function nodalSolveAll(elements, freqs, opts = {}) {
+	const net = nodalNetlist(elements, { input: 'vin', gbw: null, aol: Infinity, ...opts });
+	const work = nodalWork(net);
+	return freqs.map((f) => {
+		const { xr, xi } = nodalAt(net, f, work);
+		return nodalCurrents(net, xr, xi);
+	});
+}
+
+/** The augmented matrix of a netlist's system, real and imaginary parts, as rows over one buffer each (cleared before every solve, so one serves every frequency). */
+function nodalWork(net) {
+	const size = net.n + 1 + net.opamps.length;
+	const bufRe = new Float64Array(size * (size + 1));
+	const bufIm = new Float64Array(size * (size + 1));
+	const rows = (buf) => Array.from({ length: size }, (_, r) => buf.subarray(r * (size + 1), (r + 1) * (size + 1)));
+	return { bufRe, bufIm, re: rows(bufRe), im: rows(bufIm) };
+}
+
+/** The source's current and each op-amp's output voltage and current, from the unknowns: each unknown current flows from its node into the source or the op-amp, so the circuit's side is minus that. */
+function nodalCurrents(net, xr, xi) {
+	const { n, opamps } = net;
+	const at = (i) => (i >= 0 ? { re: xr[i], im: xi[i] } : { re: 0, im: 0 });
+	return {
+		source: { re: -xr[n], im: -xi[n] },
+		opamps: opamps.map((e, k) => ({ name: e.name, node: e.nodes[2], voltage: at(e.at[2]), current: { re: -xr[n + 1 + k], im: -xi[n + 1 + k] } }))
+	};
+}
+
+/** A netlist read for the solver: its node index, its resistors and capacitors in order with their nodes numbered, and its op-amps. */
+function nodalNetlist(elements, { input, gbw, aol }) {
 	const index = new Map();
 	const nodeOf = (name) => {
 		if (name === '0') return -1;
@@ -29,12 +79,20 @@ export function nodalResponse(elements, freqHz, { input = 'vin', output = 'vout'
 	nodeOf(input);
 	const used = elements.filter((e) => e.kind === 'R' || e.kind === 'C' || e.kind === 'OP');
 	for (const e of used) e.nodes.forEach(nodeOf);
-	const opamps = used.filter((e) => e.kind === 'OP');
-	const n = index.size;
+	const passives = used.filter((e) => e.kind !== 'OP').map((e) => ({ kind: e.kind, a: nodeOf(e.nodes[0]), b: nodeOf(e.nodes[1]), value: e.value }));
+	const opamps = used.filter((e) => e.kind === 'OP').map((e) => ({ name: e.name, nodes: e.nodes, at: e.nodes.map(nodeOf) }));
+	return { index, n: index.size, vin: nodeOf(input), passives, opamps, gbw, aol };
+}
+
+/** The modified nodal system of a netlist at one frequency, solved: the unknowns (node voltages, the source's current, the op-amps' currents). */
+function nodalAt(net, freqHz, work = nodalWork(net)) {
+	const { n, vin, passives, opamps, gbw, aol } = net;
+	const w = 2 * Math.PI * freqHz;
 	// unknowns: the node voltages, then the source's current, then one output current per op-amp
 	const size = n + 1 + opamps.length;
-	const re = Array.from({ length: size }, () => new Float64Array(size + 1));
-	const im = Array.from({ length: size }, () => new Float64Array(size + 1));
+	work.bufRe.fill(0);
+	work.bufIm.fill(0);
+	const { re, im } = work;
 	const stamp = (a, b, yr, yi) => {
 		if (a >= 0) {
 			re[a][a] += yr;
@@ -51,20 +109,19 @@ export function nodalResponse(elements, freqHz, { input = 'vin', output = 'vout'
 			im[b][a] -= yi;
 		}
 	};
-	for (const e of used) {
-		if (e.kind === 'R') stamp(nodeOf(e.nodes[0]), nodeOf(e.nodes[1]), 1 / e.value, 0);
-		else if (e.kind === 'C') stamp(nodeOf(e.nodes[0]), nodeOf(e.nodes[1]), 0, w * e.value);
+	for (const e of passives) {
+		if (e.kind === 'R') stamp(e.a, e.b, 1 / e.value, 0);
+		else stamp(e.a, e.b, 0, w * e.value);
 	}
 	// the 1 V source on the input node
 	const src = n;
-	const vin = nodeOf(input);
 	re[vin][src] += 1;
 	re[src][vin] += 1;
 	re[src][size] = 1;
 	const finite = Number.isFinite(gbw) && gbw > 0;
 	opamps.forEach((e, k) => {
 		const row = n + 1 + k;
-		const [p, m, out] = e.nodes.map(nodeOf);
+		const [p, m, out] = e.at;
 		if (out >= 0) re[out][row] += 1;
 		if (p >= 0) re[row][p] += 1;
 		if (m >= 0) re[row][m] -= 1;
@@ -124,8 +181,7 @@ export function nodalResponse(elements, freqHz, { input = 'vin', output = 'vout'
 		xr[r] = (sr * dr + si * di) / dd;
 		xi[r] = (si * dr - sr * di) / dd;
 	}
-	const o = index.get(output);
-	return o === undefined ? { re: 0, im: 0 } : { re: xr[o], im: xi[o] };
+	return { xr, xi };
 }
 
 /*

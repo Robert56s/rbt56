@@ -21,6 +21,9 @@
  *   k               transition ratio of a low-pass or high-pass (always below 1)
  *   design          the result of designLowPass, designHighPass, designBandPass or designBandStop
  *   realizedStages  the stages built from rounded parts (panel 04)
+ *   partTargets     the target stage each realized stage was rounded around, when it is not
+ *                   design.stages[i] (a centred design may take a stage's parts from the same
+ *                   design on the passband edge); null reads design.stages
  *   bandStopBranches, combineSigns   band-stop only: the two branches and the combiner's signs
  *   attenuationAtFs, attenuationAtFp                  the flags under panel 05, low-pass and high-pass
  *   attenuationAtFsl, attenuationAtFsh, attenuationAtFl, attenuationAtFh   the same for the band types
@@ -534,10 +537,16 @@ function opampAndQ({ type, response, side, amaxDb, aminDb, ok }) {
 
 	const d = side.design;
 	const amaxText = allPos(amaxDb) ? `${plain(amaxDb)} dB` : 'Amax';
+	// Centred in the template, the ideal design loses less than Amax at the
+	// passband edge (a scale), or ripples by less than Amax (a ripple): the
+	// figures then say what it does, and what is allowed.
+	const placed = d?.placement && d.placement.mode !== 'edge' && !d.placement.empty && allPos(amaxDb) ? d.placement : null;
+	const edgeLoss = placed?.kind === 'scale' ? `${Number((amaxDb - placed.margins.pass).toFixed(2))} dB down there, under the ${amaxText} allowed` : `${amaxText} down there`;
+	const rippleHere = placed?.kind === 'ripple' ? `${Number(placed.rippleDb.chosen.toPrecision(2))} dB here, under the ${amaxText} allowed` : `${amaxText} here`;
 	if (!d) {
 		blocks.push(
 			p(
-				`Order 4, for example, is two such stages, each with its own corner, f0, and its own Q; panel 03 lists them once the design is valid. Neither is flat alone. Butterworth picks Q values whose product is flat up to the passband edge and exactly Amax down there. Chebyshev picks higher Q values and keeps the bumps on purpose: they are the ripple, at most Amax high, and they buy the steeper drop.`
+				`Order 4, for example, is two such stages, each with its own corner, f0, and its own Q; panel 03 lists them once the design is valid. Neither is flat alone. Butterworth picks Q values whose product is flat up to the passband edge and at most Amax down there. Chebyshev picks higher Q values and keeps the bumps on purpose: they are the ripple, at most Amax high, and they buy the steeper drop.`
 			)
 		);
 	} else {
@@ -563,14 +572,14 @@ function opampAndQ({ type, response, side, amaxDb, aminDb, ok }) {
 		} else if (!cheby) {
 			const parts = second.length + (fc ? 1 : 0);
 			const listing = `${lead} ${n} is ${count}${fc ? ' plus one plain RC stage for the leftover slope' : ''}, ${listed} ${f0Text} and Q = ${listText(qs)}${fc ? `, the RC stage at ${hzText(fc)}` : ''}.`;
-			const alone = parts >= 2 ? ` ${parts === 2 ? 'Neither' : 'None of them'} is flat alone. Their product is flat ${upTo}, ${amaxText} down there, then falls at ${20 * n} dB per decade${beyond}. That flat product is what Butterworth means.` : ` With Q = ${qs[0]} it is already the flattest on its own: flat ${upTo}, ${amaxText} down there, then falling at ${20 * n} dB per decade${beyond}. That flat curve is what Butterworth means.`;
+			const alone = parts >= 2 ? ` ${parts === 2 ? 'Neither' : 'None of them'} is flat alone. Their product is flat ${upTo}, ${edgeLoss}, then falls at ${20 * n} dB per decade${beyond}. That flat product is what Butterworth means.` : ` With Q = ${qs[0]} it is already the flattest on its own: flat ${upTo}, ${edgeLoss}, then falling at ${20 * n} dB per decade${beyond}. That flat curve is what Butterworth means.`;
 			text = `${listing}${alone} Chebyshev picks higher Q values and keeps the bumps on purpose: they are the ripple, at most Amax high, and they buy the steeper drop.`;
 		} else {
 			const listing = `${lead} ${n} is ${count}${fc ? ' plus one plain RC stage' : ''}, ${listed} ${f0Text} and Q = ${listText(qs)}${fc ? `, the RC stage at ${hzText(fc)}` : ''}.`;
 			const bump =
 				second.length === 1
-					? ` The bump of the high-Q stage is kept on purpose: it is the ripple, at most Amax high, ${amaxText} here, and it buys the steeper drop.`
-					: ` The bumps of the high-Q stages are kept on purpose: they are the ripple, at most Amax high, ${amaxText} here, and they buy the steeper drop.`;
+					? ` The bump of the high-Q stage is kept on purpose: it is the ripple, at most Amax high, ${rippleHere}, and it buys the steeper drop.`
+					: ` The bumps of the high-Q stages are kept on purpose: they are the ripple, at most Amax high, ${rippleHere}, and they buy the steeper drop.`;
 			let versus = ` Butterworth would instead pick Q values whose product is flat ${upTo}.`;
 			if (ok) {
 				const k = transitionRatio(high ? side.fs : side.fp, high ? side.fp : side.fs);
@@ -621,11 +630,11 @@ const TOPOLOGY_LINE = {
 	towThomas: 'Tow-Thomas spends three op-amps per stage so that f0 and Q are set by separate resistors.'
 };
 const ROUNDING = {
-	E24: 'fixes the capacitors from a short standard series, solves for the resistors, rounds each to the nearest E24 value',
-	E96: 'fixes the capacitors from a short standard series, solves for the resistors, rounds each to the nearest E96 value',
-	lab: 'fixes the capacitors from the lab kit, solves for the resistors, rounds each to the nearest value in the kit',
-	labR: 'fixes the capacitors from a short standard series, solves for the resistors, rounds each to the nearest lab resistor',
-	custom: 'fixes the capacitors from the pasted list, solves for the resistors, rounds each to the nearest value in that list'
+	E24: 'tries the capacitors of a short standard series, solves for the resistors and rounds each to the E24 value just below or just above, keeping the set of parts whose whole filter meets the spec best',
+	E96: 'tries the capacitors of a short standard series, solves for the resistors and rounds each to the E96 value just below or just above, keeping the set of parts whose whole filter meets the spec best',
+	lab: 'tries the capacitors of the lab kit, solves for the resistors and rounds each to the value in the kit just below or just above, keeping the set of parts whose whole filter meets the spec best',
+	labR: 'tries the capacitors of a short standard series, solves for the resistors and rounds each to the lab resistor just below or just above, keeping the set of parts whose whole filter meets the spec best',
+	custom: 'tries the capacitors of the pasted list, solves for the resistors and rounds each to the value in that list just below or just above, keeping the set of parts whose whole filter meets the spec best'
 };
 
 /** Symbolic corner formula for a stage's topology, with the parts it reads, in order. */
@@ -681,7 +690,7 @@ function stageCorner(stage) {
 const pairsRounding = (pairs, pairLimit) =>
 	!pairs ? '' : pairLimit ? ` (or, for up to ${pairLimit} of them in the whole filter, to two resistors in series where no single one comes close)` : ' (or to two resistors in series where no single one comes close)';
 
-function stagesToParts({ topology, stock, design, realizedStages, needsTowThomas, pairs = false, pairLimit = null }) {
+function stagesToParts({ topology, stock, design, realizedStages, needsTowThomas, pairs = false, pairLimit = null, partTargets = null }) {
 	const known = TOPOLOGY_LINE[topology] ? topology : 'mfb';
 	const others = Object.keys(TOPOLOGY_LINE).filter((t) => t !== known);
 	// order 1: every stage is first order, which the Topology menu does not touch
@@ -693,7 +702,7 @@ function stagesToParts({ topology, stock, design, realizedStages, needsTowThomas
 			: `The Topology menu sets how they are wired around the op-amp, and this page is set to ${TOPOLOGY_NAME[topology]}.`;
 	}
 	const rounding =
-		(ROUNDING[stock] ?? 'fixes the capacitors from the values in stock, solves for the resistors, rounds each to the nearest value in stock') +
+		(ROUNDING[stock] ?? 'tries the capacitors in stock, solves for the resistors and rounds each to the value in stock just below or just above, keeping the set of parts whose whole filter meets the spec best') +
 		pairsRounding(pairs, pairLimit);
 	// zeros take the Tow-Thomas notch form, so the menu has to be on it
 	if (needsTowThomas && !['towThomas', 'boctor'].includes(topology)) {
@@ -710,7 +719,7 @@ function stagesToParts({ topology, stock, design, realizedStages, needsTowThomas
 	if (/^firstOrder/.test(shape)) parts = 'Stage 1 here is a first-order stage, one resistor and one capacitor, so its corner is the one-section formula as it is.';
 	else if (/^towThomas/.test(shape)) parts = 'The corner still comes from R times C, as in the one-section formula. The wiring chosen here uses two equal resistors and two equal capacitors, so the formula keeps its one-section form.';
 	// a band type's design has no single n, only its list of stages
-	const target = design && Array.isArray(design.stages) && design.stages.length > 0 ? design.stages[0] : null;
+	const target = partTargets?.[0] ?? (design && Array.isArray(design.stages) && design.stages.length > 0 ? design.stages[0] : null);
 	const asked = target ? (target.order === 1 ? (allPos(target.tau) ? 1 / (TWO_PI * target.tau) : NaN) : allPos(target.wn) ? target.wn / TWO_PI : NaN) : NaN;
 	let tex;
 	let intro;
@@ -752,7 +761,7 @@ const NOTCH_LINE = {
  * Band-pass stages menu, and the Notch stages menu for the notch stages
  * (every stage of a band-stop, the pole pairs of a band-pass with zeros).
  */
-function transformedStagesToParts({ type, topology, topologyNotch, stock, design, realizedStages, pairs = false, pairLimit = null }) {
+function transformedStagesToParts({ type, topology, topologyNotch, stock, design, realizedStages, pairs = false, pairLimit = null, partTargets = null }) {
 	const stop = type === 'bandstop';
 	const stages = design && Array.isArray(design.stages) ? design.stages : [];
 	const realized = Array.isArray(realizedStages) ? realizedStages.filter(Boolean) : [];
@@ -772,12 +781,12 @@ function transformedStagesToParts({ type, topology, topologyNotch, stock, design
 	const otherNotch = notchMenu === 'boctor' ? 'towThomas' : 'boctor';
 	const lines = stop ? [NOTCH_LINE[notchMenu], NOTCH_LINE[otherNotch]] : [BAND_LINE[bandMenu], BAND_LINE[bandMenu === 'mfb' ? 'towThomas' : 'mfb'], ...(hasNotches ? [NOTCH_LINE[notchMenu]] : [])];
 	const rounding =
-		(ROUNDING[stock] ?? 'fixes the capacitors from the values in stock, solves for the resistors, rounds each to the nearest value in stock') +
+		(ROUNDING[stock] ?? 'tries the capacitors in stock, solves for the resistors and rounds each to the value in stock just below or just above, keeping the set of parts whose whole filter meets the spec best') +
 		pairsRounding(pairs, pairLimit);
 
 	const stage = realized[0] ?? null;
 	const corner = stageCorner(stage);
-	const target = stages[0] ?? null;
+	const target = partTargets?.[0] ?? stages[0] ?? null;
 	// a band-pass stage peaks at its f0, its centre; a notch stage turns there, its corner
 	const word = target && target.filterType !== 'bandpass' ? 'corner' : 'centre';
 	let parts = `The ${word} still comes from R times C, as in the one-section formula, only now four parts share the job under a square root.`;
@@ -979,7 +988,8 @@ export function filterBasics({
 	pairs = false,
 	pairLimit = null,
 	method,
-	topologyNotch
+	topologyNotch,
+	partTargets = null
 } = {}) {
 	const type = TYPES.includes(filterType) ? filterType : 'lowpass';
 	// a narrow band-pass: its own line and steps
@@ -996,8 +1006,8 @@ export function filterBasics({
 		...theOrder({ type, response, side, ...limits, ok, order }),
 		...opampAndQ({ type, response, side, ...limits, ok }),
 		...(transformed
-			? transformedStagesToParts({ type, topology, topologyNotch, stock, design, realizedStages, pairs, pairLimit })
-			: stagesToParts({ topology, stock, design, realizedStages, needsTowThomas, pairs, pairLimit })),
+			? transformedStagesToParts({ type, topology, topologyNotch, stock, design, realizedStages, pairs, pairLimit, partTargets })
+			: stagesToParts({ topology, stock, design, realizedStages, needsTowThomas, pairs, pairLimit, partTargets })),
 		...restOfPage({ type, amaxDb, aminDb, bandLimits, k, stages, attenuationAtFs, attenuationAtFp, attenuationAtFsl, attenuationAtFsh, attenuationAtFl, attenuationAtFh, transformed, design }),
 		h('Words used on this page'),
 		terms(transformed ? [...GLOSSARY, ...BAND_TERMS] : GLOSSARY)

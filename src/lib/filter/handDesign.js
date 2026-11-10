@@ -989,8 +989,10 @@ export function realizeStage(topology, parts, theoretical = null) {
 }
 
 /**
- * Capacitors to start from when none are typed: the automatic search's own
- * pick for this stage with the page's stock (componentOpts), or null.
+ * Capacitors to start from when none are typed: the stage designer's own
+ * pick for this stage with the page's stock (componentOpts), or null. The
+ * automatic design above chooses its parts for the whole filter at once
+ * (partSearch.js), so its capacitors can differ.
  */
 export function suggestCaps(topology, stage, componentOpts = {}) {
 	const opts = { resistorSeries: componentOpts.resistorSeries ?? 'E24', capacitors: componentOpts.capacitors ?? null, pairs: false };
@@ -1424,7 +1426,11 @@ export function denormTexts(ctx) {
 	const t = s1.filterType;
 	const n = s2.n;
 	const band = t === 'bandpass' || t === 'bandstop';
-	const intro = [p('Denormalizing puts the filter at its real frequencies: Hd(s) = Hn(s*), with s* from the last row of the table in step 1.')];
+	const intro = [
+		p(
+			'Denormalizing puts the filter at its real frequencies: Hd(s) = Hn(s*), with s* from the last row of the table in step 1. This method puts the design on the passband edge, where exactly Amax is lost; the automatic design above can instead centre it in its template (Place the design, panel 01), so its targets differ a little from these.'
+		)
+	];
 	const exp = t === 'lowpass' || t === 'bandpass' ? '-1/n' : '1/n';
 	if (s4.scaled) {
 		intro.push(

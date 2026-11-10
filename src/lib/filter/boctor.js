@@ -52,12 +52,14 @@ function boctorMiss(a, wn, q, wz, lowSide) {
 	return Math.max(Math.abs(Math.log(a.wn / wn)), Math.abs(Math.log(a.q / q)), Math.abs(Math.log(a.wz / wz)), Math.abs(a.numeratorS / (a.gain * wz)), lowSide ? Math.abs(Math.log(a.dcGain)) : 0);
 }
 
-// `pairs` may also be a list of the names allowed to pair (pairAllowed in
-// eseries.js), 'R1' to 'R6'.
-function boctorSearch(wn, q, wz, { lowSide = true, resistorSeries = 'E24', capacitors = null, pairs = false } = {}, manualC = null) {
-	if (!boctorFeasible(wn, q, wz, lowSide)) return null;
+// Every capacitor choice that builds the stage, with its ideal parts and
+// its resistors rounded to single parts (single, and the miss they leave)
+// and, once asked for, to pairs where they help (paired): whatever names a
+// call lets pair, its parts mix the two, so the many lists a pair limit
+// asks one stage for share the rounding.
+function boctorChoices(wn, q, wz, lowSide, resistorSeries, capacitors, manualC) {
 	const caps = capacitorCandidates(capacitors);
-	let best = null;
+	const out = [];
 	for (const C1 of manualC ? [manualC] : caps) {
 		for (const C2 of lowSide ? caps : [C1]) {
 			const u = C2 / C1, rho = (wn / wz) ** 2;
@@ -77,21 +79,74 @@ function boctorSearch(wn, q, wz, { lowSide = true, resistorSeries = 'E24', capac
 			for (const t of ts) {
 				const theoretical = boctorIdeal(wn, q, wz, C1, C2, t, lowSide);
 				if (!Object.entries(theoretical).filter(([k]) => k.startsWith('R')).every(([,v]) => v >= 200 && v <= 2e6)) continue;
-				const round = p => Object.fromEntries(Object.entries(theoretical).map(([k,v]) => [k, k.startsWith('R') ? pairedResistor(v, resistorSeries, pairAllowed(p, k)) : v]));
-				const single = round(false), paired = anyPairAllowed(pairs) ? round(pairs) : single;
-				const components = boctorMiss(boctorActual(paired, lowSide), wn, q, wz, lowSide) <= boctorMiss(boctorActual(single, lowSide), wn, q, wz, lowSide) ? paired : single;
-				const actual = boctorActual(components, lowSide), miss = boctorMiss(actual, wn, q, wz, lowSide);
-				if (!Number.isFinite(miss)) continue;
-				const score = 1000 * miss ** 2 + smallCapPenalty(C1, C2) + Object.entries(components).filter(([k]) => k.startsWith('R')).reduce((sum,[,v]) => sum + Math.log(v / 10000) ** 2, 0) / 6;
-				if (!best || score < best.score) best = { topology: lowSide ? 'boctor' : 'boctorHp', order: 2, lowSide, theoretical, components, actual, score, steps: { C: C1, resistorSeries }, ...(manualC ? { ok: true, manual: true } : {}) };
+				const single = Object.fromEntries(Object.entries(theoretical).map(([k,v]) => [k, k.startsWith('R') ? pairedResistor(v, resistorSeries, false) : v]));
+				out.push({ C1, C2, theoretical, single, singleMiss: boctorMiss(boctorActual(single, lowSide), wn, q, wz, lowSide), paired: null });
 			}
 		}
 	}
-	return best;
+	return out;
+}
+
+// `pairs` may also be a list of the names allowed to pair (pairAllowed in
+// eseries.js), 'R1' to 'R6'.
+function boctorSearch(wn, q, wz, { lowSide = true, resistorSeries = 'E24', capacitors = null, pairs = false } = {}, manualC = null) {
+	if (!boctorFeasible(wn, q, wz, lowSide)) return null;
+	const choices = manualC ? boctorChoices(wn, q, wz, lowSide, resistorSeries, capacitors, manualC) : boctorChoicesKept(wn, q, wz, lowSide, resistorSeries, capacitors);
+	const anyPair = anyPairAllowed(pairs);
+	let best = null;
+	for (const choice of choices) {
+		const { C1, C2, theoretical, single, singleMiss } = choice;
+		let paired = single;
+		if (anyPair) {
+			choice.paired ??= Object.fromEntries(Object.entries(theoretical).map(([k,v]) => [k, k.startsWith('R') ? pairedResistor(v, resistorSeries, true) : v]));
+			paired = Object.fromEntries(Object.entries(theoretical).map(([k,v]) => [k, k.startsWith('R') ? (pairAllowed(pairs, k) ? choice.paired : single)[k] : v]));
+		}
+		const components = (paired === single ? singleMiss : boctorMiss(boctorActual(paired, lowSide), wn, q, wz, lowSide)) <= singleMiss ? paired : single;
+		const actual = boctorActual(components, lowSide), miss = boctorMiss(actual, wn, q, wz, lowSide);
+		if (!Number.isFinite(miss)) continue;
+		const score = 1000 * miss ** 2 + smallCapPenalty(C1, C2) + Object.entries(components).filter(([k]) => k.startsWith('R')).reduce((sum,[,v]) => sum + Math.log(v / 10000) ** 2, 0) / 6;
+		if (!best || score < best.score) best = { topology: lowSide ? 'boctor' : 'boctorHp', order: 2, lowSide, theoretical, components, actual, score, steps: { C: C1, resistorSeries }, ...(manualC ? { ok: true, manual: true } : {}) };
+	}
+	// (the parts of the choices kept are shared: the result gets its own)
+	return best && { ...best, theoretical: { ...best.theoretical }, components: { ...best.components } };
+}
+
+// The single-part search is the same whatever pairs a call allows, and the
+// pair limits ask for one stage with many lists: it is kept, by stock.
+// (a list of values is a key by itself, held weakly: a typed stock makes a new one on every edit)
+// The capacitor choices (boctorChoices) are kept the same way, fewer of them.
+const BOCTOR_SINGLE_SIZE = 512;
+const BOCTOR_CHOICES_SIZE = 48;
+const boctorSlot = () => ({ named: new Map(), lists: new WeakMap(), found: new Map(), choices: new Map() });
+const BOCTOR_SINGLE = boctorSlot();
+function boctorSlotOf(slot, k) {
+	const m = k !== null && typeof k === 'object' ? slot.lists : slot.named;
+	if (!m.has(k)) m.set(k, boctorSlot());
+	return m.get(k);
+}
+function boctorChoicesKept(wn, q, wz, lowSide, resistorSeries, capacitors) {
+	const kept = boctorSlotOf(boctorSlotOf(BOCTOR_SINGLE, resistorSeries), capacitors).choices;
+	const key = `${wn} ${q} ${wz} ${lowSide}`;
+	if (!kept.has(key)) {
+		if (kept.size >= BOCTOR_CHOICES_SIZE) kept.delete(kept.keys().next().value);
+		kept.set(key, boctorChoices(wn, q, wz, lowSide, resistorSeries, capacitors, null));
+	}
+	return kept.get(key);
+}
+function boctorSingle(wn, q, wz, opts) {
+	const { lowSide = true, resistorSeries = 'E24', capacitors = null } = opts;
+	const found = boctorSlotOf(boctorSlotOf(BOCTOR_SINGLE, resistorSeries), capacitors).found;
+	const key = `${wn} ${q} ${wz} ${lowSide}`;
+	if (!found.has(key)) {
+		if (found.size >= BOCTOR_SINGLE_SIZE) found.delete(found.keys().next().value);
+		found.set(key, boctorSearch(wn, q, wz, { ...opts, pairs: false }));
+	}
+	const single = found.get(key);
+	return single && { ...single };
 }
 
 export function designBoctorNotch(wn, q, wz, opts = {}) {
-	const single = boctorSearch(wn, q, wz, { ...opts, pairs: false });
+	const single = boctorSingle(wn, q, wz, opts);
 	if (!anyPairAllowed(opts.pairs)) return single;
 	const paired = boctorSearch(wn, q, wz, opts);
 	if (!single || !paired) return paired ?? single;

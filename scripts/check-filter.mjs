@@ -35,6 +35,14 @@
 //    identical stages and their bandwidth, the comparison table and its
 //    rule, the chains with their gain stage, the pairs, the capacitors by
 //    hand, the explanations and the downloadable script.
+// 13. The design placed in its template (stages.js) and the parts picked on
+//    the whole filter (partSearch.js): the window's ends and middle for
+//    every response, the default spec's numbers, the whole-passband
+//    measure, the opening design on the lab kit, never worse than the parts
+//    of before on a pinned sample, the pair limit, the resistor floor and
+//    the op-amp loads (by the checks' own nodal solve), the capacitors typed
+//    by hand, the downloadable script against the page (lib-parts.mjs), one
+//    scope for the script, and the time a search takes.
 // Exits non-zero on any failure.
 
 import { execFileSync } from 'node:child_process';
@@ -56,7 +64,7 @@ import { designMfbLowPass, designMfbLowPassFromCaps } from '../src/lib/filter/mf
 import { designMfbHighPass, designMfbHighPassFromCap } from '../src/lib/filter/mfbHighPass.js';
 import { designSallenKeyLowPass, designSallenKeyLowPassFromCaps } from '../src/lib/filter/sallenKey.js';
 import { designSallenKeyHighPass, designSallenKeyHighPassFromCap } from '../src/lib/filter/sallenKeyHighPass.js';
-import { LAB_KIT, pairedResistor, pairSubsets, seriesPair } from '../src/lib/filter/eseries.js';
+import { LAB_KIT, nearestResistor, pairedResistor, pairSubsets, seriesPair } from '../src/lib/filter/eseries.js';
 import { TOW_THOMAS_SENSITIVITY } from '../src/lib/filter/sensitivity.js';
 import { generateNetlist, generateSchematic, spiceValue } from '../src/lib/filter/spice.js';
 import { bandCentre, bandStopbandRatio, designBandPass, designBandStop, designHighPass, designLowPass, minimumOrder as minimumOrderOf, notchOptions } from '../src/lib/filter/stages.js';
@@ -69,6 +77,8 @@ import { explainBandTransform, explainMfbBp, explainTowThomasBp, explainTransfor
 import { BAND_SPECS, BAND_SPEC_NAMES, RESPONSE_KEYS, designTransformed, hasZeros, realizeBandStage, realizeTransformed, targetStage, transformedMenus } from './lib-band.mjs';
 import { filterPairCount, filterPairGroups, filterPairLimitSentence, filterPairPlanSummary, filterStageMeasure, planFilterPairs } from '../src/lib/filter/pairPlan.js';
 import { filterBasics } from '../src/lib/filter/basics.js';
+import { PART_LOAD_MIN, PART_R_FLOOR, PASSBAND_SLACK_DB, filterTemplate, measureFilter, searchFilterParts } from '../src/lib/filter/partSearch.js';
+import { pageParts, pageSettings, partsProblems } from './lib-parts.mjs';
 
 let fails = 0;
 const check = (label, ok, detail) => {
@@ -385,7 +395,8 @@ check('combiner never leaves depth on the table', worstLoss <= 1e-9, `${worstLos
 	}
 	check(`new explanations: ${blocks.filter((b) => b.type === 'eq').length} equations render, no placeholders, no long dashes, never "you"`, texBad === 0 && wordBad === 0, `${texBad} TeX, ${wordBad} text`);
 
-	// the downloadable script runs for the new responses and finds its own spec met
+	// the downloadable script runs for the new responses and finds its whole
+	// template met, placed as the page opens (centred), with the page's parts
 	const dir = mkdtempSync(join(tmpdir(), 'rbt56-filter-'));
 	let scriptBad = 0;
 	const scripts = [
@@ -407,30 +418,32 @@ check('combiner never leaves depth on the table', worstLoss <= 1e-9, `${worstLos
 	const withZeros = (spec) => (band(spec) ? zeros(spec.responseHp) || zeros(spec.responseLp) : zeros(spec.response));
 	const base = { fp: 10000, fs: 35000, fl: 1000, fh: 10000, fsl: 300, fsh: 30000, order: null, orderHp: null, orderLp: null, capOverrides: {} };
 	for (const spec of scripts) {
-		const code = generateScript({ ...base, ...spec, ...wiring(spec) });
+		const args = { ...base, ...spec, ...wiring(spec), placement: 'centred' };
+		const code = generateScript(args);
 		const file = join(dir, `${spec.filterType}-${spec.response}.js`);
 		writeFileSync(file, code);
 		try {
 			const out = execFileSync(process.execPath, [file], { encoding: 'utf8' });
-			if (!/least attenuation in the stopband .*: OK/.test(out)) {
+			const wrong = partsProblems(out, pageParts(args));
+			if (!/least attenuation in the stopband .*: OK/.test(out) || !/the whole template: OK$/.test(out.trim()) || wrong.length) {
 				scriptBad++;
-				console.log('   SCRIPT', spec.filterType, spec.response, out.trim().split('\n').pop());
+				console.log('   SCRIPT', spec.filterType, spec.response, wrong[0] ?? out.trim().split('\n').pop());
 			}
 		} catch (e) {
 			scriptBad++;
 			console.log('   SCRIPT', spec.filterType, spec.response, String(e.stderr || e.message).split('\n').slice(0, 3).join(' / '));
 		}
 	}
-	check(`downloadable script: runs for ${scripts.length} new-response designs, a band filter's plain side on MFB, and reports its spec met`, scriptBad === 0, `${scriptBad} failures`);
+	check(`downloadable script: runs for ${scripts.length} new-response designs, a band filter's plain side on MFB, prints the page's parts and reports its whole template met`, scriptBad === 0, `${scriptBad} failures`);
 
 	// the other side of a band filter may be Sallen-Key as well
 	{
 		const spec = scripts.find((s) => s.filterType === 'bandpass');
 		const file = join(dir, 'bandpass-sallenkey-side.js');
-		writeFileSync(file, generateScript({ ...base, ...spec, ...wiring(spec, 'sallenKey') }));
+		writeFileSync(file, generateScript({ ...base, ...spec, ...wiring(spec, 'sallenKey'), placement: 'centred' }));
 		let ok = false;
 		try {
-			ok = /least attenuation in the stopband .*: OK/.test(execFileSync(process.execPath, [file], { encoding: 'utf8' }));
+			ok = /the whole template: OK$/.test(execFileSync(process.execPath, [file], { encoding: 'utf8' }).trim());
 		} catch {
 			ok = false;
 		}
@@ -578,8 +591,11 @@ const PAIR_STOCKS = {
 // existed: these fingerprints were taken from that code over this sweep.
 // A deliberate change to a designer moves them too: rerun and update them.
 {
-	// retaken when the searches began to avoid capacitors under 47 pF (C_FLOOR in eseries.js)
-	const BEFORE = { E24: 'c145fc6ff57332c7', E96: '9fb167b8061e19b8', lab: '90bf9582cfc60661', labR: 'a63bd8c92ed9f783' };
+	// retaken when the searches began to avoid capacitors under 47 pF (C_FLOOR in eseries.js),
+	// then when designMfbLowPassFromCaps began to choose its resistor root after
+	// rounding (the "by hand" MFB rows: every one that moved now lands closer
+	// to its f0 and Q; the automatic designs did not move)
+	const BEFORE = { E24: '21f9bb64364301e8', E96: '2cc477cffa604f92', lab: 'afcc9ad27692c2bf', labR: 'adc8e23e41f121ad' };
 	for (const [name, opts] of Object.entries(PAIR_STOCKS)) {
 		const rows = sweepDesigns({ ...opts, pairs: false });
 		const off = fingerprint(rows);
@@ -591,6 +607,52 @@ const PAIR_STOCKS = {
 			off === BEFORE[name] && unset === BEFORE[name] && (list || on === BEFORE[name]),
 			`${off}${list ? '' : `, on ${on}`}, expected ${BEFORE[name]}`
 		);
+	}
+	// What moved those fingerprints, checked: the MFB root from two capacitors
+	// typed by hand. Before, the root whose ideal resistors sat nearer 10
+	// kohm was taken and then rounded; now the root is chosen after rounding.
+	// Both rebuilt here from the quadratic (x = 1/R1 = (a C1 +- sqrt(D)) / 4,
+	// 1/R2 = a C1 - 2x, a = w0/Q, single parts): over the sweep's f0 and Q,
+	// capacitor ratios from 8Q^2 to 40Q^2, every stock, the root chosen now
+	// never lands further from f0 and Q than the old one where the old one's
+	// resistors stayed in range (200 ohm to 2 Mohm).
+	{
+		let rows = 0;
+		let moved = 0;
+		const worse = [];
+		for (const [name, opts] of Object.entries(PAIR_STOCKS)) {
+			for (const f0 of PAIR_F0) {
+				const wn = 2 * Math.PI * f0;
+				for (const q of PAIR_Q) {
+					for (const C2 of [1e-10, 1e-9, 4.7e-9, 2.2e-8]) {
+						for (const k of [1, 1.3, 2, 5]) {
+							const C1 = C2 * 8 * q * q * k;
+							const a = wn / q;
+							const D = (a * C1) ** 2 - 8 * wn * wn * C1 * C2;
+							const roots = [1, -1].map((sign) => (a * C1 + sign * Math.sqrt(D)) / 4).map((x) => ({ R1: 1 / x, R2: 1 / (a * C1 - 2 * x) })).filter((r) => r.R1 > 0 && r.R2 > 0);
+							if (!roots.length) continue;
+							const rounded = ({ R1, R2 }) => {
+								const R1n = pairedResistor(R1, opts.resistorSeries, false);
+								const R2n = pairedResistor(R2, opts.resistorSeries, false);
+								const b = 1 / (R1n * R2n * C1 * C2);
+								const w = Math.sqrt(b);
+								return { R1n, R2n, miss: Math.max(Math.abs(Math.log(w / wn)), Math.abs(Math.log(w / ((1 / C1) * (2 / R1n + 1 / R2n)) / q))) };
+							};
+							const sweet = ({ R1, R2 }) => Math.log(R1 / 10000) ** 2 + Math.log(R2 / 10000) ** 2;
+							const old = rounded(roots.reduce((x, y) => (sweet(y) < sweet(x) ? y : x)));
+							const now = designMfbLowPassFromCaps(wn, q, C1, C2, { ...opts, pairs: false });
+							if (!now.ok) continue;
+							rows++;
+							if (now.components.R1 !== old.R1n || now.components.R2 !== old.R2n) moved++;
+							const inRange = [old.R1n, old.R2n].every((v) => v > 200 && v < 2e6);
+							const missNow = Math.max(Math.abs(Math.log(now.actual.wn / wn)), Math.abs(Math.log(now.actual.q / q)));
+							if (inRange && missNow > old.miss + 1e-12) worse.push(`${name} ${f0} Hz Q ${q} C1/C2 ${(C1 / C2).toFixed(1)}: ${missNow.toFixed(4)} against ${old.miss.toFixed(4)}`);
+						}
+					}
+				}
+			}
+		}
+		check('MFB by hand, the root chosen after rounding: never further from f0 and Q than the root nearer 10 kohm before rounding, where that one stays in range', worse.length === 0 && moved > 0, worse.length ? worse.slice(0, 3).join('; ') : `${rows} designs, ${moved} on the other root now`);
 	}
 }
 
@@ -741,11 +803,15 @@ const PAIR_STOCKS = {
 			`f0 ${pct(f0(off))} -> ${pct(f0(on))}, Q ${pct(qe(off))} -> ${pct(qe(on))}`
 		);
 	}
-	// the page's opening design (Butterworth low-pass, 10 kHz, 3 and 40 dB, MFB) on the lab kit
+	// The page's opening design (Butterworth low-pass, 10 kHz, 3 and 40 dB,
+	// MFB) on the lab kit, built by its stage designers alone (the page's
+	// parts until the part search): pairs bring every f0 within 1 %. The
+	// page now picks the parts on the whole filter (partSearch.js), so what it
+	// shows for this design is checked in section 13 against the template.
 	{
 		const design = designLowPass({ response: 'butterworth', amaxDb: 3, aminDb: 40, fp: 10000, fs: 35000, order: null });
 		const worst = (pairs) => Math.max(...design.stages.map((st) => designMfbLowPass(st.wn, st.q, { ...PAIR_STOCKS.lab, pairs })).map((r, i) => Math.abs(r.actual.wn / design.stages[i].wn - 1)));
-		check("pairs on: the page's opening design on the lab kit gets every f0 within 1 %", worst(false) > 0.1 && worst(true) < 0.01, `worst f0 ${pct(worst(false))} -> ${pct(worst(true))}`);
+		check("pairs on: the opening design's stages, each built by its designer alone on the lab kit, get every f0 within 1 %", worst(false) > 0.1 && worst(true) < 0.01, `worst f0 ${pct(worst(false))} -> ${pct(worst(true))}`);
 	}
 }
 
@@ -780,10 +846,10 @@ const PAIR_STOCKS = {
 }
 
 // (c) The downloaded script: RESISTOR_PAIRS = true hands the option to the
-// same designers and prints each pair with its two parts; switched to false
-// it gives the single-part design back. The Chebyshev high-pass has a stage
-// that keeps single parts with the option on (see above), so the script
-// has to carry that rule too.
+// part search and prints each pair with its two parts; switched to false it
+// gives the single-part design back. Either way its parts are the ones the
+// page picks for the same settings (lib-parts.mjs), on the passband edge
+// and centred, and each pair is printed as the stock's two parts.
 {
 	const dir = mkdtempSync(join(tmpdir(), 'rbt56-pairs-'));
 	const base = { amaxDb: 3, aminDb: 40, fl: 1000, fh: 10000, fsl: 300, fsh: 30000, order: null, orderHp: null, orderLp: null, capOverrides: {} };
@@ -796,42 +862,33 @@ const PAIR_STOCKS = {
 			return 'ERROR ' + String(e.stderr || e.message);
 		}
 	};
-	// each stage's resistors as the script prints them, from the page's own designers
-	const printed = (stages, second, pairs) =>
-		stages.flatMap((st) => {
-			const o = { ...PAIR_STOCKS.lab, pairs };
-			const ohms = (v) => {
-				const pair = pairs ? seriesPair(v, LAB_KIT.resistors) : null;
-				return `${v.toFixed(0)} ohm${pair ? ` (${pair[0]} + ${pair[1]} in series)` : ''}`;
-			};
-			if (st.order === 1) {
-				const R = (st.filterType === 'highpass' ? designFirstOrderHighPass : designFirstOrderLowPass)(st.tau, o).components.R;
-				return [`  R = ${pairs && seriesPair(R, LAB_KIT.resistors) ? ohms(R) : `${R} ohm`}, C = `];
-			}
-			return Object.entries(second(st, o).components)
-				.filter(([n]) => /^[Rr]/.test(n))
-				.map(([n, v]) => `  ${n} = ${ohms(v)}\n`);
-		});
 	const cases = [
-		['mfb-lowpass', { filterType: 'lowpass', response: 'butterworth', topology: 'mfb', fp: 10000, fs: 35000 }, designLowPass, (st, o) => designMfbLowPass(st.wn, st.q, o)],
-		['tt-highpass', { filterType: 'highpass', response: 'chebyshev', topology: 'towThomas', fp: 10000, fs: 3000 }, designHighPass, (st, o) => designTowThomasHighPass(st.wn, st.q, o)]
+		['mfb-lowpass', { filterType: 'lowpass', response: 'butterworth', topology: 'mfb', fp: 10000, fs: 35000 }],
+		['tt-highpass', { filterType: 'highpass', response: 'chebyshev', topology: 'towThomas', fp: 10000, fs: 3000 }]
 	];
 	const problems = [];
 	let sample = '';
-	for (const [name, spec, make, second] of cases) {
-		const code = generateScript({ ...base, ...spec, resistorStock: LAB_KIT.resistors, capacitorStock: LAB_KIT.capacitors, resistorPairs: true });
-		const on = run(`${name}-on.js`, code);
-		const off = run(`${name}-off.js`, code.replace('const RESISTOR_PAIRS = true;', 'const RESISTOR_PAIRS = false;'));
-		const stages = make({ response: spec.response, amaxDb: 3, aminDb: 40, fp: spec.fp, fs: spec.fs, order: null }).stages;
-		const missing = [...printed(stages, second, true).filter((l) => !on.includes(l)), ...printed(stages, second, false).filter((l) => !off.includes(l))];
-		if (!/^const RESISTOR_PAIRS = true;/m.test(code) || !/^const RESISTOR_PAIRS = false;/m.test(generateScript({ ...base, ...spec }))) problems.push(`${name}: RESISTOR_PAIRS not written as asked`);
-		if (!/ohm \(\d+ \+ \d+ in series\)/.test(on) || /in series\)/.test(off)) problems.push(`${name}: pairs printed ${/in series\)/.test(on) ? 'with the option off' : 'nowhere'}`);
-		if (missing.length) problems.push(`${name} missing: ${missing[0].trim()}`);
-		if (!/least attenuation in the stopband .*: OK/.test(on)) problems.push(`${name}: ${on.trim().split('\n').pop()}`);
-		sample ||= on.split('\n').find((l) => /in series\)/.test(l))?.trim() ?? '';
+	for (const [name, spec] of cases) {
+		for (const placement of ['edge', 'centred']) {
+			const args = { ...base, ...spec, resistorStock: LAB_KIT.resistors, capacitorStock: LAB_KIT.capacitors, resistorPairs: true, placement };
+			const code = generateScript(args);
+			const on = run(`${name}-${placement}-on.js`, code);
+			const off = run(`${name}-${placement}-off.js`, code.replace('const RESISTOR_PAIRS = true;', 'const RESISTOR_PAIRS = false;'));
+			if (!/^const RESISTOR_PAIRS = true;/m.test(code) || !/^const RESISTOR_PAIRS = false;/m.test(generateScript({ ...base, ...spec }))) problems.push(`${name}: RESISTOR_PAIRS not written as asked`);
+			if (!/ohm \(\d+ \+ \d+ in series\)/.test(on) || /in series\)/.test(off)) problems.push(`${name} ${placement}: pairs printed ${/in series\)/.test(on) ? 'with the option off' : 'nowhere'}`);
+			// every pair printed is the stock's own two parts for that value
+			for (const [, v, a, b] of on.matchAll(/ = (\d+) ohm \((\d+) \+ (\d+) in series\)/g)) {
+				if (JSON.stringify(seriesPair(Number(v), LAB_KIT.resistors)) !== JSON.stringify([Number(a), Number(b)])) problems.push(`${name} ${placement}: ${v} printed as ${a} + ${b}`);
+			}
+			for (const [label, out, pairs] of [['on', on, true], ['off', off, false]]) {
+				const wrong = partsProblems(out, pageParts({ ...args, resistorPairs: pairs }));
+				if (wrong.length) problems.push(`${name} ${placement} pairs ${label}: ${wrong[0]}`);
+			}
+			sample ||= on.split('\n').find((l) => /in series\)/.test(l))?.trim() ?? '';
+		}
 	}
 	check(
-		'downloadable script: RESISTOR_PAIRS = true prints each pair with its two parts exactly as the page designs it (single parts where the page keeps them) and meets the spec; false gives single parts back',
+		'downloadable script: RESISTOR_PAIRS = true prints the parts the page picks with pairs, each pair as its two parts, on the edge and centred; false gives the page\'s single parts back',
 		problems.length === 0,
 		problems.length ? problems.slice(0, 2).join('; ') : sample
 	);
@@ -1222,14 +1279,19 @@ const PAIR_STOCKS = {
 	}
 
 	// (g) The downloadable script with BAND_METHOD = "transformed" designs
-	// the page's stages, says which method has fewer op-amps, finds its own
-	// spec met with the stopband figure the page's stages give, and held to
-	// order 2 reports the narrow band-pass short.
+	// the page's stages, says which method has fewer op-amps, and prints the
+	// parts, the response and the verdict the page shows (lib-parts.mjs), on
+	// the passband edge and centred. Centred, as the page opens, the narrow
+	// band-pass and the default band-stop meet their whole template; on the
+	// edge the band-pass stages a transformed design cannot search keep their
+	// designer's pick, and the narrow band-pass on MFB is reported short in
+	// its passband, as the page reports it; held to order 2 it is short of
+	// its 50 dB.
 	{
 		const dir = mkdtempSync(join(tmpdir(), 'rbt56-band-'));
 		// the page's arguments: its sides on Tow-Thomas when the response has zeros, as the page insists
 		const sideOf = (response) => (hasZeros(response) ? 'towThomas' : 'mfb');
-		const args = (spec, response, topologyBand, topologyNotch, orderBand = null) => ({
+		const args = (spec, response, topologyBand, topologyNotch, orderBand = null, placement = 'centred') => ({
 			filterType: spec.filterType,
 			response,
 			responseHp: response,
@@ -1256,7 +1318,8 @@ const PAIR_STOCKS = {
 			bandMethod: 'transformed',
 			topologyBand,
 			topologyNotch,
-			orderBand
+			orderBand,
+			placement
 		});
 		const run = (name, opts) => {
 			const file = join(dir, `${name}.js`);
@@ -1267,39 +1330,36 @@ const PAIR_STOCKS = {
 				return 'ERROR ' + String(e.stderr || e.message);
 			}
 		};
-		/** The least attenuation across the stopband, from the passband top, of the stages the page builds. */
-		const leastOf = (spec, realized) => {
-			const g = (f) => magnitudePhaseAt(realized, f).db;
-			const bp = spec.filterType === 'bandpass';
-			const top = Math.max(...(bp ? [[spec.fl, spec.fh]] : [[spec.fl / 100, spec.fl], [spec.fh, spec.fh * 100]]).flatMap((r) => scan(r, 600)).map(g));
-			const stops = bp ? [[[spec.fsl / 100, spec.fsl], spec.aminDbLow], [[spec.fsh, spec.fsh * 100], spec.aminDbHigh]] : [[[spec.fsl, spec.fsh], spec.aminDb]];
-			let worst = { db: Infinity, margin: Infinity };
-			for (const [band, amin] of stops) for (const f of scan(band, 600)) if (top - g(f) - amin < worst.margin) worst = { db: top - g(f), margin: top - g(f) - amin };
-			return worst.db;
-		};
 		const cases = [
 			['narrow-bp-butterworth-mfb', BAND_SPECS.narrowBp, 'butterworth', 'mfb', 'boctor'],
 			['narrow-bp-elliptic-towthomas', BAND_SPECS.narrowBp, 'elliptic', 'towThomas', 'towThomas'],
 			['default-bs-butterworth-boctor', BAND_SPECS.defaultBs, 'butterworth', 'mfb', 'boctor']
 		];
 		const problems = [];
+		const verdicts = [];
 		for (const [name, spec, response, band, notch] of cases) {
-			const out = run(name, args(spec, response, band, notch));
-			const verdict = /least attenuation in the stopband ([\d.]+) dB at \d+ Hz \(spec asks for >= [\d.]+ dB there\): OK$/.exec(out.trim());
-			const design = designTransformed(spec, response);
-			const page = leastOf(spec, realizeTransformed(design, transformedMenus(band, notch)));
-			const choice = chooseBandMethod({ cascade: opampCount(cascadeOf(spec, response), cascadeMenus(sideOf(response))), transformed: opampCount(design, transformedMenus(band, notch)) });
-			const fewest = choice === 'transformed' ? 'the transformation' : spec.filterType === 'bandpass' ? 'the cascade' : 'the summed branches';
-			if (!verdict) problems.push(`${name}: ${out.trim().split('\n').pop()}`);
-			else if (Math.abs(Number(verdict[1]) - page) > 0.051) problems.push(`${name}: ${verdict[1]} dB, the page's stages ${page.toFixed(2)} dB`);
-			if (!out.includes(`fewest op-amps: ${fewest}`) || !(spec.filterType === 'bandpass' ? /gain at f0 \([\d.]+ Hz\): -?[\d.]+ dB/ : /gain at DC: -?[\d.]+ dB/).test(out)) problems.push(`${name}: no method or level line`);
+			for (const placement of ['centred', 'edge']) {
+				const a = args(spec, response, band, notch, null, placement);
+				const out = run(`${name}-${placement}`, a);
+				const page = pageParts(a);
+				const wrong = partsProblems(out, page);
+				if (wrong.length) problems.push(`${name} ${placement}: ${wrong[0]}`);
+				const design = designTransformed(spec, response);
+				const choice = chooseBandMethod({ cascade: opampCount(cascadeOf(spec, response), cascadeMenus(sideOf(response))), transformed: opampCount(design, transformedMenus(band, notch)) });
+				const fewest = choice === 'transformed' ? 'the transformation' : spec.filterType === 'bandpass' ? 'the cascade' : 'the summed branches';
+				if (!out.includes(`fewest op-amps: ${fewest}`) || !(spec.filterType === 'bandpass' ? /gain at f0 \([\d.]+ Hz\): -?[\d.]+ dB/ : /gain at DC: -?[\d.]+ dB/).test(out)) problems.push(`${name}: no method or level line`);
+				if (placement === 'centred' && !/the whole template: OK$/.test(out.trim())) problems.push(`${name} centred: ${out.trim().split('\n').pop()}`);
+				verdicts.push(`${name} ${placement} ${page.result.measure.margin.toFixed(2)} dB`);
+			}
 		}
+		const edgeMfb = run('narrow-bp-mfb-edge-again', args(BAND_SPECS.narrowBp, 'butterworth', 'mfb', 'boctor', null, 'edge'));
+		if (!/worst loss in the passband [\d.]+ dB at \d+ Hz \(f[lh]\), Amax there 3 dB: NOT MET/.test(edgeMfb)) problems.push(`narrow band-pass on the edge: ${edgeMfb.trim().split('\n').slice(-4, -3)}`);
 		const short = run('narrow-bp-order-2', args(BAND_SPECS.narrowBp, 'butterworth', 'mfb', 'boctor', 2));
-		if (!/least attenuation in the stopband .*\(spec asks for >= 50 dB there\): NOT MET$/.test(short.trim())) problems.push(`order 2: ${short.trim().split('\n').pop()}`);
+		if (!/least attenuation in the stopband .*\(spec asks for >= 50 dB there\): NOT MET$/m.test(short) || !/the whole template: NOT MET$/.test(short.trim())) problems.push(`order 2: ${short.trim().split('\n').pop()}`);
 		check(
-			'downloadable script, transformed: the narrow band-pass (Butterworth on MFB, elliptic on Tow-Thomas) and the default band-stop (Boctor notches) end with their spec met, as the page computes it; order 2 is reported short',
+			'downloadable script, transformed: the narrow band-pass (Butterworth on MFB, elliptic on Tow-Thomas) and the default band-stop (Boctor notches) print the page\'s parts, response and verdict on the edge and centred, meet their template centred; on the edge the MFB band-pass is short in its passband and order 2 short of its stopband, as the page says',
 			problems.length === 0,
-			problems.slice(0, 2).join('; ')
+			problems.length ? problems.slice(0, 2).join('; ') : verdicts.join(', ')
 		);
 	}
 
@@ -1696,10 +1756,10 @@ const PAIR_STOCKS = {
 		check('explanations of stages built for their op-amp: strict KaTeX, plain words, the op-amp paragraph present', blocks.length > 100 && texBad === 0 && wordBad.length === 0 && opampText, wordBad.length ? wordBad[0].text.slice(0, 120) : `${blocks.length} blocks, ${texBad} TeX failures`);
 	}
 
-	// (h) The downloaded script. Without an op-amp it is exactly what it
-	// was: what codegen.js writes around the engine (everything but the
-	// inlined library sources) is pinned over 1152 scripts, taken from the
-	// code before the option existed. With OPAMP_GBW a transformed
+	// (h) The downloaded script. Without an op-amp it carries none: what
+	// codegen.js writes around the engine (everything but the inlined
+	// library sources) is pinned over 1152 scripts, moved only on purpose
+	// (see below). With OPAMP_GBW a transformed
 	// band-pass builds its MFB stages for that op-amp, prints them with it
 	// and alone, and judges the response with it, as the page does.
 	{
@@ -1720,12 +1780,22 @@ const PAIR_STOCKS = {
 				}
 			}
 		}
-		// taken from codegen.js before OPAMP_GBW existed, then moved once on
-		// purpose: the next-steps note now gives the Tow-Thomas Q law,
-		// Q / (1 - 4 Q f0 / f_T), and 400 Q f0 instead of "a few hundred"
-		const SCRIPTS_BEFORE = 'ba48a189d84c14de';
+		// taken from codegen.js before OPAMP_GBW existed, then moved on
+		// purpose: once when the next-steps note began to give the Tow-Thomas
+		// Q law, Q / (1 - 4 Q f0 / f_T), and 400 Q f0 instead of "a few
+		// hundred"; once when the script began to place the design in its
+		// template (PLACEMENT, its own section) and to take its parts from the
+		// part search on the whole filter (searchFilterParts, with its notes
+		// and the whole-passband verdict) instead of each stage's designer;
+		// once more when a stage a centred design puts out of its circuit's
+		// reach began to be built and counted as on the passband edge
+		// (placedOpampCount), a stage rounded around the edge design to be
+		// printed against that design's stage, the load notes to say when an
+		// output is read at the input's full swing, and PLACEMENT to list its
+		// values. None added OPAMP_GBW to a script without an op-amp.
+		const SCRIPTS_BEFORE = 'fb1c0d999e3dcd31';
 		const print = createHash('sha256').update(texts.join('\n')).digest('hex').slice(0, 16);
-		check(`downloadable script without an op-amp: all ${texts.length} scripts exactly as before around the engine`, print === SCRIPTS_BEFORE && !texts.some((t) => /OPAMP_GBW/.test(t)), `${print}, expected ${SCRIPTS_BEFORE}`);
+		check(`downloadable script without an op-amp: all ${texts.length} scripts as pinned around the engine, none with OPAMP_GBW`, print === SCRIPTS_BEFORE && !texts.some((t) => /OPAMP_GBW/.test(t)), `${print}, expected ${SCRIPTS_BEFORE}`);
 
 		const dir = mkdtempSync(join(tmpdir(), 'rbt56-gbw-'));
 		const spec = BAND_SPECS.narrowBp;
@@ -1739,28 +1809,27 @@ const PAIR_STOCKS = {
 				return `${e.stdout ?? ''}ERROR ${e.stderr || e.message}`;
 			}
 		};
-		const d = designTransformed(spec, 'butterworth');
-		const built = d.stages.map((s) => designMfbBandPass(s.wn, s.q, { gain: s.gain, gbw: GBWS.TL082 }));
 		const problems = [];
+		// the page's parts for the same arguments, built for the TL082 (the page's own figures are with it)
 		const code = generateScript({ ...args, opampGbw: GBWS.TL082 });
 		const out = run('narrow-tl082', code);
-		for (const f of [spec.fsl, spec.fl, spec.fh, spec.fsh]) {
-			const line = new RegExp(`^\\s*${f} Hz :\\s+(-?[\\d.]+) dB$`, 'm').exec(out);
-			if (!line || Math.abs(Number(line[1]) - magnitudePhaseAt(built, f).db) > 0.006) problems.push(`${f} Hz: ${line?.[1]} dB, the page's ${magnitudePhaseAt(built, f).db.toFixed(2)} dB`);
-		}
+		const page = pageParts({ ...args, opampGbw: GBWS.TL082 });
+		problems.push(...partsProblems(out, page).map((p) => `TL082: ${p}`));
+		if (!page.result.stages.every((s) => s.topology === 'mfbBp' && s.actual.gbw === GBWS.TL082)) problems.push('the page\'s stages are not built for the TL082');
 		if ((out.match(/with the op-amp \(single pole, GBW = 3\.45 MHz\)/g) ?? []).length !== 3 || (out.match(/the circuit alone \(ideal op-amp\)/g) ?? []).length !== 3) problems.push('stages not printed with the op-amp and alone');
 		if (!/^const OPAMP_GBW = 3450000;$/m.test(code)) problems.push('no OPAMP_GBW parameter');
 		// the closing steps say the corrected stages' numbers include the op-amp; with null they stay as they were
 		const steps = (text) => text.slice(text.indexOf('// NEXT STEPS')).replace(/\n\/\/\s+/g, ' ');
 		if (!/stages are built for a single-pole op-amp of 3\.45 MHz, so their numbers above include it/.test(steps(code))) problems.push('next steps do not name the op-amp');
-		if (!/least attenuation in the stopband .*: OK$/.test(out.trim())) problems.push(`verdict: ${out.trim().split('\n').pop()}`);
+		if (!/least attenuation in the stopband .*: OK$/m.test(out) || !/the whole template: OK$/.test(out.trim())) problems.push(`verdict: ${out.trim().split('\n').pop()}`);
 		const slow = run('narrow-lm741', generateScript({ ...args, opampGbw: GBWS.LM741 }));
 		if (!/fewest op-amps: the cascade/.test(slow) || !/loop gain under 2/.test(slow) || !/a faster op-amp in OPAMP_GBW/.test(slow)) problems.push(`LM741: ${slow.trim().split('\n').pop().slice(0, 120)}`);
 		const noneCode = generateScript({ ...args, opampGbw: null });
 		if (!/Every number above comes from an ideal op-amp/.test(steps(noneCode))) problems.push('OPAMP_GBW = null changes the next steps');
 		const none = run('narrow-none', noneCode);
-		if (!/^\s*actual f0 = /m.test(none) || /with the op-amp/.test(none) || !/: OK$/.test(none.trim())) problems.push('OPAMP_GBW = null does not give the plain stages');
-		check('downloadable script with OPAMP_GBW: the narrow band-pass built for the TL082 gives the page\'s response and meets its spec; the LM741 cannot be built (loop gain); null builds the plain stages', problems.length === 0, problems.slice(0, 2).join('; '));
+		if (!/^\s*actual f0 = /m.test(none) || /with the op-amp/.test(none)) problems.push('OPAMP_GBW = null does not give the plain stages');
+		problems.push(...partsProblems(none, pageParts({ ...args, opampGbw: null })).map((p) => `no op-amp: ${p}`));
+		check('downloadable script with OPAMP_GBW: the narrow band-pass built for the TL082 prints the page\'s parts and response and meets its template; the LM741 cannot be built (loop gain); null builds the page\'s plain stages', problems.length === 0, problems.slice(0, 2).join('; '));
 	}
 }
 
@@ -2053,8 +2122,9 @@ const PAIR_STOCKS = {
 	}
 
 	// (d) the downloaded script: RESISTOR_PAIR_LIMIT only when the page has a
-	// limit, and then the stages it prints are the page's choice; set to null
-	// it prints the design with pairs where they help
+	// limit, and then the parts it prints are the ones the page picks under
+	// that limit (the part search keeps to it, lib-parts.mjs), with the page's
+	// summary; set to null it prints the page's parts with pairs where they help
 	{
 		const dir = mkdtempSync(join(tmpdir(), 'rbt56-pair-limit-'));
 		const base = { amaxDb: 3, aminDb: 40, fp: 10000, fs: 35000, fl: 1000, fh: 10000, fsl: 300, fsh: 30000, order: null, orderHp: null, orderLp: null, capOverrides: {} };
@@ -2067,47 +2137,31 @@ const PAIR_STOCKS = {
 				return `ERROR ${e.stderr || e.message}`;
 			}
 		};
-		// the resistor lines a script prints, and the same from the page's designs
-		const printedParts = (out) =>
-			[...out.matchAll(/^ {2}(R\w*|r) = ([\d.]+) ohm( \(([\d.]+) \+ ([\d.]+) in series\))?/gm)].map((m) => `${m[1]} = ${Math.round(Number(m[2]))}${m[3] ? ` (${m[4]} + ${m[5]})` : ''}`);
-		const expectedParts = (designs) =>
-			designs.flatMap((d) =>
-				Object.entries(d.components)
-					.filter(([name]) => /^[Rr]/.test(name))
-					.map(([name, v]) => {
-						const pair = d.stockShortfall ? null : seriesPair(v, kit);
-						return { text: `${name} = ${Math.round(v)}${pair ? ` (${Number(pair[0].toPrecision(6))} + ${Number(pair[1].toPrecision(6))})` : ''}`, loose: !!d.stockShortfall };
-					})
-			);
-		// a stage on the full grid prints any pair the kit happens to sum to; the page shows none
-		const sameParts = (got, want) => got.length === want.length && want.every((w, k) => (w.loose ? got[k].replace(/ \(.*\)$/, '') === w.text : got[k] === w.text));
-		const firstOff = (got, want) => {
-			const k = want.findIndex((w, j) => !sameParts([got[j] ?? ''], [w]));
-			return k < 0 ? `${got.length} lines against ${want.length}` : `${got[k]} against ${want[k].text}`;
-		};
 		const problems = [];
 		let compared = 0;
 		for (const c of cases.filter((x) => x.script)) {
-			const { byN, top } = plans.get(c.label);
 			const spec = { ...base, ...c.script, ...scriptStock };
 			if (/RESISTOR_PAIR_LIMIT/.test(generateScript(spec))) problems.push(`${c.label}: RESISTOR_PAIR_LIMIT without a limit`);
 			for (const n of [1, 2, 3]) {
-				const code = generateScript({ ...spec, resistorPairLimit: n });
+				const placement = n === 2 ? 'centred' : 'edge';
+				const code = generateScript({ ...spec, resistorPairLimit: n, placement });
 				if (!new RegExp(`^const RESISTOR_PAIR_LIMIT = ${n};`, 'm').test(code)) problems.push(`${c.label} N=${n}: no RESISTOR_PAIR_LIMIT line`);
 				const out = run(`${c.script.filterType}-${c.script.topology}-${n}`, code);
-				const got = printedParts(out);
-				const want = expectedParts(byN[n].stages.map((s) => s.design));
+				const page = pageParts({ ...spec, resistorPairLimit: n, placement });
 				compared++;
-				if (!sameParts(got, want)) problems.push(`${c.label} N=${n}: ${firstOff(got, want)}`);
-				if (!out.includes(filterPairPlanSummary(byN[n]))) problems.push(`${c.label} N=${n}: the summary is not the page's`);
+				const wrong = partsProblems(out, page);
+				if (wrong.length) problems.push(`${c.label} N=${n}: ${wrong[0]}`);
+				if (!page.result.pairPlan || !out.includes(filterPairPlanSummary(page.result.pairPlan))) problems.push(`${c.label} N=${n}: the summary is not the page's`);
+				if ((out.match(/ in series\)/g) ?? []).length > n) problems.push(`${c.label} N=${n}: ${(out.match(/ in series\)/g) ?? []).length} pairs printed`);
 				if (n === 2) {
 					const off = run(`${c.script.filterType}-${c.script.topology}-null`, code.replace(/^const RESISTOR_PAIR_LIMIT = 2;/m, 'const RESISTOR_PAIR_LIMIT = null;'));
 					compared++;
-					if (!sameParts(printedParts(off), expectedParts(top.stages.map((s) => s.design)))) problems.push(`${c.label}: RESISTOR_PAIR_LIMIT = null is not pairs where they help`);
+					const free = partsProblems(off, pageParts({ ...spec, placement }));
+					if (free.length) problems.push(`${c.label}: RESISTOR_PAIR_LIMIT = null is not the page's pairs where they help (${free[0]})`);
 				}
 			}
 		}
-		check('pair limit, downloadable script: RESISTOR_PAIR_LIMIT only with a limit; the stages it prints are the page\'s choice for N = 1, 2, 3, its summary the page\'s, and null gives pairs where they help', problems.length === 0 && compared === 16, problems.length ? problems.slice(0, 2).join('; ') : `${compared} runs`);
+		check('pair limit, downloadable script: RESISTOR_PAIR_LIMIT only with a limit; the parts it prints are the page\'s under N = 1, 2, 3 (on the edge and centred), its summary the page\'s, and null gives the page\'s pairs where they help', problems.length === 0 && compared === 16, problems.length ? problems.slice(0, 2).join('; ') : `${compared} runs`);
 	}
 
 	// (e) LTspice: the notes follow the parts built, so they name the kept pairs only
@@ -2191,7 +2245,9 @@ const PAIR_STOCKS = {
 			});
 			rows.push(`${n}:${plan.count} pairs, ${fell} on the grids`);
 		}
-		// the script prints the stages the page shows, the full-grid ones flagged
+		// The page's parts (the part search under the same limit) leave no more
+		// stages on the full grids than the plan's fewest, and the script prints
+		// them, with the page's summary
 		const dir = mkdtempSync(join(tmpdir(), 'rbt56-pair-short-'));
 		const spec = { filterType: 'bandpass', response: 'chebyshev', topology: 'mfb', amaxDb: 3, aminDb: 40, amaxDbHp: 3, amaxDbLp: 3, aminDbHp: 40, aminDbLp: 40, fl: 1000, fh: 10000, fsl: 300, fsh: 30000, fp: 10000, fs: 35000, order: null, orderHp: null, orderLp: null, capOverrides: {}, bandMethod: 'transformed', topologyBand: 'mfb', topologyNotch: 'boctor', opampGbw: LIMIT_GBW, resistorStock: shortList, capacitorStock: stock.capacitors, resistorPairs: true };
 		for (const n of [1, total - 1]) {
@@ -2204,13 +2260,16 @@ const PAIR_STOCKS = {
 				out = `ERROR ${e.stderr || e.message}`;
 			}
 			const plan = planFilterPairs(d.stages, build, shortList, n);
-			const got = [...out.matchAll(/^ {2}(R\w*) = ([\d.]+) ohm/gm)].map((m) => `${m[1]} = ${Math.round(Number(m[2]))}`);
-			const want = plan.stages.flatMap((s) => Object.entries(s.design.components).filter(([name]) => /^R/.test(name)).map(([name, v]) => `${name} = ${Math.round(v)}`));
-			if (got.join() !== want.join()) problems.push(`script N=${n}: ${got.join(' ')} against ${want.join(' ')}`);
-			if (!out.includes(filterPairPlanSummary(plan))) problems.push(`script N=${n}: the summary is not the page's`);
+			const page = pageParts({ ...spec, resistorPairLimit: n });
+			const fellPage = page.result.stages.filter((s) => s.stockShortfall).length;
+			const fellPlan = plan.stages.filter((s) => s.design.stockShortfall).length;
+			if (fellPage > fellPlan) problems.push(`N=${n}: the page's parts leave ${fellPage} stages on the full grids, the plan ${fellPlan}`);
+			const wrong = partsProblems(out, page);
+			if (wrong.length) problems.push(`script N=${n}: ${wrong[0]}`);
+			if (!out.includes(filterPairPlanSummary(page.result.pairPlan))) problems.push(`script N=${n}: the summary is not the page's`);
 		}
 		check(
-			'pair limit, a short list: a stage the list builds with the pairs left is never shown on the full grids instead (the fewest such stages any lists give, for every N), the notes say why one is, and the script makes the same choice',
+			'pair limit, a short list: a stage the list builds with the pairs left is never shown on the full grids instead (the fewest such stages any lists give, for every N, and no more in the page\'s parts), the notes say why one is, and the script prints the page\'s parts',
 			problems.length === 0 && meaningful && total >= 3,
 			problems.length ? problems.slice(0, 3).join('; ') : `${total} pairs where they help; ${rows.join(', ')}`
 		);
@@ -3228,6 +3287,539 @@ const PAIR_STOCKS = {
 		const pairsPrinted = (limited.match(/in series\)/g) ?? []).length;
 		if (/^ERROR/.test(limited) || !/^const RESISTOR_PAIR_LIMIT = 1;/m.test(generateScript({ filterType: 'narrowband', f0: 10000, narrowBy: 'q', q: 5, gain: 1, stages: 1, circuit: 'mfbBp', circuitMenu: 'auto', capOverrides: {}, resistorStock: kit, resistorPairs: true, resistorPairLimit: 1, capacitorStock: null })) || pairsPrinted > 1) problems.push(`pair limit: ${pairsPrinted} pairs printed${/^ERROR/.test(limited) ? `, ${limited.slice(0, 120)}` : ''}`);
 		check('downloadable script, narrow band-pass: rebuilds the circuit shown, prints its figures as the page computes them, ends OK or NOT MET as the rule says, and keeps to RESISTOR_PAIR_LIMIT', problems.length === 0, problems.length ? problems.slice(0, 2).join('; ') : verdicts.join(', '));
+	}
+}
+
+/* ------------------------ 13. placement in the template and the part search */
+// The design is placed in its template (stages.js, placementWindow): its
+// whole-number order leaves a range for one free parameter between Amax
+// exactly at the passband edge and Amin exactly at the stopband edge, the
+// frequency scale for a flat or falling passband, the ripple for an
+// equiripple one; 'centred' takes the geometric middle, 'edge' the first
+// end. The page then picks every stage's parts on the whole filter
+// (partSearch.js): measured over the whole passband and stopband, up to
+// the ideal design's margin, its resistors from 1 kohm and every op-amp
+// output loaded by 2 kohm or more, else the designers' range, flagged.
+{
+	const { designBandPassTransformed, designBandStopTransformed } = await import('../src/lib/filter/stages.js');
+	const { stageElements } = await import('../src/lib/filter/stageElements.js');
+	const { solveNodes } = await import('./lib-nodal.mjs');
+	const { componentOptions } = await import('../src/lib/stock.js');
+	const lab = componentOptions('lab', '', '', false, null);
+	const labR = componentOptions('labR', '', '', false, null);
+	const cascade = (topology) => ({ method: 'cascade', highpass: topology, lowpass: topology });
+	const scan = (a, b, count) => Array.from({ length: count + 1 }, (_, i) => a * (b / a) ** (i / count));
+	/** An ideal design measured on a dense grid of its own: the worst passband loss and each stopband edge's least loss, from the passband peak. */
+	const idealFigures = (d) => {
+		const stages = d.stages.map(targetStage);
+		const g = (f) => magnitudePhaseAt(stages, f).db;
+		const t = filterTemplate(d);
+		const pass = t.pass.flatMap((r) => scan(r.from, r.to, 4000).map((f) => ({ f, db: g(f), limit: r.amaxFrom })));
+		const peak = Math.max(...pass.map((p) => p.db));
+		const worstPass = Math.min(...pass.map((p) => p.limit - (peak - p.db)));
+		// each stopband stretch from its edge outward (a band-stop's one stretch from both ends to its middle)
+		const stops = t.stop.map((r) => Math.min(...scan(r.from, r.to, 8000).map((f) => peak - g(f) - r.aminDb)));
+		return { pass: worstPass, stop: Math.min(...stops) };
+	};
+	const SPECS = {
+		butterworth: [3, 40, 3.5],
+		chebyshev: [1, 40, 3.5],
+		legendre: [2, 40, 2.5],
+		bessel: [3, 30, 4],
+		inverseChebyshev: [1, 50, 1.8],
+		elliptic: [0.5, 60, 1.4]
+	};
+	// the grid error of each family on the 4001 / 8001 points: exact for the monotone ones, the ripple peaks for the rest
+	const TOL = { butterworth: 1e-6, legendre: 1e-3, bessel: 1e-3, chebyshev: 2e-3, inverseChebyshev: 2e-3, elliptic: 3e-3 };
+
+	// (a) the window's two ends and its middle, every response, low-pass,
+	// high-pass and both transformations: 'edge' loses exactly Amax in the
+	// passband, 'stop' (the other end, kept for checks) exactly Amin in the
+	// stopband, 'centred' takes the geometric middle (sqrt(high) of the
+	// scale, sqrt(low high) of eps) and keeps the two margins it reports
+	{
+		const problems = [];
+		const worst = {};
+		for (const response of RESPONSE_KEYS) {
+			const [amaxDb, aminDb, ratio] = SPECS[response];
+			const makers = {
+				lowpass: (placement) => designLowPass({ response, amaxDb, aminDb, fp: 10000, fs: 10000 * ratio, order: null, placement }),
+				highpass: (placement) => designHighPass({ response, amaxDb, aminDb, fp: 10000, fs: 10000 / ratio, order: null, placement }),
+				bandpass: (placement) => designBandPassTransformed({ response, amaxDb, aminDbLow: aminDb + 5, aminDbHigh: aminDb, fl: 40000, fh: 60000, fsl: 40000 / (1 + ratio / 3), fsh: 60000 * (1 + ratio / 3), placement }),
+				bandstop: (placement) => designBandStopTransformed({ response, amaxDb, aminDb, fl: 9000, fh: 11500, fsl: 9000 * (1 + 0.03 * ratio), fsh: 11500 / (1 + 0.03 * ratio), placement })
+			};
+			for (const [kind, make] of Object.entries(makers)) {
+				const label = `${response} ${kind}`;
+				const edge = make('edge');
+				const stop = make('stop');
+				const mid = make('centred');
+				const p = mid.placement;
+				if (p.empty) {
+					problems.push(`${label}: no room`);
+					continue;
+				}
+				const fe = idealFigures(edge);
+				const fs = idealFigures(stop);
+				const fm = idealFigures(mid);
+				const err = Math.max(Math.abs(fe.pass), Math.abs(fs.stop), Math.abs(fm.pass - p.margins.pass), Math.abs(fm.stop - p.margins.stop));
+				worst[response] = Math.max(worst[response] ?? 0, err);
+				if (err > TOL[response]) problems.push(`${label}: edge ${fe.pass.toExponential(2)}, stop ${fs.stop.toExponential(2)}, centred ${fm.pass.toFixed(4)}/${fm.stop.toFixed(4)} against ${p.margins.pass.toFixed(4)}/${p.margins.stop.toFixed(4)}`);
+				// the edge keeps today's design, its room all in the stopband; the stop end has none left there
+				if (!(fe.stop > 1e-4 && fs.pass > 1e-4 && fm.pass > 1e-4 && fm.stop > 1e-4)) problems.push(`${label}: margins edge ${fe.stop.toFixed(3)}, stop ${fs.pass.toFixed(3)}, centred ${fm.pass.toFixed(3)}/${fm.stop.toFixed(3)}`);
+				const middle = p.kind === 'scale' ? Math.sqrt(p.high) : Math.sqrt(p.low * p.high);
+				if (Math.abs(p.value / middle - 1) > 1e-12 || Math.abs(p.idealMargin - Math.min(p.margins.pass, p.margins.stop)) > 1e-12 || edge.placement.idealMargin !== 0) problems.push(`${label}: value ${p.value} against the middle ${middle}, ideal margin ${p.idealMargin}`);
+				if (p.kind !== (response === 'chebyshev' || response === 'elliptic' ? 'ripple' : 'scale')) problems.push(`${label}: placed by ${p.kind}`);
+			}
+		}
+		check(
+			'placement: for every response (low-pass, high-pass, transformed band-pass and band-stop) the edge loses exactly Amax in the passband, the other end exactly Amin in the stopband, and centred is the geometric middle with the margins it reports',
+			problems.length === 0,
+			problems.length ? problems.slice(0, 3).join('; ') : Object.entries(worst).map(([r, e]) => `${r} ${e.toExponential(1)} dB`).join(', ')
+		);
+	}
+
+	// (b) the numbers worked out for the default spec: Butterworth 3/40 dB,
+	// 10 and 35 kHz, n = 4: f-3dB from 10005.9 to 11068.1 Hz, the middle
+	// 10523.6 Hz, which is sqrt(fp fs) (eps_p eps_s)^(-1/(2n)), and 0.79 and
+	// 1.75 dB of margin; Chebyshev 1/40 dB, the same edges: a ripple of
+	// 0.1958 dB, 0.80 and 7.49 dB
+	{
+		const eps = (a) => Math.sqrt(10 ** (a / 10) - 1);
+		const bw = designLowPass({ response: 'butterworth', amaxDb: 3, aminDb: 40, fp: 10000, fs: 35000, order: null, placement: 'centred' });
+		const p = bw.placement;
+		const f3 = (s) => 10000 * bw.wcScale * s;
+		const closed = Math.sqrt(10000 * 35000) * (eps(3) * eps(40)) ** (-1 / (2 * bw.n));
+		const ch = designLowPass({ response: 'chebyshev', amaxDb: 1, aminDb: 40, fp: 10000, fs: 35000, order: null, placement: 'centred' }).placement;
+		const near = (a, b, d) => Math.abs(a - b) <= d;
+		check(
+			'placement, the default spec: f-3dB from 10005.9 to 11068.1 Hz, centred at 10523.6 Hz (the closed form), margins 0.786 and 1.752 dB; Chebyshev 1/40 dB centred on a 0.1958 dB ripple, margins 0.804 and 7.493 dB',
+			bw.n === 4 && near(f3(1), 10005.9, 0.05) && near(f3(p.high), 11068.1, 0.05) && near(bw.wc / (2 * Math.PI), 10523.6, 0.05) && Math.abs(bw.wc / (2 * Math.PI) / closed - 1) < 1e-9 && near(p.margins.pass, 0.786, 5e-4) && near(p.margins.stop, 1.752, 5e-4) && near(ch.rippleDb.chosen, 0.1958, 5e-5) && near(ch.margins.pass, 0.804, 5e-4) && near(ch.margins.stop, 7.493, 5e-4),
+			`f-3dB ${f3(1).toFixed(1)} to ${f3(p.high).toFixed(1)}, centred ${(bw.wc / (2 * Math.PI)).toFixed(1)} Hz (closed form ${closed.toFixed(1)}), ${p.margins.pass.toFixed(3)} / ${p.margins.stop.toFixed(3)} dB; Chebyshev ${ch.rippleDb.chosen.toFixed(4)} dB, ${ch.margins.pass.toFixed(3)} / ${ch.margins.stop.toFixed(3)} dB`
+		);
+	}
+
+	// (c) the whole passband: the page's measure reads the worst loss over
+	// it, from its peak, not only at fp. The Chebyshev 0.5/40 dB low-pass
+	// (10 and 35 kHz) on the lab kit, Sallen-Key, as its designers alone build
+	// it, loses 0.00 dB at fp but 2.54 dB at 6 kHz: measured at fp only it
+	// would pass. measureFilter finds that point (against a dense grid of the
+	// checks' own), says it is not at the edge, and the template missed; the
+	// page's parts meet it. Over a set of designs, meets is the passband's
+	// worst loss within Amax + PASSBAND_SLACK_DB and the stopband's within Amin.
+	{
+		const d = designLowPass({ response: 'chebyshev', amaxDb: 0.5, aminDb: 40, fp: 10000, fs: 35000, order: null, placement: 'edge' });
+		const today = searchFilterParts(d, { menus: cascade('sallenKey'), ...lab, search: false });
+		const m = today.measure;
+		const g = (f) => magnitudePhaseAt(today.stages, f).db;
+		const grid = scan(100, 10000, 8000);
+		const peak = Math.max(...grid.map(g));
+		const dense = Math.max(...grid.map((f) => peak - g(f)));
+		const page = searchFilterParts(designLowPass({ response: 'chebyshev', amaxDb: 0.5, aminDb: 40, fp: 10000, fs: 35000, order: null, placement: 'centred' }), { menus: cascade('sallenKey'), ...lab });
+		let inconsistent = 0;
+		for (const response of RESPONSE_KEYS) {
+			for (const placement of ['edge', 'centred']) {
+				const r = searchFilterParts(designLowPass({ response, amaxDb: SPECS[response][0], aminDb: SPECS[response][1], fp: 10000, fs: 10000 * SPECS[response][2], order: null, placement }), { menus: cascade(hasZeros(response) ? 'towThomas' : 'mfb'), ...labR });
+				for (const x of [r.measure, r.baseline.measure]) if (x.meets !== (x.pass.margin >= -PASSBAND_SLACK_DB && x.stop.margin >= -1e-6) || Math.abs(x.margin - Math.min(x.pass.margin, x.stop.margin)) > 1e-12) inconsistent++;
+			}
+		}
+		check(
+			'whole passband: the Chebyshev 0.5 dB low-pass on Sallen-Key, lab kit, as its designers build it, loses 0.00 dB at fp but 2.54 dB inside; the measure finds it (not at the edge) and calls the template missed, the page\'s parts meet it, and meets follows the two margins everywhere',
+			m.passEdges[0].loss < 0.01 && m.pass.edge === null && Math.abs(m.pass.loss - dense) < 0.02 && m.pass.loss > 2.4 && !m.meets && page.measure.meets && inconsistent === 0,
+			`at fp ${m.passEdges[0].loss.toFixed(3)} dB, worst ${m.pass.loss.toFixed(3)} dB at ${m.pass.freq.toFixed(0)} Hz (dense grid ${dense.toFixed(3)}), the page's parts ${page.measure.pass.loss.toFixed(3)} dB, margin ${page.measure.margin.toFixed(3)}; ${inconsistent} inconsistent`
+		);
+	}
+
+	// (d) the page's opening design, Butterworth 3/40 dB, 10 and 35 kHz, MFB,
+	// on the lab kit. Its designers alone miss the template by 1.1 dB (4.13
+	// dB lost at fp). The part search meets it on the passband edge (with a
+	// little margin, the ideal design there having none) and, centred as the
+	// page opens, with at least the ideal design's 0.786 dB, within the
+	// limits (no alert); so do E24, E96 and the lab resistors
+	{
+		const spec = { response: 'butterworth', amaxDb: 3, aminDb: 40, fp: 10000, fs: 35000, order: null };
+		const edge = searchFilterParts(designLowPass({ ...spec, placement: 'edge' }), { menus: cascade('mfb'), ...lab });
+		const centred = searchFilterParts(designLowPass({ ...spec, placement: 'centred' }), { menus: cascade('mfb'), ...lab });
+		const others = ['E24', 'E96', 'labR'].map((s) => [s, searchFilterParts(designLowPass({ ...spec, placement: 'centred' }), { menus: cascade('mfb'), ...componentOptions(s, '', '', false, null) })]);
+		const today = edge.baseline.measure;
+		check(
+			"the page's opening design on the lab kit: its designers alone miss by 1.1 dB (4.13 dB at fp); the search meets it on the edge and, centred, with at least the ideal design's 0.786 dB, within the limits; E24, E96 and the lab resistors too",
+			!today.meets && today.margin < -1 && edge.measure.meets && edge.measure.margin > 0.05 && centred.measure.meets && centred.measure.margin >= centred.ideal.margin - 1e-3 && centred.ideal.margin > 0.78 && [edge, centred].every((r) => r.withinLimits && r.alerts.length === 0) && others.every(([, r]) => r.measure.meets && r.measure.margin >= 0.75 && r.alerts.length === 0),
+			`today ${today.passEdges[0].loss.toFixed(3)} dB at fp, margin ${today.margin.toFixed(3)}; edge ${edge.measure.passEdges[0].loss.toFixed(3)} / ${edge.measure.stop.db.toFixed(2)} dB, margin ${edge.measure.margin.toFixed(3)}; centred ${centred.measure.margin.toFixed(3)} (ideal ${centred.ideal.margin.toFixed(3)}); ${others.map(([s, r]) => `${s} ${r.measure.margin.toFixed(3)}`).join(', ')}`
+		);
+	}
+
+	// (e) Never worse than today: a fixed sample of 36 specs (every type,
+	// both band methods, every response, seven stocks and limits, the three
+	// topologies and both notch circuits), each built with today's parts as
+	// the page showed them before the search (the library at that commit,
+	// on the passband edge) and measured with the whole-passband measure.
+	// Those margins are pinned below; the 5 specs today's page could not
+	// build are left out. The search, on the edge and centred, meets the
+	// template wherever today's parts did, and where both miss it misses by
+	// no more.
+	{
+		const RESP = ['butterworth', 'chebyshev', 'legendre', 'bessel', 'inverseChebyshev', 'elliptic'];
+		const ZEROS = { inverseChebyshev: true, elliptic: true };
+		const LIMITS = { butterworth: [3, 40, 3.5], chebyshev: [1, 50, 2], legendre: [2, 40, 2.5], bessel: [3, 30, 4], inverseChebyshev: [1, 50, 1.8], elliptic: [0.5, 60, 1.4] };
+		const STOCKS = [['E24', false, null], ['E96', false, null], ['lab', false, null], ['labR', false, null], ['lab', true, null], ['lab', true, 2], ['labR', true, 1]];
+		const sample = [];
+		let k = 0;
+		for (const type of ['lowpass', 'highpass', 'bandpass', 'bandstop', 'bandpassT', 'bandstopT']) {
+			RESP.forEach((response, j) => {
+				const [amaxDb, aminDb, ratio] = LIMITS[response];
+				const [stock, pairs, limit] = STOCKS[k % STOCKS.length];
+				const topo = ZEROS[response] ? ['towThomas', 'boctor'][k % 2] : ['mfb', 'sallenKey', 'towThomas'][k % 3];
+				k++;
+				const c = { type, response, amaxDb, aminDb, stock, pairs, limit, topo };
+				if (type === 'lowpass') Object.assign(c, { fp: 10000, fs: 10000 * ratio });
+				else if (type === 'highpass') Object.assign(c, { fp: 10000, fs: 10000 / ratio });
+				else if (type === 'bandpass') Object.assign(c, { fl: 1000, fh: 10000, fsl: 1000 / ratio, fsh: 10000 * ratio });
+				else if (type === 'bandstop') Object.assign(c, { fl: 1000, fh: 30000, fsl: 1000 * ratio, fsh: 30000 / ratio });
+				else if (type === 'bandpassT') Object.assign(c, { fl: 40000, fh: 60000, fsl: 40000 / (1 + ratio / 4), fsh: 60000 * (1 + ratio / 4), bandpass: j % 2 ? 'towThomas' : 'mfb', notch: ZEROS[response] ? ['towThomas', 'boctor'][j % 2] : 'boctor' });
+				else Object.assign(c, { fl: 9000, fh: 11500, fsl: 9000 * (1 + 0.04 * ratio), fsh: 11500 / (1 + 0.04 * ratio), bandpass: 'mfb', notch: ZEROS[response] ? ['towThomas', 'boctor'][j % 2] : 'boctor' });
+				sample.push(c);
+			});
+		}
+		const designOf = (c, placement) => {
+			const { response, amaxDb, aminDb } = c;
+			if (c.type === 'lowpass') return designLowPass({ response, amaxDb, aminDb, fp: c.fp, fs: c.fs, order: null, placement });
+			if (c.type === 'highpass') return designHighPass({ response, amaxDb, aminDb, fp: c.fp, fs: c.fs, order: null, placement });
+			if (c.type === 'bandpass') return designBandPass({ response, amaxDb, aminDb, fl: c.fl, fh: c.fh, fsl: c.fsl, fsh: c.fsh, placement });
+			if (c.type === 'bandstop') return designBandStop({ response, amaxDb, aminDb, fl: c.fl, fh: c.fh, fsl: c.fsl, fsh: c.fsh, placement });
+			if (c.type === 'bandpassT') return designBandPassTransformed({ response, amaxDb, aminDbLow: aminDb, aminDbHigh: aminDb, fl: c.fl, fh: c.fh, fsl: c.fsl, fsh: c.fsh, placement });
+			return designBandStopTransformed({ response, amaxDb, aminDb, fl: c.fl, fh: c.fh, fsl: c.fsl, fsh: c.fsh, placement });
+		};
+		const settingsOf = (c) => {
+			const o = componentOptions(c.stock, '', '', c.pairs, c.limit);
+			const menus = c.type.endsWith('T') ? { method: 'transformed', bandpass: c.bandpass, notch: c.notch, ...(c.type === 'bandpassT' && c.bandpass === 'mfb' ? { gbw: OPAMP_GBW.TL082 } : {}) } : cascade(c.topo);
+			return { menus, ...o, combinerR: Array.isArray(o.resistorSeries) ? nearestResistor(10000, o.resistorSeries) : 10000 };
+		};
+		// [sample index, today's margin (dB), today met the template], taken from the library before the part search
+		const TODAY = [[0, -0.1069, false], [1, -0.7794, false], [2, 0.6476, true], [3, -1.3359, false], [4, -0.2389, false], [5, -4.1302, false], [6, 0.507, true], [7, -1.1739, false], [8, 0.0157, true], [9, 0.363, true], [10, -2.3093, false], [12, -0.4616, false], [13, -4.5426, false], [14, -1.2094, false], [15, 0.4947, true], [16, -6.1326, false], [18, -0.1654, false], [19, -10.4649, false], [20, -3.4095, false], [21, 0.096, true], [22, -4.9976, false], [25, -3.7214, false], [27, -0.4839, false], [28, -3.2636, false], [29, -1.5999, false], [30, -11.8617, false], [31, -13.5562, false], [32, 0.0908, true], [33, -11.7083, false], [34, -12.8509, false], [35, -17.2946, false]];
+		const problems = [];
+		let met = { today: 0, edge: 0, centred: 0 };
+		let gained = 0;
+		for (const [i, margin, meets] of TODAY) {
+			const c = sample[i];
+			if (meets) met.today++;
+			for (const placement of ['edge', 'centred']) {
+				const now = searchFilterParts(designOf(c, placement), settingsOf(c)).measure;
+				if (now.meets) met[placement]++;
+				if (placement === 'centred') gained += now.margin - margin;
+				const worse = (meets && !now.meets) || (!meets && !now.meets && now.margin < margin - 1e-3);
+				if (worse) problems.push(`${i} ${c.type} ${c.response} ${c.stock}${c.pairs ? ' pairs' : ''}${c.limit ? ` N=${c.limit}` : ''} ${placement}: ${now.margin.toFixed(3)} dB against today's ${margin}`);
+			}
+		}
+		check(
+			`never worse than today: ${TODAY.length} pinned specs, on the edge and centred, meet wherever today's parts met and miss by no more where both miss`,
+			sample.length === 36 && problems.length === 0 && met.centred > met.today,
+			problems.length ? problems.slice(0, 3).join('; ') : `met today ${met.today}, edge ${met.edge}, centred ${met.centred}; mean margin gained centred ${(gained / TODAY.length).toFixed(2)} dB`
+		);
+	}
+
+	// (f) "Up to N pairs": the search keeps to N and its result never gets
+	// worse as N grows (the same pools whatever the limit, so a larger one
+	// only adds sets), on both placements. One step may give margin back: a
+	// smaller N that met the template only past the resistor floor or the
+	// load limit, and a larger one that meets it within them (the limits come
+	// first); centred, the band-stop does that on the lab kit from N = 1 to 2
+	// and on the lab resistors from N = 2 to 3, and the high-pass on the lab
+	// kit from N = 3 to 4 (its loads read up to 200 kHz)
+	{
+		const problems = [];
+		const rows = [];
+		const specs = [
+			['Butterworth low-pass, MFB', designLowPass, { response: 'butterworth', amaxDb: 3, aminDb: 40, fp: 10000, fs: 35000 }, 'mfb'],
+			['Chebyshev high-pass, Tow-Thomas', designHighPass, { response: 'chebyshev', amaxDb: 1, aminDb: 40, fp: 3000, fs: 1000 }, 'towThomas'],
+			['Legendre low-pass, Sallen-Key', designLowPass, { response: 'legendre', amaxDb: 1, aminDb: 50, fp: 2000, fs: 5000 }, 'sallenKey'],
+			['Butterworth band-stop, MFB', designBandStop, { response: 'butterworth', amaxDb: 3, aminDb: 40, fl: 1000, fh: 30000, fsl: 3000, fsh: 10000 }, 'mfb']
+		];
+		const rank = (r) => [r.measure.meets ? 1 : 0, Math.min(r.measure.margin, r.ideal.margin)];
+		let byLimits = 0;
+		for (const [label, make, spec, topology] of specs) {
+			for (const stock of ['lab', 'labR']) {
+				for (const placement of ['edge', 'centred']) {
+					const d = make({ ...spec, placement });
+					const byN = [1, 2, 3, 4].map((n) => searchFilterParts(d, { menus: cascade(topology), ...componentOptions(stock, '', '', true, n) }));
+					byN.forEach((r, k) => {
+						const used = r.stages.reduce((s, x) => s + filterPairCount(x, LAB_KIT.resistors), 0);
+						if (used > k + 1) problems.push(`${label} ${stock} ${placement} N=${k + 1}: ${used} pairs`);
+						if (k === 0) return;
+						const [a, b] = [rank(byN[k - 1]), rank(r)];
+						if (b[0] < a[0] || (b[0] === a[0] && b[1] < a[1] - 1e-3)) {
+							// the limits first: past them at the smaller N, within them at this one
+							if (byN[k - 1].withinLimits === false && r.withinLimits && r.measure.meets) byLimits++;
+							else problems.push(`${label} ${stock} ${placement}: N=${k} ${byN[k - 1].measure.margin.toFixed(3)} -> N=${k + 1} ${r.measure.margin.toFixed(3)}`);
+						}
+					});
+					rows.push(`${label} ${stock} ${placement} ${byN.map((r) => r.measure.margin.toFixed(2)).join('/')}`);
+				}
+			}
+		}
+		check('pair limit and the search: at most N resistors two in series, and the result never worse as N grows from 1 to 4 (4 filters, lab kit and lab resistors, both placements) but where the larger N keeps the limits the smaller one broke', problems.length === 0 && byLimits <= 3, problems.length ? problems.slice(0, 3).join('; ') : `${byLimits} step${byLimits === 1 ? '' : 's'} back into the limits; ${rows.slice(0, 4).join(', ')}`);
+	}
+
+	// (g) The floor and the loads. An op-amp output's load is |V| / |I| with
+	// the current it delivers into its own network and the next stage's
+	// input (or the band-stop's summing resistor), solved here by the
+	// checks' own nodal solver (lib-nodal.mjs) on the stage netlists: within
+	// the limits every searched resistor is 1 kohm or more and every load 2
+	// kohm or more over the passband (a band-stop's branch over its own);
+	// an alert names the stage, the part or the op-amp, and the load and
+	// frequency the solver finds there. An output that swings less than the
+	// filter's input there (atInput) is read at the input's full swing: the
+	// resistor that would draw its current then, 1 / |H ahead| / |I|, with H
+	// ahead the built stages before it, chained from the filter's input.
+	{
+		const forSolver = (els) => [{ kind: 'V', name: 'V1', a: 'vin', b: '0' }, ...els.map((e) => (e.kind === 'OP' ? { kind: 'OP', name: e.name, p: e.nodes[0], m: e.nodes[1], out: e.nodes[2] } : { kind: e.kind, name: e.name, a: e.nodes[0], b: e.nodes[1], value: e.value }))];
+		/** |H| of the stages ahead of stage i at f, the realized ones chained from the filter's input. */
+		const gainBefore = (stages, i, f) => {
+			if (i === 0) return 1;
+			const els = stages.slice(0, i).flatMap((s, j) => stageElements(s, j, j === 0 ? 'vin' : `chain${j}`, `chain${j + 1}`));
+			const v = solveNodes(forSolver(els), f).get(`chain${i}`);
+			return Math.hypot(v.re, v.im);
+		};
+		/** The load on op-amp `tag` of stage i at f: its stage driven by 1 V, the next stage (or a resistor to ground) on its output; with swing, also |V| and |I| apart. */
+		const loadOf = (stages, i, tag, f, after, swing = false) => {
+			const els = [...stageElements(stages[i], i, 'vin', 'n1')];
+			if (after === 'stage') els.push(...stageElements(stages[i + 1], i + 1, 'n1', 'vout'));
+			if (typeof after === 'number') els.push({ kind: 'R', name: 'Rload', nodes: ['n1', '0'], value: after });
+			const ops = els.filter((e) => e.kind === 'OP' && e.name.slice(1, -String(i).length || undefined) === tag && e.name.endsWith(String(i)));
+			const op = ops[0];
+			const v = solveNodes(forSolver(els), f);
+			const out = op.nodes[2];
+			const vo = v.get(out);
+			let ire = 0;
+			let iim = 0;
+			for (const e of els) {
+				if (e.kind !== 'R' && e.kind !== 'C') continue;
+				const [a, b] = e.nodes;
+				if (a !== out && b !== out) continue;
+				const other = a === out ? b : a;
+				const vb = other === '0' ? { re: 0, im: 0 } : v.get(other);
+				const dre = vo.re - vb.re;
+				const dim = vo.im - vb.im;
+				const y = e.kind === 'R' ? { re: 1 / e.value, im: 0 } : { re: 0, im: 2 * Math.PI * f * e.value };
+				ire += dre * y.re - dim * y.im;
+				iim += dre * y.im + dim * y.re;
+			}
+			if (swing) return { v: Math.hypot(vo.re, vo.im), i: Math.hypot(ire, iim) };
+			return Math.hypot(vo.re, vo.im) / Math.hypot(ire, iim);
+		};
+		const problems = [];
+		const rows = [];
+		const within = [
+			['default low-pass, MFB, lab kit, centred', designLowPass({ response: 'butterworth', amaxDb: 3, aminDb: 40, fp: 10000, fs: 35000, order: null, placement: 'centred' }), cascade('mfb'), lab],
+			['default band-stop, MFB, lab kit, centred', designBandStop({ response: 'butterworth', amaxDb: 3, aminDb: 40, fl: 1000, fh: 30000, fsl: 3000, fsh: 10000, placement: 'centred' }), cascade('mfb'), lab],
+			['Butterworth band-pass cascade, Tow-Thomas, lab resistors, centred', designBandPass({ response: 'butterworth', amaxDb: 3, aminDb: 40, fl: 1000, fh: 10000, fsl: 300, fsh: 30000, placement: 'centred' }), cascade('towThomas'), labR],
+			['elliptic low-pass, Tow-Thomas, E24, centred', designLowPass({ response: 'elliptic', amaxDb: 1, aminDb: 40, fp: 10000, fs: 20000, order: null, placement: 'centred' }), cascade('towThomas'), componentOptions('E24', '', '', false, null)]
+		];
+		for (const [label, d, menus, stock] of within) {
+			const r = searchFilterParts(d, { menus, ...stock, combinerR: 10000 });
+			const t = filterTemplate(d);
+			// nine log-spaced points per passband stretch, one that runs up from its edge read to loadTo (a TL082's full swing);
+			// a band-stop's branch over its own passband only (the other is its stopband: no signal there)
+			const read = (stretches) => stretches.flatMap((p) => scan(p.from, p.loadTo ?? p.to, 8));
+			let least = Infinity;
+			r.stages.forEach((s, i) => {
+				const freqs = t.parallel ? read([t.pass[i < t.lpCount ? 0 : 1]]) : read(t.pass);
+				for (const [name, v] of Object.entries(s.components)) if (/^R/.test(name) && v < PART_R_FLOOR) problems.push(`${label} stage ${i + 1}: ${name} = ${v}`);
+				const last = t.parallel ? i === t.lpCount - 1 || i === r.stages.length - 1 : i === r.stages.length - 1;
+				const after = !last ? 'stage' : t.parallel ? 10000 : null;
+				const tags = stageElements(s, i, 'vin', 'n1').filter((e) => e.kind === 'OP').map((e) => e.name.slice(1, e.name.length - String(i).length));
+				for (const tag of tags) for (const f of freqs) least = Math.min(least, loadOf(r.stages, i, tag, f, after));
+			});
+			if (!(r.withinLimits && r.alerts.length === 0 && least >= PART_LOAD_MIN * (1 - 1e-9))) problems.push(`${label}: within ${r.withinLimits}, ${r.alerts.length} alerts, least load ${least.toFixed(0)} ohm`);
+			rows.push(`${label.split(',')[0]} ${least.toFixed(0)} ohm`);
+		}
+		// past the limits: the elliptic Tow-Thomas low-pass on the lab kit with 10 nF typed for stage 1
+		const d = designLowPass({ response: 'elliptic', amaxDb: 1, aminDb: 40, fp: 10000, fs: 20000, order: null, placement: 'centred' });
+		const r = searchFilterParts(d, { menus: cascade('towThomas'), ...lab, overrides: { 0: { C: 1e-8 } } });
+		// and the default band-stop transformed on E24, whose notches' first op-amp barely swings ten times above fh (atInput)
+		const bs = designBandStopTransformed({ response: 'butterworth', amaxDb: 3, aminDb: 40, fl: 1000, fh: 30000, fsl: 3000, fsh: 10000, placement: 'centred' });
+		const rb = searchFilterParts(bs, { menus: { method: 'transformed', bandpass: 'mfb', notch: 'boctor' }, ...componentOptions('E24', '', '', false, null) });
+		let checked = 0;
+		let atInput = 0;
+		for (const [res, a] of [...r.alerts.map((a) => [r, a]), ...rb.alerts.map((a) => [rb, a])]) {
+			const s = res.stages[a.stage];
+			if (a.kind === 'floor') {
+				if (!(s.components[a.resistor] === a.value && a.value < PART_R_FLOOR)) problems.push(`floor alert ${JSON.stringify(a)}`);
+			} else {
+				// (on: the next stage's input made the load the least, null the stage's own network)
+				const out = loadOf(res.stages, a.stage, a.opamp, a.freq, a.on === 'next' ? 'stage' : null, true);
+				const raw = out.v / out.i;
+				if (a.atInput) {
+					// the output swings less than the input there: read at the input's full swing
+					atInput++;
+					const full = 1 / gainBefore(res.stages, a.stage, a.freq) / out.i;
+					if (!(out.v * out.i > 0 && full > raw && Math.abs(full / a.load - 1) < 1e-6 && a.load < PART_LOAD_MIN)) problems.push(`load alert ${JSON.stringify(a)}: the solver finds ${full.toFixed(1)} ohm at full swing (${raw.toFixed(1)} ohm alone)`);
+				} else if (!(Math.abs(raw / a.load - 1) < 1e-6 && a.load < PART_LOAD_MIN)) problems.push(`load alert ${JSON.stringify(a)}: the solver finds ${raw.toFixed(1)} ohm`);
+			}
+			if (a.manual !== (res === r && a.stage === 0)) problems.push(`alert on stage ${a.stage + 1}: manual ${a.manual}`);
+			checked++;
+		}
+		const kinds = new Set(r.alerts.map((a) => a.kind));
+		if (!(kinds.has('floor') && kinds.has('load') && r.withinLimits === false && r.stages[0].components.C1 === 1e-8 && r.stages[0].manual)) problems.push(`elliptic with 10 nF: alerts ${[...kinds]}, within ${r.withinLimits}, C1 ${r.stages[0].components.C1}`);
+		check(
+			'floor and loads: within the limits every searched resistor is 1 kohm or more and every op-amp output sees 2 kohm or more over the passband (the checks\' own nodal solve, the next stage and the summing resistor on it); past them each alert names a resistor under the floor or a load the solver finds, and says the capacitors were typed',
+			problems.length === 0 && checked >= 3 && atInput >= 1,
+			problems.length ? problems.slice(0, 3).join('; ') : `${rows.join(', ')}; ${checked} alerts confirmed, ${atInput} read at the input's full swing`
+		);
+	}
+
+	// (h) The capacitors typed by hand (farads here, nF on the page): the
+	// default low-pass on the lab kit with 100 nF / 4.7 nF and 47 nF / 1 nF.
+	// The search keeps them, picks the resistors around them, and meets the
+	// template where the designers alone left Amax 0.05 dB over at fp; it
+	// needs resistors under the floor and loads under 2 kohm for that, and
+	// says so on both stages.
+	{
+		const overrides = { 0: { C1: 1e-7, C2: 4.7e-9 }, 1: { C1: 4.7e-8, C2: 1e-9 } };
+		const rows = [];
+		const problems = [];
+		for (const placement of ['edge', 'centred']) {
+			const d = designLowPass({ response: 'butterworth', amaxDb: 3, aminDb: 40, fp: 10000, fs: 35000, order: null, placement });
+			const r = searchFilterParts(d, { menus: cascade('mfb'), ...lab, overrides });
+			const kept = r.stages.every((s, i) => s.components.C1 === overrides[i].C1 && s.components.C2 === overrides[i].C2 && s.manual);
+			const flagged = [0, 1].every((i) => r.alerts.some((a) => a.stage === i && a.manual));
+			const today = r.baseline.measure;
+			if (!kept || !flagged || !r.measure.meets || r.measure.margin < today.margin + 0.5) problems.push(`${placement}: kept ${kept}, flagged ${flagged}, ${r.measure.margin.toFixed(3)} against today's ${today.margin.toFixed(3)}`);
+			rows.push(`${placement}: today ${today.passEdges[0].loss.toFixed(3)} dB at fp, search ${r.measure.passEdges[0].loss.toFixed(3)} / ${r.measure.stop.db.toFixed(2)} dB (${r.measure.margin >= 0 ? '+' : ''}${r.measure.margin.toFixed(3)})`);
+		}
+		check('capacitors typed by hand: kept on both stages, the resistors searched around them, the template met with at least 0.5 dB more margin than the designers alone, and the floor and loads they need flagged on both stages', problems.length === 0, problems.length ? problems.join('; ') : rows.join('; '));
+	}
+
+	// (i) The downloaded script reproduces the page: the parts, the response
+	// at the points it prints and the verdict, for every type, both band
+	// methods, both placements, the stocks, pairs under a limit, the
+	// capacitors typed and the op-amp of a transformed band-pass; and a
+	// script placed on the edge is told apart from the page centred
+	{
+		const dir = mkdtempSync(join(tmpdir(), 'rbt56-search-'));
+		const base = { amaxDb: 3, aminDb: 40, fp: 10000, fs: 35000, fl: 1000, fh: 10000, fsl: 300, fsh: 30000, order: null, orderHp: null, orderLp: null, capOverrides: {}, response: 'butterworth', topology: 'mfb' };
+		const kit = { resistorStock: LAB_KIT.resistors, capacitorStock: LAB_KIT.capacitors };
+		const cases = [
+			['low-pass, lab kit', { filterType: 'lowpass', ...kit }],
+			['high-pass, Sallen-Key, E24', { filterType: 'highpass', fs: 3000, topology: 'sallenKey' }],
+			['band-pass cascade, Tow-Thomas, lab resistors', { filterType: 'bandpass', topology: 'towThomas', resistorStock: LAB_KIT.resistors }],
+			['band-stop of two branches, lab kit', { filterType: 'bandstop', fl: 1000, fh: 30000, fsl: 3000, fsh: 10000, ...kit }],
+			['narrow band-pass transformed, TL082, lab kit, 2 pairs', { filterType: 'bandpass', fl: 40000, fh: 60000, fsl: 10000, fsh: 100000, aminDbHp: 50, aminDbLp: 30, bandMethod: 'transformed', topologyBand: 'mfb', topologyNotch: 'boctor', opampGbw: OPAMP_GBW.TL082, ...kit, resistorPairs: true, resistorPairLimit: 2 }],
+			['band-stop transformed, Boctor, E96', { filterType: 'bandstop', fl: 1000, fh: 30000, fsl: 3000, fsh: 10000, bandMethod: 'transformed', topologyBand: 'mfb', topologyNotch: 'boctor', resistorStock: 'E96' }],
+			['elliptic low-pass, Tow-Thomas, lab kit, 10 nF typed', { filterType: 'lowpass', response: 'elliptic', amaxDb: 1, fs: 20000, topology: 'towThomas', ...kit, capOverrides: { 0: { C: 1e-8 } } }],
+			['low-pass, lab kit, capacitors typed', { filterType: 'lowpass', ...kit, capOverrides: { 0: { C1: 1e-7, C2: 4.7e-9 }, 1: { C1: 4.7e-8, C2: 1e-9 } } }],
+			['Chebyshev high-pass, Tow-Thomas, lab kit, 1 pair', { filterType: 'highpass', response: 'chebyshev', amaxDb: 1, fp: 3000, fs: 1000, topology: 'towThomas', ...kit, resistorPairs: true, resistorPairLimit: 1 }]
+		];
+		const run = (name, code) => {
+			const file = join(dir, `${name.replace(/\W+/g, '-')}.js`);
+			writeFileSync(file, code);
+			try {
+				return execFileSync(process.execPath, [file], { encoding: 'utf8', stdio: 'pipe' });
+			} catch (e) {
+				return `${e.stdout ?? ''}ERROR ${e.stderr || e.message}`;
+			}
+		};
+		const problems = [];
+		let compared = 0;
+		let notesShown = 0;
+		for (const [label, spec] of cases) {
+			for (const placement of ['edge', 'centred']) {
+				const args = { ...base, ...spec, placement };
+				const code = generateScript(args);
+				if (!new RegExp(`^const PLACEMENT = "${placement}";`, 'm').test(code)) problems.push(`${label}: no PLACEMENT = "${placement}"`);
+				const out = run(`${label} ${placement}`, code);
+				const page = pageParts(args);
+				compared++;
+				const wrong = partsProblems(out, page);
+				if (wrong.length) problems.push(`${label} ${placement}: ${wrong[0]}`);
+				// the placement section and the search's notes, as the page's result has them
+				if (!out.includes(placement === 'edge' ? 'PLACEMENT (on the passband edge)' : 'PLACEMENT (centred in the template)')) problems.push(`${label} ${placement}: no placement section`);
+				const alerts = (out.match(/^ {2}note: .*(floor of 1000 ohm|under 2000 ohm)/gm) ?? []).length;
+				if (alerts !== page.result.alerts.length) problems.push(`${label} ${placement}: ${alerts} alert notes against ${page.result.alerts.length}`);
+				notesShown += alerts;
+				const fromSearch = (out.match(/^ {2}parts from the search/gm) ?? []).length;
+				if (fromSearch !== page.result.picks.filter((p) => p === 'search').length) problems.push(`${label} ${placement}: ${fromSearch} stages from the search against ${page.result.picks.filter((p) => p === 'search').length}`);
+				if (/past them, so the parts keep the designers' range/.test(out) !== (page.result.withinLimits === false)) problems.push(`${label} ${placement}: the limits line`);
+			}
+		}
+		// the edge script against the centred page: told apart
+		const args = { ...base, filterType: 'lowpass', ...kit };
+		const edgeOut = run('control', generateScript({ ...args, placement: 'edge' }));
+		const control = partsProblems(edgeOut, pageParts({ ...args, placement: 'centred' })).length > 0;
+		check(
+			`downloadable script: ${compared} scripts (every type, both band methods, both placements, stocks, pairs, capacitors typed, the TL082) print the page's parts, response, verdict, placement and notes, and an edge script is told apart from the page centred`,
+			problems.length === 0 && control && notesShown > 0,
+			problems.length ? problems.slice(0, 3).join('; ') : `${notesShown} alert notes`
+		);
+	}
+
+	// (j) The script is one scope: every top-level name of the inlined
+	// library and the report is declared once (a second function of the same
+	// name would silently replace the first), and every import of an inlined
+	// module fits on one line (inline() drops the import lines)
+	{
+		const problems = [];
+		for (const args of [{ filterType: 'lowpass', response: 'butterworth', topology: 'mfb', fp: 10000, fs: 35000, amaxDb: 3, aminDb: 40, order: null, capOverrides: {} }, { filterType: 'bandpass', response: 'butterworth', topology: 'mfb', amaxDb: 3, aminDb: 40, fl: 40000, fh: 60000, fsl: 10000, fsh: 100000, bandMethod: 'transformed', opampGbw: OPAMP_GBW.TL082, resistorStock: LAB_KIT.resistors, resistorPairs: true, resistorPairLimit: 2, capOverrides: {}, placement: 'centred' }]) {
+			const code = generateScript(args);
+			const seen = new Map();
+			for (const line of code.split('\n')) {
+				const m = /^(?:async\s+)?function\*?\s+([A-Za-z_$][\w$]*)/.exec(line) || /^(?:const|let|var|class)\s+([A-Za-z_$][\w$]*)/.exec(line);
+				if (m) seen.set(m[1], (seen.get(m[1]) ?? 0) + 1);
+			}
+			const dups = [...seen].filter(([, n]) => n > 1).map(([name]) => name);
+			if (dups.length) problems.push(`${args.filterType}: ${dups.join(', ')}`);
+			if (/^import\s/m.test(code) || /^export\s/m.test(code)) problems.push(`${args.filterType}: an import or export left`);
+		}
+		const { readFileSync } = await import('node:fs');
+		for (const name of ['eseries', 'format', 'order', 'approximations', 'stages', 'mfb', 'mfbHighPass', 'mfbBandPass', 'sallenKey', 'sallenKeyHighPass', 'towThomas', 'boctor', 'bandMethod', 'firstOrder', 'firstOrderHighPass', 'pairPlan', 'stageElements', 'nodal', 'bode', 'sensitivity', 'partSearch']) {
+			const src = readFileSync(new URL(`../src/lib/filter/${name}.js`, import.meta.url), 'utf8');
+			for (const line of src.split('\n')) if (/^import\s/.test(line) && !/from\s+'[^']+';?\s*$/.test(line)) problems.push(`${name}.js: ${line.slice(0, 60)}`);
+		}
+		check('downloadable script: one scope, every top-level name declared once, every import of an inlined module on one line', problems.length === 0, problems.join('; '));
+	}
+
+	// (k) Time: the worst cases of the page's settings, each searched cold
+	// (specs not searched above, so nothing is remembered): order 16 on the
+	// lab kit with pairs under a limit of 4, a band-stop of 16 + 16 on the lab
+	// resistors with pairs, an elliptic of order 12 on Tow-Thomas, and the
+	// families whose designers take longest (Boctor and a transformed
+	// band-pass of MFB stages built for the TL082, the lab resistors with
+	// pairs: every list of names to pair is built for the pair limits). The
+	// page reruns after a pause in the typing, so order 16 on the lab kit
+	// stays under 300 ms and every case under 400 ms; the same settings
+	// again come from memory
+	{
+		const cases = [
+			['low-pass, order 16, lab kit, pairs, N = 4', designLowPass({ response: 'butterworth', amaxDb: 1, aminDb: 60, fp: 9900, fs: 12900, order: 16, placement: 'centred' }), cascade('mfb'), componentOptions('lab', '', '', true, 4)],
+			['band-stop, 16 + 16, lab resistors, pairs, N = 2', designBandStop({ response: 'butterworth', amaxDb: 1, aminDb: 60, fl: 990, fh: 29900, fsl: 1290, fsh: 22900, orderLow: 16, orderHigh: 16, placement: 'centred' }), cascade('mfb'), componentOptions('labR', '', '', true, 2)],
+			['elliptic low-pass, order 12, Tow-Thomas, lab kit, N = 4', designLowPass({ response: 'elliptic', amaxDb: 0.5, aminDb: 80, fp: 9900, fs: 10900, order: 12, placement: 'centred' }), cascade('towThomas'), componentOptions('lab', '', '', true, 4)],
+			['Chebyshev low-pass, order 16, Sallen-Key, E96', designLowPass({ response: 'chebyshev', amaxDb: 0.5, aminDb: 60, fp: 9900, fs: 10900, order: 16, placement: 'centred' }), cascade('sallenKey'), componentOptions('E96', '', '', false, null)],
+			['inverse Chebyshev low-pass, Boctor, lab resistors, pairs', designLowPass({ response: 'inverseChebyshev', amaxDb: 0.1, aminDb: 39, fp: 6030, fs: 19500, order: null, placement: 'centred' }), cascade('boctor'), componentOptions('labR', '', '', true, null)],
+			[
+				'transformed band-pass, 16 stages, MFB for the TL082, lab resistors, pairs, N = 3',
+				designBandPassTransformed({ response: 'butterworth', amaxDb: 1, aminDbLow: 45, aminDbHigh: 45, fl: 240, fh: 6990, fsl: 169, fsh: 52100, placement: 'centred' }),
+				{ method: 'transformed', bandpass: 'mfb', notch: 'towThomas', gbw: OPAMP_GBW.TL082 },
+				componentOptions('labR', '', '', true, 3)
+			]
+		];
+		const times = [];
+		let warm = 0;
+		for (const [label, d, menus, stock] of cases) {
+			const settings = { menus, ...stock };
+			const t0 = performance.now();
+			const r = searchFilterParts(d, settings);
+			const t1 = performance.now();
+			const again = searchFilterParts(d, settings);
+			warm = Math.max(warm, performance.now() - t1);
+			if (again !== r || r.stages.some((s) => !s)) times.push([label, Infinity]);
+			else times.push([label, t1 - t0]);
+		}
+		const worst = Math.max(...times.map(([, ms]) => ms));
+		const first = times[0][1];
+		check(
+			'time: the worst cases searched cold stay under 0.4 s (order 16 on the lab kit with pairs under 0.3 s), and the same settings again come from memory at once',
+			first < 300 && worst < 400 && warm < 5,
+			`${times.map(([label, ms]) => `${label} ${ms.toFixed(0)} ms`).join(', ')}; again ${warm.toFixed(2)} ms`
+		);
 	}
 }
 

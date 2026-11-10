@@ -168,8 +168,12 @@ function checkText(where, text) {
 
 	// real designs, built with the tool's own library the way the page
 	// builds them, so that the figures' props (the realized stages, the
-	// band-stop branches and signs, the flags of panel 05) are exercised
+	// band-stop branches and signs, the flags of panel 05) are exercised:
+	// placed in the template as the page opens (centred), the parts picked
+	// on the whole filter (searchFilterParts), and once more as the stage
+	// designers build them alone on the passband edge, as before the search
 	const { designBandPass, designBandStop, designHighPass, designLowPass, minimumOrder } = await import('../src/lib/filter/stages.js');
+	const { searchFilterParts } = await import('../src/lib/filter/partSearch.js');
 	const { butterworthOrder, chebyshevOrder, transitionRatio } = await import('../src/lib/filter/order.js');
 	const { combinerChoice, magnitudePhaseAt, magnitudePhaseAtParallelSum } = await import('../src/lib/filter/bode.js');
 	const { LAB_KIT } = await import('../src/lib/filter/eseries.js');
@@ -213,8 +217,10 @@ function checkText(where, text) {
 	// the page sets them: Tow-Thomas stays Tow-Thomas, anything else takes
 	// MFB band-pass stages and Boctor notches, the MFB band-pass stages of a
 	// band-pass built for the page's default op-amp, the TL082.
-	function pageValues(spec, response, topology, stock, orderOverride = null, bandMethod = 'cascade') {
+	function pageValues(spec, response, topology, stock, orderOverride = null, bandMethod = 'cascade', placement = 'centred', designers = false) {
 		const { filterType, amaxDb, aminDb } = spec;
+		// designers: the parts as each stage's designer builds them alone, as before the search
+		const searched = !designers;
 		const band = filterType === 'bandpass' || filterType === 'bandstop';
 		// the page's count: null when a searched response never gets there, which counts as past the limit
 		const count = (k, amax = amaxDb, amin = aminDb) => minimumOrder(response, amax, amin, k).n ?? 99;
@@ -237,10 +243,10 @@ function checkText(where, text) {
 		if (band) {
 			const nLp = count(transitionRatio(lpFp, lpFs), amaxDbLp, aminSideLp);
 			const nHp = count(transitionRatio(filterType === 'bandstop' ? e.fsh : e.fsl, filterType === 'bandstop' ? e.fh : e.fl), amaxDbHp, aminSideHp);
-			const args = { response, amaxDbHp, aminDbHp: aminSideHp, amaxDbLp, aminDbLp: aminSideLp, fl: e.fl, fh: e.fh, fsl: e.fsl, fsh: e.fsh, orderLow: nLp, orderHigh: nHp };
+			const args = { response, amaxDbHp, aminDbHp: aminSideHp, amaxDbLp, aminDbLp: aminSideLp, fl: e.fl, fh: e.fh, fsl: e.fsl, fsh: e.fsh, orderLow: nLp, orderHigh: nHp, placement };
 			const cascade = nLp <= 8 && nHp <= 8 ? (filterType === 'bandstop' ? designBandStop(args) : designBandPass(args)) : null;
 			// the transformation: one Amax (the smaller), the Amin of each stopband edge
-			const transformed = designTransformed({ filterType, amaxDb: amaxBand, aminDb, aminDbLow: aminSideHp, aminDbHigh: aminSideLp, fl: e.fl, fh: e.fh, fsl: e.fsl, fsh: e.fsh }, response);
+			const transformed = designTransformed({ filterType, amaxDb: amaxBand, aminDb, aminDbLow: aminSideHp, aminDbHigh: aminSideLp, fl: e.fl, fh: e.fh, fsl: e.fsl, fsh: e.fsh }, response, null, placement);
 			const nBand = transformed.orderInfo.n;
 			const transformedOk = nBand !== null && nBand <= MAX_ORDER_BAND;
 			menus = transformedMenus(topology === 'towThomas' ? 'towThomas' : 'mfb', topology === 'towThomas' ? 'towThomas' : 'boctor');
@@ -263,28 +269,35 @@ function checkText(where, text) {
 			k = filterType === 'highpass' ? transitionRatio(e.fs, e.fp) : transitionRatio(e.fp, e.fs);
 			const min = count(k);
 			order = orderOverride ?? min;
-			if (min <= 8) design = (filterType === 'highpass' ? designHighPass : designLowPass)({ response, amaxDb, aminDb, fp: e.fp, fs: e.fs, order });
+			if (min <= 8) design = (filterType === 'highpass' ? designHighPass : designLowPass)({ response, amaxDb, aminDb, fp: e.fp, fs: e.fs, order, placement });
 		}
 		const transformed = method === 'transformed';
-		// a transformed design as the page builds it, its own E24 fallback
-		// included; a stage that cannot be built leaves no stages at all there
-		const bandStages = design && transformed ? design.stages.map((s) => realizeBandStage(s, menus, STOCK[stock])) : null;
+		// the page's parts: the search on the whole filter, or a stage that
+		// cannot be built (then a transformed design shows no stages at all)
+		const search =
+			design && searched
+				? searchFilterParts(design, { menus: transformed ? menus : { method: 'cascade', highpass: topology, lowpass: topology }, ...STOCK[stock], combinerR: 10000 })
+				: null;
+		// as the designers built them alone: a transformed design with its own E24 fallback included
+		const bandStages = design && transformed ? (search ? search.stages : design.stages.map((s) => realizeBandStage(s, menus, STOCK[stock]))) : null;
 		const realizedStages = bandStages
 			? bandStages.every(Boolean) ? bandStages : []
 			: design
-			? design.stages
-					.map((s) => {
-						const built = buildStage(s, topology, STOCK[stock]);
-						if (built) return built;
-						const fallback = buildStage(s, topology, STOCK.E24);
-						return fallback && { ...fallback, stockShortfall: true };
-					})
-					.filter(Boolean)
+			? (search
+					? search.stages
+					: design.stages.map((s) => {
+							const built = buildStage(s, topology, STOCK[stock]);
+							if (built) return built;
+							const fallback = buildStage(s, topology, STOCK.E24);
+							return fallback && { ...fallback, stockShortfall: true };
+						})
+				).filter(Boolean)
 			: [];
 		// a transformed band-stop is one chain: no branches, no combiner
 		const lpCount = design && filterType === 'bandstop' && !transformed ? design.lp.stages.length : 0;
 		const bandStopBranches = lpCount && realizedStages.length ? [realizedStages.slice(0, lpCount), realizedStages.slice(lpCount)] : null;
-		const combineSigns = bandStopBranches ? combinerChoice(bandStopBranches, e.fsl, e.fsh).signs : null;
+		// the page weighs the branches by its combiner's rounded resistors
+		const combineSigns = bandStopBranches ? (search?.measure?.combiner?.weights ?? combinerChoice(bandStopBranches, e.fsl, e.fsh).signs) : null;
 		const loss = (f) => {
 			if (!design || realizedStages.length === 0) return null;
 			return bandStopBranches ? -magnitudePhaseAtParallelSum(bandStopBranches, f, combineSigns).db : -magnitudePhaseAt(realizedStages, f).db;
@@ -357,6 +370,21 @@ function checkText(where, text) {
 						if (values.method === 'transformed' && values.design) transformedSeen.add(`${spec.label} ${bandMethod}`);
 						for (const w of inspectFilter(`filter ${spec.label}/${response}/${topology}/${stock}${band ? `/${bandMethod}` : ''}`, filterBasics(values))) widgets.add(w);
 					}
+				}
+			}
+		}
+	}
+	// placed on the passband edge, the page's other placement, and the
+	// stages as their designers alone build them (the parts before the search)
+	for (const spec of SPECS) {
+		const band = spec.filterType === 'bandpass' || spec.filterType === 'bandstop';
+		for (const response of ['butterworth', 'chebyshev', 'elliptic']) {
+			for (const topology of ['mfb', 'towThomas']) {
+				for (const designersAlone of [false, true]) {
+					const values = pageValues(spec, response, topology, 'lab', null, band ? 'auto' : 'cascade', 'edge', designersAlone);
+					configs++;
+					if (values.design) designs++;
+					for (const w of inspectFilter(`filter ${spec.label}/${response}/${topology}/lab/edge${designersAlone ? '/designers' : ''}`, filterBasics(values))) widgets.add(w);
 				}
 			}
 		}

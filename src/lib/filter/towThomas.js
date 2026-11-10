@@ -1,4 +1,4 @@
-import { anyPairAllowed, capacitorCandidates, nearestCapacitor, nearestResistor, pairAllowed, pairedResistor, smallCapPenalty } from './eseries';
+import { SERIES, anyPairAllowed, capacitorCandidates, nearestCapacitor, nearestResistor, pairAllowed, pairedResistor, seriesValues, smallCapPenalty, stockNeighbours, stockResistor } from './eseries';
 
 /**
  * Tow-Thomas biquad: two integrators in a loop, three op-amps.
@@ -332,4 +332,127 @@ export function designTowThomasBandPassFromCap(wn, q, C, { gain = 1, resistorSer
 	const size = Math.abs(gain);
 	if (![wn, q, C, size].every((v) => Number.isFinite(v) && v > 0)) return { ok: false };
 	return ttBpRealize(wn, q, C, { gain: size, resistorSeries, manual: true, pairs });
+}
+
+/* ------------------------------------------------- candidates for a joint search */
+
+/** The stocked values a resistor of a candidate may take: just below and just above its target, inside [rMin, rMax). */
+function ttNeighbours(target, resistorSeries, pairs, rMin, rMax) {
+	return stockNeighbours(target, resistorSeries, pairs).filter((r) => r.value >= rMin * (1 - 1e-9) && r.value < rMax);
+}
+
+/**
+ * Every way the stock builds a low-pass (or with highPass a high-pass)
+ * stage, each judged on its rounded parts (partSearch.js): every capacitor
+ * C for the two integrators (the one typed by hand, `caps.C`, when there is
+ * one), R rounded to the stocked values just below and above 1 / (omega0 C),
+ * and Rd the same around Q times that rounded R (stockNeighbours: two in
+ * series too where `pairs` lets them). Every resistor stays in [rMin, rMax).
+ * Returns light records { miss, wn, q, pairs, small, level, parts }, parts
+ * = { C, Rtarget, RdIdeal, R, Rd }, unsorted; towThomasFromParts builds one.
+ * pairs counts R three times for a low-pass (R1, Ra and Rb), twice for a
+ * high-pass.
+ */
+export function towThomasCandidates(wn, q, { highPass = false, resistorSeries = 'E24', capacitors = null, pairs = false, caps = null, rMin = TT_R_MIN, rMax = TT_R_MAX } = {}) {
+	const pairR = pairAllowed(pairs, 'Ra');
+	const pairRd = pairAllowed(pairs, 'Rd');
+	const out = [];
+	for (const C of caps?.C > 0 ? [caps.C] : capacitorCandidates(capacitors)) {
+		const { R: Rtarget, Rd: RdIdeal } = solveTowThomas(wn, q, C);
+		if (Rtarget < rMin / 2 || Rtarget > rMax * 2 || RdIdeal < rMin / 2 || RdIdeal > rMax * 2) continue;
+		const small = smallCapPenalty(C) > 0;
+		for (const r of ttNeighbours(Rtarget, resistorSeries, pairR, rMin, rMax)) {
+			for (const d of ttNeighbours(q * r.value, resistorSeries, pairRd, rMin, rMax)) {
+				const wnA = 1 / (r.value * C);
+				const qA = d.value / r.value;
+				const miss = towThomasMiss({ wn: wnA, q: qA }, wn, q);
+				const level = Math.log(r.value / TT_R_SWEET) ** 2 + 0.25 * Math.log(d.value / TT_R_SWEET) ** 2;
+				out.push({ miss, wn: wnA, q: qA, pairs: (r.pair ? (highPass ? 2 : 3) : 0) + (d.pair ? 1 : 0), small, level, parts: { C, Rtarget, RdIdeal, R: r.value, Rd: d.value } });
+			}
+		}
+	}
+	return out;
+}
+
+/** The stage a record of towThomasCandidates stands for, in the shape designTowThomasLowPass (or with highPass designTowThomasHighPass) returns, with ok, manual and outOfRange for a capacitor typed by hand. */
+export function towThomasFromParts(wn, q, parts, { highPass = false, resistorSeries = 'E24', manual = false } = {}) {
+	const { C, Rtarget, RdIdeal, R, Rd } = parts;
+	const rInv = stockResistor(TT_INVERTER_R, resistorSeries);
+	const shared = {
+		order: 2,
+		actual: { wn: 1 / (R * C), q: Rd / R, gain: highPass ? -1 : 1 },
+		steps: { C, Rtarget, RdIdeal, Rrounded: R, RdTarget: q * R, resistorSeries },
+		...(manual ? { ok: true, manual: true, outOfRange: !(R > TT_R_MIN && R < TT_R_MAX && Rd > TT_R_MIN && Rd < TT_R_MAX) } : {})
+	};
+	if (highPass) {
+		return { topology: 'towThomasHp', theoretical: { Cin: C, Ra: Rtarget, Rb: Rtarget, Rd: RdIdeal, C1: C, C2: C, r: rInv }, components: { Cin: C, Ra: R, Rb: R, Rd, C1: C, C2: C, r: rInv }, ...shared };
+	}
+	return { topology: 'towThomas', theoretical: { R1: Rtarget, Ra: Rtarget, Rb: Rtarget, Rd: RdIdeal, C1: C, C2: C, r: rInv }, components: { R1: R, Ra: R, Rb: R, Rd, C1: C, C2: C, r: rInv }, ...shared };
+}
+
+/**
+ * Every way the stock builds a notch stage, each judged on its rounded
+ * parts (partSearch.js), with the options of designTowThomasNotch (lowSide,
+ * gain): every C (or `caps.C`), Cin the stocked capacitors on each side of
+ * its ideal value where it is rounded (C itself where it is not), R and Rd
+ * as for towThomasCandidates, and Rz the stocked values just below and above
+ * the one that puts the zero on target with those parts. Every resistor
+ * stays in [rMin, rMax). miss is the largest log miss of f0, Q and the zero.
+ * Returns light records { miss, wn, q, wz, pairs, small, level, parts },
+ * parts = { C, Cin, CinIdeal, Rtarget, RdIdeal, R, Rd, RzTarget, Rz },
+ * unsorted; towThomasNotchFromParts builds one.
+ */
+export function towThomasNotchCandidates(wn, q, wz, { lowSide = true, gain = null, resistorSeries = 'E24', capacitors = null, pairs = false, caps = null, rMin = TT_R_MIN, rMax = TT_R_MAX } = {}) {
+	const grid = Array.isArray(capacitors) ? capacitorCandidates(capacitors) : seriesValues(SERIES.E12, -12, -3);
+	const pairR = pairAllowed(pairs, 'Ra');
+	const pairRd = pairAllowed(pairs, 'Rd');
+	const pairRz = pairAllowed(pairs, 'Rz');
+	const out = [];
+	for (const C of caps?.C > 0 ? [caps.C] : capacitorCandidates(capacitors)) {
+		const { R: Rtarget, Rd: RdIdeal } = solveTowThomas(wn, q, C);
+		if (Rtarget < rMin / 2 || Rtarget > rMax * 2 || RdIdeal < rMin / 2 || RdIdeal > rMax * 2) continue;
+		const CinIdeal = ttNotchCinIdeal(wn, wz, C, lowSide, gain);
+		const rounded = gain !== null ? CinIdeal !== C : lowSide;
+		let cins = [C];
+		if (rounded) {
+			let i = 0;
+			while (i < grid.length && grid[i] < CinIdeal) i++;
+			cins = grid.slice(Math.max(0, i - 1), i + 1);
+		}
+		for (const Cin of cins) {
+			const small = smallCapPenalty(C, Cin) > 0;
+			const tinyCin = CinIdeal < TT_CIN_MIN ? Math.log(TT_CIN_MIN / CinIdeal) ** 2 : 0;
+			for (const r of ttNeighbours(Rtarget, resistorSeries, pairR, rMin, rMax)) {
+				const RzTarget = 1 / (C * Cin * r.value * wz * wz);
+				const rzs = ttNeighbours(RzTarget, resistorSeries, pairRz, rMin, rMax);
+				for (const d of ttNeighbours(q * r.value, resistorSeries, pairRd, rMin, rMax)) {
+					for (const z of rzs) {
+						const actual = { wn: 1 / (r.value * C), q: d.value / r.value, wz: 1 / Math.sqrt(C * Cin * r.value * z.value) };
+						const level = Math.log(r.value / TT_R_SWEET) ** 2 + 0.125 * (Math.log(d.value / TT_R_SWEET) ** 2 + Math.log(z.value / TT_R_SWEET) ** 2) + tinyCin;
+						// the gain the stage is held at, missed as the others: far above the zero with a set gain, at DC on the low-pass side
+						const gainMiss = gain !== null ? Math.abs(Math.log(Cin / C / gain)) : lowSide ? Math.abs(Math.log(r.value / z.value)) : 0;
+						out.push({ miss: Math.max(towThomasMiss(actual, wn, q, wz), gainMiss), ...actual, pairs: (r.pair ? 2 : 0) + (d.pair ? 1 : 0) + (z.pair ? 1 : 0), small, level, parts: { C, Cin, CinIdeal, Rtarget, RdIdeal, R: r.value, Rd: d.value, RzTarget, Rz: z.value } });
+					}
+				}
+			}
+		}
+	}
+	return out;
+}
+
+/** The stage a record of towThomasNotchCandidates stands for, in the shape designTowThomasNotch returns (with ok, manual and outOfRange for a capacitor typed by hand). */
+export function towThomasNotchFromParts(wn, q, wz, parts, { lowSide = true, gain = null, resistorSeries = 'E24', manual = false } = {}) {
+	const { C, Cin, CinIdeal, Rtarget, RdIdeal, R, Rd, RzTarget, Rz } = parts;
+	const rInv = stockResistor(TT_INVERTER_R, resistorSeries);
+	const RzIdeal = gain !== null ? (Rtarget / gain) * (wn / wz) ** 2 : lowSide ? Rtarget : Rtarget * (wn / wz) ** 2;
+	return {
+		topology: 'towThomasNotch',
+		order: 2,
+		lowSide: gain !== null ? wz > wn : lowSide,
+		theoretical: { Cin: CinIdeal, Rz: RzIdeal, Ra: Rtarget, Rb: Rtarget, Rd: RdIdeal, C1: C, C2: C, r: rInv },
+		components: { Cin, Rz, Ra: R, Rb: R, Rd, C1: C, C2: C, r: rInv },
+		actual: { wn: 1 / (R * C), q: Rd / R, wz: 1 / Math.sqrt(C * Cin * R * Rz), gain: -Cin / C, dcGain: -R / Rz },
+		steps: { C, Rtarget, RdIdeal, Rrounded: R, RdTarget: q * R, CinIdeal, RzTarget, ...(gain !== null ? { gainTarget: gain } : {}), resistorSeries },
+		...(manual ? { ok: true, manual: true, outOfRange: ![R, Rd, Rz].every((v) => v > TT_R_MIN && v < TT_R_MAX) } : {})
+	};
 }

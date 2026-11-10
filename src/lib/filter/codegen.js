@@ -10,6 +10,7 @@ import mfbBandPassSrc from './mfbBandPass.js?raw';
 import mfbHighPassSrc from './mfbHighPass.js?raw';
 import orderSrc from './order.js?raw';
 import pairPlanSrc from './pairPlan.js?raw';
+import partSearchSrc from './partSearch.js?raw';
 import sallenKeySrc from './sallenKey.js?raw';
 import sallenKeyHighPassSrc from './sallenKeyHighPass.js?raw';
 import sensitivitySrc from './sensitivity.js?raw';
@@ -102,11 +103,11 @@ const OPAMP_GBW = ${gbw ?? null};
  * that many resistors in the whole filter, shared out as the page does.
  */
 function pairLimitParam(limit) {
-	return `const RESISTOR_PAIR_LIMIT = ${limit};   // with RESISTOR_PAIRS: at most this many resistors in the whole filter are two in series, the ones that bring it closest to its targets; null for every pair that helps
+	return `const RESISTOR_PAIR_LIMIT = ${limit};   // with RESISTOR_PAIRS: at most this many resistors in the whole filter are two in series, the ones the part search finds best for its template; null for every pair that helps
 `;
 }
 
-function paramsBlock({ amaxDb, aminDb, amaxDbHp, aminDbHp, amaxDbLp, aminDbLp, fp, fs, fl, fh, fsl, fsh, filterType, response, responseHp, responseLp, topology, topologyHp, topologyLp, order, orderHp, orderLp, capOverrides, resistorStock, resistorPairs, capacitorStock, transformed = false, topologyBand, topologyNotch, orderBand, opampGbw, pairLimit = null }) {
+function paramsBlock({ amaxDb, aminDb, amaxDbHp, aminDbHp, amaxDbLp, aminDbLp, fp, fs, fl, fh, fsl, fsh, filterType, response, responseHp, responseLp, topology, topologyHp, topologyLp, order, orderHp, orderLp, capOverrides, resistorStock, resistorPairs, capacitorStock, transformed = false, topologyBand, topologyNotch, orderBand, opampGbw, pairLimit = null, placement = 'edge' }) {
 	const hasOverrides = capOverrides && Object.keys(capOverrides).length > 0;
 	return `// =====================================================================
 // PARAMETERS - the only block meant to be edited
@@ -123,6 +124,13 @@ const AMAX_LP = ${amaxDbLp ?? amaxDb};           // dB, the low-pass side's Amax
 const AMIN_HP = ${aminDbHp ?? aminDb};          // dB, band-pass: the high-pass side's Amin, at fsl
 const AMIN_LP = ${aminDbLp ?? aminDb};          // dB, band-pass: the low-pass side's Amin, at fsh
 const FILTER_TYPE = ${JSON.stringify(filterType)}; // 'lowpass', 'highpass', 'bandpass' or 'bandstop'
+// Where the ideal design sits in its template. Its whole-number order
+// leaves room between Amax exactly at the passband edge and Amin exactly
+// at the stopband edge: 'centred' takes the middle of that room, so the
+// rounded parts and their tolerances can move the response either way;
+// 'edge' puts Amax exactly at the passband edge, all the room going to
+// the stopband. A band filter places each side (or its prototype) so.
+const PLACEMENT = ${JSON.stringify(placement)};  // 'centred' or 'edge'
 // Responses: 'butterworth', 'chebyshev', 'legendre', 'bessel',
 // 'inverseChebyshev' or 'elliptic'.
 const RESPONSE  = ${JSON.stringify(response)};  // used by 'lowpass' and 'highpass'
@@ -171,6 +179,7 @@ ${transformed ? bandParams({ topologyBand, topologyNotch, orderBand, opampGbw })
 // stage out of this object to keep searching automatically for it. Needs
 // C1 and C2 for an MFB stage, Ctop and Cbottom for Sallen-Key, C for a
 // first-order (leftover, odd-n) stage, a Tow-Thomas stage or a notch stage.
+// The search then picks that stage's resistors around these capacitors.
 ${transformed ? "// With BAND_METHOD 'transformed': C1 and C2 for an MFB band-pass stage,\n// C for a Tow-Thomas band-pass stage or a notch stage.\n" : ''}const CAP_OVERRIDES = ${hasOverrides ? JSON.stringify(capOverrides, null, 2) : '{}'};
 `;
 }
@@ -185,7 +194,7 @@ const bandSetup = (g) => `// a band filter built by transformation is one low-pa
 // response, its band-pass stages built as TOPOLOGY_BAND says and its notch
 // stages as TOPOLOGY_NOTCH says (Boctor only where it can be built)
 const BAND_TRANSFORMED = BAND && BAND_METHOD === 'transformed';
-const BAND_MENUS = { method: 'transformed', bandpass: TOPOLOGY_BAND, notch: TOPOLOGY_NOTCH${g ? ', gbw: OPAMP_GBW' : ''} };
+const BAND_MENUS = { method: 'transformed', bandpass: TOPOLOGY_BAND, notch: TOPOLOGY_NOTCH${g ? ", ...(TOPOLOGY_BAND === 'mfb' && OPAMP_GBW !== null ? { gbw: OPAMP_GBW } : {})" : ''} };
 if (BAND_TRANSFORMED && RESPONSE_HP !== RESPONSE_LP) {
 	throw new Error('The transformation builds the band from one low-pass prototype, so it takes one response: set RESPONSE_HP and RESPONSE_LP to the same one.');
 }
@@ -222,17 +231,20 @@ const BAND_ORDER = `if (BAND_TRANSFORMED) {
 	if (ORDER_BAND === null && info.n === null) throw new Error(\`\${label} does not reach Amin at both stopband edges at any order up to \${SEARCH_LIMIT}: loosen the spec or pick a steeper response\`);
 	design =
 		FILTER_TYPE === 'bandpass'
-			? designBandPassTransformed({ response: RESPONSE_LP, amaxDb: amax, aminDbLow: aminLow, aminDbHigh: aminHigh, fl, fh, fsl, fsh, order: ORDER_BAND })
-			: designBandStopTransformed({ response: RESPONSE_LP, amaxDb: amax, aminDb: Amin, fl, fh, fsl, fsh, order: ORDER_BAND });
+			? designBandPassTransformed({ response: RESPONSE_LP, amaxDb: amax, aminDbLow: aminLow, aminDbHigh: aminHigh, fl, fh, fsl, fsh, order: ORDER_BAND, placement: PLACEMENT })
+			: designBandStopTransformed({ response: RESPONSE_LP, amaxDb: amax, aminDb: Amin, fl, fh, fsl, fsh, order: ORDER_BAND, placement: PLACEMENT });
 	console.log(\`  -> using n = \${design.n} for the prototype: \${design.stages.length} \${kind} stages, order \${2 * design.stages.length} in all\`);
-	console.log(\`prototype (\${label} low-pass): passband edge B = \${B.toFixed(1)} Hz, stopband edge \${design.lowpass.fs.toFixed(1)} Hz\${RESPONSE_LP === 'butterworth' ? \`, pole circle at \${(design.lowpass.wc / (2 * Math.PI)).toFixed(1)} Hz (B x eps^(-1/n))\` : ''}\`);
+	const placed = design.lowpass.placement.scale !== 1 ? \` x the placement's scale \${design.lowpass.placement.scale.toFixed(4)}\` : '';
+	console.log(\`prototype (\${label} low-pass): passband edge B = \${B.toFixed(1)} Hz, stopband edge \${design.lowpass.fs.toFixed(1)} Hz\${RESPONSE_LP === 'butterworth' ? \`, pole circle at \${(design.lowpass.wc / (2 * Math.PI)).toFixed(1)} Hz (B x eps^(-1/n)\${placed})\` : ''}\`);
 } else `;
 
 /** The op-amps of both methods at their minimum orders, as the page compares them. */
 const BAND_COMPARE = `// The page builds whichever method takes fewer op-amps (the cascade on a
 // tie). Both are counted here at their minimum orders, each stage with the
-// topology it gets from the menus above. Like the page, a method whose
-// order is past MAX_ORDER is left out.
+// topology it gets from the menus above (placedOpampCount: a stage a
+// centred design puts out of its circuit's reach is built, and counted, as
+// on the passband edge). Like the page, a method whose order is past
+// MAX_ORDER is left out.
 if (BAND) {
 	console.log();
 	console.log('='.repeat(72));
@@ -241,21 +253,21 @@ if (BAND) {
 	const MAX_ORDER = 16;
 	const pass = FILTER_TYPE === 'bandpass';
 	const cascade = pass
-		? designBandPass({ responseHp: RESPONSE_HP, responseLp: RESPONSE_LP, amaxDbHp: AMAX_HP, aminDbHp: AMIN_HP, amaxDbLp: AMAX_LP, aminDbLp: AMIN_LP, fl, fh, fsl, fsh, orderHigh: null, orderLow: null })
-		: designBandStop({ responseHp: RESPONSE_HP, responseLp: RESPONSE_LP, amaxDbHp: AMAX_HP, amaxDbLp: AMAX_LP, aminDb: Amin, fl, fh, fsl, fsh, orderHigh: null, orderLow: null });
+		? designBandPass({ responseHp: RESPONSE_HP, responseLp: RESPONSE_LP, amaxDbHp: AMAX_HP, aminDbHp: AMIN_HP, amaxDbLp: AMAX_LP, aminDbLp: AMIN_LP, fl, fh, fsl, fsh, orderHigh: null, orderLow: null, placement: PLACEMENT })
+		: designBandStop({ responseHp: RESPONSE_HP, responseLp: RESPONSE_LP, amaxDbHp: AMAX_HP, amaxDbLp: AMAX_LP, aminDb: Amin, fl, fh, fsl, fsh, orderHigh: null, orderLow: null, placement: PLACEMENT });
 	const cascadeReached = [cascade.hp, cascade.lp].every((d) => Number.isFinite(d.minOrder));
 	const cascadeWithin = cascadeReached && cascade.hp.n <= MAX_ORDER && cascade.lp.n <= MAX_ORDER;
-	const cascadeCount = cascadeWithin ? opampCount(cascade, { method: 'cascade', highpass: TOPOLOGY_HP, lowpass: TOPOLOGY_LP }) : null;
+	const cascadeCount = cascadeWithin ? placedOpampCount(cascade, { method: 'cascade', highpass: TOPOLOGY_HP, lowpass: TOPOLOGY_LP }) : null;
 	const amax = Math.min(AMAX_HP, AMAX_LP);
 	const oneResponse = RESPONSE_HP === RESPONSE_LP;
 	const transformed = !oneResponse
 		? null
 		: pass
-			? designBandPassTransformed({ response: RESPONSE_LP, amaxDb: amax, aminDbLow: AMIN_HP, aminDbHigh: AMIN_LP, fl, fh, fsl, fsh })
-			: designBandStopTransformed({ response: RESPONSE_LP, amaxDb: amax, aminDb: Amin, fl, fh, fsl, fsh });
+			? designBandPassTransformed({ response: RESPONSE_LP, amaxDb: amax, aminDbLow: AMIN_HP, aminDbHigh: AMIN_LP, fl, fh, fsl, fsh, placement: PLACEMENT })
+			: designBandStopTransformed({ response: RESPONSE_LP, amaxDb: amax, aminDb: Amin, fl, fh, fsl, fsh, placement: PLACEMENT });
 	const transformedReached = !!transformed && transformed.orderInfo.n !== null;
 	const transformedWithin = transformedReached && transformed.orderInfo.n <= MAX_ORDER;
-	const transformedCount = transformedWithin ? opampCount(transformed, BAND_MENUS) : null;
+	const transformedCount = transformedWithin ? placedOpampCount(transformed, BAND_MENUS) : null;
 	const count = (c) => (c.unavailable ? \`cannot be built (\${c.unavailable})\` : \`\${c.opamps} op-amps\`);
 	const past = \`past the page's limit of \${MAX_ORDER}\`;
 	const sections = pass ? \`high-pass order \${cascade.hp.n} + low-pass order \${cascade.lp.n}\` : \`low-pass order \${cascade.lp.n} + high-pass order \${cascade.hp.n} and the summing amplifier\`;
@@ -276,19 +288,6 @@ if (BAND) {
 
 `;
 
-/** The note for capacitors chosen by hand that cannot build an MFB band-pass stage built for the op-amp: its circuit sets the ceiling. */
-const BAND_NOTE_GBW = `			// built for the op-amp, the circuit's own gain and Q set the ceiling
-			const circuit = manual.predistorted ?? { gain: stage.gain, q: stage.q };
-			note =
-				manual.why === 'opamp'
-					? '  note: with this op-amp no circuit lands on this stage, whatever the capacitors: it is too slow at f0 to correct for; using the automatic search instead'
-					: manual.why === 'loop'
-						? \`  note: with C2/C1 = \${(C2 / C1).toFixed(2)} the op-amp is left a loop gain of \${manual.loopGain.toFixed(2)} at f0, under 2, too little to correct for; using the automatic search instead\`
-						: circuit.gain >= manual.maxGain
-							? \`  note: C2/C1 = \${(C2 / C1).toFixed(2)} cannot give this stage its gain of \${circuit.gain.toFixed(3)} at Q = \${circuit.q.toFixed(4)}: the most it reaches is Q^2 (1 + C2/C1) = \${manual.maxGain.toFixed(3)}, so C2/C1 must be above \${manual.neededRatio.toFixed(2)}; using the automatic search instead\`
-							: '  note: these capacitors need a resistor outside what the stock can give; using the automatic search instead';
-`;
-
 /** An MFB band-pass stage built for the op-amp: what it does with it, then the circuit alone. */
 const BAND_PRINT_GBW = `		if (Number.isFinite(r.actual.gbw)) {
 			const pre = r.steps.predistorted;
@@ -297,81 +296,41 @@ const BAND_PRINT_GBW = `		if (Number.isFinite(r.actual.gbw)) {
 			console.log(\`  the circuit alone (ideal op-amp): f0 = \${(r.ideal.wn / (2 * Math.PI)).toFixed(1)} Hz, Q = \${r.ideal.q.toFixed(4)}, gain at its centre = \${Math.abs(r.ideal.gain).toFixed(4)}; designed for f0 = \${(pre.wn / (2 * Math.PI)).toFixed(1)} Hz, Q = \${pre.q.toFixed(4)}, gain \${pre.gain.toFixed(4)} (k = Q (1 + C2/C1) f0 / GBW = \${r.steps.k.toFixed(4)})\`);
 			console.log(\`  Q sensitivity to 1% component error: \${worstCaseQError(mfbBpSensitivity(r.components), 1).toFixed(2)}% (root-sum-square)\`);
 			console.log(\`  loop gain at f0 = GBW / (noise gain x f0) = \${r.steps.loopGain.toFixed(2)}\${r.steps.loopGain < 3 ? ': under 3, so the stage leans on the op-amp having this exact GBW' : ''}\`);
-			return r;
+			return;
 		}
 `;
 
-/** One stage of a transformed design, by the realization rules the page follows; g: the script carries OPAMP_GBW. */
-const bandRealize = (g, L = false) => `// A stage of a transformed design, built as the page builds it:
-// plannedTopology picks the circuit (Boctor only where its search finds
-// parts, a Tow-Thomas notch otherwise), notchOptions the notch's gain, and a
-// band-pass stage gets the gain at its own centre that leaves it at 1 at f0.
-// As on the page, the stock is tried first, the capacitors in CAP_OVERRIDES
-// before the automatic search, and a stage neither can build takes the
-// full E24/E6 grid, tried the same way.${g ? '\n// An MFB band-pass stage is built for the op-amp OPAMP_GBW names.' : ''}
-function realizeBandStage(stage, i, ov${L ? ', OPTS' : ''}) {
+/** One stage of a transformed design, printed; g: the script carries OPAMP_GBW. */
+const bandPrint = (g) => `// A stage of a transformed design, printed as the page shows it:
+// plannedTopology picks its circuit (Boctor only where its search finds
+// parts, a Tow-Thomas notch otherwise), notchOptions the notch's gain, and
+// a band-pass stage has the gain at its own centre that leaves it at 1 at
+// f0.${g ? ' An MFB band-pass stage is built for the op-amp OPAMP_GBW names.' : ''}
+function printBandStage(stage, i, r) {
 	const plan = plannedTopology(stage, BAND_MENUS);
-	if (plan.unavailable) throw new Error(\`Stage \${i + 1}: \${plan.unavailable}. Set TOPOLOGY_BAND = 'towThomas', ${g ? 'a faster op-amp in OPAMP_GBW, ' : ''}or BAND_METHOD = 'cascade', or change the specification.\`);
 	const f0 = stage.wn / (2 * Math.PI);
 	const where = stage.role === 'centre' ? 'at f0' : stage.role === 'lower' ? 'below f0' : 'above f0';
 	const pct = (actual, target) => (100 * (actual - target) / target).toFixed(2);
-	let note = null;
-	const withStock = (build) => {
-		note = null;
-		const r = build(OPTS);
-		if (r) return r;
-		note = null;
-		const r2 = build({ resistorSeries: 'E24', capacitors: null });
-		if (r2) console.log('  Stock cannot realize this section; using the full E24/E6 grid, as on the page.');
-		return r2${L ? ' && { ...r2, stockShortfall: true }' : ''};
-	};
-	let r;
 	if (stage.filterType === 'bandpass') {
 		console.log(\`stage \${i + 1} (band-pass, \${where}): f0 = \${f0.toFixed(1)} Hz, Q = \${stage.q.toFixed(4)}, gain at its centre = \${stage.gain.toFixed(4)} (gain 1 at f0)\`);
-		const mfb = plan.topology === 'mfbBp';
-		r = withStock((o) => {
-			const bpOpts = { ...o, gain: stage.gain${g ? ', gbw: mfb ? OPAMP_GBW : null' : ''} };
-			if (!mfb) {
-				const manual = ov && ov.C ? designTowThomasBandPassFromCap(stage.wn, stage.q, ov.C, bpOpts) : null;
-				return manual && manual.ok !== false ? manual : designTowThomasBandPass(stage.wn, stage.q, bpOpts);
-			}
-			const auto = designMfbBandPass(stage.wn, stage.q, bpOpts);
-			if (!ov || !(ov.C1 || ov.C2)) return auto;
-			const C1 = ov.C1 || (auto && auto.components.C1);
-			const C2 = ov.C2 || (auto && auto.components.C2);
-			const manual = designMfbBandPassFromCaps(stage.wn, stage.q, C1, C2, bpOpts);
-			if (manual.ok) return manual;
-${g ? BAND_NOTE_GBW : `			note =
-				stage.gain >= manual.maxGain
-					? \`  note: C2/C1 = \${(C2 / C1).toFixed(2)} cannot give this stage its gain of \${stage.gain.toFixed(3)} at Q = \${stage.q.toFixed(4)}: the most it reaches is Q^2 (1 + C2/C1) = \${manual.maxGain.toFixed(3)}, so C2/C1 must be above \${manual.neededRatio.toFixed(2)}; using the automatic search instead\`
-					: '  note: these capacitors need a resistor outside what the stock can give; using the automatic search instead';
-`}			return auto;
-		});
-		if (!r) throw new Error(\`Stage \${i + 1}: no parts build this band-pass stage. Change TOPOLOGY_BAND or the specification.\`);
-		if (note) console.log(note);
+		printNotes(r);
 		printParts(r);
 ${g ? BAND_PRINT_GBW : ''}		const f0Actual = r.actual.wn / (2 * Math.PI);
 		console.log(\`  actual f0 = \${f0Actual.toFixed(1)} Hz (\${pct(f0Actual, f0)}%), Q = \${r.actual.q.toFixed(4)} (\${pct(r.actual.q, stage.q)}%), gain at its centre = \${Math.abs(r.actual.gain).toFixed(4)} (\${pct(Math.abs(r.actual.gain), stage.gain)}%, inverting)\`);
-		if (mfb) {
+		if (plan.topology === 'mfbBp') {
 			console.log(\`  Q sensitivity to 1% component error: \${worstCaseQError(mfbBpSensitivity(r.components), 1).toFixed(2)}% (root-sum-square)\`);
 			console.log(\`  noise gain at f0 = \${r.steps.noiseGain.toFixed(1)}: the op-amp's gain-bandwidth must sit well above \${r.steps.noiseGain.toFixed(1)} x f0 = \${formatHz(r.steps.noiseGain * f0)}\`);
 		} else {
 			console.log(\`  Q sensitivity to 1% component error: \${worstCaseQError(TOW_THOMAS_BP_SENSITIVITY, 1).toFixed(2)}% (root-sum-square, fixed for this topology)\`);
 		}
-		return r;
+		return;
 	}
 	const fz = stage.wz / (2 * Math.PI);
 	const zero = stage.notch === 'symmetric' ? 'zero on its own f0' : stage.wz > stage.wn ? 'zero above its f0' : 'zero below its f0';
 	console.log(\`stage \${i + 1} (notch, \${where}, \${zero}): f0 = \${f0.toFixed(1)} Hz, Q = \${stage.q.toFixed(4)}, zero at fz = \${fz.toFixed(1)} Hz\`);
 	if (plan.fallback) console.log(plan.why === 'level' ? '  Boctor sets its own gain, and here it would move the passband by more than 1 dB or leave the zero off target, so it is a Tow-Thomas notch.' : '  Boctor cannot build this notch, so it is a Tow-Thomas notch.');
 	const boctor = plan.topology === 'boctor' || plan.topology === 'boctorHp';
-	const notchPlan = notchOptions(stage);
-	const notchOpts = boctor ? { lowSide: notchPlan.boctorLowSide } : notchPlan.towThomas;
-	r = withStock((o) => {
-		const edited = ov && ov.C ? (boctor ? designBoctorNotchFromCap : designTowThomasNotchFromCap)(stage.wn, stage.q, stage.wz, ov.C, { ...o, ...notchOpts }) : null;
-		return edited && edited.ok !== false ? edited : (boctor ? designBoctorNotch : designTowThomasNotch)(stage.wn, stage.q, stage.wz, { ...o, ...notchOpts });
-	});
-	if (!r) throw new Error(\`Stage \${i + 1}: no parts build this notch stage. Set TOPOLOGY_NOTCH = 'towThomas' or change the specification.\`);
+	printNotes(r);
 	printParts(r);
 	const f0Actual = r.actual.wn / (2 * Math.PI);
 	const fzActual = r.actual.wz / (2 * Math.PI);
@@ -383,7 +342,58 @@ ${g ? BAND_PRINT_GBW : ''}		const f0Actual = r.actual.wn / (2 * Math.PI);
 			: \`  DC gain = \${(10 ** (magnitudePhaseAt([r], 0).db / 20)).toFixed(4)}\${boctor ? ' (a Boctor stage keeps its own gain)' : ' (set for 1, including component rounding)'}\`
 	);
 	if (!boctor) console.log(\`  Q sensitivity to 1% component error: \${worstCaseQError(TOW_THOMAS_NOTCH_SENSITIVITY, 1).toFixed(2)}% (root-sum-square, fixed for this topology)\`);
-	return r;
+}
+`;
+
+/** One stage of a low-pass, a high-pass or a band filter's side, printed. */
+const STAGE_PRINT = `// A stage of a cascade (or of a band-stop's branch), printed as the page
+// shows it: its targets, its parts and what they give.
+function printStage(stage, i, r) {
+	const TOPO = topologyOf(stage.filterType);
+	if (stage.order === 1) {
+		console.log(\`stage \${i + 1} (1st order, \${stage.filterType}): tau = \${stage.tau.toExponential(4)} s\`);
+		printNotes(r);
+		console.log(\`  R = \${RESISTOR_PAIRS && seriesPair(r.components.R, RESISTOR_SERIES) ? ohms(r.components.R) : r.components.R + ' ohm'}, C = \${r.components.C.toExponential(4)} F\`);
+		console.log(\`  actual tau = \${r.actual.tau.toExponential(4)} s (\${(100 * (r.actual.tau - stage.tau) / stage.tau).toFixed(2)}%)\`);
+		return;
+	}
+	const f0 = stage.wn / (2 * Math.PI);
+
+	if (Number.isFinite(stage.wz)) {
+		// A finite zero uses the selected notch network.
+		const fz = stage.wz / (2 * Math.PI);
+		const lowSide = stage.filterType === 'lowpass';
+		console.log(\`stage \${i + 1} (\${stage.filterType} notch): f0 = \${f0.toFixed(1)} Hz, Q = \${stage.q.toFixed(4)}, zero at fz = \${fz.toFixed(1)} Hz\`);
+		printNotes(r);
+		printParts(r);
+		const f0Actual = r.actual.wn / (2 * Math.PI);
+		const fzActual = r.actual.wz / (2 * Math.PI);
+		console.log(
+			\`  actual f0 = \${f0Actual.toFixed(1)} Hz (\${(100 * (f0Actual - f0) / f0).toFixed(2)}%), Q = \${r.actual.q.toFixed(4)} (\${(100 * (r.actual.q - stage.q) / stage.q).toFixed(2)}%), fz = \${fzActual.toFixed(1)} Hz (\${(100 * (fzActual - fz) / fz).toFixed(2)}%)\`
+		);
+		console.log('  numerator s coefficient = ' + (r.actual.numeratorS ?? 0));
+		console.log(lowSide ? \`  DC gain = \${r.actual.dcGain.toFixed(4)} (including component rounding)\` : \`  gain above the zero = \${r.actual.gain.toFixed(4)}\`);
+		if (TOPO !== 'boctor') console.log(\`  Q sensitivity to 1% component error: \${worstCaseQError(TOW_THOMAS_NOTCH_SENSITIVITY, 1).toFixed(2)}% (root-sum-square, fixed for this topology)\`);
+		return;
+	}
+
+	console.log(\`stage \${i + 1} (\${stage.filterType}): f0 = \${f0.toFixed(1)} Hz, Q = \${stage.q.toFixed(4)}\`);
+	printNotes(r);
+	printParts(r);
+	const f0Actual = r.actual.wn / (2 * Math.PI);
+	console.log(
+		\`  actual f0 = \${f0Actual.toFixed(1)} Hz (\${(100 * (f0Actual - f0) / f0).toFixed(2)}%), Q = \${r.actual.q.toFixed(4)} (\${(100 * (r.actual.q - stage.q) / stage.q).toFixed(2)}%)\`
+	);
+	if (stage.filterType === 'highpass') {
+		const sens = TOPO === 'towThomas' || TOPO === 'boctor' ? TOW_THOMAS_HP_SENSITIVITY : TOPO === 'sallenKey' ? SALLEN_KEY_HP_SENSITIVITY : MFB_HP_SENSITIVITY;
+		console.log(\`  Q sensitivity to 1% component error: \${worstCaseQError(sens, 1).toFixed(2)}% (root-sum-square, fixed for this topology)\`);
+	} else if (TOPO === 'towThomas' || TOPO === 'boctor') {
+		console.log(\`  Q sensitivity to 1% component error: \${worstCaseQError(TOW_THOMAS_SENSITIVITY, 1).toFixed(2)}% (root-sum-square, fixed for this topology)\`);
+	} else if (TOPO === 'mfb') {
+		console.log(\`  Q sensitivity to 1% component error: \${worstCaseQError(mfbSensitivity(r.components), 1).toFixed(2)}% (root-sum-square)\`);
+	} else {
+		console.log(\`  Q sensitivity to 1% component error: \${worstCaseQError(SALLEN_KEY_SENSITIVITY, 1).toFixed(2)}% (root-sum-square, fixed for this topology)\`);
+	}
 }
 `;
 
@@ -401,37 +411,106 @@ const BAND_LEVEL = `if (BAND_TRANSFORMED) {
 const BAND_RESPONSE_GBW = `if (BAND_TRANSFORMED && OPAMP_GBW !== null && realized.some((r) => r.topology === 'mfbBp')) console.log(\`  (the MFB band-pass stages with the single-pole op-amp they are built for, GBW = \${formatHz(OPAMP_GBW)})\`);
 `;
 
-/**
- * A script with RESISTOR_PAIR_LIMIT builds its stages through realizeStage
- * (the loop body of every other script, the same text), so that the plan
- * can build each stage quietly for every subset of its pairs first.
- */
-const PAIR_PLAN_RUN = `
-// RESISTOR_PAIR_LIMIT: the pairs shared out over the stages as the page
-// does it (planFilterPairs above). Each stage is built quietly with every
-// subset of its pairs, then built and printed with the ones kept.
-const quietly = (build) => {
-	const log = console.log;
-	console.log = () => {};
-	try {
-		return build();
-	} catch {
-		return null;
-	} finally {
-		console.log = log;
+/** Where the design sits in its template (stages.js placementWindow): the room its order leaves and the point taken. */
+const PLACEMENT_REPORT = `console.log();
+console.log('='.repeat(72));
+console.log(\`PLACEMENT (\${design.placement.mode === 'edge' ? 'on the passband edge' : 'centred in the template'})\`);
+console.log('='.repeat(72));
+/** One prototype's window and its point; pass and stop name its edges. */
+function printPlacement(p, side, pass, stop) {
+	const hz = (f) => (Array.isArray(f) ? \`\${f[0].toFixed(1)} and \${f[1].toFixed(1)} Hz\` : \`\${f.toFixed(1)} Hz\`);
+	const head = side ? \`\${side}: \` : '';
+	if (p.empty) {
+		console.log(\`\${head}the order is under the one the spec needs, so it leaves no room to place: Amax exactly at \${pass}\`);
+		return;
 	}
+	if (p.kind === 'scale') {
+		console.log(\`\${head}the frequency scale can run from 1 (Amax exactly at \${pass}, \${hz(p.amaxAt.edge)}) to \${p.high.toFixed(4)} (Amin exactly at \${stop}, Amax then lost at \${hz(p.amaxAt.stop)})\`);
+		if (p.mode !== 'edge') console.log(\`  centred: the geometric middle, sqrt(1 x \${p.high.toFixed(4)}) = \${p.value.toFixed(4)}, Amax lost at \${hz(p.amaxAt.chosen)}\`);
+	} else {
+		// four figures, however small the ripple a high order leaves room for
+		const sig = (v) => Number(v.toPrecision(4));
+		console.log(\`\${head}eps can run from \${sig(p.low)} (a ripple of \${sig(p.rippleDb.stop)} dB, Amin exactly at \${stop}) to \${sig(p.high)} (the ripple of Amax, \${p.rippleDb.edge} dB)\`);
+		if (p.mode !== 'edge') console.log(\`  centred: the geometric middle, sqrt(\${sig(p.low)} x \${sig(p.high)}) = \${sig(p.value)}, a ripple of \${sig(p.rippleDb.chosen)} dB, the passband edge still on \${pass}\`);
+	}
+	const edges = p.margins.edges.length > 1 ? \` (\${p.margins.edges[0].toFixed(3)} dB at fsl, \${p.margins.edges[1].toFixed(3)} dB at fsh)\` : '';
+	if (p.mode === 'edge') console.log(\`  on the passband edge: Amax exactly at \${pass}, all the room to the stopband, \${p.margins.stop.toFixed(3)} dB over Amin\${edges}\`);
+	else console.log(\`  the ideal design keeps \${p.margins.pass.toFixed(3)} dB under Amax across the passband and \${p.margins.stop.toFixed(3)} dB over Amin across the stopband\${edges}: room for the rounding of the parts and their tolerances\`);
+}
+if (BAND && design.placement.hp) {
+	const sides = FILTER_TYPE === 'bandpass' ? [[design.placement.hp, 'high-pass side', 'fl', 'fsl'], [design.placement.lp, 'low-pass side', 'fh', 'fsh']] : [[design.placement.lp, 'low-pass branch', 'fl', 'fsl'], [design.placement.hp, 'high-pass branch', 'fh', 'fsh']];
+	for (const [p, side, pass, stop] of sides) printPlacement(p, side, pass, stop);
+} else if (BAND) printPlacement(design.placement, 'the prototype', 'fl and fh', 'fsl or fsh, the closer');
+else printPlacement(design.placement, '', 'fp', 'fs');
+if (design.placement.mode !== 'edge' && design.placement.idealMargin > 0) console.log(\`the parts are searched for up to the ideal design's margin, \${design.placement.idealMargin.toFixed(3)} dB: more is not sought, so they stay close to the response designed\`);
+`;
+
+/**
+ * The parts of the whole filter, chosen as the page chooses them
+ * (searchFilterParts of partSearch.js), and the notes the page gives with
+ * them; L: the script carries RESISTOR_PAIR_LIMIT.
+ */
+const searchRun = (t, g, L) => `// The parts of the whole filter, chosen as the page chooses them
+// (searchFilterParts): every stage lists the ways the stock builds it, each
+// judged on its rounded parts, and the set whose whole response meets the
+// template best is kept, the stage designers' own picks among them. Its
+// resistors start at PART_R_FLOOR and every op-amp output must see at
+// least PART_LOAD_MIN over the passband; a filter that meets its template
+// only past those limits keeps the designers' range and says where.
+const MENUS = ${t ? 'BAND_TRANSFORMED ? BAND_MENUS : ' : ''}{ method: 'cascade', highpass: topologyOf('highpass'), lowpass: topologyOf('lowpass') };
+// a list's summing resistor is its value nearest SUMMING_R, as on the page
+const COMBINER_R = Array.isArray(RESISTOR_SERIES) ? nearestResistor(SUMMING_R, RESISTOR_SERIES) : SUMMING_R;
+const PAIR_LIMIT = ${L ? 'RESISTOR_PAIRS && RESISTOR_PAIR_LIMIT !== null ? RESISTOR_PAIR_LIMIT : null' : 'null'};
+${
+	t
+		? `if (BAND_TRANSFORMED) {
+	// a stage the placement puts out of its circuit's reach is built as on the passband edge (placedOpampCount)
+	const count = placedOpampCount(design, BAND_MENUS);
+	if (count.unavailable) throw new Error(\`Stage \${count.unavailable.replace(/^stage /, '')}. Set TOPOLOGY_BAND = 'towThomas', ${g ? 'a faster op-amp in OPAMP_GBW, ' : ''}or BAND_METHOD = 'cascade', or change the specification.\`);
+}
+`
+		: ''
+}const SEARCH = searchFilterParts(design, { menus: MENUS, ...OPTS, pairLimit: PAIR_LIMIT, overrides: CAP_OVERRIDES, combinerR: COMBINER_R });
+const failed = SEARCH.stages.findIndex((r) => !r);
+if (failed >= 0) {
+	const stage = design.stages[failed];
+${t ? `	if (BAND_TRANSFORMED) throw new Error(stage.filterType === 'bandpass' ? \`Stage \${failed + 1}: no parts build this band-pass stage. Change TOPOLOGY_BAND or the specification.\` : \`Stage \${failed + 1}: no parts build this notch stage. Set TOPOLOGY_NOTCH = 'towThomas' or change the specification.\`);\n` : ''}	throw new Error(Number.isFinite(stage.wz) && topologyOf(stage.filterType) === 'boctor' ? 'This Boctor section is not realizable. Select Tow-Thomas or change the specification.' : \`Stage \${failed + 1} cannot be built with the available capacitor range and positive resistors. Change the topology or the specification.\`);
+}
+const realized = SEARCH.stages;
+const searched = SEARCH.picks.filter((p) => p === 'search').length;
+console.log(\`parts chosen on the whole filter's response: \${searched} of \${realized.length} stage\${realized.length === 1 ? '' : 's'} from the search\${searched < realized.length ? ', the others as their designer picks them alone' : ''}\`);
+if (SEARCH.pairPlan) console.log(filterPairPlanSummary(SEARCH.pairPlan));
+// a load the page flags: which op-amp, and what hangs on its output
+const opampName = (tag) => (tag === '' ? 'the op-amp' : /^[abc]$/.test(tag) ? \`A\${'abc'.indexOf(tag) + 1}\` : \`U\${tag}\`);
+const alertText = (a) => {
+	const typed = a.manual ? ', around the capacitors of CAP_OVERRIDES' : '';
+	if (a.kind === 'floor') return \`\${a.resistor} = \${ohms(a.value)} is under the search's floor of \${PART_R_FLOOR} ohm\${typed}\`;
+	const on = a.on === 'next' ? " with the next stage's input on it" : a.on === 'combiner' ? ' with the summing amplifier on it' : '';
+	const who = \`\${a.output ? 'the output of ' : ''}\${opampName(a.opamp)}\${a.output ? '' : "'s output"}\`;
+	const at = \`at \${Number(a.freq.toPrecision(4))} Hz\`;
+	// an output that swings less than the filter's input there: the current it draws at the largest signal the filter passes
+	const sees = a.atInput ? \`draws as much current\${on} \${at} as \${a.load.toFixed(0)} ohm would at full swing\` : \`sees \${a.load.toFixed(0)} ohm\${on} \${at}\`;
+	return \`\${who} \${sees}, under \${PART_LOAD_MIN} ohm: a TL082 swings +-10 V only into 2 kohm or more\${typed}\`;
 };
-const PAIR_PLAN =
-	RESISTOR_PAIRS && RESISTOR_PAIR_LIMIT !== null
-		? planFilterPairs(design.stages, (i, pairs) => quietly(() => realizeStage(design.stages[i], i, { ...OPTS, pairs })), RESISTOR_SERIES, RESISTOR_PAIR_LIMIT)
-		: null;
-if (PAIR_PLAN) console.log(filterPairPlanSummary(PAIR_PLAN));
-const realized = design.stages.map((stage, i) => {
-	const r = realizeStage(stage, i, PAIR_PLAN ? { ...OPTS, pairs: PAIR_PLAN.stages[i].option } : OPTS);
-	const cut = PAIR_PLAN && PAIR_PLAN.limited ? filterPairLimitSentence(PAIR_PLAN.stages[i], RESISTOR_PAIR_LIMIT) : '';
+// a stage whose parts were rounded around the same design on the passband edge is printed against that stage
+const EDGE_DESIGN = SEARCH.fromEdge.some(Boolean) ? edgeDesignOf(design) : null;
+realized.forEach((r, i) => {
+	const stage = SEARCH.fromEdge[i] && EDGE_DESIGN ? EDGE_DESIGN.stages[i] : design.stages[i];
+	${t ? 'if (BAND_TRANSFORMED) printBandStage(stage, i, r);\n\telse ' : ''}printStage(stage, i, r);
+	const how = SEARCH.picks[i] === 'search' ? "  parts from the search, judged on the whole filter's response" : '  parts as the stage designer picks them alone';
+	const edgeNote = SEARCH.edgeOnly[i]
+		? ', built as this stage of the same design on the passband edge (the figures above): centred, it is out of reach of its circuit'
+		: ', rounded around this stage of the same design on the passband edge (the figures above): they land the whole filter closer to its template';
+	console.log(\`\${how}\${SEARCH.fromEdge[i] ? edgeNote : SEARCH.picks[i] === 'search' ? '' : ': the search found nothing closer'}\`);
+	const cut = SEARCH.pairPlan && SEARCH.pairPlan.limited ? filterPairLimitSentence(SEARCH.pairPlan.stages[i], PAIR_LIMIT) : '';
 	if (cut) console.log(\`  \${cut}\`);
-	return r;
-});`;
+	for (const a of SEARCH.alerts) if (a.stage === i) console.log(\`  note: \${alertText(a)}\`);
+});
+const LIMITS = \`resistors from \${PART_R_FLOOR} ohm, every op-amp output \${PART_LOAD_MIN} ohm or more over the passband\`;
+if (SEARCH.withinLimits === false) console.log(\`limits of the search (\${LIMITS}): the filter meets its template, or comes closest to it, only past them, so the parts keep the designers' range; the notes above say where\`);
+else if (SEARCH.alerts.length) console.log(\`limits of the search (\${LIMITS}): kept, but where no part keeps them; the notes above say where\`);
+else console.log(\`limits of the search (\${LIMITS}): kept\`);
+`;
 
 function reportBlock(t = false, g = false, L = false) {
 	return `// =====================================================================
@@ -442,6 +521,7 @@ function reportBlock(t = false, g = false, L = false) {
 // has one: the side (or the filter) with such a response must be Tow-Thomas
 const BAND = FILTER_TYPE === 'bandpass' || FILTER_TYPE === 'bandstop';
 const topologyOf = (side) => (BAND ? (side === 'highpass' ? TOPOLOGY_HP : TOPOLOGY_LP) : TOPOLOGY);
+if (!PLACEMENTS.includes(PLACEMENT)) throw new Error("PLACEMENT must be 'centred' or 'edge'");
 ${t ? bandSetup(g) : ''}for (const [response, side, name] of ${t ? 'BAND_TRANSFORMED ? [] : ' : ''}BAND ? [[RESPONSE_HP, 'highpass', 'TOPOLOGY_HP'], [RESPONSE_LP, 'lowpass', 'TOPOLOGY_LP']] : [[RESPONSE, FILTER_TYPE, 'TOPOLOGY']]) {
 	if (RESPONSES[response].zeros && !['towThomas', 'boctor'].includes(topologyOf(side))) {
 		throw new Error(\`\${RESPONSES[response].label} needs Tow-Thomas or Boctor notch stages: set \${name} = 'towThomas'\`);
@@ -471,32 +551,36 @@ ${t ? BAND_ORDER : ''}if (FILTER_TYPE === 'bandpass') {
 	console.log(\`spec: bandpass (fl=\${fl} fh=\${fh} fsl=\${fsl} fsh=\${fsh} Hz), high-pass side Amax=\${AMAX_HP} dB Amin=\${AMIN_HP} dB, low-pass side Amax=\${AMAX_LP} dB Amin=\${AMIN_LP} dB\`);
 	const nHp = orderFor('high-pass side', RESPONSE_HP, transitionRatio(fsl, fl), ORDER_HP, AMAX_HP, AMIN_HP);
 	const nLp = orderFor('low-pass side', RESPONSE_LP, transitionRatio(fh, fsh), ORDER_LP, AMAX_LP, AMIN_LP);
-	design = designBandPass({ responseHp: RESPONSE_HP, responseLp: RESPONSE_LP, amaxDbHp: AMAX_HP, aminDbHp: AMIN_HP, amaxDbLp: AMAX_LP, aminDbLp: AMIN_LP, fl, fh, fsl, fsh, orderHigh: nHp, orderLow: nLp });
+	design = designBandPass({ responseHp: RESPONSE_HP, responseLp: RESPONSE_LP, amaxDbHp: AMAX_HP, aminDbHp: AMIN_HP, amaxDbLp: AMAX_LP, aminDbLp: AMIN_LP, fl, fh, fsl, fsh, orderHigh: nHp, orderLow: nLp, placement: PLACEMENT });
 } else if (FILTER_TYPE === 'bandstop') {
 	console.log(\`spec: bandstop (fl=\${fl} fsl=\${fsl} fsh=\${fsh} fh=\${fh} Hz), Amin=\${Amin} dB across the stopband, low-pass branch Amax=\${AMAX_LP} dB, high-pass branch Amax=\${AMAX_HP} dB\`);
 	const nLp = orderFor('low-pass branch', RESPONSE_LP, transitionRatio(fl, fsl), ORDER_LP, AMAX_LP, Amin);
 	const nHp = orderFor('high-pass branch', RESPONSE_HP, transitionRatio(fsh, fh), ORDER_HP, AMAX_HP, Amin);
-	design = designBandStop({ responseHp: RESPONSE_HP, responseLp: RESPONSE_LP, amaxDbHp: AMAX_HP, amaxDbLp: AMAX_LP, aminDb: Amin, fl, fh, fsl, fsh, orderHigh: nHp, orderLow: nLp });
+	design = designBandStop({ responseHp: RESPONSE_HP, responseLp: RESPONSE_LP, amaxDbHp: AMAX_HP, amaxDbLp: AMAX_LP, aminDb: Amin, fl, fh, fsl, fsh, orderHigh: nHp, orderLow: nLp, placement: PLACEMENT });
 } else {
 	console.log(\`spec: Amax=\${Amax} dB at \${fp} Hz, Amin=\${Amin} dB at \${fs} Hz, \${FILTER_TYPE}\`);
 	const k = FILTER_TYPE === 'highpass' ? transitionRatio(fs, fp) : transitionRatio(fp, fs);
 	const n = orderFor(FILTER_TYPE === 'highpass' ? 'k = fs/fp' : 'k = fp/fs', RESPONSE, k, ORDER);
 	design =
 		FILTER_TYPE === 'highpass'
-			? designHighPass({ response: RESPONSE, amaxDb: Amax, aminDb: Amin, fp, fs, order: n })
-			: designLowPass({ response: RESPONSE, amaxDb: Amax, aminDb: Amin, fp, fs, order: n });
+			? designHighPass({ response: RESPONSE, amaxDb: Amax, aminDb: Amin, fp, fs, order: n, placement: PLACEMENT })
+			: designLowPass({ response: RESPONSE, amaxDb: Amax, aminDb: Amin, fp, fs, order: n, placement: PLACEMENT });
 	if (RESPONSE === 'butterworth') {
 		// Where Amax reaches the components: the pole circle (= the -3 dB point)
 		// sits at fp * eps^(-1/n) for a low-pass, fp * eps^(+1/n) for a high-pass,
 		// so that exactly Amax dB is lost at fp. eps = 1 only at Amax = 3.0103 dB.
-		console.log(\`Butterworth: eps = sqrt(10^(Amax/10) - 1) = \${design.eps.toFixed(4)}, pole circle at fp x eps^(\${FILTER_TYPE === 'highpass' ? '+' : '-'}1/n) = \${fp} x \${design.wcScale.toFixed(4)} = \${(design.wc / (2 * Math.PI)).toFixed(1)} Hz (the -3 dB frequency)\`);
+		// Centred, the placement's scale moves it on from there (PLACEMENT below).
+		const scale = design.placement.scale;
+		const by = scale !== 1 ? \` \${FILTER_TYPE === 'highpass' ? '/' : 'x'} \${scale.toFixed(4)}\` : '';
+		console.log(\`Butterworth: eps = sqrt(10^(Amax/10) - 1) = \${design.eps.toFixed(4)}, pole circle at fp x eps^(\${FILTER_TYPE === 'highpass' ? '+' : '-'}1/n)\${scale !== 1 ? \` \${FILTER_TYPE === 'highpass' ? '/' : 'x'} scale\` : ''} = \${fp} x \${design.wcScale.toFixed(4)}\${by} = \${(design.wc / (2 * Math.PI)).toFixed(1)} Hz (the -3 dB frequency)\`);
 	}
 	if (design.prototype && Number.isFinite(design.prototype.aminReached)) {
-		console.log(\`the extra order goes to the stopband: at least \${design.prototype.aminReached.toFixed(2)} dB across it (Amin = \${Amin} dB)\`);
+		console.log(\`\${design.placement.mode === 'edge' ? 'the extra order goes to the stopband' : 'the stopband'}: at least \${design.prototype.aminReached.toFixed(2)} dB across it (Amin = \${Amin} dB)\`);
 	}
 }
 
-${t ? BAND_COMPARE : ''}console.log();
+${t ? BAND_COMPARE : ''}${PLACEMENT_REPORT}
+console.log();
 console.log('='.repeat(72));
 console.log('STAGES');
 console.log('='.repeat(72));
@@ -512,113 +596,22 @@ const printParts = (r) => {
 		console.log(\`  \${name} = \${isR ? ohms(value) : value.toExponential(4) + ' F'}\`);
 	}
 };
-${t ? bandRealize(g, L) : ''}${L ? 'function realizeStage(stage, i, OPTS) {' : 'const realized = design.stages.map((stage, i) => {'}
-	const ov = CAP_OVERRIDES[i];
-
-${t ? `\tif (BAND_TRANSFORMED) return realizeBandStage(stage, i, ov${L ? ', OPTS' : ''});\n` : ''}	if (stage.order === 1) {
-		let r;
-		if (stage.filterType === 'highpass') {
-			r = ov && ov.C ? designFirstOrderHighPassFromCap(stage.tau, ov.C, OPTS) : designFirstOrderHighPass(stage.tau, OPTS);
-		} else {
-			r = ov && ov.C ? designFirstOrderLowPassFromCap(stage.tau, ov.C, OPTS) : designFirstOrderLowPass(stage.tau, OPTS);
-		}
-		console.log(\`stage \${i + 1} (1st order, \${stage.filterType}): tau = \${stage.tau.toExponential(4)} s\`);
-		console.log(\`  R = \${RESISTOR_PAIRS && seriesPair(r.components.R, RESISTOR_SERIES) ? ohms(r.components.R) : r.components.R + ' ohm'}, C = \${r.components.C.toExponential(4)} F\`);
-		console.log(\`  actual tau = \${r.actual.tau.toExponential(4)} s (\${(100 * (r.actual.tau - stage.tau) / stage.tau).toFixed(2)}%)\`);
-		return r;
-	}
-	const f0 = stage.wn / (2 * Math.PI);
-
-	if (Number.isFinite(stage.wz)) {
-		// A finite zero uses the selected notch network.
-		const fz = stage.wz / (2 * Math.PI);
-		const lowSide = stage.filterType === 'lowpass';
-		console.log(\`stage \${i + 1} (\${stage.filterType} notch): f0 = \${f0.toFixed(1)} Hz, Q = \${stage.q.toFixed(4)}, zero at fz = \${fz.toFixed(1)} Hz\`);
-		const notch = topologyOf(stage.filterType) === 'boctor' ? designBoctorNotch : designTowThomasNotch;
-		const fromCap = topologyOf(stage.filterType) === 'boctor' ? designBoctorNotchFromCap : designTowThomasNotchFromCap;
-		let notchOpts = { ...OPTS, lowSide };
-		let auto = notch(stage.wn, stage.q, stage.wz, notchOpts);
-		if (!auto && topologyOf(stage.filterType) === 'boctor') {
-			notchOpts = { resistorSeries: 'E24', capacitors: null, lowSide${L ? ', shortfall: true' : ''} };
-			auto = notch(stage.wn, stage.q, stage.wz, notchOpts);
-			if (auto) console.log('  Stock cannot realize this section; using the full E24/E6 grid, as on the page.');
-		}
-		const edited = ov && ov.C ? fromCap(stage.wn, stage.q, stage.wz, ov.C, notchOpts) : null;
-		const r = edited && edited.ok !== false ? edited : auto;
-		if (!r) throw new Error('This Boctor section is not realizable. Select Tow-Thomas or change the specification.');
-${L ? '\t\tif (notchOpts.shortfall) r.stockShortfall = true;\n' : ''}		printParts(r);
-		const f0Actual = r.actual.wn / (2 * Math.PI);
-		const fzActual = r.actual.wz / (2 * Math.PI);
-		console.log(
-			\`  actual f0 = \${f0Actual.toFixed(1)} Hz (\${(100 * (f0Actual - f0) / f0).toFixed(2)}%), Q = \${r.actual.q.toFixed(4)} (\${(100 * (r.actual.q - stage.q) / stage.q).toFixed(2)}%), fz = \${fzActual.toFixed(1)} Hz (\${(100 * (fzActual - fz) / fz).toFixed(2)}%)\`
-		);
-		console.log('  numerator s coefficient = ' + (r.actual.numeratorS ?? 0));
-		console.log(lowSide ? \`  DC gain = \${r.actual.dcGain.toFixed(4)} (including component rounding)\` : \`  gain above the zero = \${r.actual.gain.toFixed(4)}\`);
-		if (topologyOf(stage.filterType) !== 'boctor') console.log(\`  Q sensitivity to 1% component error: \${worstCaseQError(TOW_THOMAS_NOTCH_SENSITIVITY, 1).toFixed(2)}% (root-sum-square, fixed for this topology)\`);
-		return r;
-	}
-
-	console.log(\`stage \${i + 1} (\${stage.filterType}): f0 = \${f0.toFixed(1)} Hz, Q = \${stage.q.toFixed(4)}\`);
-	const TOPO = topologyOf(stage.filterType);
-	let r;
-	if (stage.filterType === 'highpass') {
-		if (TOPO === 'towThomas' || TOPO === 'boctor') {
-			r = ov && ov.C ? designTowThomasHighPassFromCap(stage.wn, stage.q, ov.C, OPTS) : designTowThomasHighPass(stage.wn, stage.q, OPTS);
-		} else if (TOPO === 'sallenKey') {
-			r = ov && ov.C ? designSallenKeyHighPassFromCap(stage.wn, stage.q, ov.C, OPTS) : designSallenKeyHighPass(stage.wn, stage.q, OPTS);
-		} else {
-			r = ov && ov.C ? designMfbHighPassFromCap(stage.wn, stage.q, ov.C, OPTS) : designMfbHighPass(stage.wn, stage.q, OPTS);
-		}
-	} else if (TOPO === 'towThomas' || TOPO === 'boctor') {
-		r = ov && ov.C ? designTowThomasLowPassFromCap(stage.wn, stage.q, ov.C, OPTS) : designTowThomasLowPass(stage.wn, stage.q, OPTS);
-	} else if (TOPO === 'sallenKey') {
-		const auto = designSallenKeyLowPass(stage.wn, stage.q, OPTS);
-		if (ov && (ov.Ctop || ov.Cbottom)) {
-			const manual = designSallenKeyLowPassFromCaps(stage.wn, stage.q, ov.Ctop || auto.components.Ctop, ov.Cbottom || auto.components.Cbottom, OPTS);
-			r = manual.ok ? manual : auto;
-		} else {
-			r = auto;
-		}
-	} else {
-		const auto = designMfbLowPass(stage.wn, stage.q, OPTS);
-		if (ov && (ov.C1 || ov.C2)) {
-			const manual = designMfbLowPassFromCaps(stage.wn, stage.q, ov.C1 || auto.components.C1, ov.C2 || auto.components.C2, OPTS);
-			if (manual.ok) {
-				r = manual;
-			} else {
-				console.log(\`  note: the C1/C2 override cannot realize this Q (needs C1/C2 >= 8*Q^2), using the automatic search instead\`);
-				r = auto;
-			}
-		} else {
-			r = auto;
-		}
-	}
-	printParts(r);
-	const f0Actual = r.actual.wn / (2 * Math.PI);
-	console.log(
-		\`  actual f0 = \${f0Actual.toFixed(1)} Hz (\${(100 * (f0Actual - f0) / f0).toFixed(2)}%), Q = \${r.actual.q.toFixed(4)} (\${(100 * (r.actual.q - stage.q) / stage.q).toFixed(2)}%)\`
-	);
-	if (stage.filterType === 'highpass') {
-		const sens = TOPO === 'towThomas' || TOPO === 'boctor' ? TOW_THOMAS_HP_SENSITIVITY : TOPO === 'sallenKey' ? SALLEN_KEY_HP_SENSITIVITY : MFB_HP_SENSITIVITY;
-		console.log(\`  Q sensitivity to 1% component error: \${worstCaseQError(sens, 1).toFixed(2)}% (root-sum-square, fixed for this topology)\`);
-	} else if (TOPO === 'towThomas' || TOPO === 'boctor') {
-		console.log(\`  Q sensitivity to 1% component error: \${worstCaseQError(TOW_THOMAS_SENSITIVITY, 1).toFixed(2)}% (root-sum-square, fixed for this topology)\`);
-	} else if (TOPO === 'mfb') {
-		console.log(\`  Q sensitivity to 1% component error: \${worstCaseQError(mfbSensitivity(r.components), 1).toFixed(2)}% (root-sum-square)\`);
-	} else {
-		console.log(\`  Q sensitivity to 1% component error: \${worstCaseQError(SALLEN_KEY_SENSITIVITY, 1).toFixed(2)}% (root-sum-square, fixed for this topology)\`);
-	}
-	return r;
-${L ? `}\n${PAIR_PLAN_RUN}` : '});'}
-
-// the band-stop's two branches and how the combiner weighs them
+// what the page says over a stage's parts: capacitors typed by hand, kept
+// or unable to build it, and a stage the stock cannot build at all
+const printNotes = (r) => {
+	if (r.manual) console.log('  capacitors from CAP_OVERRIDES');
+	if (r.manualError) console.log(\`  note: CAP_OVERRIDES: \${r.manualError}\`);
+	if (r.stockShortfall) console.log('  Stock cannot realize this section; using the full E24/E6 grid, as on the page.');
+};
+${t ? bandPrint(g) : ''}${STAGE_PRINT}
+${searchRun(t, g, L)}
+// the band-stop's two branches and how the combiner weighs them (the search
+// chose it with the parts, as the page does)
 let branches = null;
 let weights = null;
 if (FILTER_TYPE === 'bandstop'${t ? ' && !BAND_TRANSFORMED' : ''}) {
 	branches = [realized.slice(0, design.lp.stages.length), realized.slice(design.lp.stages.length)];
-	const choice = combinerChoice(branches, fsl, fsh);
-	const lpGain = Math.abs(branchDcGain(branches[0]));
-	const parts = combinerDesign(choice.mode, SUMMING_R, lpGain, (v) => nearestResistor(v, RESISTOR_SERIES));
+	const { choice, lpGain, parts } = SEARCH.measure.combiner;
 	weights = parts.weights;
 	console.log();
 	console.log('='.repeat(72));
@@ -635,34 +628,29 @@ console.log();
 console.log('='.repeat(72));
 console.log('FREQUENCY RESPONSE (from the rounded, realized components)');
 console.log('='.repeat(72));
-${g ? BAND_RESPONSE_GBW : ''}const gainDb = (f) => (FILTER_TYPE === 'bandstop'${t ? ' && !BAND_TRANSFORMED' : ''} ? magnitudePhaseAtParallelSum(branches, f, weights).db : magnitudePhaseAt(realized, f).db);
-// each stretch of stopband carries the Amin it answers to: a band-pass's
-// lower stopband is its high-pass side's, its upper one the low-pass side's
-const bands = {
-	lowpass: { pass: [[fp / 100, fp]], stop: [[fs, fs * 100, Amin]], points: [fp / 10, fp, Math.sqrt(fp * fs), fs, fs * 10] },
-	highpass: { pass: [[fp, fp * 100]], stop: [[fs / 100, fs, Amin]], points: [fs / 10, fs, Math.sqrt(fp * fs), fp, fp * 10] },
-	bandpass: { pass: [[fl, fh]], stop: [[fsl / 100, fsl, AMIN_HP], [fsh, fsh * 100, AMIN_LP]], points: [fsl / 10, fsl, fl, Math.sqrt(fl * fh), fh, fsh, fsh * 10] },
-	bandstop: { pass: [[fl / 100, fl], [fh, fh * 100]], stop: [[fsl, fsh, Amin]], points: [fl / 10, fl, fsl, Math.sqrt(fsl * fsh), fsh, fh, fh * 10] }
+${g ? BAND_RESPONSE_GBW : ''}// measured as the page measures it (measureFilter): from the top of the
+// passband (an even-order Chebyshev or elliptic ripples above its DC gain),
+// the worst loss over the whole passband against Amax, the least
+// attenuation over the whole stopband against its Amin (an elliptic or
+// inverse Chebyshev bounces between zeros); a band-pass's lower stopband
+// answers to its high-pass side's Amin, its upper one to the low-pass side's
+const MEASURE = SEARCH.measure;
+const gainDb = MEASURE.gainDbAt;
+const points = {
+	lowpass: [fp / 10, fp, Math.sqrt(fp * fs), fs, fs * 10],
+	highpass: [fs / 10, fs, Math.sqrt(fp * fs), fp, fp * 10],
+	bandpass: [fsl / 10, fsl, fl, Math.sqrt(fl * fh), fh, fsh, fsh * 10],
+	bandstop: [fl / 10, fl, fsl, Math.sqrt(fsl * fsh), fsh, fh, fh * 10]
 }[FILTER_TYPE];
-for (const f of bands.points) console.log(\`  \${f.toFixed(0).padStart(9)} Hz : \${gainDb(f).toFixed(2).padStart(8)} dB\`);
-${t ? BAND_LEVEL : ''}// Amax and Amin count from the top of the passband (an even-order Chebyshev
-// or elliptic ripples above its DC gain), and the stopband is searched over
-// its whole width (an elliptic or inverse Chebyshev bounces between zeros)
-const scan = (ranges) => {
-	const out = [];
-	for (const [a, b] of ranges) for (let i = 0; i <= 600; i++) out.push(a * (b / a) ** (i / 600));
-	return out;
-};
-const top = Math.max(...scan(bands.pass).map(gainDb));
-// the point with the least margin over its own Amin
-let worst = { db: Infinity, f: 0, amin: Amin, margin: Infinity };
-for (const [a, b, amin] of bands.stop) {
-	for (const f of scan([[a, b]])) {
-		const att = top - gainDb(f);
-		if (att - amin < worst.margin) worst = { db: att, f, amin, margin: att - amin };
-	}
-}
-console.log(\`\\npassband top \${top.toFixed(2)} dB; least attenuation in the stopband \${worst.db.toFixed(1)} dB at \${worst.f.toFixed(0)} Hz (spec asks for >= \${worst.amin} dB there): \${worst.margin >= 0 ? 'OK' : 'NOT MET'}\`);
+for (const f of points) console.log(\`  \${f.toFixed(0).padStart(9)} Hz : \${gainDb(f).toFixed(2).padStart(8)} dB\`);
+${t ? BAND_LEVEL : ''}// a figure in dB, and 0 for what rounds to nothing (no -0.000)
+const fixedDb = (v, digits) => (Math.abs(v) < 0.5 * 10 ** -digits ? 0 : v).toFixed(digits);
+const passOk = MEASURE.pass.margin >= -PASSBAND_SLACK_DB;
+const slack = passOk && MEASURE.pass.margin < 0 ? \` (up to \${PASSBAND_SLACK_DB} dB over counts as rounding)\` : '';
+console.log(\`\\npassband top \${fixedDb(MEASURE.peakDb, 2)} dB; worst loss in the passband \${MEASURE.pass.loss.toFixed(3)} dB at \${MEASURE.pass.freq.toFixed(0)} Hz\${MEASURE.pass.edge ? \` (\${MEASURE.pass.edge})\` : ''}, Amax there \${Number(MEASURE.pass.limit.toFixed(3))} dB: \${passOk ? 'OK' : 'NOT MET'}\${slack}\`);
+console.log(\`  at the passband edge\${MEASURE.passEdges.length > 1 ? 's' : ''}: \${MEASURE.passEdges.map((e) => \`\${e.name} \${e.loss.toFixed(3)} dB (Amax \${e.amaxDb} dB)\`).join(', ')}\`);
+console.log(\`least attenuation in the stopband \${MEASURE.stop.db.toFixed(1)} dB at \${MEASURE.stop.freq.toFixed(0)} Hz (spec asks for >= \${MEASURE.stop.required} dB there): \${MEASURE.stop.margin >= -1e-6 ? 'OK' : 'NOT MET'}\`);
+console.log(\`margin \${fixedDb(MEASURE.margin, 3)} dB, the smaller of the passband's and the stopband's (the ideal design: \${fixedDb(SEARCH.ideal.measure.margin, 3)} dB); the whole template: \${MEASURE.meets ? 'OK' : 'NOT MET'}\`);
 `;
 }
 
@@ -1069,7 +1057,11 @@ function narrowScript({ f0, narrowBy, q, bandwidth, gain = 1, stages = 1, circui
  * script is exactly what it was. So with `resistorPairLimit`, the most
  * resistors that may be two in series in the whole filter (the stock
  * picker's "Up to N pairs"): the script carries it as RESISTOR_PAIR_LIMIT
- * and shares the pairs out as the page does (pairPlan.js).
+ * and the part search keeps to it, as the page does. `placement` is the
+ * page's "Place the design" menu, 'centred' or 'edge' (left out: 'edge',
+ * the library's default): the script carries it as PLACEMENT. The parts
+ * are the page's: searchFilterParts (partSearch.js) on the whole filter,
+ * with its notes on the resistor floor and the op-amp loads.
  * filterType 'narrowband' writes the narrow band-pass script instead
  * (narrowScript above: f0, narrowBy, q, bandwidth, gain, stages, circuit,
  * circuitMenu, opampGbw, and the same stock and capacitor arguments).
@@ -1107,6 +1099,7 @@ export function generateScript({
 	orderBand = null,
 	opampGbw = undefined,
 	resistorPairLimit = null,
+	placement = 'edge',
 	f0,
 	narrowBy,
 	q,
@@ -1161,7 +1154,8 @@ export function generateScript({
 			topologyNotch,
 			orderBand,
 			opampGbw: gbw ? opampGbw : undefined,
-			pairLimit: limited ? resistorPairLimit : null
+			pairLimit: limited ? resistorPairLimit : null,
+			placement: placement === 'centred' ? 'centred' : 'edge'
 		}),
 		'// ===================================================================== \n// ENGINE - same code the web tool runs\n// =====================================================================\n',
 		inline(eseriesSrc),
@@ -1171,17 +1165,21 @@ export function generateScript({
 		inline(stagesSrc),
 		inline(mfbSrc),
 		inline(mfbHighPassSrc),
-		...(transformed ? [inline(mfbBandPassSrc)] : []),
+		inline(mfbBandPassSrc),
 		inline(sallenKeySrc),
 		inline(sallenKeyHighPassSrc),
 		inline(towThomasSrc),
 		inline(boctorSrc),
-		...(transformed ? [inline(bandMethodSrc)] : []),
+		inline(bandMethodSrc),
 		inline(firstOrderSrc),
 		inline(firstOrderHighPassSrc),
-		...(limited ? [inline(pairPlanSrc)] : []),
+		inline(pairPlanSrc),
+		inline(stageElementsSrc),
+		inline(nodalSrc),
 		inline(bodeSrc),
 		inline(sensitivitySrc),
+		// the part search the page runs on the whole filter (it reads every module above)
+		inline(partSearchSrc),
 		reportBlock(transformed, gbw, limited),
 		// its MFB band-pass stages built for the op-amp: the closing steps say so
 		nextStepsComment(gbw && topologyBand === 'mfb' ? opampGbw : null)

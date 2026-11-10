@@ -1,5 +1,5 @@
 import { butterworthOrder, butterworthStages, chebyshevOrder, chebyshevStages, transitionRatio } from './order';
-import { RESPONSES, ellipJ, ellipK, ellipticOrder, inverseChebyshevOrder, prototypeFor, prototypeLossDb, searchedOrder } from './approximations';
+import { RESPONSES, ellipDiscrimination, ellipJ, ellipK, ellipticOrder, inverseChebyshevOrder, prototypeFor, prototypeLossDb, searchedOrder } from './approximations';
 
 /**
  * Ripple factor epsilon = sqrt(10^(Amax/10) - 1): the one number the
@@ -59,6 +59,145 @@ export function cutoffScale(response, amaxDb, n, filterType = 'lowpass') {
 	return filterType === 'highpass' ? eps ** (1 / n) : eps ** (-1 / n);
 }
 
+/* ------------------------------------------------ placement in the template */
+
+/**
+ * Where the ideal design sits in its template. The order is a whole number,
+ * so it leaves room: one free parameter can move between "exactly Amax at
+ * the passband edge" and "exactly Amin at the stopband edge".
+ *   'edge'     the first: Amax exactly at fp, all the room left to the
+ *              stopband (the textbook way, and the default)
+ *   'centred'  the geometric middle of that range, so that rounding and
+ *              part tolerances can move the response either way
+ *   'stop'     the other end: Amin exactly at fs (for checks)
+ * The parameter, by response:
+ *   scale   Butterworth, Bessel, Legendre and inverse Chebyshev (a flat or
+ *           falling passband): the frequency scale sigma, the prototype's
+ *           passband edge moved out to sigma times the real one (a low-pass
+ *           has every frequency times sigma, a high-pass divided by it)
+ *   ripple  Chebyshev and elliptic (an equiripple passband, whose edge stays
+ *           on fp): eps, from the one that leaves Amin exactly at the closest
+ *           stopband edge up to the one of Amax; the middle is taken in eps.
+ *           An elliptic stopband follows from the ripple at fixed n and k.
+ * A window with nothing in it (an order forced under the minimum) keeps
+ * the edge.
+ */
+export const PLACEMENTS = ['edge', 'centred'];
+
+/** The responses placed by their ripple; the others by their frequency scale. */
+const PLACE_BY_RIPPLE = { chebyshev: true, elliptic: true };
+
+/**
+ * The least loss, in dB from the passband peak, that the ideal prototype of
+ * order n keeps from omega on (omega in units of its passband edge, where
+ * it loses rippleDb). proto is the prototype of approximations.js for the
+ * responses that have one.
+ */
+function placeLeastLoss(response, n, rippleDb, k, proto, omega) {
+	const eps = rippleFactor(rippleDb);
+	if (response === 'butterworth') return 10 * Math.log10(1 + eps * eps * omega ** (2 * n));
+	if (response === 'chebyshev') {
+		const t = omega >= 1 ? Math.cosh(n * Math.acosh(omega)) : Math.cos(n * Math.acos(omega));
+		return 10 * Math.log10(1 + eps * eps * t * t);
+	}
+	if (RESPONSES[response]?.zeros) return bandLeastLoss(response, n, rippleDb, k, proto, omega);
+	return prototypeLossDb(proto, omega);
+}
+
+/**
+ * prototypeFor, remembered for the last few hundred prototypes: a window is
+ * asked for again and again (both band methods, the minimum and the order
+ * used, every redraw), and a Bessel or Legendre prototype of a high order
+ * takes its roots each time. Read only.
+ */
+const PLACE_PROTOTYPES = new Map();
+function placePrototype(response, n, amaxDb, aminDb, k) {
+	const key = `${response} ${n} ${amaxDb} ${aminDb} ${k}`;
+	if (!PLACE_PROTOTYPES.has(key)) {
+		if (PLACE_PROTOTYPES.size >= 256) PLACE_PROTOTYPES.delete(PLACE_PROTOTYPES.keys().next().value);
+		PLACE_PROTOTYPES.set(key, prototypeFor(response, n, amaxDb, aminDb, k));
+	}
+	return PLACE_PROTOTYPES.get(key);
+}
+
+/** The x in [lo, hi] (logs) where an increasing f crosses zero, by bisection. */
+function placeCrossing(f, lo, hi) {
+	for (let i = 0; i < 60; i++) {
+		const mid = (lo + hi) / 2;
+		if (f(mid) < 0) lo = mid;
+		else hi = mid;
+	}
+	return (lo + hi) / 2;
+}
+
+/**
+ * The placement window of a low-pass prototype of order n against its
+ * stopband edges, edges = [{ omega, aminDb }] (omega in units of the
+ * passband edge), k the selectivity its prototype is built with, and the
+ * point `placement` takes in it. Returns { kind, low, high, value, empty,
+ * rippleDb, scale, margins }: low and high are the window's two ends (the
+ * scale from 1 up, or eps from the stopband end up to Amax's), value the
+ * chosen point, rippleDb and scale what the prototype is then built with,
+ * and margins the ideal design's room there: { pass, stop, edges } in dB,
+ * pass = Amax less the worst loss in the passband, stop the least of
+ * edges[e] = least loss from that edge on less its Amin.
+ */
+function placementWindow(response, n, amaxDb, edges, k, placement = 'edge') {
+	const epsMax = rippleFactor(amaxDb);
+	if (PLACE_BY_RIPPLE[response]) {
+		const rippleOf = (eps) => 10 * Math.log10(1 + eps * eps);
+		const protoAt = (eps) => (response === 'elliptic' ? placePrototype('elliptic', n, rippleOf(eps), amaxDb, k) : null);
+		const marginsAt = (eps) => {
+			const proto = protoAt(eps);
+			return edges.map((e) => placeLeastLoss(response, n, rippleOf(eps), k, proto, e.omega) - e.aminDb);
+		};
+		let low;
+		if (response === 'chebyshev') low = Math.max(...edges.map((e) => rippleFactor(e.aminDb) / Math.cosh(n * Math.acosh(e.omega))));
+		else if (edges.every((e) => e.omega >= 1 / k)) {
+			// every edge on the elliptic floor 10 log(1 + (eps/k1)^2): eps = k1 eps_s for the largest Amin
+			low = Math.sqrt(ellipDiscrimination(n, k * k)) * Math.max(...edges.map((e) => rippleFactor(e.aminDb)));
+		} else low = Math.exp(placeCrossing((x) => Math.min(...marginsAt(Math.exp(x))), Math.log(epsMax) - 40, Math.log(epsMax)));
+		const empty = !(low <= epsMax);
+		const value = empty || placement === 'edge' ? epsMax : placement === 'stop' ? low : Math.sqrt(low * epsMax);
+		const rippleDb = value === epsMax ? amaxDb : rippleOf(value);
+		const stopEdges = marginsAt(value);
+		return { kind: 'ripple', low, high: epsMax, value, empty, rippleDb, scale: 1, margins: { pass: amaxDb - rippleDb, stop: Math.min(...stopEdges), edges: stopEdges } };
+	}
+	const proto = response === 'butterworth' ? null : placePrototype(response, n, amaxDb, edges[0].aminDb, k);
+	const loss = (omega) => placeLeastLoss(response, n, amaxDb, k, proto, omega);
+	// each edge alone: the scale that leaves it exactly its Amin
+	const ends = edges.map((e) =>
+		response === 'butterworth' ? e.omega * (epsMax / rippleFactor(e.aminDb)) ** (1 / n) : Math.exp(placeCrossing((x) => e.aminDb - loss(e.omega / Math.exp(x)), Math.log(e.omega) - 40, Math.log(e.omega)))
+	);
+	const high = Math.min(...ends);
+	const empty = !(high >= 1);
+	const value = empty || placement === 'edge' ? 1 : placement === 'stop' ? high : Math.sqrt(high);
+	const stopEdges = edges.map((e) => loss(e.omega / value) - e.aminDb);
+	return { kind: 'scale', low: 1, high, value, empty, rippleDb: amaxDb, scale: value, margins: { pass: value === 1 ? 0 : amaxDb - loss(1 / value), stop: Math.min(...stopEdges), edges: stopEdges } };
+}
+
+/**
+ * What a design says about its placement: the mode asked for, the window and
+ * the chosen point, in the parameter and in the units the page shows (the
+ * frequency the ideal loses exactly Amax at for a scale, the ripple in dB for
+ * a ripple), and the ideal design's room there. idealMargin is the smaller of
+ * its two margins (0 at the edge): the most the part search asks of the
+ * rounded parts.
+ */
+function placementInfo(mode, win, { amaxDb, edgeFrequency, toFrequency }) {
+	const info = { mode, kind: win.kind, low: win.low, high: win.high, value: win.value, empty: win.empty, margins: win.margins, idealMargin: Math.max(0, Math.min(win.margins.pass, win.margins.stop)) };
+	if (mode === 'edge') info.idealMargin = 0;
+	if (win.kind === 'scale') {
+		info.scale = win.value;
+		info.amaxAt = { edge: edgeFrequency, stop: toFrequency(win.high), chosen: toFrequency(win.value) };
+	} else {
+		const rippleOf = (eps) => 10 * Math.log10(1 + eps * eps);
+		info.scale = 1;
+		info.rippleDb = { edge: amaxDb, stop: rippleOf(win.low), chosen: win.rippleDb };
+	}
+	return info;
+}
+
 /**
  * The normalized low-pass prototype of any response as second-order
  * sections (with the zero z of a notch section when the response has
@@ -89,16 +228,28 @@ function prototypeSections(response, n, amaxDb, aminDb, k) {
  * inverse Chebyshev) keeps it at omega_z = omega_c * sqrt(z) and is built
  * as a notch with unity DC gain. Every stage stands on its own, so no
  * extra gain stage is needed to cascade them.
+ * `placement` puts the design in its template (placementWindow above):
+ * 'edge' (the default) as described here, 'centred' with omega_c times the
+ * window's scale, or for Chebyshev and elliptic with the smaller ripple
+ * (eps is then that ripple's, and wcScale keeps the edge's figure).
  */
-export function designLowPass({ response, amaxDb, aminDb, fp, fs, order }) {
+export function designLowPass({ response, amaxDb, aminDb, fp, fs, order, placement = 'edge' }) {
 	const k = transitionRatio(fp, fs);
 	const min = minimumOrder(response, amaxDb, aminDb, k);
 	const n = order ?? min.n ?? 1;
-	const proto = prototypeSections(response, n, amaxDb, aminDb, k);
+	const win = placementWindow(response, n, amaxDb, [{ omega: 1 / k, aminDb }], k, placement);
+	const lp = lowPassAt({ response, amaxDb, aminDb, fp, fs, k, n, min }, win);
+	lp.placement = placementInfo(placement, win, { amaxDb, edgeFrequency: fp, toFrequency: (s) => fp * s });
+	return lp;
+}
 
-	const eps = rippleFactor(amaxDb);
+/** designLowPass at order n with the prototype placed by `win` (placementWindow). */
+function lowPassAt({ response, amaxDb, aminDb, fp, fs, k, n, min }, win) {
+	const proto = prototypeSections(response, n, win.rippleDb, aminDb, k);
+
+	const eps = rippleFactor(win.rippleDb);
 	const wcScale = cutoffScale(response, amaxDb, n, 'lowpass');
-	const wc = 2 * Math.PI * fp * wcScale;
+	const wc = 2 * Math.PI * fp * wcScale * win.scale;
 	const stages = proto.sections.map((s) => ({
 		order: 2,
 		filterType: 'lowpass',
@@ -143,16 +294,18 @@ export function designLowPass({ response, amaxDb, aminDb, fp, fs, order }) {
  * passband edge, fs the lower, stopband edge), so k = fs/fp instead of
  * fp/fs. omega_c for denormalizing is 2*pi*fp times cutoffScale, which for
  * Butterworth is eps^(+1/n) here (the poles move in, not out, for a high-pass).
+ * `placement` as for designLowPass; a centred scale divides omega_c here.
  */
-export function designHighPass({ response, amaxDb, aminDb, fp, fs, order }) {
+export function designHighPass({ response, amaxDb, aminDb, fp, fs, order, placement = 'edge' }) {
 	const k = transitionRatio(fs, fp);
 	const min = minimumOrder(response, amaxDb, aminDb, k);
 	const n = order ?? min.n ?? 1;
-	const proto = prototypeSections(response, n, amaxDb, aminDb, k);
+	const win = placementWindow(response, n, amaxDb, [{ omega: 1 / k, aminDb }], k, placement);
+	const proto = prototypeSections(response, n, win.rippleDb, aminDb, k);
 
-	const eps = rippleFactor(amaxDb);
+	const eps = rippleFactor(win.rippleDb);
 	const wcScale = cutoffScale(response, amaxDb, n, 'highpass');
-	const wc = 2 * Math.PI * fp * wcScale;
+	const wc = (2 * Math.PI * fp * wcScale) / win.scale;
 	const stages = proto.sections.map((s) => {
 		const aHp = s.a / s.b;
 		const bHp = 1 / s.b;
@@ -192,8 +345,14 @@ export function designHighPass({ response, amaxDb, aminDb, fp, fs, order }) {
 		wcScale,
 		filterType: 'highpass',
 		beta: proto.beta,
-		prototype: proto.extra
+		prototype: proto.extra,
+		placement: placementInfo(placement, win, { amaxDb, edgeFrequency: fp, toFrequency: (s) => fp / s })
 	};
+}
+
+/** The placement of a cascade or a parallel band filter: each side's own, and the smaller ideal margin of the two. */
+function bandPlacement(mode, hp, lp) {
+	return { mode, hp: hp.placement, lp: lp.placement, idealMargin: Math.min(hp.placement.idealMargin, lp.placement.idealMargin) };
 }
 
 /**
@@ -214,6 +373,7 @@ export function designHighPass({ response, amaxDb, aminDb, fp, fs, order }) {
  * (amaxDbHp and aminDbHp at fl and fsl, amaxDbLp and aminDbLp at fh and
  * fsh; all default to amaxDb and aminDb). The result says
  * method: 'cascade', which tells it apart from a transformed design.
+ * `placement` places each side in its own template (designLowPass).
  */
 export function designBandPass({
 	response,
@@ -230,15 +390,17 @@ export function designBandPass({
 	fsl,
 	fsh,
 	orderLow,
-	orderHigh
+	orderHigh,
+	placement = 'edge'
 }) {
-	const hp = designHighPass({ response: responseHp, amaxDb: amaxDbHp, aminDb: aminDbHp, fp: fl, fs: fsl, order: orderHigh });
-	const lp = designLowPass({ response: responseLp, amaxDb: amaxDbLp, aminDb: aminDbLp, fp: fh, fs: fsh, order: orderLow });
+	const hp = designHighPass({ response: responseHp, amaxDb: amaxDbHp, aminDb: aminDbHp, fp: fl, fs: fsl, order: orderHigh, placement });
+	const lp = designLowPass({ response: responseLp, amaxDb: amaxDbLp, aminDb: aminDbLp, fp: fh, fs: fsh, order: orderLow, placement });
 
 	return {
 		method: 'cascade',
 		hp,
 		lp,
+		placement: bandPlacement(placement, hp, lp),
 		stages: [...hp.stages, ...lp.stages],
 		response: responseHp === responseLp ? responseLp : null,
 		responseHp,
@@ -292,6 +454,7 @@ export function designBandPass({
  * Amin right across), so neither can be held to more than the other.
  * The result says method: 'parallel'; designBandStopTransformed below is
  * the other method, a plain cascade of notch stages with no combiner.
+ * `placement` places each branch in its own template (designLowPass).
  */
 export function designBandStop({
 	response,
@@ -308,15 +471,17 @@ export function designBandStop({
 	fsl,
 	fsh,
 	orderLow,
-	orderHigh
+	orderHigh,
+	placement = 'edge'
 }) {
-	const lp = designLowPass({ response: responseLp, amaxDb: amaxDbLp, aminDb: aminDbLp, fp: fl, fs: fsl, order: orderLow });
-	const hp = designHighPass({ response: responseHp, amaxDb: amaxDbHp, aminDb: aminDbHp, fp: fh, fs: fsh, order: orderHigh });
+	const lp = designLowPass({ response: responseLp, amaxDb: amaxDbLp, aminDb: aminDbLp, fp: fl, fs: fsl, order: orderLow, placement });
+	const hp = designHighPass({ response: responseHp, amaxDb: amaxDbHp, aminDb: aminDbHp, fp: fh, fs: fsh, order: orderHigh, placement });
 
 	return {
 		method: 'parallel',
 		lp,
 		hp,
+		placement: bandPlacement(placement, hp, lp),
 		stages: [...lp.stages, ...hp.stages],
 		response: responseHp === responseLp ? responseLp : null,
 		responseHp,
@@ -614,15 +779,31 @@ function bandNotchStage(wn, q, wz, w0, gainAt, role, pole, normalized) {
  *     zero Wz  -> the same pair of zeros with bw^2/Wz in place of Wz, the
  *                 lower one with the lower pole, the upper with the upper
  */
-function bandTransformed(filterType, spec, orderInfo, order) {
+function bandTransformed(filterType, spec, orderInfo, order, placement = 'edge') {
 	const { response, amaxDb, aminDbLow, aminDbHigh, fl, fh, fsl, fsh } = spec;
 	const { f0, B } = bandCentre(fl, fh);
 	const w0 = 2 * Math.PI * f0;
 	const bw = 2 * Math.PI * B;
 	const n = order ?? orderInfo.n ?? 1;
 	const proto = bandPrototypeSpec(response, amaxDb, orderInfo, n);
-	const lowpass = designLowPass({ response, amaxDb, aminDb: proto.aminDb, fp: B, fs: B / proto.k, order: n });
 	const stop = filterType === 'bandstop';
+	// the prototype is placed against both stopband edges, each with its own Amin
+	const edges = [
+		{ omega: orderInfo.omegaLow, aminDb: aminDbLow },
+		{ omega: orderInfo.omegaHigh, aminDb: aminDbHigh }
+	];
+	// k as designLowPass would find it from these two edges, to the last digit
+	const kLp = transitionRatio(B, B / proto.k);
+	const win = placementWindow(response, n, amaxDb, edges, kLp, placement);
+	const lpSpec = { response, amaxDb, aminDb: proto.aminDb, fp: B, fs: B / proto.k, k: kLp, n, min: minimumOrder(response, amaxDb, proto.aminDb, kLp) };
+	const lowpass = lowPassAt(lpSpec, win);
+	lowpass.placement = placementInfo(placement, win, { amaxDb, edgeFrequency: B, toFrequency: (s) => B * s });
+	// where the band loses exactly Amax: the two band frequencies the prototype's Omega = scale lands on
+	const bandEdgesAt = (s) => {
+		const hi = stop ? (B + Math.sqrt(B * B + 4 * s * s * f0 * f0)) / (2 * s) : (s * B) / 2 + Math.sqrt(((s * B) / 2) ** 2 + f0 * f0);
+		return [(f0 * f0) / hi, hi];
+	};
+	const bandPlace = placementInfo(placement, win, { amaxDb, edgeFrequency: [fl, fh], toFrequency: bandEdgesAt });
 	const stages = [];
 	lowpass.stages.forEach((st, pole) => {
 		const normalized = st.normalized;
@@ -671,7 +852,8 @@ function bandTransformed(filterType, spec, orderInfo, order) {
 		orderSearch: orderInfo.tried,
 		n,
 		lowpass,
-		stages
+		stages,
+		placement: bandPlace
 	};
 }
 
@@ -683,9 +865,9 @@ function bandTransformed(filterType, spec, orderInfo, order) {
  * a rippled response then has f0 in a ripple trough, Amax under its peaks).
  * `order` overrides the counted n.
  */
-export function designBandPassTransformed({ response, amaxDb, aminDbLow, aminDbHigh, fl, fh, fsl, fsh, order = null }) {
+export function designBandPassTransformed({ response, amaxDb, aminDbLow, aminDbHigh, fl, fh, fsl, fsh, order = null, placement = 'edge' }) {
 	const spec = { response, amaxDb, aminDbLow, aminDbHigh, fl, fh, fsl, fsh };
-	return bandTransformed('bandpass', spec, transformedOrder({ filterType: 'bandpass', ...spec }), order);
+	return bandTransformed('bandpass', spec, transformedOrder({ filterType: 'bandpass', ...spec }), order, placement);
 }
 
 /**
@@ -694,9 +876,9 @@ export function designBandPassTransformed({ response, amaxDb, aminDbLow, aminDbH
  * so the filter passes exactly 1 at DC and far above the band, with no
  * summing amplifier. One Amin holds across the stopband.
  */
-export function designBandStopTransformed({ response, amaxDb, aminDb, fl, fh, fsl, fsh, order = null }) {
+export function designBandStopTransformed({ response, amaxDb, aminDb, fl, fh, fsl, fsh, order = null, placement = 'edge' }) {
 	const spec = { response, amaxDb, aminDbLow: aminDb, aminDbHigh: aminDb, fl, fh, fsl, fsh };
-	return bandTransformed('bandstop', spec, transformedOrder({ filterType: 'bandstop', ...spec }), order);
+	return bandTransformed('bandstop', spec, transformedOrder({ filterType: 'bandstop', ...spec }), order, placement);
 }
 
 /**
