@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Bases du courant alternatif | Préparation Installateur Mesurage</title>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<link rel="stylesheet" href="assets/style.css?v=94dbb397">
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="index.html">Installateur Mesurage <small>Préparation au test technique</small></a>
+  <nav>
+    <a href="index.html">Accueil</a>
+    <a href="index.html#theorie" class="active">Théorie</a>
+    <a href="pratique.html">Exercices</a>
+    <a href="tests.html">Tests pratiques</a>
+    <a href="formules.html">Formules</a>
+    <button class="theme-btn" type="button">Thème</button>
+  </nav>
+</header>
+<nav class="subnav" aria-label="Sujets de théorie"><a href="unites.html"><span class="n">0</span>Unités</a><a href="base.html"><span class="n">1</span>Base</a><a href="calculs.html"><span class="n">2</span>Calculs</a><a href="alternatif.html" class="active"><span class="n">3</span>Alternatif</a><a href="electrotechnique.html"><span class="n">4</span>Électrotechnique</a><a href="transformateurs.html"><span class="n">5</span>Transformateurs</a><a href="triphase.html"><span class="n">6</span>Mono et triphasé</a><a href="mesure.html"><span class="n">7</span>Mesure et comptage</a><a href="securite.html"><span class="n">8</span>Sécurité</a><a href="schemas.html"><span class="n">9</span>Schémas</a></nav>
+<main class="layout">
+<aside class="toc"></aside>
+<article class="content">
+<div class="course-hero">
+  <div class="kicker">Théorie | Sujet 3</div>
+  <h1>Bases du courant alternatif</h1>
+  <p class="meta">Sujet annoncé dans l'invitation : « Bases du courant alternatif » | Lecture : environ 30 minutes</p>
+  <p><span class="pill accent">Sinusoïde</span><span class="pill accent">Période et fréquence</span><span class="pill accent">Valeur efficace</span><span class="pill accent">Déphasage</span><span class="pill accent">Réactance et impédance</span><span class="pill accent">Puissances P, Q et S</span><span class="pill accent">Facteur de puissance</span></p>
+  <p class="small">But de la page : lire une sinusoïde (période, fréquence, crête, valeur efficace), savoir si le courant est en phase, en retard ou en avance selon la charge, calculer une impédance et distinguer les puissances active, réactive et apparente. Le triphasé a sa propre page : <a href="triphase.html">Monophasé et triphasé</a>.</p>
+</div>
+
+<h2>1. Pourquoi le courant alternatif</h2>
+<p>Le réseau électrique fonctionne en courant alternatif (CA) pour trois raisons qui s'enchaînent.</p>
+<ol class="steps">
+  <li><strong>Il est produit naturellement par une machine qui tourne.</strong> Dans un alternateur, la rotation fait varier le champ magnétique devant des bobines : la tension produite monte, redescend et s'inverse. C'est une sinusoïde.</li>
+  <li><strong>Il se transforme facilement.</strong> Un transformateur élève ou abaisse une tension alternative avec très peu de pertes. Un transformateur ne fonctionne pas en courant continu.</li>
+  <li><strong>Il se transporte donc en haute tension.</strong> Pour une même puissance, une tension élevée veut dire un courant faible, et les pertes dans les lignes valent \(R \times I^{2}\) (voir la page <a href="calculs.html">Calculs électriques</a>).</li>
+</ol>
+<figure class="fig wide" data-fig="chaine-reseau"><figcaption>De la centrale au client. La tension est élevée pour le transport, puis abaissée par étapes jusqu'aux 120/240 V de la maison. Sans transformateur, donc sans courant alternatif, cette chaîne serait impossible.</figcaption></figure>
+<p class="small">Le courant continu garde ses usages : piles, batteries, électronique, panneaux solaires. Voir le tableau comparatif de la page <a href="base.html">Électricité de base</a>.</p>
+
+<h2>2. La sinusoïde</h2>
+<p>La tension du réseau suit une courbe régulière qui se répète sans arrêt. Trois mots la décrivent.</p>
+<ul>
+  <li><strong>Le cycle :</strong> un aller-retour complet, soit une alternance positive suivie d'une alternance négative.</li>
+  <li><strong>La période</strong> \(T\) : la durée d'un cycle, en secondes.</li>
+  <li><strong>La fréquence</strong> \(f\) : le nombre de cycles par seconde, en hertz (Hz).</li>
+</ul>
+<div class="formula"><div class="title">Période et fréquence</div>
+\[f = \frac{1}{T} \qquad T = \frac{1}{f}\]
+<div class="cond">\(f\) en hertz, \(T\) en secondes. À 60 Hz (Amérique du Nord) : \(T = \dfrac{1}{60} = 0{,}01667\ \text{s} = 16{,}67\ \text{ms}\). À 50 Hz (Europe) : \(T = \dfrac{1}{50} = 0{,}02\ \text{s} = 20\ \text{ms}\).</div>
+</div>
+<figure class="fig wide" data-fig="sinusoide-annotee"><figcaption>La tension d'une prise de 120 V. Le voltmètre indique 120 V (valeur efficace), mais la tension monte en réalité jusqu'à 170 V à chaque sommet.</figcaption></figure>
+<h3>Les valeurs d'une tension alternative</h3>
+<table class="tight">
+  <tr><th>Valeur</th><th>Ce que c'est</th><th>Calcul</th><th>Prise de 120 V</th></tr>
+  <tr><td><strong>De crête</strong> (maximale), \(U_{\text{max}}\)</td><td>Le sommet de la courbe</td><td>\(1{,}414 \times U_{\text{eff}}\)</td><td>170 V</td></tr>
+  <tr><td><strong>Crête à crête</strong></td><td>Du sommet positif au sommet négatif</td><td>\(2 \times U_{\text{max}}\)</td><td>339 V</td></tr>
+  <tr><td><strong>Efficace</strong>, \(U_{\text{eff}}\)</td><td>La tension continue qui chaufferait autant une même résistance</td><td>\(0{,}707 \times U_{\text{max}}\)</td><td>120 V</td></tr>
+  <tr><td><strong>Moyenne</strong></td><td>La moyenne de la courbe</td><td>\(0{,}637 \times U_{\text{max}}\) sur une demi-alternance ; 0 sur un cycle complet</td><td>108 V sur une alternance ; 0 V sur un cycle</td></tr>
+</table>
+<div class="formula"><div class="title">Valeur efficace et valeur de crête</div>
+\[U_{\text{eff}} = \frac{U_{\text{max}}}{\sqrt{2}} = 0{,}707 \times U_{\text{max}} \qquad U_{\text{max}} = \sqrt{2} \times U_{\text{eff}} = 1{,}414 \times U_{\text{eff}}\]
+<div class="cond">Les mêmes rapports valent pour le courant : \(I_{\text{eff}} = 0{,}707 \times I_{\text{max}}\).</div>
+</div>
+<div class="box key"><span class="label">La règle à ne pas oublier</span>
+  <p>Sauf indication contraire, une tension ou un courant alternatif est <strong>toujours donné en valeur efficace</strong>. Les voltmètres, les ampèremètres et les plaques signalétiques donnent des valeurs efficaces. Le « 120 V » d'une prise est une valeur efficace.</p>
+</div>
+<table class="tight">
+  <tr><th>Tension efficace</th><th>Tension de crête (× 1,414)</th><th>Crête à crête (× 2,828)</th></tr>
+  <tr><td>120 V</td><td>170 V</td><td>339 V</td></tr>
+  <tr><td>240 V</td><td>339 V</td><td>679 V</td></tr>
+  <tr><td>347 V</td><td>491 V</td><td>981 V</td></tr>
+  <tr><td>600 V</td><td>849 V</td><td>1&nbsp;697 V</td></tr>
+</table>
+<div class="box ex"><span class="label">Deux exemples</span>
+  <ol>
+    <li>Une prise fournit 120 V efficaces. Tension de crête : \(1{,}414 \times 120 = 169{,}7\ \text{V}\), soit environ 170 V. Crête à crête : \(2 \times 169{,}7 = 339\ \text{V}\).</li>
+    <li>Un oscilloscope montre une crête de 339 V. Tension efficace : \(0{,}707 \times 339 = 240\ \text{V}\).</li>
+  </ol>
+</div>
+<div class="widget" data-widget="sinus-explorateur"></div>
+
+<h2>3. La valeur instantanée</h2>
+<p>À chaque instant, la tension a une valeur précise : la <strong>valeur instantanée</strong>, notée en minuscule. On repère l'endroit où l'on est dans le cycle par un angle : un cycle complet vaut 360°.</p>
+<div class="formula"><div class="title">Valeur instantanée</div>
+\[u(t) = U_{\text{max}} \times \sin(2\pi f t) = U_{\text{max}} \times \sin(\omega t) \qquad \omega = 2\pi f\]
+<div class="cond">\(\omega\) (oméga) : pulsation, en radians par seconde. À 60 Hz : \(\omega = 2\pi \times 60 = 377\ \text{rad/s}\). Un cycle = 360° = \(2\pi\) radians.</div>
+</div>
+<table class="tight">
+  <tr><th>Angle</th><th>Fraction du cycle</th><th>Temps à 60 Hz</th><th>Sinus</th><th>Tension (crête de 169,7 V)</th></tr>
+  <tr><td>0°</td><td>début</td><td>0 ms</td><td>0</td><td>0 V</td></tr>
+  <tr><td>30°</td><td>1/12</td><td>1,39 ms</td><td>0,5</td><td>84,9 V</td></tr>
+  <tr><td>45°</td><td>1/8</td><td>2,08 ms</td><td>0,707</td><td>120 V</td></tr>
+  <tr><td>90°</td><td>1/4</td><td>4,17 ms</td><td>1</td><td>169,7 V (crête positive)</td></tr>
+  <tr><td>180°</td><td>1/2</td><td>8,33 ms</td><td>0</td><td>0 V</td></tr>
+  <tr><td>270°</td><td>3/4</td><td>12,5 ms</td><td>−1</td><td>−169,7 V (crête négative)</td></tr>
+  <tr><td>360°</td><td>1</td><td>16,67 ms</td><td>0</td><td>0 V</td></tr>
+</table>
+<p class="small">Pour ces calculs, la calculatrice doit être en mode degrés (DEG) : sin 30 doit donner 0,5. Voir la page <a href="unites.html">Unités et préfixes</a>.</p>
+
+<h2>4. Les trois types de charges</h2>
+<p>En alternatif, c'est la charge qui décide si le courant suit exactement la tension ou s'il est décalé dans le temps. Ce décalage s'appelle le <strong>déphasage</strong>. On le mesure par un angle, \(\varphi\) (phi).</p>
+<figure class="fig wide" data-fig="trois-charges"><figcaption>Avec une résistance, le courant suit la tension. Avec une bobine, il arrive un quart de cycle plus tard. Avec un condensateur, il arrive un quart de cycle plus tôt.</figcaption></figure>
+<table class="tight">
+  <tr><th>Charge</th><th>Exemples</th><th>Le courant, par rapport à la tension</th><th>Opposition au courant</th></tr>
+  <tr><td><strong>Résistive</strong> <span class="unit">(\(R\))</span></td><td>Plinthe, chauffe-eau, cuisinière, lampe à incandescence</td><td><strong>En phase</strong> : \(\varphi = 0^\circ\)</td><td>Résistance \(R\), la même à toutes les fréquences</td></tr>
+  <tr><td><strong>Inductive</strong> <span class="unit">(\(L\))</span></td><td>Moteurs, transformateurs, bobines de relais et de contacteurs</td><td><strong>En retard</strong> : 90° pour une bobine parfaite</td><td>Réactance inductive \(X_L\), qui augmente avec la fréquence</td></tr>
+  <tr><td><strong>Capacitive</strong> <span class="unit">(\(C\))</span></td><td>Condensateurs</td><td><strong>En avance</strong> : 90° pour un condensateur parfait</td><td>Réactance capacitive \(X_C\), qui diminue quand la fréquence augmente</td></tr>
+</table>
+<p>Une charge réelle est un mélange. Un moteur, par exemple, est à la fois résistif et inductif : son courant est en retard d'un angle compris entre 0° et 90°.</p>
+<h3>La réactance</h3>
+<p>Une bobine et un condensateur s'opposent au courant alternatif sans le transformer en chaleur. Cette opposition s'appelle la <strong>réactance</strong>. Elle se mesure en ohms, comme une résistance, mais elle dépend de la fréquence.</p>
+<div class="formula"><div class="title">Réactances</div>
+\[X_L = 2\pi f L \qquad X_C = \frac{1}{2\pi f C}\]
+<div class="cond">\(X_L\) et \(X_C\) en ohms, \(f\) en hertz, \(L\) en henrys, \(C\) en farads (attention : 100 µF = 0,0001 F).</div>
+</div>
+<div class="box ex"><span class="label">Deux calculs à 60 Hz</span>
+  <ol>
+    <li>Bobine de 0,1 H : \(X_L = 2\pi \times 60 \times 0{,}1 = 37{,}7\ \Omega\).</li>
+    <li>Condensateur de 100 µF : \(X_C = \dfrac{1}{2\pi \times 60 \times 0{,}0001} = 26{,}5\ \Omega\).</li>
+  </ol>
+  <p>Si la fréquence double (120 Hz) : \(X_L\) double et passe à 75,4 Ω, alors que \(X_C\) est divisée par 2 et tombe à 13,3 Ω.</p>
+</div>
+<ul>
+  <li><strong>En courant continu</strong> (fréquence nulle), une bobine parfaite ne s'oppose plus au courant (\(X_L = 0\)) : il ne reste que la résistance de son fil.</li>
+  <li><strong>En courant continu</strong>, un condensateur chargé bloque le courant : il se comporte comme un circuit ouvert.</li>
+</ul>
+<div class="box tip"><span class="label">Aide-mémoire : « ELI the ICE man »</span>
+  <p>Quand la tension est notée \(E\) : dans une bobine (<strong>L</strong>), E vient avant I, donc la tension est en avance et le <strong>courant en retard</strong> (E-L-I). Dans un condensateur (<strong>C</strong>), I vient avant E, donc le <strong>courant en avance</strong> (I-C-E).</p>
+</div>
+
+<h2>5. L'impédance</h2>
+<p>L'<strong>impédance</strong> \(Z\) est l'opposition totale d'un circuit au courant alternatif : la résistance et la réactance ensemble. Elle se mesure en ohms. Comme les effets de \(R\) et de \(X\) sont décalés de 90°, on ne les additionne pas directement : on utilise le théorème de Pythagore.</p>
+<div class="formula"><div class="title">Impédance d'un circuit série</div>
+\[Z = \sqrt{R^{2} + X^{2}} \qquad X = X_L - X_C \qquad U = Z \times I \qquad \cos\varphi = \frac{R}{Z}\]
+<div class="cond">\(U = Z \times I\) est la loi d'Ohm en alternatif. Tout est en ohms, en volts et en ampères efficaces.</div>
+</div>
+<figure class="fig wide" data-fig="triangle-impedance"><figcaption>Le triangle d'impédance : la résistance à l'horizontale, la réactance à la verticale, et l'impédance sur l'hypoténuse. L'angle entre R et Z est le déphasage.</figcaption></figure>
+<div class="box ex"><span class="label">Exemple</span>
+  <p>Une résistance de 30 Ω est en série avec une bobine dont la réactance est de 40 Ω. Le tout est branché sur 120 V.</p>
+  <ul>
+    <li>Impédance : \(Z = \sqrt{30^{2} + 40^{2}} = \sqrt{900 + 1\,600} = \sqrt{2\,500} = 50\ \Omega\).</li>
+    <li>Courant : \(I = \dfrac{U}{Z} = \dfrac{120}{50} = 2{,}4\ \text{A}\).</li>
+    <li>Déphasage : \(\cos\varphi = \dfrac{R}{Z} = \dfrac{30}{50} = 0{,}6\), donc \(\varphi = 53{,}1^\circ\). Le courant est en retard (circuit inductif).</li>
+    <li>Tensions : \(U_R = 30 \times 2{,}4 = 72\ \text{V}\) et \(U_L = 40 \times 2{,}4 = 96\ \text{V}\).</li>
+  </ul>
+</div>
+<div class="box warn"><span class="label">En alternatif, on n'additionne pas tout bêtement</span>
+  <ul>
+    <li>30 Ω de résistance et 40 Ω de réactance ne font pas 70 Ω, mais 50 Ω.</li>
+    <li>Dans l'exemple, \(72 + 96 = 168\ \text{V}\) ne donne pas la tension de la source. Les deux tensions sont décalées de 90° : \(\sqrt{72^{2} + 96^{2}} = 120\ \text{V}\).</li>
+    <li>Repère les triangles 3-4-5 : 30-40-50, 72-96-120, 6-8-10. Les exercices de manuels en utilisent souvent, et le calcul se fait alors de tête.</li>
+  </ul>
+</div>
+
+<h2>6. Les trois puissances</h2>
+<p>En alternatif, dès qu'il y a un déphasage, le produit \(U \times I\) ne donne plus la puissance réellement utilisée. Il faut distinguer trois puissances.</p>
+<table class="tight">
+  <tr><th>Puissance</th><th>Formule</th><th>Unité</th><th>Ce que c'est</th></tr>
+  <tr><td><strong>Apparente</strong>, \(S\)</td><td><span class="unit">\(S = U \times I\)</span></td><td>voltampère (VA)</td><td>Ce que la source et les fils doivent fournir. Les transformateurs sont dimensionnés en kVA.</td></tr>
+  <tr><td><strong>Active</strong>, \(P\)</td><td><span class="unit">\(P = U \times I \times \cos\varphi\)</span></td><td>watt (W)</td><td>Celle qui fait le travail : chaleur, lumière, mouvement. C'est son énergie que le compteur enregistre en kWh.</td></tr>
+  <tr><td><strong>Réactive</strong>, \(Q\)</td><td><span class="unit">\(Q = U \times I \times \sin\varphi\)</span></td><td>var</td><td>Celle qui va et vient entre la source et les bobines ou les condensateurs. Elle ne fait aucun travail, mais elle charge les fils.</td></tr>
+</table>
+<div class="formula"><div class="title">Triangle des puissances et facteur de puissance</div>
+\[S^{2} = P^{2} + Q^{2} \qquad FP = \cos\varphi = \frac{P}{S}\]
+<div class="cond">Le facteur de puissance (FP) est un nombre entre 0 et 1, sans unité. On le donne parfois en pourcentage : 0,8 = 80 %.</div>
+</div>
+<figure class="fig wide" data-fig="triangle-puissances"><figcaption>Le triangle des puissances a la même forme que le triangle d'impédance : même angle, mêmes rapports. Plus l'angle est grand, plus la puissance réactive est importante et plus le facteur de puissance est faible.</figcaption></figure>
+<div class="box ex"><span class="label">Exemple</span>
+  <p>Un moteur branché sur 120 V tire 10 A avec un facteur de puissance de 0,8.</p>
+  <ul>
+    <li>Puissance apparente : \(S = U \times I = 120 \times 10 = 1\,200\ \text{VA}\).</li>
+    <li>Puissance active : \(P = S \times \cos\varphi = 1\,200 \times 0{,}8 = 960\ \text{W}\).</li>
+    <li>Angle : \(\cos\varphi = 0{,}8\) donne \(\varphi = 36{,}9^\circ\), et \(\sin\varphi = 0{,}6\).</li>
+    <li>Puissance réactive : \(Q = S \times \sin\varphi = 1\,200 \times 0{,}6 = 720\ \text{var}\).</li>
+    <li>Vérification : \(\sqrt{960^{2} + 720^{2}} = \sqrt{1\,440\,000} = 1\,200\ \text{VA}\).</li>
+  </ul>
+</div>
+<div class="widget" data-widget="dephasage-puissances"></div>
+
+<h2>7. Le facteur de puissance en pratique</h2>
+<p>Le facteur de puissance dit quelle part de la puissance apparente est vraiment utile. On précise « en retard » pour une charge inductive et « en avance » pour une charge capacitive.</p>
+<table class="tight">
+  <tr><th>Charge</th><th>Facteur de puissance</th></tr>
+  <tr><td>Chauffage, chauffe-eau, lampe à incandescence</td><td>1 (courant en phase)</td></tr>
+  <tr><td>Moteur à pleine charge</td><td>Environ 0,8 à 0,9, en retard</td></tr>
+  <tr><td>Moteur peu chargé ou à vide</td><td>Beaucoup plus faible, en retard</td></tr>
+  <tr><td>Bobine parfaite ou condensateur parfait</td><td>0 (aucune puissance active)</td></tr>
+</table>
+<h3>Pourquoi un mauvais facteur de puissance coûte cher</h3>
+<p>Pour fournir la même puissance utile, un facteur de puissance faible oblige à faire circuler plus de courant : \(I = \dfrac{P}{U \times FP}\). Exemple pour 960 W utiles sous 120 V :</p>
+<table class="tight">
+  <tr><th>Facteur de puissance</th><th>Courant</th><th>Puissance apparente</th><th>Pertes dans les fils (\(R \times I^{2}\))</th></tr>
+  <tr><td>1</td><td>8 A</td><td>960 VA</td><td>référence</td></tr>
+  <tr><td>0,8</td><td>10 A</td><td>1&nbsp;200 VA</td><td>1,56 fois plus</td></tr>
+  <tr><td>0,6</td><td>13,3 A</td><td>1&nbsp;600 VA</td><td>2,78 fois plus</td></tr>
+  <tr><td>0,5</td><td>16 A</td><td>1&nbsp;920 VA</td><td>4 fois plus</td></tr>
+</table>
+<p>Plus de courant, c'est des fils, des transformateurs et des appareillages plus gros, et plus de pertes en chaleur, pour le même travail.</p>
+<h3>La correction par condensateurs</h3>
+<p>Un moteur demande de la puissance réactive inductive. Un condensateur branché en parallèle lui en fournit sur place : la source n'a plus à la transporter. La puissance active ne change pas, mais la puissance apparente et le courant diminuent.</p>
+<figure class="fig wide" data-fig="correction-fp"><figcaption>Corriger le facteur de puissance, c'est raccourcir le côté vertical du triangle. La puissance active reste la même, l'hypoténuse (donc le courant) diminue.</figcaption></figure>
+<div class="box ex"><span class="label">Exemple</span>
+  <p>Le moteur de la section 6 (960 W, 720 var, 1&nbsp;200 VA, 10 A) reçoit un condensateur de 400 var.</p>
+  <ul>
+    <li>Puissance réactive restante : \(Q = 720 - 400 = 320\ \text{var}\).</li>
+    <li>Puissance apparente : \(S = \sqrt{960^{2} + 320^{2}} = 1\,012\ \text{VA}\).</li>
+    <li>Facteur de puissance : \(FP = \dfrac{960}{1\,012} = 0{,}95\).</li>
+    <li>Courant : \(I = \dfrac{1\,012}{120} = 8{,}4\ \text{A}\) au lieu de 10 A.</li>
+  </ul>
+</div>
+<p><strong>Le lien avec le comptage.</strong> Le compteur d'une maison enregistre l'énergie active (kWh). Chez les clients d'affaires de plus grande taille, le compteur enregistre aussi la puissance appelée, et souvent la puissance apparente (kVA) : selon le tarif, un mauvais facteur de puissance peut alors faire augmenter la facture. Voir la page <a href="mesure.html">Mesure et comptage</a>.</p>
+
+<h2>À retenir</h2>
+<div class="box key"><span class="label">L'essentiel</span>
+  <ul>
+    <li>Réseau nord-américain : 60 Hz, donc une période de 16,67 ms. \(f = 1 / T\).</li>
+    <li>Valeur efficace = 0,707 × crête. Crête = 1,414 × efficace. 120 V efficaces font 170 V de crête.</li>
+    <li>Les appareils de mesure et les plaques signalétiques donnent des valeurs efficaces.</li>
+    <li>Résistance : courant en phase. Bobine : courant en retard. Condensateur : courant en avance.</li>
+    <li>\(X_L = 2\pi f L\) augmente avec la fréquence. \(X_C = 1 / (2\pi f C)\) diminue quand la fréquence augmente.</li>
+    <li>Impédance : \(Z = \sqrt{R^{2} + X^{2}}\), et \(U = Z \times I\).</li>
+    <li>\(S = U \times I\) en VA ; \(P = S \times \cos\varphi\) en W ; \(Q = S \times \sin\varphi\) en var ; \(S^{2} = P^{2} + Q^{2}\).</li>
+    <li>Facteur de puissance : \(FP = \cos\varphi = P / S\). Il vaut 1 pour une charge résistive.</li>
+    <li>On corrige un facteur de puissance en retard avec des condensateurs.</li>
+  </ul>
+</div>
+<div class="box trap"><span class="label">Pièges fréquents</span>
+  <ul>
+    <li>Confondre valeur de crête et valeur efficace : 120 V, c'est la valeur efficace.</li>
+    <li>Multiplier par 0,707 quand il faut multiplier par 1,414 : la crête est toujours plus grande que la valeur efficace.</li>
+    <li>Inverser retard et avance : dans une bobine, le courant est en retard (ELI) ; dans un condensateur, il est en avance (ICE).</li>
+    <li>Additionner \(R\) et \(X\) directement au lieu d'utiliser Pythagore.</li>
+    <li>Confondre les unités : W pour la puissance active, VA pour l'apparente, var pour la réactive.</li>
+    <li>Oublier le \(\cos\varphi\) : en alternatif, \(P = U \times I\) n'est vrai que pour une charge résistive.</li>
+    <li>Oublier de convertir les µF en farads dans \(X_C\).</li>
+    <li>Croire que la valeur moyenne d'une sinusoïde complète vaut 0,637 × crête : sur un cycle complet, elle est nulle.</li>
+  </ul>
+</div>
+
+<section class="quiz" data-bank="alternatif"></section>
+<div class="prevnext"><a class="prev" href="calculs.html">← Les calculs électriques simples</a><a class="next" href="electrotechnique.html">Électrotechnique de base →</a></div>
+</article>
+</main>
+<footer class="footer">Site d'étude personnel et non officiel : il n'est pas produit par Hydro-Québec et ne contient aucune question réelle du test. Les questions et les exemples ont été écrits pour s'exercer sur les sujets annoncés.</footer>
+<script defer src="assets/katex/katex.min.js?v=f4e1ebdc"></script>
+<script defer src="assets/katex/contrib/auto-render.min.js?v=71052e38"></script>
+<script defer src="assets/app.js?v=61dab5d2"></script>
+<script defer src="assets/draw.js?v=ca488361"></script>
+<script defer src="assets/bank.js?v=1a2737bc"></script>
+<script defer src="assets/figs-alternatif.js?v=0d22bcae"></script>
+</body>
+</html>

@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Règles de sécurité électrique | Préparation Installateur Mesurage</title>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<link rel="stylesheet" href="assets/style.css?v=94dbb397">
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="index.html">Installateur Mesurage <small>Préparation au test technique</small></a>
+  <nav>
+    <a href="index.html">Accueil</a>
+    <a href="index.html#theorie" class="active">Théorie</a>
+    <a href="pratique.html">Exercices</a>
+    <a href="tests.html">Tests pratiques</a>
+    <a href="formules.html">Formules</a>
+    <button class="theme-btn" type="button">Thème</button>
+  </nav>
+</header>
+<nav class="subnav" aria-label="Sujets de théorie"><a href="unites.html"><span class="n">0</span>Unités</a><a href="base.html"><span class="n">1</span>Base</a><a href="calculs.html"><span class="n">2</span>Calculs</a><a href="alternatif.html"><span class="n">3</span>Alternatif</a><a href="electrotechnique.html"><span class="n">4</span>Électrotechnique</a><a href="transformateurs.html"><span class="n">5</span>Transformateurs</a><a href="triphase.html"><span class="n">6</span>Mono et triphasé</a><a href="mesure.html"><span class="n">7</span>Mesure et comptage</a><a href="securite.html" class="active"><span class="n">8</span>Sécurité</a><a href="schemas.html"><span class="n">9</span>Schémas</a></nav>
+<main class="layout">
+<aside class="toc"></aside>
+<article class="content">
+<style>
+.cad-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: .4rem 1.2rem; margin: .4rem 0; }
+.cad-head { font-size: .8em; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: .3em; }
+.cad-pool { display: flex; flex-direction: column; align-items: flex-start; gap: .35rem; min-height: 2.4em; }
+.cad-step { border: 1px solid var(--border); background: var(--surface-2); color: var(--text); border-radius: 8px; padding: .3em .7em; font: inherit; font-size: .92em; cursor: pointer; text-align: left; }
+.cad-step:hover { border-color: var(--accent); }
+.cad-list { margin: 0; }
+.cad-list > li { margin: .35rem 0; }
+.cad-list > li.ok .cad-step { background: var(--ok-soft); border-color: var(--ok); }
+.cad-list > li.no .cad-step { background: var(--bad-soft); border-color: var(--bad); }
+.cad-list > li.cad-empty { color: var(--muted); font-size: .9em; }
+</style>
+<div class="course-hero">
+  <div class="kicker">Théorie | Sujet 8</div>
+  <h1>Règles de sécurité électrique</h1>
+  <p class="meta">Sujet annoncé dans l'invitation : « Règles de sécurité électrique » | Lecture : environ 25 minutes</p>
+  <p><span class="pill accent">Effets du courant</span><span class="pill accent">Cadenassage</span><span class="pill accent">Absence de tension</span><span class="pill accent">Protection individuelle</span><span class="pill accent">Mise à la terre et DDFT</span><span class="pill accent">Distances d'approche</span></p>
+  <p class="small">But de la page : connaître les dangers de l'électricité et les effets du courant sur le corps, l'ordre des étapes d'un cadenassage, la vérification d'absence de tension, le rôle de chaque protection et les bons réflexes en cas d'accident. Cette page résume des principes généraux reconnus : au travail, ce sont toujours les méthodes de l'employeur qui s'appliquent.</p>
+</div>
+
+<h2>1. Les dangers de l'électricité</h2>
+<p>L'électricité ne se voit pas, ne s'entend pas et ne sent rien. On reconnaît cinq grands dangers.</p>
+<table class="tight">
+  <tr><th>Danger</th><th>Ce qui se passe</th><th>Exemple</th></tr>
+  <tr><td><strong>Choc électrique</strong></td><td>Un courant traverse le corps : c'est une <strong>électrisation</strong>. Quand elle est mortelle, on parle d'<strong>électrocution</strong>.</td><td>Toucher en même temps un fil sous tension et un objet relié à la terre.</td></tr>
+  <tr><td><strong>Brûlures</strong></td><td>Le courant chauffe les tissus qu'il traverse ; un arc brûle la peau de l'extérieur.</td><td>Brûlures aux points d'entrée et de sortie du courant.</td></tr>
+  <tr><td><strong>Arc électrique</strong></td><td>Le courant passe dans l'air : chaleur intense, métal en fusion projeté, souffle.</td><td>Un outil qui glisse entre deux pièces sous tension.</td></tr>
+  <tr><td><strong>Incendie</strong></td><td>Un conducteur surchargé, une mauvaise connexion ou un arc met le feu aux matériaux voisins.</td><td>Une connexion desserrée qui chauffe.</td></tr>
+  <tr><td><strong>Chute</strong></td><td>Un choc, même léger, fait sursauter ou perdre l'équilibre.</td><td>Un choc reçu en haut d'une échelle.</td></tr>
+</table>
+
+<h2>2. Les effets du courant sur le corps</h2>
+<p>Ce qui blesse, c'est l'<strong>intensité du courant qui traverse le corps</strong>. La tension pousse ce courant, la résistance du corps le limite : c'est la loi d'Ohm. La gravité dépend de quatre facteurs :</p>
+<ul>
+  <li><strong>L'intensité</strong> du courant.</li>
+  <li><strong>La durée</strong> du contact : plus il dure, plus c'est grave.</li>
+  <li><strong>Le trajet</strong> dans le corps : le plus dangereux passe par le cœur (d'une main à l'autre, d'une main à un pied).</li>
+  <li><strong>L'état de la peau</strong> : une peau mouillée laisse passer beaucoup plus de courant qu'une peau sèche.</li>
+</ul>
+<figure class="fig wide" data-fig="echelle-effets"><figcaption>Effets d'un courant alternatif à 60 Hz. Ce sont des ordres de grandeur : les valeurs varient selon les sources et selon les personnes. À retenir : les seuils dangereux se comptent en milliampères.</figcaption></figure>
+<div class="box ex"><span class="label">Exemple : une tension de maison peut tuer</span>
+  <p>La résistance du corps est de l'ordre de 100 000 Ω quand la peau est sèche, et d'environ 1000 Ω quand elle est mouillée.</p>
+  <ul>
+    <li>Peau sèche, contact avec 120 V : \(I = \dfrac{120}{100\,000} = 0{,}0012\ \text{A} = 1{,}2\ \text{mA}\). On sent un picotement.</li>
+    <li>Peau mouillée, même tension : \(I = \dfrac{120}{1000} = 0{,}12\ \text{A} = 120\ \text{mA}\). C'est la zone de la fibrillation ventriculaire.</li>
+  </ul>
+</div>
+<div class="widget" data-widget="courant-corps"></div>
+
+<h2>3. Travailler hors tension</h2>
+<div class="box key"><span class="label">La règle de base</span>
+  <p>Tout conducteur est considéré comme <strong>sous tension</strong> tant que l'absence de tension n'a pas été vérifiée. Un interrupteur ouvert ne prouve rien.</p>
+</div>
+<h3>Le cadenassage</h3>
+<p>Le cadenassage empêche qu'un équipement soit remis sous tension pendant qu'on y travaille. Les étapes se font dans cet ordre :</p>
+<ol class="steps">
+  <li><strong>Identifier</strong> toutes les sources d'énergie.</li>
+  <li><strong>Aviser</strong> les personnes concernées.</li>
+  <li><strong>Arrêter</strong> l'équipement.</li>
+  <li><strong>Isoler</strong> : ouvrir le sectionneur ou le disjoncteur.</li>
+  <li><strong>Cadenasser et étiqueter</strong> : chaque travailleur pose son propre cadenas et garde sa clé.</li>
+  <li><strong>Dissiper l'énergie résiduelle</strong> : condensateurs, ressorts.</li>
+  <li><strong>Vérifier</strong> l'absence de tension et faire un essai de démarrage.</li>
+</ol>
+<figure class="fig wide" data-fig="cadenassage"><figcaption>Les numéros renvoient aux étapes de la liste (l'étape 2, aviser, ne se dessine pas). En amont du sectionneur ouvert, la source est toujours sous tension. Avec un cadenas par travailleur, personne ne peut refermer le sectionneur tant qu'il reste quelqu'un au travail.</figcaption></figure>
+<div class="widget" data-widget="ordre-cadenassage"></div>
+<h3>Vérifier l'absence de tension en trois temps</h3>
+<figure class="fig wide" data-fig="trois-temps"><figcaption>Un vérificateur en panne affiche 0 V même sur un circuit sous tension. En le testant sur une source connue avant et après, on sait que le « 0 V » lu sur le circuit est fiable.</figcaption></figure>
+<p>À l'étape 2, on teste <strong>chaque phase</strong>, <strong>entre les phases</strong> et <strong>par rapport à la terre</strong>.</p>
+<h3>La mise à la terre temporaire</h3>
+<p>Sur les installations de moyenne tension, on pose des mises à la terre temporaires <strong>après</strong> avoir vérifié l'absence de tension. Elles protègent contre une réalimentation ou une tension induite.</p>
+
+<h2>4. Travailler sous tension ou à proximité</h2>
+<p>Quand on travaille sous tension ou près de pièces sous tension, la protection repose sur les équipements, les outils et la méthode.</p>
+<table class="tight">
+  <tr><th>Équipement de protection individuelle</th><th>À savoir</th></tr>
+  <tr><td><strong>Gants isolants</strong></td><td>De la classe adaptée à la tension. Portés avec des surgants de cuir et inspectés avant chaque usage.</td></tr>
+  <tr><td><strong>Lunettes ou visière</strong></td><td>Protègent les yeux et le visage des arcs et des projections.</td></tr>
+  <tr><td><strong>Casque</strong></td><td>Protège la tête.</td></tr>
+  <tr><td><strong>Vêtements résistants aux arcs</strong></td><td>Limitent les brûlures si un arc se produit.</td></tr>
+  <tr><td><strong>Chaussures à semelle isolante</strong></td><td>Limitent le passage du courant vers le sol.</td></tr>
+</table>
+<div class="box ex"><span class="label">Exemple : la classe des gants isolants</span>
+  <p>Chaque classe de gants a une tension maximale d'utilisation. Par exemple : <strong>classe 0 jusqu'à 1000 V</strong>, <strong>classe 2 jusqu'à 17 000 V</strong>.</p>
+  <p>Pour une installation à 600 V, des gants de classe 0 conviennent : 600 V est sous leur limite de 1000 V. Un gant d'une classe trop basse ne protège pas.</p>
+</div>
+<p>Les bonnes habitudes :</p>
+<ul class="checklist">
+  <li>Utiliser des <strong>outils isolés</strong>.</li>
+  <li>Retirer <strong>bijoux et objets métalliques</strong> (montre, bague, chaîne).</li>
+  <li>Garder <strong>une main libre</strong> quand c'est possible : on évite le trajet d'une main à l'autre, qui passe par le cœur.</li>
+  <li>Se tenir sur un <strong>tapis isolant</strong>.</li>
+  <li>Travailler dans une zone <strong>dégagée et sèche</strong>.</li>
+</ul>
+<p>Au Canada, la norme de référence pour la sécurité électrique au travail est la <strong>CSA Z462</strong>.</p>
+
+<h2>5. Les protections d'une installation</h2>
+<figure class="fig wide" data-fig="defaut-terre"><figcaption>Un fil sous tension touche le boîtier métallique. Comme le boîtier est relié à la terre, le courant de défaut trouve un chemin de retour très peu résistant : il devient très élevé et le disjoncteur déclenche. Sans ce fil, le boîtier resterait sous tension et la première personne à le toucher servirait de chemin.</figcaption></figure>
+<table class="tight">
+  <tr><th>Protection</th><th>Ce qu'elle fait</th><th>Ce qu'elle protège</th></tr>
+  <tr><td><strong>Mise à la terre et continuité des masses</strong></td><td>Relie les boîtiers et les pièces métalliques à la terre.</td><td>Les personnes : un boîtier ne reste pas sous tension après un défaut.</td></tr>
+  <tr><td><strong>Fusible, disjoncteur</strong></td><td>Coupe quand le courant dépasse son calibre (surcharge, court-circuit).</td><td>Les conducteurs et l'installation. <strong>Pas les personnes.</strong></td></tr>
+  <tr><td><strong>DDFT</strong> (disjoncteur différentiel de fuite à la terre)</td><td>Compare le courant de la ligne et celui du neutre. Coupe dès qu'il manque environ 5 mA.</td><td>Les personnes.</td></tr>
+  <tr><td><strong>DDFA</strong> (protection anti-arc)</td><td>Détecte les arcs dans le circuit et coupe.</td><td>Le bâtiment, contre les incendies causés par les arcs.</td></tr>
+</table>
+<figure class="fig wide" data-fig="ddft"><figcaption>Le DDFT ne mesure pas le courant total : il surveille la différence entre l'aller et le retour. Si une partie du courant revient par un autre chemin, par exemple à travers une personne, il coupe.</figcaption></figure>
+<div class="box ex"><span class="label">Exemple : pourquoi un disjoncteur ne protège pas les personnes</span>
+  <p>Un courant de 100 mA peut tuer. Pour un disjoncteur de 15 A, 100 mA, c'est \(0{,}1\ \text{A}\) : 150 fois moins que son calibre. Il ne voit rien d'anormal. Un DDFT, lui, coupe dès qu'il manque environ 5 mA au retour.</p>
+</div>
+<h3>Les couleurs des conducteurs</h3>
+<table class="tight">
+  <tr><th>Couleur</th><th>Rôle</th></tr>
+  <tr><td><strong>Vert</strong> ou <strong>nu</strong></td><td>Mise à la terre</td></tr>
+  <tr><td><strong>Blanc</strong></td><td>Neutre</td></tr>
+  <tr><td><strong>Noir</strong> et <strong>rouge</strong></td><td>Conducteurs sous tension</td></tr>
+</table>
+
+<h2>6. Les distances et les situations à risque</h2>
+<p>Près d'une ligne aérienne, pas besoin de toucher le fil pour être en danger. Le Code de sécurité pour les travaux de construction du Québec fixe une <strong>distance d'approche minimale</strong> pour les travailleurs non habilités et le public :</p>
+<table class="tight">
+  <tr><th>Tension de la ligne</th><th>Distance d'approche minimale</th></tr>
+  <tr><td>Moins de 125 kV</td><td><strong>3 m</strong></td></tr>
+  <tr><td>De 125 à 250 kV</td><td><strong>5 m</strong></td></tr>
+  <tr><td>De 250 à 550 kV</td><td><strong>8 m</strong></td></tr>
+  <tr><td>Plus de 550 kV</td><td><strong>12 m</strong></td></tr>
+</table>
+<p>Une ligne de distribution à 25 kV est dans la première catégorie : 3 m. La distance vaut aussi pour ce qu'on tient ou manœuvre : échelle, perche, tuyau.</p>
+<figure class="fig wide" data-fig="tension-pas"><figcaption>Un fil tombé met le sol sous tension autour de lui. Entre deux pieds écartés, il y a une différence de potentiel : la tension de pas. On reste à au moins 10 m, et si on est déjà trop près, on s'éloigne à petits pas, les pieds rapprochés.</figcaption></figure>
+<table class="tight">
+  <tr><th>Situation à risque</th><th>Pourquoi c'est dangereux</th></tr>
+  <tr><td><strong>Fil tombé au sol</strong></td><td>Il peut être sous tension, et le sol autour aussi. Rester à au moins 10 m.</td></tr>
+  <tr><td><strong>Humidité</strong></td><td>La peau mouillée et les isolants humides laissent passer beaucoup plus de courant.</td></tr>
+  <tr><td><strong>Échelle ou objet long près d'une ligne</strong></td><td>L'objet peut toucher la ligne ou s'en approcher trop.</td></tr>
+  <tr><td><strong>Condensateur resté chargé</strong></td><td>Il garde une tension après la coupure de l'alimentation.</td></tr>
+  <tr><td><strong>Secondaire d'un transformateur de courant ouvert</strong></td><td>Une tension dangereuse apparaît à ses bornes (voir <a href="transformateurs.html">Les transformateurs</a>).</td></tr>
+  <tr><td><strong>Génératrice mal raccordée</strong></td><td>Elle renvoie de la tension dans une installation ou une ligne qu'on croit hors tension : c'est un retour de tension.</td></tr>
+</table>
+
+<h2>7. En cas d'accident</h2>
+<ol class="steps">
+  <li><strong>Ne touche pas la victime</strong> tant que le courant n'est pas coupé : tu deviendrais la deuxième victime.</li>
+  <li><strong>Coupe l'alimentation.</strong></li>
+  <li><strong>Appelle le 911.</strong></li>
+  <li>Si tu es formé : <strong>réanimation</strong> et <strong>défibrillateur</strong>.</li>
+  <li>Toute personne électrisée doit <strong>consulter un médecin</strong>, même si elle se sent bien.</li>
+</ol>
+<h3>Feu d'origine électrique</h3>
+<p>On utilise un extincteur de <strong>classe C</strong> (CO2 ou poudre). <strong>Jamais d'eau</strong> sur un équipement sous tension : l'eau conduit le courant jusqu'à toi.</p>
+<table class="tight">
+  <tr><th>Classe de feu</th><th>Ce qui brûle</th></tr>
+  <tr><td><strong>A</strong></td><td>Matières solides ordinaires : bois, papier, tissu</td></tr>
+  <tr><td><strong>B</strong></td><td>Liquides inflammables : essence, huile, solvants</td></tr>
+  <tr><td><strong>C</strong></td><td>Équipement électrique sous tension</td></tr>
+</table>
+
+<h2>8. Avant de commencer un travail</h2>
+<p>La plupart des accidents se préparent avant le premier geste. Quatre réflexes :</p>
+<table class="tight">
+  <tr><th>Réflexe</th><th>Questions à se poser</th></tr>
+  <tr><td><strong>Planifier</strong></td><td>Quel est le travail ? Sous tension ou hors tension ? Dans quel ordre ?</td></tr>
+  <tr><td><strong>Identifier les dangers</strong></td><td>Quelle tension ? Combien de sources ? De l'eau, de la hauteur, une ligne à proximité ?</td></tr>
+  <tr><td><strong>S'entendre en équipe</strong></td><td>Tout le monde connaît-il la méthode, son rôle et les mesures de sécurité ?</td></tr>
+  <tr><td><strong>Vérifier son matériel</strong></td><td>Les appareils de mesure fonctionnent-ils ? Les équipements de protection sont-ils en bon état et adaptés à la tension ?</td></tr>
+</table>
+
+<h2>À retenir</h2>
+<div class="box key"><span class="label">L'essentiel</span>
+  <ul>
+    <li>C'est le courant qui blesse : perception vers 1 mA, impossible de lâcher prise vers 10 à 20 mA, fibrillation vers 75 à 100 mA.</li>
+    <li>Corps : de l'ordre de 100 000 Ω peau sèche, 1000 Ω peau mouillée. Sur 120 V mouillé : 120 mA.</li>
+    <li>Tout conducteur est sous tension tant que l'absence de tension n'est pas vérifiée.</li>
+    <li>Cadenassage : identifier, aviser, arrêter, isoler, cadenasser et étiqueter, dissiper, vérifier.</li>
+    <li>Absence de tension en trois temps : tester le vérificateur, tester le circuit, retester le vérificateur.</li>
+    <li>Fusible et disjoncteur protègent les conducteurs ; le DDFT (environ 5 mA) protège les personnes ; le DDFA protège contre les incendies dus aux arcs.</li>
+    <li>Vert ou nu : terre. Blanc : neutre. Noir et rouge : sous tension.</li>
+    <li>Lignes aériennes : 3 m sous 125 kV, puis 5 m, 8 m et 12 m. Fil tombé : 10 m.</li>
+    <li>Accident : ne pas toucher, couper, 911. Feu électrique : classe C, jamais d'eau.</li>
+  </ul>
+</div>
+<div class="box trap"><span class="label">Pièges fréquents</span>
+  <ul>
+    <li>Croire qu'une « basse » tension est sans danger : 120 V suffit pour tuer.</li>
+    <li>Croire qu'un disjoncteur protège les personnes : il protège les conducteurs.</li>
+    <li>Confondre DDFT (fuite à la terre, personnes) et DDFA (arcs, incendies).</li>
+    <li>Vérifier l'absence de tension sans tester le vérificateur avant et après.</li>
+    <li>Poser la mise à la terre temporaire avant d'avoir vérifié l'absence de tension.</li>
+    <li>Partager un cadenas ou une clé : c'est un cadenas par travailleur.</li>
+    <li>Confondre électrisation (un courant traverse le corps) et électrocution (elle est mortelle).</li>
+    <li>Courir pour s'éloigner d'un fil tombé : on s'éloigne à petits pas.</li>
+  </ul>
+</div>
+
+<section class="quiz" data-bank="securite"></section>
+<div class="prevnext"><a class="prev" href="mesure.html">← Mesure et comptage électrique</a><a class="next" href="schemas.html">Lecture de schémas électriques →</a></div>
+</article>
+</main>
+<footer class="footer">Site d'étude personnel et non officiel : il n'est pas produit par Hydro-Québec et ne contient aucune question réelle du test. Les questions et les exemples ont été écrits pour s'exercer sur les sujets annoncés.</footer>
+<script defer src="assets/katex/katex.min.js?v=f4e1ebdc"></script>
+<script defer src="assets/katex/contrib/auto-render.min.js?v=71052e38"></script>
+<script defer src="assets/app.js?v=61dab5d2"></script>
+<script defer src="assets/draw.js?v=ca488361"></script>
+<script defer src="assets/bank.js?v=1a2737bc"></script>
+<script defer src="assets/figs-securite.js?v=9da7b4ed"></script>
+</body>
+</html>

@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Mesure et comptage électrique | Préparation Installateur Mesurage</title>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<link rel="stylesheet" href="assets/style.css?v=94dbb397">
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="index.html">Installateur Mesurage <small>Préparation au test technique</small></a>
+  <nav>
+    <a href="index.html">Accueil</a>
+    <a href="index.html#theorie" class="active">Théorie</a>
+    <a href="pratique.html">Exercices</a>
+    <a href="tests.html">Tests pratiques</a>
+    <a href="formules.html">Formules</a>
+    <button class="theme-btn" type="button">Thème</button>
+  </nav>
+</header>
+<nav class="subnav" aria-label="Sujets de théorie"><a href="unites.html"><span class="n">0</span>Unités</a><a href="base.html"><span class="n">1</span>Base</a><a href="calculs.html"><span class="n">2</span>Calculs</a><a href="alternatif.html"><span class="n">3</span>Alternatif</a><a href="electrotechnique.html"><span class="n">4</span>Électrotechnique</a><a href="transformateurs.html"><span class="n">5</span>Transformateurs</a><a href="triphase.html"><span class="n">6</span>Mono et triphasé</a><a href="mesure.html" class="active"><span class="n">7</span>Mesure et comptage</a><a href="securite.html"><span class="n">8</span>Sécurité</a><a href="schemas.html"><span class="n">9</span>Schémas</a></nav>
+<main class="layout">
+<aside class="toc"></aside>
+<article class="content">
+<style>
+.mz-in { width: 6em; margin: 0 .3em; padding: .35em .5em; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); color: var(--text); font: inherit; font-variant-numeric: tabular-nums; letter-spacing: .08em; }
+.mz-dials { display: flex; flex-wrap: wrap; justify-content: center; gap: 0 .5rem; }
+.mz-dials svg.hq { flex: 0 0 auto; margin: .4rem 0; }
+</style>
+<div class="course-hero">
+  <div class="kicker">Théorie | Sujet 7</div>
+  <h1>Mesure et comptage électrique</h1>
+  <p class="meta">Sujet annoncé dans l'invitation : « Notions de mesure et de comptage électrique » | Lecture : environ 25 minutes</p>
+  <p><span class="pill accent">Appareils de mesure</span><span class="pill accent">kW et kWh</span><span class="pill accent">Le compteur</span><span class="pill accent">Lecture des cadrans</span><span class="pill accent">Multiplicateur</span><span class="pill accent">Circuit de mesure</span></p>
+  <p class="small">But de la page : savoir quel appareil mesure quoi et comment le brancher, distinguer la puissance (kW) de l'énergie (kWh), lire un compteur à cadrans, et calculer une consommation réelle quand le compteur est alimenté par des transformateurs de mesure.</p>
+</div>
+
+<h2>1. Les appareils de mesure</h2>
+<p>Chaque grandeur a son appareil, et chaque appareil a sa façon de se brancher. Le duo de base à ne jamais inverser : le <strong>voltmètre en parallèle</strong>, l'<strong>ampèremètre en série</strong>.</p>
+<figure class="fig wide" data-fig="ou-brancher"><figcaption>L'ampèremètre est inséré dans le circuit : tout le courant le traverse. Le voltmètre se branche aux bornes de l'élément, sans rien ouvrir. La pince mesure le courant de l'extérieur du fil. L'ohmmètre ne s'utilise que sur un élément hors tension.</figcaption></figure>
+<table class="tight">
+  <tr><th>Appareil</th><th>Ce qu'il mesure</th><th>Comment le brancher</th><th>À savoir</th></tr>
+  <tr><td><strong>Voltmètre</strong></td><td>Tension (V)</td><td>En <strong>parallèle</strong>, aux bornes de l'élément</td><td>Résistance interne très élevée : il ne dérange presque pas le circuit.</td></tr>
+  <tr><td><strong>Ampèremètre</strong></td><td>Courant (A)</td><td>En <strong>série</strong> : il faut ouvrir le circuit pour l'insérer</td><td>Résistance interne très faible. Jamais en parallèle sur une source : c'est un court-circuit.</td></tr>
+  <tr><td><strong>Pince ampèremétrique</strong></td><td>Courant (A)</td><td>Autour d'<strong>un seul</strong> conducteur, sans ouvrir le circuit</td><td>Elle capte le champ magnétique créé par le courant.</td></tr>
+  <tr><td><strong>Ohmmètre</strong></td><td>Résistance (Ω), continuité</td><td>Aux bornes de l'élément, circuit <strong>hors tension</strong></td><td>Il envoie son propre petit courant. Une résistance presque nulle confirme la continuité.</td></tr>
+  <tr><td><strong>Mégohmmètre</strong></td><td>Résistance d'isolement (MΩ)</td><td>Entre un conducteur et la terre, ou entre deux conducteurs, <strong>hors tension</strong></td><td>Tension d'essai élevée : 500 V ou 1000 V. Plus la valeur lue est grande, meilleur est l'isolant.</td></tr>
+  <tr><td><strong>Wattmètre</strong></td><td>Puissance active (W)</td><td>Un circuit de courant en série et un circuit de tension en parallèle</td><td>Il combine la tension, le courant et le facteur de puissance.</td></tr>
+  <tr><td><strong>Multimètre</strong></td><td>Tension, courant, résistance</td><td>Selon la fonction choisie</td><td>Choisir la fonction (CA ou CC), puis le calibre, en commençant par le plus élevé.</td></tr>
+  <tr><td><strong>Indicateur d'ordre de phases</strong></td><td>Séquence de rotation des phases</td><td>Sur les trois phases</td><td>Il indique dans quel ordre les phases se suivent (voir <a href="triphase.html">Monophasé et triphasé</a>).</td></tr>
+  <tr><td><strong>Vérificateur d'absence de tension</strong></td><td>Présence ou absence de tension</td><td>Sur le conducteur à vérifier</td><td>On le teste sur une source connue avant et après (voir <a href="securite.html">Sécurité électrique</a>).</td></tr>
+</table>
+
+<h2>2. Les erreurs classiques</h2>
+<p>Cinq erreurs de mesure sont à connaître. Pour chacune, retiens la conséquence et le bon geste.</p>
+<table class="tight">
+  <tr><th>Erreur</th><th>Ce qui arrive</th><th>Le bon geste</th></tr>
+  <tr><td><strong>Ampèremètre en parallèle</strong> (ou cordons restés dans la borne de courant)</td><td>Sa résistance presque nulle court-circuite la source : courant énorme, fusible de l'appareil grillé, risque d'arc.</td><td>Toujours en série, ou utiliser une pince.</td></tr>
+  <tr><td><strong>Ohmmètre sur un circuit sous tension</strong></td><td>Lecture fausse, appareil endommagé, danger pour toi.</td><td>Couper l'alimentation et vérifier l'absence de tension avant de mesurer.</td></tr>
+  <tr><td><strong>Mauvais calibre</strong></td><td>Calibre trop petit : la valeur dépasse l'échelle, l'appareil peut être endommagé. Calibre trop grand : lecture peu précise.</td><td>Commencer par le calibre le plus élevé, puis descendre.</td></tr>
+  <tr><td><strong>CA et CC confondus</strong></td><td>Lecture fausse, parfois proche de zéro : on peut croire à tort que le circuit est hors tension.</td><td>Vérifier la fonction choisie avant chaque mesure.</td></tr>
+  <tr><td><strong>Pince autour de deux conducteurs</strong></td><td>L'aller et le retour créent des champs magnétiques opposés qui s'annulent : lecture d'environ 0 A.</td><td>Entourer un seul conducteur à la fois.</td></tr>
+</table>
+<figure class="fig wide" data-fig="pince-conducteurs"><figcaption>La pince mesure le champ magnétique autour du fil. Si elle entoure l'aller et le retour d'un même circuit, les deux champs s'annulent et elle indique environ zéro, même si 12 A circulent.</figcaption></figure>
+<div class="box ex"><span class="label">Exemple : pourquoi un ampèremètre en parallèle est un court-circuit</span>
+  <p>Prenons un ampèremètre dont la résistance interne est de 0,1 Ω, branché par erreur directement sur une source de 120 V :</p>
+  <p>\(I = \dfrac{120}{0{,}1} = 1200\ \text{A}\). Son fusible fond aussitôt.</p>
+  <p>À l'inverse, un voltmètre de 10 MΩ branché sur la même source ne tire presque rien :</p>
+  <p>\(I = \dfrac{120}{10\,000\,000} = 0{,}000\,012\ \text{A}\), soit 12 µA. Il ne dérange pas le circuit.</p>
+</div>
+
+<h2>3. Puissance et énergie</h2>
+<p>Deux unités qu'on confond souvent :</p>
+<ul>
+  <li>Le <strong>kilowatt (kW)</strong> mesure une <strong>puissance</strong> : le rythme auquel on consomme l'électricité à un instant donné.</li>
+  <li>Le <strong>kilowattheure (kWh)</strong> mesure une <strong>énergie</strong> : la quantité consommée pendant une certaine durée.</li>
+</ul>
+<div class="formula"><div class="title">Énergie</div>
+\[E = P \times t\]
+<div class="cond">\(E\) en kWh si \(P\) est en kW et \(t\) en heures. 1 kWh, c'est 1000 W pendant 1 heure (3,6 MJ).</div>
+</div>
+<figure class="fig wide" data-fig="energie-rectangle"><figcaption>La puissance est la hauteur du rectangle, la durée est sa largeur, et l'énergie est sa surface. Image utile : le kW est l'indicateur de vitesse d'une auto, le kWh est son odomètre.</figcaption></figure>
+<div class="box ex"><span class="label">Trois exemples types</span>
+  <ol>
+    <li>Un chauffe-eau de 4,5 kW fonctionne pendant 3 h : \(E = 4{,}5 \times 3 = 13{,}5\ \text{kWh}\).</li>
+    <li>Une lampe de 100 W (soit 0,1 kW) reste allumée 10 h : \(E = 0{,}1 \times 10 = 1\ \text{kWh}\).</li>
+    <li>À l'envers : 12 kWh consommés en 4 h, c'est une puissance moyenne de \(P = \dfrac{12}{4} = 3\ \text{kW}\).</li>
+  </ol>
+</div>
+<p>Un compteur d'électricité enregistre l'<strong>énergie active, en kWh</strong>. Pour les gros clients, il enregistre aussi la <strong>puissance appelée maximale</strong> (en kW et en kVA).</p>
+
+<h2>4. Le compteur</h2>
+<p>Le compteur mesure et enregistre l'électricité consommée. Quelques faits publics à connaître :</p>
+<ul>
+  <li><strong>À qui il appartient :</strong> le compteur appartient à Hydro-Québec. L'<strong>embase</strong> (le socle qui le reçoit) appartient au client et reste sous sa responsabilité.</li>
+  <li><strong>Approbation :</strong> les compteurs utilisés pour la facturation sont approuvés par <strong>Mesures Canada</strong> (Loi sur l'inspection de l'électricité et du gaz).</li>
+  <li><strong>Scellés :</strong> un compteur est scellé. Un scellé intact montre que personne n'a ouvert l'appareil.</li>
+  <li><strong>Installation du client :</strong> elle doit respecter le « Livre bleu » (norme E.21-10). Entre autres : un dégagement d'au moins 1 m devant l'appareillage, et une embase dont le centre est entre 1,2 m et 1,6 m du sol fini.</li>
+</ul>
+<figure class="fig wide" data-fig="embase-degagement"><figcaption>Deux repères du Livre bleu faciles à vérifier d'un coup d'œil : la hauteur du centre de l'embase et le dégagement libre devant l'appareillage.</figcaption></figure>
+<table class="tight">
+  <tr><th>Génération de compteur</th><th>Comment il fonctionne</th><th>Relève</th></tr>
+  <tr><td><strong>Électromécanique</strong></td><td>Un disque tourne d'autant plus vite que la puissance est grande et entraîne des cadrans à aiguilles.</td><td>Manuelle : un releveur lit les cadrans sur place.</td></tr>
+  <tr><td><strong>À radiofréquence</strong></td><td>Il émet ses données par ondes radio sur une courte distance.</td><td>À distance, par un releveur qui passe à proximité.</td></tr>
+  <tr><td><strong>Communicant</strong></td><td>Il fait partie d'une infrastructure de mesurage avancée et transmet ses données dans la bande de 902 à 928 MHz.</td><td>À distance et sans releveur.</td></tr>
+</table>
+
+<h2>5. Lire un compteur à cadrans</h2>
+<p>Un compteur à cadrans a quatre cadrans : milliers, centaines, dizaines et unités. Deux cadrans voisins tournent <strong>en sens contraires</strong> : regarde toujours dans quel ordre les chiffres sont écrits. La règle de lecture publiée par Hydro-Québec tient en quatre points :</p>
+<ol class="steps">
+  <li>Lis les cadrans <strong>de gauche à droite</strong>.</li>
+  <li>Si l'aiguille est entre deux chiffres, retiens <strong>le plus petit</strong>.</li>
+  <li>Exception : entre 9 et 0, retiens <strong>9</strong> (le 0 joue ici le rôle de 10).</li>
+  <li>Si une aiguille semble exactement sur un chiffre, regarde le cadran <strong>de droite</strong> : s'il n'a pas encore dépassé 0, retiens le chiffre précédent.</li>
+</ol>
+<figure class="fig" data-fig="cadrans-exemple"><figcaption>Les flèches pointillées donnent le sens de rotation. Milliers : entre 7 et 8, on retient 7. Centaines : entre 5 et 6, on retient 5. Dizaines : entre 2 et 3, on retient 2. Unités : entre 3 et 4, on retient 3. Relevé : 7523 kWh.</figcaption></figure>
+<div class="box ex"><span class="label">Exemple : consommation entre deux relevés</span>
+  <p>Relevé précédent : 7300. Relevé actuel : 7523.</p>
+  <p>\(\text{Consommation} = \text{relevé actuel} - \text{relevé précédent} = 7523 - 7300 = 223\ \text{kWh}\)</p>
+</div>
+<div class="widget" data-widget="lecture-compteur"></div>
+
+<h2>6. Mesurage direct ou avec transformateurs de mesure</h2>
+<p>En <strong>mesurage direct</strong>, tout le courant de l'installation traverse le compteur : c'est le cas d'une maison. Selon la norme E.21-10, à 120/240 V, le mesurage est direct jusqu'à 320 A. Au-delà, on utilise des <strong>transformateurs de courant</strong>.</p>
+<p>Avec des transformateurs de mesure, le compteur ne voit qu'une <strong>image réduite</strong> de ce qui passe dans la ligne :</p>
+<ul>
+  <li>le <strong>transformateur de courant (TC)</strong> réduit le courant. Son secondaire est de 5 A : un TC 200:5 fournit 5 A au compteur quand 200 A passent dans la ligne ;</li>
+  <li>le <strong>transformateur de tension (TT)</strong>, utilisé en moyenne tension, réduit la tension à environ 120 V au secondaire.</li>
+</ul>
+<figure class="fig wide" data-fig="mesurage-direct-tc"><figcaption>En mesurage direct, le compteur est traversé par les 80 A du client. Avec un TC 200:5, la ligne porte 160 A, mais le compteur n'en reçoit que 4 : il faut multiplier ce qu'il enregistre par 40.</figcaption></figure>
+<div class="formula"><div class="title">Multiplicateur et consommation réelle</div>
+\[\text{multiplicateur} = \text{rapport du TC} \times \text{rapport du TT}\]
+\[\text{consommation réelle} = (\text{relevé actuel} - \text{relevé précédent}) \times \text{multiplicateur}\]
+<div class="cond">Sans TT, on ne garde que le rapport du TC. En mesurage direct, le multiplicateur vaut 1.</div>
+</div>
+<div class="box ex"><span class="label">Trois exemples types</span>
+  <ol>
+    <li><strong>TC 200:5, pas de TT.</strong> Multiplicateur : \(\dfrac{200}{5} = 40\).<br>Relevés 2418 puis 2468 : \((2468 - 2418) \times 40 = 50 \times 40 = 2000\ \text{kWh}\).</li>
+    <li><strong>TC 200:5 et TT 14 400:120.</strong> Rapports : \(\dfrac{200}{5} = 40\) et \(\dfrac{14\,400}{120} = 120\).<br>Multiplicateur : \(40 \times 120 = 4800\).</li>
+    <li><strong>Puissance appelée</strong> (méthode publiée par Hydro-Québec) : valeur lue sur le compteur en W × multiplicateur ÷ 1000 = kW.<br>Lecture de 1250 W, multiplicateur de 80 : \(\dfrac{1250 \times 80}{1000} = 100\ \text{kW}\).</li>
+  </ol>
+</div>
+<div class="widget" data-widget="multiplicateur"></div>
+<div class="box warn"><span class="label">Sécurité : le secondaire d'un TC</span>
+  <p>Le secondaire d'un transformateur de courant en service ne doit <strong>jamais être ouvert</strong> : une tension dangereuse apparaît à ses bornes. Les explications sont dans la page <a href="transformateurs.html">Les transformateurs</a>.</p>
+</div>
+
+<h2>7. Vérifier un circuit de mesure</h2>
+<p>Quand le compteur passe par des transformateurs de mesure, une erreur de filerie fausse l'enregistrement sans que rien ne paraisse. Chaque vérification répond à une question précise.</p>
+<table class="tight">
+  <tr><th>Vérification</th><th>Appareil</th><th>À quoi elle sert</th></tr>
+  <tr><td><strong>Tension</strong></td><td>Voltmètre</td><td>Confirmer que chaque circuit de tension du compteur reçoit bien sa tension.</td></tr>
+  <tr><td><strong>Courant</strong></td><td>Pince ampèremétrique</td><td>Confirmer que le courant circule dans chaque circuit de courant, avec une valeur cohérente avec la charge et le rapport du TC.</td></tr>
+  <tr><td><strong>Isolement</strong></td><td>Mégohmmètre, hors tension</td><td>S'assurer qu'aucun fil ne fuit vers la terre ou vers un autre conducteur.</td></tr>
+  <tr><td><strong>Continuité</strong></td><td>Ohmmètre, hors tension</td><td>S'assurer que la filerie secondaire n'est coupée nulle part et que chaque fil aboutit à la bonne borne.</td></tr>
+  <tr><td><strong>Séquence de rotation des phases</strong></td><td>Indicateur d'ordre de phases</td><td>Elle doit être la même après l'intervention qu'avant. Une inversion ferait tourner à l'envers les moteurs triphasés du client.</td></tr>
+  <tr><td><strong>Fusibles des circuits de tension</strong></td><td>Voltmètre de chaque côté du fusible</td><td>Un fusible fondu prive le compteur d'une de ses tensions : l'enregistrement devient faux.</td></tr>
+</table>
+<div class="box ex"><span class="label">Exemple : le courant au secondaire est-il cohérent ?</span>
+  <p>Une installation est mesurée avec des TC 400:5. Rapport : \(\dfrac{400}{5} = 80\). La pince indique 240 A sur une phase de la ligne.</p>
+  <p>Courant attendu au secondaire du TC : \(\dfrac{240}{80} = 3\ \text{A}\).</p>
+  <p>Si la pince indique à peu près 3 A sur le fil secondaire, le circuit de courant de cette phase est cohérent.</p>
+</div>
+
+<h2>8. La précision d'un compteur</h2>
+<p>Un compteur est vérifié en comparant ce qu'il enregistre avec une valeur de référence.</p>
+<div class="formula"><div class="title">Erreur en pourcentage</div>
+\[\text{erreur (\%)} = \frac{\text{valeur mesurée} - \text{valeur réelle}}{\text{valeur réelle}} \times 100\]
+<div class="cond">Erreur positive : le compteur enregistre trop. Erreur négative : il n'enregistre pas assez.</div>
+</div>
+<div class="box ex"><span class="label">Exemple</span>
+  <p>Un compteur indique 102 kWh alors que 100 kWh ont réellement été consommés :</p>
+  <p>\(\text{erreur} = \dfrac{102 - 100}{100} \times 100 = +2\ \%\). Le compteur enregistre 2 % de trop.</p>
+</div>
+<h3>Pour aller plus loin : la constante Kh</h3>
+<p>Sur un compteur à disque, la constante \(K_h\) donne l'énergie qui correspond à <strong>un tour de disque</strong>, en wattheures par tour. En comptant les tours pendant un temps donné, on retrouve la puissance :</p>
+<div class="formula"><div class="title">Puissance à partir du disque</div>
+\[P = \frac{3600 \times K_h \times \text{nombre de tours}}{\text{temps en secondes}}\]
+<div class="cond">\(P\) en watts, \(K_h\) en Wh par tour. Le 3600 convertit les heures en secondes.</div>
+</div>
+<div class="box ex"><span class="label">Exemple</span>
+  <p>\(K_h = 7{,}2\) Wh par tour. Le disque fait 10 tours en 30 s :</p>
+  <p>\(P = \dfrac{3600 \times 7{,}2 \times 10}{30} = 8640\ \text{W}\), soit 8,64 kW.</p>
+</div>
+
+<h2>À retenir</h2>
+<div class="box key"><span class="label">L'essentiel</span>
+  <ul>
+    <li>Voltmètre en parallèle (résistance très élevée). Ampèremètre en série (résistance très faible).</li>
+    <li>Pince ampèremétrique : un seul conducteur. Ohmmètre et mégohmmètre : toujours hors tension.</li>
+    <li>Le kW est une puissance (un rythme), le kWh est une énergie (une quantité) : \(E = P \times t\).</li>
+    <li>Le compteur appartient à Hydro-Québec, l'embase au client. Les compteurs de facturation sont approuvés par Mesures Canada et scellés.</li>
+    <li>Cadrans : de gauche à droite, on retient le plus petit des deux chiffres, et 9 entre 9 et 0.</li>
+    <li>Consommation réelle = différence des relevés × multiplicateur. Multiplicateur = rapport du TC × rapport du TT.</li>
+    <li>Secondaire d'un TC : 5 A, jamais ouvert en service.</li>
+    <li>Erreur en % = (mesuré − réel) ÷ réel × 100.</li>
+  </ul>
+</div>
+<div class="box trap"><span class="label">Pièges fréquents</span>
+  <ul>
+    <li>Oublier le multiplicateur, ou soustraire les relevés dans le mauvais sens.</li>
+    <li>Calculer le rapport d'un TC à l'envers : 200:5 donne 40, pas 0,025.</li>
+    <li>Confondre kW et kWh, ou oublier de convertir les watts en kilowatts et les minutes en heures.</li>
+    <li>Lire un cadran sans regarder son sens de rotation.</li>
+    <li>Retenir le chiffre vers lequel l'aiguille se dirige au lieu de celui qu'elle vient de dépasser.</li>
+    <li>Croire qu'une pince posée autour d'un câble complet (aller et retour) donne le courant.</li>
+  </ul>
+</div>
+
+<section class="quiz" data-bank="mesure"></section>
+<div class="prevnext"><a class="prev" href="triphase.html">← Circuits monophasés et triphasés</a><a class="next" href="securite.html">Règles de sécurité électrique →</a></div>
+</article>
+</main>
+<footer class="footer">Site d'étude personnel et non officiel : il n'est pas produit par Hydro-Québec et ne contient aucune question réelle du test. Les questions et les exemples ont été écrits pour s'exercer sur les sujets annoncés.</footer>
+<script defer src="assets/katex/katex.min.js?v=f4e1ebdc"></script>
+<script defer src="assets/katex/contrib/auto-render.min.js?v=71052e38"></script>
+<script defer src="assets/app.js?v=61dab5d2"></script>
+<script defer src="assets/draw.js?v=ca488361"></script>
+<script defer src="assets/bank.js?v=1a2737bc"></script>
+<script defer src="assets/figs-mesure.js?v=51c46d94"></script>
+</body>
+</html>

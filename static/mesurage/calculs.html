@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Les calculs électriques simples | Préparation Installateur Mesurage</title>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<link rel="stylesheet" href="assets/style.css?v=94dbb397">
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="index.html">Installateur Mesurage <small>Préparation au test technique</small></a>
+  <nav>
+    <a href="index.html">Accueil</a>
+    <a href="index.html#theorie" class="active">Théorie</a>
+    <a href="pratique.html">Exercices</a>
+    <a href="tests.html">Tests pratiques</a>
+    <a href="formules.html">Formules</a>
+    <button class="theme-btn" type="button">Thème</button>
+  </nav>
+</header>
+<nav class="subnav" aria-label="Sujets de théorie"><a href="unites.html"><span class="n">0</span>Unités</a><a href="base.html"><span class="n">1</span>Base</a><a href="calculs.html" class="active"><span class="n">2</span>Calculs</a><a href="alternatif.html"><span class="n">3</span>Alternatif</a><a href="electrotechnique.html"><span class="n">4</span>Électrotechnique</a><a href="transformateurs.html"><span class="n">5</span>Transformateurs</a><a href="triphase.html"><span class="n">6</span>Mono et triphasé</a><a href="mesure.html"><span class="n">7</span>Mesure et comptage</a><a href="securite.html"><span class="n">8</span>Sécurité</a><a href="schemas.html"><span class="n">9</span>Schémas</a></nav>
+<main class="layout">
+<aside class="toc"></aside>
+<article class="content">
+<div class="course-hero">
+  <div class="kicker">Théorie | Sujet 2</div>
+  <h1>Les calculs électriques simples</h1>
+  <p class="meta">Sujet annoncé dans l'invitation : « Calculs électriques simples » | Lecture : environ 30 minutes</p>
+  <p><span class="pill accent">Puissance</span><span class="pill accent">Énergie et kWh</span><span class="pill accent">Rendement</span><span class="pill accent">Série et parallèle</span><span class="pill accent">Circuit mixte</span><span class="pill accent">Lois de Kirchhoff</span><span class="pill accent">Chute de tension</span></p>
+  <p class="small">But de la page : poser un calcul proprement, choisir la bonne formule de puissance, passer de la puissance à l'énergie, réduire un circuit série, parallèle ou mixte, et vérifier ta réponse en quelques secondes. La loi d'Ohm de la page <a href="base.html">Électricité de base</a> est supposée connue.</p>
+</div>
+
+<h2>1. Une méthode en quatre étapes</h2>
+<p>Un calcul d'électricité se rate rarement à cause de la formule. Il se rate à cause d'un préfixe oublié, d'une division faite à l'envers ou d'une réponse qu'on n'a pas relue. Cette méthode règle les trois.</p>
+<div class="box method"><span class="label">Méthode</span>
+  <ol class="steps">
+    <li><strong>Données et conversions.</strong> Note ce qui est donné et ce qui est cherché. Convertis tout en unités de base : V, A, Ω, W (voir la page <a href="unites.html">Unités et préfixes</a>).</li>
+    <li><strong>Formule.</strong> Choisis celle qui relie tes données à l'inconnue, puis isole l'inconnue.</li>
+    <li><strong>Calcul.</strong> Remplace les lettres par les nombres et calcule sur une seule ligne.</li>
+    <li><strong>Vérification.</strong> L'unité est-elle la bonne ? L'ordre de grandeur est-il plausible ?</li>
+  </ol>
+</div>
+<div class="box ex"><span class="label">La méthode appliquée</span>
+  <p>Un élément chauffant de 2,4 kW est branché sur 240 V. Quel courant tire-t-il ?</p>
+  <ol>
+    <li>Données : \(P = 2{,}4\ \text{kW} = 2\,400\ \text{W}\) et \(U = 240\ \text{V}\). On cherche \(I\).</li>
+    <li>Formule : \(P = U \times I\), donc \(I = \dfrac{P}{U}\).</li>
+    <li>Calcul : \(I = \dfrac{2\,400}{240} = 10\ \text{A}\).</li>
+    <li>Vérification : des watts divisés par des volts donnent des ampères. Un courant de 10 A pour un élément chauffant, c'est plausible.</li>
+  </ol>
+</div>
+
+<h2>2. La puissance</h2>
+<p>La puissance dit à quelle vitesse un appareil utilise l'énergie. Elle se mesure en <strong>watts</strong> (W) ou en <strong>kilowatts</strong> (1 kW = 1&nbsp;000 W). Elle se calcule de trois façons, selon ce que tu connais.</p>
+<div class="formula"><div class="title">Puissance</div>
+\[P = U \times I \qquad P = R \times I^{2} \qquad P = \frac{U^{2}}{R}\]
+<div class="cond">\(P\) en watts, \(U\) en volts, \(I\) en ampères, \(R\) en ohms. Les deux dernières formules viennent de la loi d'Ohm : on remplace \(U\) par \(R \times I\), ou \(I\) par \(U / R\).</div>
+</div>
+<figure class="fig" data-fig="roue-formules"><figcaption>La roue des formules. Repère au centre la grandeur que tu cherches : son quartier donne trois formules. Choisis celle qui utilise les deux grandeurs que tu connais.</figcaption></figure>
+<table class="tight">
+  <tr><th>Tu connais</th><th>Tu utilises</th><th>Usage typique</th></tr>
+  <tr><td>\(U\) et \(I\)</td><td>\(P = U \times I\)</td><td>Puissance d'un appareil à partir de sa tension et de son courant</td></tr>
+  <tr><td>\(I\) et \(R\)</td><td>\(P = R \times I^{2}\)</td><td>Chaleur perdue dans un fil ou une connexion</td></tr>
+  <tr><td>\(U\) et \(R\)</td><td>\(P = \dfrac{U^{2}}{R}\)</td><td>Élément chauffant branché sur une tension connue</td></tr>
+</table>
+<div class="box ex"><span class="label">Exemple : un chauffe-eau</span>
+  <p>Un chauffe-eau de 4&nbsp;500 W fonctionne sous 240 V.</p>
+  <ul>
+    <li>Courant : \(I = \dfrac{P}{U} = \dfrac{4\,500}{240} = 18{,}75\ \text{A}\).</li>
+    <li>Résistance de l'élément : \(R = \dfrac{U}{I} = \dfrac{240}{18{,}75} = 12{,}8\ \Omega\).</li>
+    <li>Vérification par une autre formule : \(R = \dfrac{U^{2}}{P} = \dfrac{57\,600}{4\,500} = 12{,}8\ \Omega\).</li>
+  </ul>
+</div>
+<div class="box warn"><span class="label">Le carré de la tension</span>
+  <p>La résistance d'un élément chauffant est fixe. Comme \(P = U^{2} / R\), sa puissance varie comme le <strong>carré</strong> de la tension.</p>
+  <p>Un élément de 4&nbsp;000 W prévu pour 240 V a une résistance de \(\dfrac{240^{2}}{4\,000} = 14{,}4\ \Omega\). Branché sur 120 V, il ne donne que \(\dfrac{120^{2}}{14{,}4} = 1\,000\ \text{W}\). Tension divisée par 2 : puissance divisée par <strong>4</strong>, pas par 2.</p>
+</div>
+<p><strong>Le cheval-vapeur.</strong> La puissance mécanique d'un moteur est souvent donnée en chevaux (HP) : <strong>1 HP = 746 W</strong>. Un moteur de 2 HP fournit donc \(2 \times 746 = 1\,492\ \text{W}\) à son arbre.</p>
+
+<h2>3. L'énergie</h2>
+<p>L'énergie, c'est la puissance multipliée par le temps d'utilisation. C'est elle que le compteur enregistre et que le client paie (voir la page <a href="mesure.html">Mesure et comptage</a>).</p>
+<div class="formula"><div class="title">Énergie</div>
+\[E = P \times t\]
+<div class="cond">W × h = Wh | kW × h = kWh | 1 kWh = 1&nbsp;000 Wh | W × s = joule</div>
+</div>
+<div class="box ex"><span class="label">Exemple : une plinthe électrique</span>
+  <p>Une plinthe de 1&nbsp;500 W chauffe pendant 8 heures.</p>
+  <ul>
+    <li>Puissance en kW : \(1\,500\ \text{W} = 1{,}5\ \text{kW}\).</li>
+    <li>Énergie : \(E = P \times t = 1{,}5 \times 8 = 12\ \text{kWh}\).</li>
+    <li>Coût, avec un tarif <strong>fictif</strong> de 0,10 $ le kWh (ce n'est pas un tarif réel) : \(12 \times 0{,}10 = 1{,}20\ \$\).</li>
+  </ul>
+</div>
+<table class="tight">
+  <tr><th>Appareil</th><th>Puissance</th><th>Durée</th><th>Énergie</th></tr>
+  <tr><td>Ampoule DEL</td><td>10 W = 0,01 kW</td><td>100 h</td><td>1 kWh</td></tr>
+  <tr><td>Bouilloire</td><td>1&nbsp;500 W = 1,5 kW</td><td>4 min = 4 ÷ 60 h</td><td>0,1 kWh</td></tr>
+  <tr><td>Sécheuse</td><td>5&nbsp;000 W = 5 kW</td><td>1 h</td><td>5 kWh</td></tr>
+  <tr><td>Plinthe</td><td>1&nbsp;500 W = 1,5 kW</td><td>8 h</td><td>12 kWh</td></tr>
+  <tr><td>Chauffe-eau</td><td>4&nbsp;500 W = 4,5 kW</td><td>3 h</td><td>13,5 kWh</td></tr>
+</table>
+<div class="box trap"><span class="label">Deux pièges avec le kWh</span>
+  <ul>
+    <li><strong>Le temps doit être en heures.</strong> 30 min = 0,5 h ; 15 min = 0,25 h ; 45 min = 0,75 h. On divise les minutes par 60.</li>
+    <li><strong>kW et kWh ne sont pas la même chose.</strong> Le kW est une puissance (un débit d'énergie). Le kWh est une énergie (une quantité). Une plinthe de 1,5 kW consomme 1,5 kWh chaque heure.</li>
+  </ul>
+</div>
+<div class="widget" data-widget="puissance-energie"></div>
+
+<h2>4. Le rendement</h2>
+<p>Aucun appareil ne transforme en travail utile toute l'énergie qu'il reçoit. Une partie se perd, presque toujours en chaleur. Le rendement dit quelle fraction est vraiment utilisée.</p>
+<div class="formula"><div class="title">Rendement</div>
+\[\eta = \frac{P_{\text{utile}}}{P_{\text{absorbée}}} \times 100\ \% \qquad \text{pertes} = P_{\text{absorbée}} - P_{\text{utile}}\]
+<div class="cond">\(\eta\) se lit « êta ». Il est toujours inférieur à 100 %. Dans un calcul, on l'écrit en décimal : 85 % = 0,85.</div>
+</div>
+<figure class="fig wide" data-fig="rendement-flux"><figcaption>Le bilan de puissance d'un moteur. Ce qui entre (puissance absorbée) ressort en puissance utile et en pertes. La largeur des bandes est à l'échelle.</figcaption></figure>
+<div class="box ex"><span class="label">Deux exemples</span>
+  <ol>
+    <li><strong>Trouver le rendement.</strong> Un moteur absorbe 2&nbsp;000 W et fournit 1&nbsp;700 W. Rendement : \(\eta = \dfrac{1\,700}{2\,000} = 0{,}85 = 85\ \%\). Pertes : \(2\,000 - 1\,700 = 300\ \text{W}\), dissipés en chaleur.</li>
+    <li><strong>Trouver la puissance absorbée.</strong> Un moteur de 1 HP (746 W utiles) a un rendement de 80 %. Il absorbe \(\dfrac{746}{0{,}80} = 932{,}5\ \text{W}\), soit environ 933 W.</li>
+  </ol>
+</div>
+<ul>
+  <li>La puissance inscrite sur la plaque d'un moteur (en HP ou en kW) est sa puissance <strong>utile</strong>, à l'arbre. La puissance qu'il tire du réseau est plus grande.</li>
+  <li>Pour passer de l'une à l'autre : \(P_{\text{utile}} = \eta \times P_{\text{absorbée}}\) et \(P_{\text{absorbée}} = \dfrac{P_{\text{utile}}}{\eta}\).</li>
+  <li>Quand deux appareils se suivent, les rendements se multiplient : un transformateur à 98 % qui alimente un moteur à 85 % donne \(0{,}98 \times 0{,}85 = 0{,}833\), soit 83,3 %.</li>
+</ul>
+
+<h2>5. Le circuit série</h2>
+<p>En série, les éléments sont branchés l'un à la suite de l'autre. Le courant n'a qu'<strong>un seul chemin</strong>.</p>
+<ul>
+  <li><strong>Le courant est le même partout.</strong></li>
+  <li><strong>Les tensions s'additionnent :</strong> la tension de la source se partage entre les résistances.</li>
+  <li><strong>La résistance totale est la somme</strong> des résistances. Elle est plus grande que la plus grande d'entre elles.</li>
+  <li><strong>Si un élément ouvre, tout s'arrête :</strong> le courant tombe à zéro partout.</li>
+</ul>
+<div class="formula"><div class="title">Circuit série</div>
+\[R_T = R_1 + R_2 + R_3 \qquad I = \frac{U}{R_T} \qquad U = U_1 + U_2 + U_3\]
+</div>
+<figure class="fig wide" data-fig="circuit-serie"><figcaption>Circuit série : un seul courant, et une tension qui se partage. La plus grande résistance prend la plus grande part de la tension.</figcaption></figure>
+<div class="box ex"><span class="label">Exemple</span>
+  <p>Une source de 12 V alimente \(R_1 = 10\ \Omega\), \(R_2 = 20\ \Omega\) et \(R_3 = 30\ \Omega\) en série.</p>
+  <ul>
+    <li>Résistance totale : \(R_T = 10 + 20 + 30 = 60\ \Omega\).</li>
+    <li>Courant : \(I = \dfrac{12}{60} = 0{,}2\ \text{A}\), le même dans les trois résistances.</li>
+    <li>Tensions : \(U_1 = 10 \times 0{,}2 = 2\ \text{V}\) ; \(U_2 = 20 \times 0{,}2 = 4\ \text{V}\) ; \(U_3 = 30 \times 0{,}2 = 6\ \text{V}\).</li>
+    <li>Vérification : \(2 + 4 + 6 = 12\ \text{V}\), la tension de la source.</li>
+  </ul>
+</div>
+<h3>Le diviseur de tension</h3>
+<p>Pour trouver directement la tension aux bornes d'une résistance en série, sans calculer le courant :</p>
+<div class="formula"><div class="title">Diviseur de tension</div>
+\[U_x = U \times \frac{R_x}{R_T}\]
+<div class="cond">Dans l'exemple : \(U_2 = 12 \times \dfrac{20}{60} = 4\ \text{V}\). Une résistance qui représente le tiers du total prend le tiers de la tension.</div>
+</div>
+
+<h2>6. Le circuit parallèle</h2>
+<p>En parallèle, chaque élément est branché directement aux bornes de la source. Le courant a <strong>plusieurs chemins</strong>, un par branche.</p>
+<ul>
+  <li><strong>La tension est la même sur chaque branche.</strong></li>
+  <li><strong>Les courants s'additionnent :</strong> le courant total est la somme des courants des branches.</li>
+  <li><strong>La résistance totale est toujours plus petite que la plus petite branche.</strong> Ajouter une branche diminue la résistance totale et augmente le courant total.</li>
+  <li><strong>Si une branche ouvre, les autres continuent.</strong> C'est pour cela que les circuits d'une maison sont en parallèle : chaque appareil reçoit la pleine tension et fonctionne seul.</li>
+</ul>
+<div class="formula"><div class="title">Circuit parallèle</div>
+\[\frac{1}{R_T} = \frac{1}{R_1} + \frac{1}{R_2} + \frac{1}{R_3} \qquad I_T = I_1 + I_2 + I_3\]
+<div class="cond">Deux résistances seulement : \(R_T = \dfrac{R_1 \times R_2}{R_1 + R_2}\) (produit sur somme) | \(n\) résistances égales : \(R_T = \dfrac{R}{n}\)</div>
+</div>
+<figure class="fig wide" data-fig="circuit-parallele"><figcaption>Circuit parallèle : une seule tension, et un courant qui se partage. La plus petite résistance tire le plus grand courant.</figcaption></figure>
+<div class="box ex"><span class="label">Exemple</span>
+  <p>Une source de 120 V alimente \(R_1 = 60\ \Omega\), \(R_2 = 40\ \Omega\) et \(R_3 = 24\ \Omega\) en parallèle.</p>
+  <ul>
+    <li>Courants : \(I_1 = \dfrac{120}{60} = 2\ \text{A}\) ; \(I_2 = \dfrac{120}{40} = 3\ \text{A}\) ; \(I_3 = \dfrac{120}{24} = 5\ \text{A}\).</li>
+    <li>Courant total : \(I_T = 2 + 3 + 5 = 10\ \text{A}\).</li>
+    <li>Résistance totale : \(R_T = \dfrac{U}{I_T} = \dfrac{120}{10} = 12\ \Omega\).</li>
+    <li>Par les inverses : \(\dfrac{1}{60} + \dfrac{1}{40} + \dfrac{1}{24} = \dfrac{2 + 3 + 5}{120} = \dfrac{10}{120}\), donc \(R_T = \dfrac{120}{10} = 12\ \Omega\).</li>
+    <li>Par étapes : 60 Ω et 40 Ω donnent \(\dfrac{60 \times 40}{60 + 40} = 24\ \Omega\) ; puis deux résistances égales de 24 Ω donnent \(\dfrac{24}{2} = 12\ \Omega\).</li>
+    <li>Vérification : 12 Ω est bien plus petit que la plus petite branche (24 Ω).</li>
+  </ul>
+</div>
+<div class="widget" data-widget="serie-parallele"></div>
+<table class="tight">
+  <tr><th></th><th>Série</th><th>Parallèle</th></tr>
+  <tr><td><strong>Courant</strong></td><td>Le même partout</td><td>Se partage : \(I_T\) = somme des branches</td></tr>
+  <tr><td><strong>Tension</strong></td><td>Se partage : \(U\) = somme des tensions</td><td>La même sur chaque branche</td></tr>
+  <tr><td><strong>Résistance totale</strong></td><td>Somme ; plus grande que la plus grande</td><td>Inverse de la somme des inverses ; plus petite que la plus petite</td></tr>
+  <tr><td><strong>Un élément ouvre</strong></td><td>Tout s'arrête</td><td>Les autres branches continuent</td></tr>
+  <tr><td><strong>Puissance totale</strong></td><td>Somme des puissances</td><td>Somme des puissances</td></tr>
+</table>
+
+<h2>7. Le circuit mixte</h2>
+<p>Un circuit mixte mélange des parties en série et des parties en parallèle. On ne le calcule pas d'un coup : on le <strong>réduit étape par étape</strong>, puis on remonte.</p>
+<div class="box method"><span class="label">Méthode</span>
+  <ol class="steps">
+    <li>Repère un groupe qui est <strong>purement</strong> en série ou purement en parallèle.</li>
+    <li>Remplace-le par sa résistance équivalente et redessine le circuit.</li>
+    <li>Recommence jusqu'à n'avoir qu'une seule résistance : c'est \(R_T\).</li>
+    <li>Calcule le courant total : \(I_T = U / R_T\).</li>
+    <li>Remonte les étapes à l'envers pour trouver la tension et le courant de chaque élément.</li>
+  </ol>
+</div>
+<figure class="fig wide" data-fig="mixte-etapes"><figcaption>Réduction d'un circuit mixte. Le groupe parallèle (en couleur) est remplacé par une seule résistance, puis les deux résistances en série sont additionnées.</figcaption></figure>
+<div class="box ex"><span class="label">Exemple</span>
+  <p>Une source de 24 V alimente \(R_1 = 4\ \Omega\) en série avec le groupe parallèle \(R_2 = 12\ \Omega\) et \(R_3 = 6\ \Omega\).</p>
+  <ul>
+    <li>Groupe parallèle : \(\dfrac{12 \times 6}{12 + 6} = \dfrac{72}{18} = 4\ \Omega\).</li>
+    <li>Résistance totale : \(R_T = 4 + 4 = 8\ \Omega\).</li>
+    <li>Courant total : \(I_T = \dfrac{24}{8} = 3\ \text{A}\). Il traverse \(R_1\).</li>
+    <li>Tension sur \(R_1\) : \(U_1 = 4 \times 3 = 12\ \text{V}\).</li>
+    <li>Tension sur le groupe parallèle : \(24 - 12 = 12\ \text{V}\) (ou \(4 \times 3 = 12\ \text{V}\)).</li>
+    <li>Courants des branches : \(I_2 = \dfrac{12}{12} = 1\ \text{A}\) et \(I_3 = \dfrac{12}{6} = 2\ \text{A}\).</li>
+    <li>Vérification : \(1 + 2 = 3\ \text{A}\), le courant total.</li>
+  </ul>
+</div>
+
+<h2>8. Les lois de Kirchhoff</h2>
+<p>Ces deux lois résument tout ce qui précède. Elles servent surtout à trouver une valeur manquante.</p>
+<ul>
+  <li><strong>Loi des nœuds (courants) :</strong> à un point de jonction, la somme des courants qui entrent est égale à la somme des courants qui sortent. Le courant ne se perd pas et ne s'accumule pas.</li>
+  <li><strong>Loi des mailles (tensions) :</strong> dans une boucle fermée, la somme des tensions fournies par les sources est égale à la somme des chutes de tension aux bornes des charges.</li>
+</ul>
+<figure class="fig wide" data-fig="kirchhoff"><figcaption>À gauche, un nœud : 12 A entrent, 12 A sortent. À droite, une maille : les 120 V de la source se retrouvent en entier aux bornes des trois charges.</figcaption></figure>
+<div class="box ex"><span class="label">Trouver la valeur manquante</span>
+  <ol>
+    <li><strong>Nœud.</strong> Deux courants de 8 A et 4 A entrent dans une jonction. Un courant de 5 A en sort par un premier fil. Par le deuxième fil, il sort \(8 + 4 - 5 = 7\ \text{A}\).</li>
+    <li><strong>Maille.</strong> Une source de 120 V alimente trois charges en série. On mesure 45 V sur la première et 30 V sur la deuxième. La troisième a \(120 - 45 - 30 = 45\ \text{V}\) à ses bornes.</li>
+  </ol>
+</div>
+
+<h2>9. Chute de tension et pertes en ligne</h2>
+<p>Un fil a une petite résistance (voir la page <a href="base.html">Électricité de base</a>). Dès qu'un courant le traverse, il se passe deux choses : une partie de la tension reste dans le fil, et le fil chauffe.</p>
+<div class="formula"><div class="title">Dans un conducteur</div>
+\[\Delta U = R_{\text{fil}} \times I \qquad P_{\text{pertes}} = R_{\text{fil}} \times I^{2}\]
+<div class="cond">\(\Delta U\) : chute de tension dans le fil | Tension à la charge = tension de la source − \(\Delta U\) | Chute en % = \(\Delta U \div U_{\text{source}} \times 100\)</div>
+</div>
+<div class="box ex"><span class="label">Exemple</span>
+  <p>Un circuit de 120 V alimente une charge qui tire 15 A. Les deux fils du câble (aller et retour) totalisent 0,2 Ω.</p>
+  <ul>
+    <li>Chute de tension : \(\Delta U = 0{,}2 \times 15 = 3\ \text{V}\), soit \(\dfrac{3}{120} = 2{,}5\ \%\).</li>
+    <li>Tension à la charge : \(120 - 3 = 117\ \text{V}\).</li>
+    <li>Puissance perdue en chaleur dans le câble : \(0{,}2 \times 15^{2} = 45\ \text{W}\).</li>
+  </ul>
+  <p>Si le courant double (30 A), la chute double (6 V), mais les pertes <strong>quadruplent</strong> (180 W).</p>
+</div>
+<p>Le Code de l'électricité limite la chute de tension permise (de l'ordre de 3 % dans un circuit de dérivation). C'est pour cela qu'un long parcours demande un fil plus gros.</p>
+<h3>Pourquoi on transporte en haute tension</h3>
+<p>Pour une même puissance, \(P = U \times I\) : si on élève la tension, le courant baisse d'autant. Et comme les pertes valent \(R \times I^{2}\), elles baissent comme le carré. Exemple : transporter 12 kW dans une ligne de 1 Ω.</p>
+<table class="tight">
+  <tr><th></th><th>À 240 V</th><th>À 24 kV (100 fois plus)</th></tr>
+  <tr><td><strong>Courant</strong> \(I = P \div U\)</td><td>50 A</td><td>0,5 A (100 fois moins)</td></tr>
+  <tr><td><strong>Chute de tension</strong> \(R \times I\)</td><td>50 V</td><td>0,5 V</td></tr>
+  <tr><td><strong>Pertes</strong> \(R \times I^{2}\)</td><td>2&nbsp;500 W</td><td>0,25 W (10&nbsp;000 fois moins)</td></tr>
+</table>
+<p>À 240 V, la ligne perdrait une grande partie de la puissance et de la tension : elle serait inutilisable. À 24 kV, les pertes sont négligeables. C'est le rôle des transformateurs d'élever la tension pour le transport, puis de l'abaisser près du client (voir la page <a href="transformateurs.html">Transformateurs</a>).</p>
+
+<h2>À retenir</h2>
+<div class="box key"><span class="label">L'essentiel</span>
+  <ul>
+    <li>Méthode : données et conversions, formule, calcul, vérification.</li>
+    <li>Puissance : \(P = U \times I = R \times I^{2} = U^{2} / R\). 1 kW = 1&nbsp;000 W ; 1 HP = 746 W.</li>
+    <li>Énergie : \(E = P \times t\). Des kW multipliés par des heures donnent des kWh.</li>
+    <li>Rendement : puissance utile divisée par puissance absorbée. Pertes = absorbée − utile.</li>
+    <li>Série : même courant, les tensions s'additionnent, \(R_T\) = somme.</li>
+    <li>Parallèle : même tension, les courants s'additionnent, \(R_T\) plus petite que la plus petite branche.</li>
+    <li>Mixte : on réduit étape par étape, puis on remonte.</li>
+    <li>Kirchhoff : ce qui entre dans un nœud en sort ; dans une maille, les tensions fournies égalent les chutes.</li>
+    <li>Dans un fil : chute \(R \times I\), pertes \(R \times I^{2}\). Haute tension, petit courant, petites pertes.</li>
+  </ul>
+</div>
+<div class="box trap"><span class="label">Pièges fréquents</span>
+  <ul>
+    <li>Additionner des résistances en parallèle comme si elles étaient en série.</li>
+    <li>Trouver en parallèle une résistance totale plus grande que la plus petite branche : il y a une erreur de calcul.</li>
+    <li>Oublier le carré dans \(R \times I^{2}\) ou dans \(U^{2} / R\).</li>
+    <li>Croire que la puissance d'un élément chauffant est divisée par 2 quand la tension est divisée par 2 : elle est divisée par 4.</li>
+    <li>Laisser le temps en minutes dans \(E = P \times t\), ou confondre kW et kWh.</li>
+    <li>Inverser puissance utile et puissance absorbée : un rendement supérieur à 100 % est impossible.</li>
+    <li>Oublier un préfixe : 2,4 kW, c'est 2&nbsp;400 W.</li>
+  </ul>
+</div>
+
+<section class="quiz" data-bank="calculs"></section>
+<div class="prevnext"><a class="prev" href="base.html">← Électricité de base</a><a class="next" href="alternatif.html">Bases du courant alternatif →</a></div>
+</article>
+</main>
+<footer class="footer">Site d'étude personnel et non officiel : il n'est pas produit par Hydro-Québec et ne contient aucune question réelle du test. Les questions et les exemples ont été écrits pour s'exercer sur les sujets annoncés.</footer>
+<script defer src="assets/katex/katex.min.js?v=f4e1ebdc"></script>
+<script defer src="assets/katex/contrib/auto-render.min.js?v=71052e38"></script>
+<script defer src="assets/app.js?v=61dab5d2"></script>
+<script defer src="assets/draw.js?v=ca488361"></script>
+<script defer src="assets/bank.js?v=1a2737bc"></script>
+<script defer src="assets/figs-calculs.js?v=2a247834"></script>
+</body>
+</html>

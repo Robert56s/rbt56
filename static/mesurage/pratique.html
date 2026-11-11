@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Exercices | Préparation Installateur Mesurage</title>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<link rel="stylesheet" href="assets/style.css?v=94dbb397">
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="index.html">Installateur Mesurage <small>Préparation au test technique</small></a>
+  <nav>
+    <a href="index.html">Accueil</a>
+    <a href="index.html#theorie">Théorie</a>
+    <a href="pratique.html" class="active">Exercices</a>
+    <a href="tests.html">Tests pratiques</a>
+    <a href="formules.html">Formules</a>
+    <button class="theme-btn" type="button">Thème</button>
+  </nav>
+</header>
+<main class="layout">
+<aside class="toc"></aside>
+<article class="content">
+<div class="course-hero">
+  <div class="kicker">Pratique | Exercices</div>
+  <h1>Exercices</h1>
+  <p class="meta">Deux façons de s'exercer : des questions à choix de réponses dont les valeurs changent à chaque essai, et des problèmes plus longs à faire sur papier.</p>
+  <p><span class="pill accent">Questions illimitées</span><span class="pill accent">Corrigé immédiat</span><span class="pill accent">Calculatrice et crayon</span></p>
+  <p class="small">Fais les exercices comme au test : calculatrice scientifique, papier, crayon, et aucune formule sous les yeux. Regarde la <a href="formules.html">feuille de formules</a> seulement après avoir répondu. Quand un type d'exercice est réussi quatre ou cinq fois de suite, passe au suivant. Pour une mise en situation complète, va aux <a href="tests.html">tests pratiques</a>.</p>
+</div>
+
+<h2>1. Exercices à valeurs aléatoires</h2>
+<p>Choisis un type d'exercice : une question apparaît juste sous la grille. Les mauvaises réponses proposées sont les erreurs les plus courantes (oubli d'une conversion, division inversée, oubli du \(\sqrt{3}\)) : si tu tombes dedans, lis le corrigé, il explique laquelle.</p>
+<div id="drills"></div>
+
+<h2>2. Problèmes à développement</h2>
+<p>Ces problèmes enchaînent plusieurs étapes, comme dans une vraie situation de travail. Résous-les sur papier, puis déplie l'indice ou le corrigé. Coche « Fait » pour suivre ta progression.</p>
+<div class="exo-tools" data-scope="dev-list">
+  <div class="progress-bar"><span></span></div><span class="progress-label"></span>
+  <button class="btn secondary small" type="button" data-action="open-all">Ouvrir tous les corrigés</button>
+  <button class="btn secondary small" type="button" data-action="close-all">Tout refermer</button>
+</div>
+<div id="dev-list">
+
+<article class="exo" data-exo-id="p1">
+  <header><span class="tag">Problème 1</span><span class="tag theme">Calculs</span><h4>Le chauffe-eau</h4></header>
+  <div class="enonce"><p>Un chauffe-eau a un élément de 4 500 W alimenté en 240 V.</p>
+  <ol type="a"><li>Quel courant tire-t-il ?</li><li>Quelle est la résistance de l'élément ?</li><li>Quelle énergie consomme-t-il en 2 h 30 min de chauffe ?</li><li>Combien coûte cette énergie avec un tarif fictif de 0,10 $ le kWh ?</li></ol></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>Une seule formule par question : \(I = P/U\), \(R = U^2/P\), \(E = P \times t\). Convertis la durée en heures décimales et la puissance en kW.</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>\(I = \dfrac{P}{U} = \dfrac{4\,500}{240} = 18{,}75\ \text{A}\)</li>
+      <li>\(R = \dfrac{U^2}{P} = \dfrac{240^2}{4\,500} = \dfrac{57\,600}{4\,500} = 12{,}8\ \Omega\) (vérification : \(240 / 18{,}75 = 12{,}8\))</li>
+      <li>2 h 30 min = 2,5 h et 4 500 W = 4,5 kW : \(E = 4{,}5 \times 2{,}5 = 11{,}25\ \text{kWh}\)</li>
+      <li>\(11{,}25 \times 0{,}10 = 1{,}13\ \$\) environ</li>
+    </ol>
+    <p class="answer">18,75 A | 12,8 Ω | 11,25 kWh | environ 1,13 $</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="p2">
+  <header><span class="tag">Problème 2</span><span class="tag theme">Calculs</span><h4>Un circuit mixte complet</h4></header>
+  <div class="enonce"><p>Une source de 120 V alimente une résistance \(R_1 = 10\ \Omega\) en série avec deux résistances en parallèle, \(R_2 = 30\ \Omega\) et \(R_3 = 60\ \Omega\).</p>
+  <ol type="a"><li>Quelle est la résistance totale ?</li><li>Quel courant la source fournit-elle ?</li><li>Quelle est la tension aux bornes de \(R_1\) et celle du groupe parallèle ?</li><li>Quels sont les courants dans \(R_2\) et \(R_3\) ?</li><li>Quelle puissance totale le circuit dissipe-t-il ?</li></ol></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>Réduis d'abord le groupe parallèle (produit sur somme), additionne avec \(R_1\), puis remonte : courant total, tensions, courants de branche.</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>Groupe parallèle : \(\dfrac{30 \times 60}{30 + 60} = 20\ \Omega\). Résistance totale : \(10 + 20 = 30\ \Omega\).</li>
+      <li>\(I = \dfrac{120}{30} = 4\ \text{A}\)</li>
+      <li>\(U_1 = 10 \times 4 = 40\ \text{V}\) ; groupe parallèle : \(20 \times 4 = 80\ \text{V}\) (total : 120 V, ça concorde).</li>
+      <li>\(I_2 = \dfrac{80}{30} = 2{,}67\ \text{A}\) ; \(I_3 = \dfrac{80}{60} = 1{,}33\ \text{A}\) (total : 4 A, ça concorde).</li>
+      <li>\(P = U \times I = 120 \times 4 = 480\ \text{W}\)</li>
+    </ol>
+    <p class="answer">30 Ω | 4 A | 40 V et 80 V | 2,67 A et 1,33 A | 480 W</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="p3">
+  <header><span class="tag">Problème 3</span><span class="tag theme">Unités</span><h4>Le courant de fuite d'un isolant</h4></header>
+  <div class="enonce"><p>Un mégohmmètre applique 500 V à l'isolant d'un câble et indique une résistance d'isolement de 50 MΩ.</p>
+  <ol type="a"><li>Quel courant de fuite traverse l'isolant, en ampères (notation scientifique) ?</li><li>Exprime ce courant en microampères, puis en milliampères.</li><li>Si la résistance d'isolement tombait à 250 kΩ, que deviendrait ce courant ?</li></ol></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>Convertis d'abord en ohms : 50 MΩ = \(50 \times 10^{6}\ \Omega\). Puis loi d'Ohm.</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>\(I = \dfrac{U}{R} = \dfrac{500}{50 \times 10^{6}} = 1 \times 10^{-5}\ \text{A}\)</li>
+      <li>\(1 \times 10^{-5}\ \text{A} = 10 \times 10^{-6}\ \text{A} = 10\ \mu\text{A} = 0{,}01\ \text{mA}\)</li>
+      <li>\(250\ \text{k}\Omega = 250\,000\ \Omega\) : \(I = \dfrac{500}{250\,000} = 0{,}002\ \text{A} = 2\ \text{mA}\). L'isolant est 200 fois moins bon, le courant de fuite est 200 fois plus grand.</li>
+    </ol>
+    <p class="answer">1 × 10⁻⁵ A | 10 µA, soit 0,01 mA | 2 mA</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="p4">
+  <header><span class="tag">Problème 4</span><span class="tag theme">Courant alternatif</span><h4>Les trois puissances d'un moteur</h4></header>
+  <div class="enonce"><p>Un moteur monophasé alimenté en 240 V tire 15 A avec un facteur de puissance de 0,8 (en retard).</p>
+  <ol type="a"><li>Quelle est sa puissance apparente ?</li><li>Sa puissance active ?</li><li>Sa puissance réactive ?</li><li>Quelle énergie le compteur enregistre-t-il en 8 heures de marche ?</li></ol></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>\(S = U \times I\), \(P = S \times \cos\varphi\), \(Q = \sqrt{S^2 - P^2}\). Le compteur enregistre l'énergie active.</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>\(S = 240 \times 15 = 3\,600\ \text{VA}\)</li>
+      <li>\(P = 3\,600 \times 0{,}8 = 2\,880\ \text{W}\)</li>
+      <li>\(Q = \sqrt{3\,600^2 - 2\,880^2} = 2\,160\ \text{var}\) (ou \(S \times \sin\varphi = 3\,600 \times 0{,}6\))</li>
+      <li>\(E = 2{,}88\ \text{kW} \times 8\ \text{h} = 23{,}04\ \text{kWh}\)</li>
+    </ol>
+    <p class="answer">3 600 VA | 2 880 W | 2 160 var | 23,04 kWh</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="p5">
+  <header><span class="tag">Problème 5</span><span class="tag theme">Courant alternatif</span><h4>Une bobine réelle</h4></header>
+  <div class="enonce"><p>Une bobine a une résistance de 12 Ω et une inductance de 42,4 mH. Elle est branchée sur 120 V, 60 Hz.</p>
+  <ol type="a"><li>Quelle est sa réactance ?</li><li>Son impédance ?</li><li>Quel courant tire-t-elle ?</li><li>Quel est son facteur de puissance et quelle puissance active consomme-t-elle ?</li></ol></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>\(X_L = 2\pi f L\) avec \(L\) en henrys (42,4 mH = 0,0424 H), puis \(Z = \sqrt{R^2 + X_L^2}\).</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>\(X_L = 2\pi \times 60 \times 0{,}0424 = 16\ \Omega\)</li>
+      <li>\(Z = \sqrt{12^2 + 16^2} = \sqrt{400} = 20\ \Omega\)</li>
+      <li>\(I = \dfrac{U}{Z} = \dfrac{120}{20} = 6\ \text{A}\)</li>
+      <li>\(\cos\varphi = \dfrac{R}{Z} = \dfrac{12}{20} = 0{,}6\) ; \(P = U \times I \times \cos\varphi = 120 \times 6 \times 0{,}6 = 432\ \text{W}\) (ou \(R \times I^2 = 12 \times 36\)).</li>
+    </ol>
+    <p class="answer">16 Ω | 20 Ω | 6 A | FP = 0,6 et 432 W</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="p6">
+  <header><span class="tag">Problème 6</span><span class="tag theme">Transformateurs</span><h4>Le transformateur du poteau</h4></header>
+  <div class="enonce"><p>Un transformateur de distribution monophasé de 50 kVA est alimenté en 14 400 V et fournit 240 V.</p>
+  <ol type="a"><li>Quel est son rapport de transformation ?</li><li>Quels sont ses courants nominaux au primaire et au secondaire ?</li><li>Il alimente une charge de 36 kW avec un facteur de puissance de 0,9. À quel pourcentage de sa capacité travaille-t-il, et quel courant fournit-il au secondaire ?</li></ol></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>Un transformateur se dimensionne en kVA : convertis la charge en puissance apparente avec \(S = P / \cos\varphi\).</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>\(a = \dfrac{14\,400}{240} = 60\)</li>
+      <li>\(I_1 = \dfrac{50\,000}{14\,400} = 3{,}47\ \text{A}\) ; \(I_2 = \dfrac{50\,000}{240} = 208\ \text{A}\) (rapport des courants : 60, comme prévu).</li>
+      <li>\(S = \dfrac{36}{0{,}9} = 40\ \text{kVA}\), soit \(40 / 50 = 80\ \%\) de la capacité. \(I_2 = \dfrac{40\,000}{240} = 167\ \text{A}\).</li>
+    </ol>
+    <p class="answer">60 | 3,47 A et 208 A | 80 % et 167 A</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="p7">
+  <header><span class="tag">Problème 7</span><span class="tag theme">Triphasé</span><h4>Un moteur triphasé de 25 HP</h4></header>
+  <div class="enonce"><p>Un moteur triphasé de 25 HP fonctionne sous 600 V. Son rendement est de 90 % et son facteur de puissance de 0,85.</p>
+  <ol type="a"><li>Quelle puissance mécanique fournit-il, en watts ?</li><li>Quelle puissance active absorbe-t-il ?</li><li>Quel courant de ligne tire-t-il ?</li><li>Quelle est sa puissance apparente ?</li></ol></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>1 HP = 746 W. La puissance absorbée est la puissance utile divisée par le rendement. En triphasé, \(I = \dfrac{P}{\sqrt{3} \times U \times \cos\varphi}\).</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>\(25 \times 746 = 18\,650\ \text{W}\)</li>
+      <li>\(P = \dfrac{18\,650}{0{,}90} = 20\,722\ \text{W}\)</li>
+      <li>\(I = \dfrac{20\,722}{1{,}732 \times 600 \times 0{,}85} = 23{,}5\ \text{A}\)</li>
+      <li>\(S = \dfrac{P}{\cos\varphi} = \dfrac{20\,722}{0{,}85} = 24\,380\ \text{VA} = 24{,}4\ \text{kVA}\) (ou \(1{,}732 \times 600 \times 23{,}5\)).</li>
+    </ol>
+    <p class="answer">18 650 W | 20,7 kW | 23,5 A | 24,4 kVA</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="p8">
+  <header><span class="tag">Problème 8</span><span class="tag theme">Triphasé</span><h4>Étoile ou triangle</h4></header>
+  <div class="enonce"><p>Trois éléments chauffants identiques de 20 Ω sont branchés sur un réseau de 600 V entre phases.</p>
+  <ol type="a"><li>En étoile : quelle tension reçoit chaque élément, quel est le courant de ligne et quelle est la puissance totale ?</li><li>En triangle : mêmes questions.</li><li>Compare les deux puissances.</li></ol></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>En étoile, chaque élément reçoit la tension de phase (\(600 / \sqrt{3}\)) et le courant de ligne est le courant de l'élément. En triangle, chaque élément reçoit 600 V et le courant de ligne vaut \(\sqrt{3}\) fois celui de l'élément.</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>Étoile : \(U_{ph} = \dfrac{600}{1{,}732} = 346\ \text{V}\) (la valeur nominale est 347 V) ; \(I = \dfrac{346}{20} = 17{,}3\ \text{A}\) ; \(P = 1{,}732 \times 600 \times 17{,}3 = 18\ \text{kW}\).</li>
+      <li>Triangle : \(U_{ph} = 600\ \text{V}\) ; courant d'un élément \(\dfrac{600}{20} = 30\ \text{A}\) ; courant de ligne \(1{,}732 \times 30 = 52\ \text{A}\) ; \(P = 1{,}732 \times 600 \times 52 = 54\ \text{kW}\).</li>
+      <li>Les mêmes éléments dégagent trois fois plus de puissance en triangle qu'en étoile, parce que chacun reçoit une tension \(\sqrt{3}\) fois plus élevée et que la puissance varie comme le carré de la tension.</li>
+    </ol>
+    <p class="answer">Étoile : 346 V, 17,3 A, 18 kW | Triangle : 600 V, 52 A, 54 kW | rapport de 3</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="p9">
+  <header><span class="tag">Problème 9</span><span class="tag theme">Mesure et comptage</span><h4>Un compteur avec transformateurs de mesure</h4></header>
+  <div class="enonce"><p>Un compteur est alimenté par des transformateurs de courant 400:5 et des transformateurs de tension 14 400:120. Le relevé précédent était 3 482 et le relevé actuel est 3 507.</p>
+  <ol type="a"><li>Quel est le multiplicateur du compteur ?</li><li>Quelle est la consommation réelle du client ?</li><li>Un ampèremètre inséré au secondaire d'un transformateur de courant indique 3,5 A. Quel est le courant dans la ligne ?</li><li>Quelle précaution faut-il prendre avant de débrancher un appareil du secondaire d'un transformateur de courant ?</li></ol></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>Multiplicateur = rapport du transformateur de courant × rapport du transformateur de tension.</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>Rapport du TC : \(400 / 5 = 80\). Rapport du TT : \(14\,400 / 120 = 120\). Multiplicateur : \(80 \times 120 = 9\,600\).</li>
+      <li>Écart des relevés : \(3\,507 - 3\,482 = 25\). Consommation : \(25 \times 9\,600 = 240\,000\ \text{kWh}\).</li>
+      <li>\(3{,}5 \times 80 = 280\ \text{A}\)</li>
+      <li>On court-circuite d'abord le secondaire du transformateur de courant : ouvert en service, il développerait une tension dangereuse.</li>
+    </ol>
+    <p class="answer">9 600 | 240 000 kWh | 280 A | court-circuiter le secondaire</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="p10">
+  <header><span class="tag">Problème 10</span><span class="tag theme">Mesure et comptage</span><h4>La consommation d'une maison</h4></header>
+  <div class="enonce"><p>Le compteur d'une maison (mesurage direct) indiquait 46 218 kWh, puis 47 903 kWh trente jours plus tard.</p>
+  <ol type="a"><li>Quelle est la consommation de la période ?</li><li>Quelle est la puissance moyenne appelée pendant ces trente jours ?</li><li>Quel est le coût de l'énergie avec un tarif fictif de 0,10 $ le kWh ?</li></ol></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>La puissance moyenne est l'énergie divisée par le temps en heures : 30 jours = 720 heures.</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>\(47\,903 - 46\,218 = 1\,685\ \text{kWh}\)</li>
+      <li>\(P = \dfrac{E}{t} = \dfrac{1\,685}{30 \times 24} = \dfrac{1\,685}{720} = 2{,}34\ \text{kW}\)</li>
+      <li>\(1\,685 \times 0{,}10 = 168{,}50\ \$\)</li>
+    </ol>
+    <p class="answer">1 685 kWh | 2,34 kW en moyenne | 168,50 $</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="p11">
+  <header><span class="tag">Problème 11</span><span class="tag theme">Sécurité</span><h4>Peau sèche, peau mouillée</h4></header>
+  <div class="enonce"><p>Une personne touche par accident un conducteur à 347 V par rapport à la terre.</p>
+  <ol type="a"><li>Avec une peau sèche (résistance d'environ 100 kΩ), quel courant la traverse ?</li><li>Avec une peau mouillée (environ 2 kΩ) ?</li><li>Compare ces deux courants aux ordres de grandeur des effets du courant sur le corps.</li></ol></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>Loi d'Ohm, après avoir converti les kilohms en ohms. Exprime le résultat en milliampères.</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>\(I = \dfrac{347}{100\,000} = 0{,}00347\ \text{A} = 3{,}5\ \text{mA}\)</li>
+      <li>\(I = \dfrac{347}{2\,000} = 0{,}174\ \text{A} = 174\ \text{mA}\)</li>
+      <li>3,5 mA se sent nettement mais reste sous le seuil où l'on ne peut plus lâcher prise (10 à 20 mA). 174 mA dépasse largement le seuil où une fibrillation ventriculaire devient possible (75 à 100 mA). La même tension peut donc donner un picotement ou tuer : on ne se fie jamais à la résistance de la peau.</li>
+    </ol>
+    <p class="answer">3,5 mA | 174 mA | le second cas est mortel</p>
+  </div></details>
+</article>
+
+<article class="exo" data-exo-id="p12">
+  <header><span class="tag">Problème 12</span><span class="tag theme">Lecture de schémas</span><h4>Trois lampes et une qui grille</h4></header>
+  <div class="enonce"><p>Dans le schéma ci-dessous, trois lampes identiques de 240 Ω sont alimentées en 120 V : L1 est en série avec le groupe L2 et L3 en parallèle.</p>
+  <figure class="fig" data-fig="p-trois-lampes"><figcaption>L1 en série avec L2 et L3 en parallèle.</figcaption></figure>
+  <ol type="a"><li>Quelle tension reçoit chaque lampe ?</li><li>Quelle lampe brille le plus ?</li><li>La lampe L3 grille. Que deviennent les tensions de L1 et de L2, et leur éclat ?</li></ol></div>
+  <details class="hint"><summary>Indice</summary><div class="body"><p>Traite les lampes comme des résistances de 240 Ω. Refais le calcul sans L3 pour la dernière question.</p></div></details>
+  <details class="sol"><summary>Corrigé</summary><div class="body">
+    <ol class="steps">
+      <li>Groupe parallèle : \(240 / 2 = 120\ \Omega\). Résistance totale : \(240 + 120 = 360\ \Omega\). \(I = 120 / 360 = 0{,}333\ \text{A}\). L1 reçoit \(240 \times 0{,}333 = 80\ \text{V}\) ; L2 et L3 reçoivent \(120 \times 0{,}333 = 40\ \text{V}\) chacune.</li>
+      <li>L1 : tout le courant la traverse et elle a la plus grande tension. Elle dissipe \(80 \times 0{,}333 = 26{,}7\ \text{W}\) contre \(40 \times 0{,}167 = 6{,}7\ \text{W}\) pour L2 et pour L3.</li>
+      <li>Sans L3, il reste L1 et L2 en série : \(480\ \Omega\), \(I = 0{,}25\ \text{A}\), 60 V chacune. L1 baisse (de 80 V à 60 V) et L2 monte (de 40 V à 60 V) : elles brillent maintenant autant l'une que l'autre.</li>
+    </ol>
+    <p class="answer">80 V, 40 V et 40 V | L1 | 60 V chacune : L1 faiblit, L2 brille plus</p>
+  </div></details>
+</article>
+
+</div>
+</article>
+</main>
+<footer class="footer">Site d'étude personnel et non officiel : il n'est pas produit par Hydro-Québec et ne contient aucune question réelle du test. Les questions et les exemples ont été écrits pour s'exercer sur les sujets annoncés.</footer>
+<script defer src="assets/katex/katex.min.js?v=f4e1ebdc"></script>
+<script defer src="assets/katex/contrib/auto-render.min.js?v=71052e38"></script>
+<script defer src="assets/app.js?v=61dab5d2"></script>
+<script defer src="assets/draw.js?v=ca488361"></script>
+<script defer src="assets/bank.js?v=1a2737bc"></script>
+<script defer src="assets/gen.js?v=d4b158a3"></script>
+<script defer src="assets/practice.js?v=311612d0"></script>
+</body>
+</html>

@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Feuille de formules | Préparation Installateur Mesurage</title>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<link rel="stylesheet" href="assets/style.css?v=94dbb397">
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="index.html">Installateur Mesurage <small>Préparation au test technique</small></a>
+  <nav>
+    <a href="index.html">Accueil</a>
+    <a href="index.html#theorie">Théorie</a>
+    <a href="pratique.html">Exercices</a>
+    <a href="tests.html">Tests pratiques</a>
+    <a href="formules.html" class="active">Formules</a>
+    <button class="theme-btn" type="button">Thème</button>
+  </nav>
+</header>
+<main class="layout">
+<aside class="toc"></aside>
+<article class="content">
+<div class="course-hero">
+  <div class="kicker">Référence | À apprendre par cœur</div>
+  <h1>Feuille de formules</h1>
+  <p class="meta">Toutes les formules du site, sujet par sujet : notion → formule → remarque ou piège. Imprimable avec Ctrl+P.</p>
+  <p class="small">L'invitation au test ne mentionne aucune feuille de formules permise : cette page sert à mémoriser. Bonne méthode : cache la colonne du milieu, récite la formule, puis vérifie. La tension est notée \(U\) (certains manuels écrivent \(E\) ou \(V\)).</p>
+</div>
+
+<section class="form-section">
+<h2>Valeurs à connaître</h2>
+<table class="tight">
+  <tr><th>Valeur</th><th>À retenir</th><th>Sert à</th></tr>
+  <tr><td>\(\sqrt{2} = 1{,}414\) et \(\dfrac{1}{\sqrt{2}} = 0{,}707\)</td><td>crête = 1,414 × efficace ; efficace = 0,707 × crête</td><td>Courant alternatif</td></tr>
+  <tr><td>\(\sqrt{3} = 1{,}732\)</td><td>ligne = 1,732 × phase</td><td>Triphasé</td></tr>
+  <tr><td>60 Hz</td><td>période de 16,7 ms ; \(2\pi f = 377\)</td><td>Réactances</td></tr>
+  <tr><td>1 HP = 746 W</td><td>cheval-vapeur vers watts</td><td>Moteurs</td></tr>
+  <tr><td>1 kWh = 3 600 000 J</td><td>1 kW pendant 1 heure</td><td>Énergie</td></tr>
+  <tr><td>120/240 V | 120/208 V | 347/600 V | 25 kV</td><td>tensions courantes au Québec</td><td>Monophasé, triphasé, distribution</td></tr>
+  <tr><td>Secondaire d'un TC : 5 A | d'un TT : 120 V</td><td>valeurs normalisées habituelles</td><td>Comptage</td></tr>
+</table>
+</section>
+
+<section class="form-section">
+<h2>0. Unités et préfixes</h2>
+<table class="tight">
+  <tr><th>Préfixe</th><th>Symbole</th><th>Facteur</th><th>Exemple</th></tr>
+  <tr><td>méga</td><td>M</td><td>\(10^{6}\) = 1 000 000</td><td>10 MΩ = 10 000 000 Ω</td></tr>
+  <tr><td>kilo</td><td>k</td><td>\(10^{3}\) = 1 000</td><td>25 kV = 25 000 V</td></tr>
+  <tr><td>(unité)</td><td></td><td>\(10^{0}\) = 1</td><td>V, A, Ω, W</td></tr>
+  <tr><td>milli</td><td>m</td><td>\(10^{-3}\) = 0,001</td><td>30 mA = 0,030 A</td></tr>
+  <tr><td>micro</td><td>µ</td><td>\(10^{-6}\) = 0,000 001</td><td>100 µF = 0,000 1 F</td></tr>
+</table>
+<table class="formulaire">
+  <tr><th class="notion">Changer de préfixe</th><td class="f"><p>Vers un préfixe plus petit : × 1 000 par marche. Vers un préfixe plus grand : ÷ 1 000 par marche.</p></td><td class="rem">Ne pas confondre m (milli) et M (méga).</td></tr>
+  <tr><th class="notion">Raccourcis</th><td class="f"><p>V ÷ kΩ = mA | V ÷ MΩ = µA | mA × kΩ = V | V ÷ mA = kΩ | W ÷ 1 000 = kW</p></td><td class="rem">En cas de doute, tout remettre en V, A, Ω.</td></tr>
+  <tr><th class="notion">Puissances de 10</th><td class="f">\[10^{a} \times 10^{b} = 10^{a+b} \qquad \frac{10^{a}}{10^{b}} = 10^{a-b}\]</td><td class="rem">Sur la calculatrice : 4,7 × 10³ se tape 4.7 EE 3. Pour 10³ seul : 1 EE 3.</td></tr>
+</table>
+</section>
+
+<section class="form-section">
+<h2>1. Électricité de base</h2>
+<table class="formulaire">
+  <tr><th class="notion">Loi d'Ohm</th><td class="f">\[U = R \times I \qquad I = \frac{U}{R} \qquad R = \frac{U}{I}\]</td><td class="rem">U en volts, I en ampères, R en ohms.</td></tr>
+  <tr><th class="notion">Résistance d'un fil</th><td class="f">\[R = \rho\,\frac{L}{A}\]</td><td class="rem">Plus long : R augmente. Plus gros : R diminue. Calibre AWG plus petit : fil plus gros.</td></tr>
+  <tr><th class="notion">Charge et courant</th><td class="f">\[I = \frac{Q}{t} \qquad 1\ \text{A} = 1\ \text{C/s}\]</td><td class="rem">1 coulomb ≈ 6,24 × 10¹⁸ électrons.</td></tr>
+  <tr><th class="notion">Piles</th><td class="f"><p>En série : les tensions s'additionnent. En parallèle : même tension.</p></td><td class="rem"></td></tr>
+</table>
+</section>
+
+<section class="form-section">
+<h2>2. Calculs électriques</h2>
+<table class="formulaire">
+  <tr><th class="notion">Puissance</th><td class="f">\[P = U \times I \qquad P = R \times I^{2} \qquad P = \frac{U^{2}}{R}\]</td><td class="rem">En watts. Résistance fixe : tension divisée par 2, puissance divisée par 4.</td></tr>
+  <tr><th class="notion">Courant ou résistance à partir de P</th><td class="f">\[I = \frac{P}{U} \qquad R = \frac{U^{2}}{P}\]</td><td class="rem"></td></tr>
+  <tr><th class="notion">Énergie</th><td class="f">\[E = P \times t\]</td><td class="rem">kW × h = kWh. Convertir les watts en kW et les minutes en heures.</td></tr>
+  <tr><th class="notion">Rendement</th><td class="f">\[\eta = \frac{P_{utile}}{P_{absorb\acute{e}e}} \times 100\ \%\]\[\text{pertes} = P_{absorb\acute{e}e} - P_{utile}\]</td><td class="rem">Toujours inférieur à 100 %.</td></tr>
+  <tr><th class="notion">Circuit série</th><td class="f">\[R_T = R_1 + R_2 + R_3 \qquad U_T = U_1 + U_2 + U_3\]</td><td class="rem">Même courant partout.</td></tr>
+  <tr><th class="notion">Diviseur de tension</th><td class="f">\[U_x = U_T \times \frac{R_x}{R_T}\]</td><td class="rem">La plus grande résistance prend la plus grande tension.</td></tr>
+  <tr><th class="notion">Circuit parallèle</th><td class="f">\[\frac{1}{R_T} = \frac{1}{R_1} + \frac{1}{R_2} + \frac{1}{R_3}\]\[I_T = I_1 + I_2 + I_3\]</td><td class="rem">Même tension partout. \(R_T\) plus petite que la plus petite branche.</td></tr>
+  <tr><th class="notion">Deux résistances en parallèle</th><td class="f">\[R_T = \frac{R_1 \times R_2}{R_1 + R_2}\]\[n\ \text{résistances égales} : R_T = \frac{R}{n}\]</td><td class="rem">Produit sur somme.</td></tr>
+  <tr><th class="notion">Lois de Kirchhoff</th><td class="f"><p>Nœud : somme des courants qui entrent = somme des courants qui sortent.</p><p>Maille : somme des tensions fournies = somme des chutes de tension.</p></td><td class="rem"></td></tr>
+  <tr><th class="notion">Pertes en ligne</th><td class="f">\[P_{pertes} = R_{fil} \times I^{2} \qquad U_{chute} = R_{fil} \times I\]</td><td class="rem">D'où le transport en haute tension : moins de courant, beaucoup moins de pertes.</td></tr>
+</table>
+</section>
+
+<section class="form-section">
+<h2>3. Courant alternatif</h2>
+<table class="formulaire">
+  <tr><th class="notion">Fréquence et période</th><td class="f">\[f = \frac{1}{T} \qquad T = \frac{1}{f}\]</td><td class="rem">60 Hz → 16,7 ms.</td></tr>
+  <tr><th class="notion">Valeurs d'une sinusoïde</th><td class="f">\[U_{max} = \sqrt{2} \times U_{eff} \qquad U_{eff} = 0{,}707 \times U_{max}\]\[U_{cc} = 2 \times U_{max}\]</td><td class="rem">120 V efficace → 170 V de crête. Les appareils indiquent la valeur efficace.</td></tr>
+  <tr><th class="notion">Réactances</th><td class="f">\[X_L = 2\pi f L \qquad X_C = \frac{1}{2\pi f C}\]</td><td class="rem">L en henrys, C en farads. \(X_L\) monte avec la fréquence, \(X_C\) descend.</td></tr>
+  <tr><th class="notion">Impédance</th><td class="f">\[Z = \sqrt{R^{2} + X^{2}} \qquad U = Z \times I \qquad \cos\varphi = \frac{R}{Z}\]</td><td class="rem">On n'additionne jamais directement R et X.</td></tr>
+  <tr><th class="notion">Déphasage</th><td class="f"><p>Résistance : courant en phase. Bobine : courant en retard. Condensateur : courant en avance.</p></td><td class="rem">90° pour une bobine ou un condensateur parfait.</td></tr>
+  <tr><th class="notion">Puissances (monophasé)</th><td class="f">\[S = U \times I \qquad P = U \times I \times \cos\varphi\]\[Q = U \times I \times \sin\varphi\]</td><td class="rem">S en VA, P en W, Q en var.</td></tr>
+  <tr><th class="notion">Triangle des puissances</th><td class="f">\[S^{2} = P^{2} + Q^{2} \qquad FP = \cos\varphi = \frac{P}{S}\]</td><td class="rem">FP = 1 pour une charge résistive. Les condensateurs corrigent un FP inductif.</td></tr>
+  <tr><th class="notion">Courant d'une charge</th><td class="f">\[I = \frac{P}{U \times \cos\varphi}\]</td><td class="rem">Monophasé.</td></tr>
+</table>
+</section>
+
+<section class="form-section">
+<h2>4. Électrotechnique</h2>
+<table class="formulaire">
+  <tr><th class="notion">Force magnétomotrice</th><td class="f">\[F = N \times I\]</td><td class="rem">En ampères-tours.</td></tr>
+  <tr><th class="notion">Vitesse synchrone</th><td class="f">\[n_s = \frac{120 \times f}{p}\]</td><td class="rem">p = nombre de pôles. À 60 Hz : 3 600, 1 800, 1 200, 900 r/min pour 2, 4, 6, 8 pôles.</td></tr>
+  <tr><th class="notion">Fréquence d'un alternateur</th><td class="f">\[f = \frac{p \times n}{120}\]</td><td class="rem">n en tours par minute.</td></tr>
+  <tr><th class="notion">Condensateurs</th><td class="f">\[\text{parallèle} : C_T = C_1 + C_2\]\[\text{série} : \frac{1}{C_T} = \frac{1}{C_1} + \frac{1}{C_2}\]</td><td class="rem">L'inverse des résistances.</td></tr>
+  <tr><th class="notion">Moteur</th><td class="f">\[P_{absorb\acute{e}e} = \frac{HP \times 746}{\eta}\]</td><td class="rem">Rendement en décimal (85 % = 0,85).</td></tr>
+  <tr><th class="notion">Sens de rotation (triphasé)</th><td class="f"><p>Intervertir deux phases inverse le sens de rotation.</p></td><td class="rem">Vérifier la séquence des phases après une intervention.</td></tr>
+</table>
+</section>
+
+<section class="form-section">
+<h2>5. Transformateurs</h2>
+<table class="formulaire">
+  <tr><th class="notion">Rapport de transformation</th><td class="f">\[a = \frac{N_1}{N_2} = \frac{U_1}{U_2} = \frac{I_2}{I_1}\]</td><td class="rem">La tension suit les spires ; le courant fait l'inverse.</td></tr>
+  <tr><th class="notion">Puissance (idéal)</th><td class="f">\[U_1 \times I_1 = U_2 \times I_2\]</td><td class="rem">Puissance nominale en kVA.</td></tr>
+  <tr><th class="notion">Courant nominal</th><td class="f">\[\text{monophasé} : I = \frac{S}{U}\]\[\text{triphasé} : I = \frac{S}{\sqrt{3} \times U_L}\]</td><td class="rem">Convertir les kVA en VA.</td></tr>
+  <tr><th class="notion">Rendement</th><td class="f">\[\eta = \frac{P_{sortie}}{P_{entr\acute{e}e}} \times 100\ \%\]</td><td class="rem">Pertes fer (constantes) + pertes cuivre (\(R I^2\), selon la charge).</td></tr>
+  <tr><th class="notion">Transformateur de courant</th><td class="f">\[I_{ligne} = I_{secondaire} \times \text{rapport} \qquad \text{ex. } 200{:}5 \rightarrow 40\]</td><td class="rem">Ne jamais ouvrir le secondaire en service : le court-circuiter.</td></tr>
+  <tr><th class="notion">Transformateur de tension</th><td class="f">\[U_{ligne} = U_{secondaire} \times \text{rapport} \qquad \text{ex. } 14\,400{:}120 \rightarrow 120\]</td><td class="rem">Ne jamais court-circuiter le secondaire.</td></tr>
+  <tr><th class="notion">Multiplicateur du compteur</th><td class="f">\[\text{multiplicateur} = \text{rapport TC} \times \text{rapport TT}\]</td><td class="rem">Sans TT : rapport du TC seulement.</td></tr>
+</table>
+</section>
+
+<section class="form-section">
+<h2>6. Monophasé et triphasé</h2>
+<table class="formulaire">
+  <tr><th class="notion">Monophasé 120/240 V</th><td class="f"><p>120 V entre une ligne et le neutre ; 240 V entre les deux lignes.</p>\[I_N = |I_1 - I_2|\]</td><td class="rem">Le neutre porte la différence des deux lignes (charges résistives).</td></tr>
+  <tr><th class="notion">Étoile (Y)</th><td class="f">\[U_L = \sqrt{3} \times U_{ph} \qquad I_L = I_{ph}\]</td><td class="rem">347/600 V et 120/208 V. Neutre : 0 A si équilibré.</td></tr>
+  <tr><th class="notion">Triangle (Δ)</th><td class="f">\[U_L = U_{ph} \qquad I_L = \sqrt{3} \times I_{ph}\]</td><td class="rem">Pas de neutre.</td></tr>
+  <tr><th class="notion">Puissances (équilibré)</th><td class="f">\[S = \sqrt{3}\,U_L I_L \qquad P = \sqrt{3}\,U_L I_L \cos\varphi\]\[Q = \sqrt{3}\,U_L I_L \sin\varphi\]</td><td class="rem">Avec la tension entre phases. Le piège : oublier \(\sqrt{3}\) ou mettre 3.</td></tr>
+  <tr><th class="notion">Courant de ligne</th><td class="f">\[I_L = \frac{P}{\sqrt{3} \times U_L \times \cos\varphi}\]</td><td class="rem">P en watts.</td></tr>
+  <tr><th class="notion">Couleurs (norme E.21-10)</th><td class="f"><p>120/240 V : noir (ligne 1), rouge (ligne 2), blanc (neutre).</p><p>347/600 V : rouge (A), noir (B), bleu (C), blanc (neutre).</p></td><td class="rem">Mise à la terre : vert ou nu.</td></tr>
+</table>
+</section>
+
+<section class="form-section">
+<h2>7. Mesure et comptage</h2>
+<table class="formulaire">
+  <tr><th class="notion">Brancher les appareils</th><td class="f"><p>Voltmètre : en parallèle. Ampèremètre : en série. Ohmmètre et mégohmmètre : hors tension. Pince : autour d'un seul conducteur.</p></td><td class="rem"></td></tr>
+  <tr><th class="notion">Consommation</th><td class="f">\[E = (\text{relevé actuel} - \text{relevé précédent}) \times \text{multiplicateur}\]</td><td class="rem">Mesurage direct : multiplicateur de 1.</td></tr>
+  <tr><th class="notion">Puissance appelée</th><td class="f">\[P\,(\text{kW}) = \frac{\text{lecture en W} \times \text{multiplicateur}}{1\,000}\]</td><td class="rem"></td></tr>
+  <tr><th class="notion">Lecture des cadrans</th><td class="f"><p>De gauche à droite. Aiguille entre deux chiffres : le plus petit, sauf entre 9 et 0 : on retient 9.</p></td><td class="rem">Le sens de rotation alterne d'un cadran à l'autre.</td></tr>
+  <tr><th class="notion">Erreur de mesure</th><td class="f">\[\text{erreur} = \frac{\text{mesuré} - \text{réel}}{\text{réel}} \times 100\ \%\]</td><td class="rem">Positive : l'appareil indique trop.</td></tr>
+  <tr><th class="notion">Compteur à disque</th><td class="f">\[P\,(\text{W}) = \frac{3\,600 \times K_h \times \text{tours}}{t\,(\text{s})}\]</td><td class="rem">\(K_h\) en Wh par tour. Pour aller plus loin.</td></tr>
+</table>
+</section>
+
+<section class="form-section">
+<h2>8. Sécurité</h2>
+<table class="formulaire">
+  <tr><th class="notion">Courant dans le corps</th><td class="f">\[I = \frac{U}{R_{corps}}\]</td><td class="rem">Peau sèche : environ 100 kΩ. Peau mouillée : environ 1 kΩ.</td></tr>
+  <tr><th class="notion">Ordres de grandeur (60 Hz)</th><td class="f"><p>1 mA : perception | 5 mA : choc, seuil d'un DDFT | 10 à 20 mA : impossible de lâcher | 30 à 50 mA : respiration difficile | 75 à 100 mA : fibrillation possible</p></td><td class="rem">Valeurs approximatives, variables selon les sources.</td></tr>
+  <tr><th class="notion">Absence de tension</th><td class="f"><p>Tester le vérificateur → tester le circuit → retester le vérificateur.</p></td><td class="rem">Tout conducteur est sous tension tant que ce n'est pas vérifié.</td></tr>
+  <tr><th class="notion">Cadenassage</th><td class="f"><p>Identifier → aviser → arrêter → isoler → cadenasser et étiqueter → dissiper l'énergie résiduelle → vérifier l'absence de tension.</p></td><td class="rem">Chacun son cadenas, chacun sa clé.</td></tr>
+  <tr><th class="notion">Distances d'approche des lignes</th><td class="f"><p>Moins de 125 kV : 3 m | 125 à 250 kV : 5 m | 250 à 550 kV : 8 m | plus de 550 kV : 12 m</p></td><td class="rem">Travailleurs non habilités. Fil au sol : rester à 10 m.</td></tr>
+</table>
+</section>
+</article>
+</main>
+<footer class="footer">Site d'étude personnel et non officiel : il n'est pas produit par Hydro-Québec et ne contient aucune question réelle du test. Les questions et les exemples ont été écrits pour s'exercer sur les sujets annoncés.</footer>
+<script defer src="assets/katex/katex.min.js?v=f4e1ebdc"></script>
+<script defer src="assets/katex/contrib/auto-render.min.js?v=71052e38"></script>
+<script defer src="assets/app.js?v=61dab5d2"></script>
+<script defer src="assets/draw.js?v=ca488361"></script>
+<script defer src="assets/bank.js?v=1a2737bc"></script>
+</body>
+</html>

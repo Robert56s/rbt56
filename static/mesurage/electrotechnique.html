@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Électrotechnique de base | Préparation Installateur Mesurage</title>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<link rel="stylesheet" href="assets/style.css?v=94dbb397">
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="index.html">Installateur Mesurage <small>Préparation au test technique</small></a>
+  <nav>
+    <a href="index.html">Accueil</a>
+    <a href="index.html#theorie" class="active">Théorie</a>
+    <a href="pratique.html">Exercices</a>
+    <a href="tests.html">Tests pratiques</a>
+    <a href="formules.html">Formules</a>
+    <button class="theme-btn" type="button">Thème</button>
+  </nav>
+</header>
+<nav class="subnav" aria-label="Sujets de théorie"><a href="unites.html"><span class="n">0</span>Unités</a><a href="base.html"><span class="n">1</span>Base</a><a href="calculs.html"><span class="n">2</span>Calculs</a><a href="alternatif.html"><span class="n">3</span>Alternatif</a><a href="electrotechnique.html" class="active"><span class="n">4</span>Électrotechnique</a><a href="transformateurs.html"><span class="n">5</span>Transformateurs</a><a href="triphase.html"><span class="n">6</span>Mono et triphasé</a><a href="mesure.html"><span class="n">7</span>Mesure et comptage</a><a href="securite.html"><span class="n">8</span>Sécurité</a><a href="schemas.html"><span class="n">9</span>Schémas</a></nav>
+<main class="layout">
+<aside class="toc"></aside>
+<article class="content">
+<div class="course-hero">
+  <div class="kicker">Théorie | Sujet 4</div>
+  <h1>Électrotechnique de base</h1>
+  <p class="meta">Sujet annoncé dans l'invitation : « Électrotechnique de base » | Lecture : environ 25 minutes</p>
+  <p><span class="pill accent">Magnétisme</span><span class="pill accent">Électromagnétisme</span><span class="pill accent">Induction</span><span class="pill accent">Bobine et condensateur</span><span class="pill accent">Alternateur et moteurs</span><span class="pill accent">Protection et commande</span></p>
+  <p class="small">But de la page : comprendre comment le magnétisme et l'électricité s'influencent, puisque tous les appareils du métier en dépendent (relais, moteurs, alternateurs, transformateurs). Tu dois pouvoir calculer une vitesse synchrone, lire une plaque de moteur et dire quel appareil protège contre quel défaut.</p>
+</div>
+
+<h2>1. Le magnétisme</h2>
+<p>Un aimant attire le fer et crée autour de lui un <strong>champ magnétique</strong>. Tout aimant a deux pôles : un <strong>pôle nord</strong> (N) et un <strong>pôle sud</strong> (S). Si on coupe un aimant en deux, on obtient deux aimants complets, chacun avec son nord et son sud.</p>
+<ul>
+  <li>Deux pôles <strong>identiques</strong> (N et N, ou S et S) se <strong>repoussent</strong>.</li>
+  <li>Deux pôles <strong>contraires</strong> (N et S) s'<strong>attirent</strong>.</li>
+  <li>On représente le champ par des <strong>lignes de champ</strong>. À l'extérieur de l'aimant, elles vont <strong>du nord vers le sud</strong>. Elles forment des boucles fermées et ne se croisent jamais.</li>
+  <li>Plus les lignes sont serrées, plus le champ est fort : c'est le cas près des pôles.</li>
+</ul>
+<figure class="fig wide" data-fig="aimant-champ"><figcaption>Les lignes de champ sortent du pôle nord et entrent au pôle sud. À droite, la règle des pôles : contraires, ils s'attirent ; identiques, ils se repoussent.</figcaption></figure>
+<table class="tight">
+  <tr><th>Famille</th><th>Exemples</th><th>Comportement</th></tr>
+  <tr><td><strong>Matériaux ferromagnétiques</strong></td><td>Fer, acier, nickel, cobalt</td><td>Attirés par un aimant. Ils laissent passer le flux beaucoup mieux que l'air : on en fait les noyaux des bobines.</td></tr>
+  <tr><td><strong>Matériaux non magnétiques</strong></td><td>Cuivre, aluminium, laiton, plastique, bois</td><td>Pas attirés. Le champ les traverse comme si c'était de l'air.</td></tr>
+</table>
+<p>Le <strong>fer doux</strong> s'aimante et se désaimante facilement : c'est le matériau des noyaux d'électroaimants, de relais et de transformateurs. L'<strong>acier dur</strong> garde son aimantation : on en fait des aimants permanents.</p>
+
+<h2>2. L'électromagnétisme</h2>
+<p>Un courant électrique crée toujours un champ magnétique autour du conducteur qu'il parcourt. Pas de courant, pas de champ. Si le courant change de sens, le champ change de sens aussi.</p>
+<div class="box method"><span class="label">Règle de la main droite</span>
+  <p><strong>Fil droit :</strong> entoure le fil de la main droite, le <strong>pouce</strong> dans le sens conventionnel du courant (du + vers le −). Les <strong>doigts</strong> donnent le sens du champ, qui tourne autour du fil.</p>
+  <p><strong>Bobine :</strong> enroule les doigts dans le sens du courant dans les spires. Le pouce pointe alors vers le <strong>pôle nord</strong> de la bobine.</p>
+</div>
+<figure class="fig wide" data-fig="champ-courant"><figcaption>À gauche, le champ tourne autour du fil. Au centre, la même chose vue du bout du fil : un point quand le courant vient vers toi, une croix quand il s'éloigne. À droite, les champs des spires s'additionnent et la bobine devient un aimant.</figcaption></figure>
+<h3>La bobine et l'électroaimant</h3>
+<p>Un fil enroulé en spires forme une <strong>bobine</strong>. Les champs de toutes les spires s'additionnent : tant que le courant passe, la bobine se comporte comme un aimant, avec un nord et un sud. Si on glisse un noyau de fer à l'intérieur, on obtient un <strong>électroaimant</strong>. Le champ d'une bobine augmente avec :</p>
+<ul>
+  <li>le <strong>nombre de spires</strong> \(N\) ;</li>
+  <li>le <strong>courant</strong> \(I\) ;</li>
+  <li>la présence d'un <strong>noyau de fer</strong>, qui conduit le flux beaucoup mieux que l'air.</li>
+</ul>
+<div class="formula"><div class="title">Force magnétomotrice</div>
+\[\text{FMM} = N \times I\]
+<div class="cond">\(N\) : nombre de spires | \(I\) : courant en ampères | FMM en ampères-tours (At)</div>
+</div>
+<div class="box ex"><span class="label">Exemple</span>
+  <p>Une bobine de 200 spires est parcourue par un courant de 2 A : \(\text{FMM} = 200 \times 2 = 400\ \text{At}\).</p>
+  <p>On obtient la même force avec 400 spires et 1 A, ou avec 100 spires et 4 A. Si on double le courant sans toucher aux spires, la force double.</p>
+</div>
+<table class="tight">
+  <tr><th>Grandeur magnétique</th><th>Symbole</th><th>Unité</th><th>Équivalent dans un circuit électrique</th></tr>
+  <tr><td>Force magnétomotrice</td><td>FMM</td><td>ampère-tour (At)</td><td>La tension : c'est elle qui « pousse » le flux</td></tr>
+  <tr><td>Flux magnétique</td><td>\(\Phi\)</td><td>weber (Wb)</td><td>Le courant : c'est ce qui circule dans le noyau</td></tr>
+  <tr><td>Réluctance</td><td>\(\mathcal{R}\)</td><td>At/Wb</td><td>La résistance : faible dans le fer, élevée dans l'air</td></tr>
+  <tr><td>Densité de flux</td><td>\(B\)</td><td>tesla (T)</td><td>Le flux par mètre carré de section</td></tr>
+</table>
+<p><strong>Applications :</strong> le relais et le contacteur (la bobine attire une pièce de fer qui actionne des contacts), le moteur (le champ fait tourner le rotor), le transformateur (le champ d'un enroulement agit sur l'autre), le déclencheur magnétique d'un disjoncteur, la sonnerie, l'électrovanne.</p>
+
+<h2>3. L'induction électromagnétique</h2>
+<p>C'est le phénomène inverse : un champ magnétique peut produire de l'électricité. La loi de Faraday dit qu'<strong>une variation du flux magnétique à travers une bobine y induit une tension</strong>.</p>
+<figure class="fig wide" data-fig="induction-aimant"><figcaption>L'aiguille ne dévie que pendant le mouvement. Elle dévie dans un sens quand l'aimant approche, dans l'autre sens quand il s'éloigne, et revient à zéro dès qu'il s'arrête.</figcaption></figure>
+<p>Le mot clé est <strong>variation</strong>. Un aimant immobile dans une bobine n'induit rien, même s'il est très puissant. Pour faire varier le flux, on peut :</p>
+<ul>
+  <li>déplacer l'aimant ou la bobine : c'est le principe de l'alternateur ;</li>
+  <li>faire varier le courant d'une bobine voisine : c'est le principe du transformateur.</li>
+</ul>
+<p>Voilà pourquoi un courant continu stable n'induit aucune tension, alors qu'un courant alternatif, qui varie sans arrêt, en induit en permanence.</p>
+<div class="formula"><div class="title">Loi de Faraday</div>
+\[e = N \times \frac{\Delta \Phi}{\Delta t}\]
+<div class="cond">\(e\) : tension induite (V) | \(N\) : nombre de spires | \(\Delta \Phi\) : variation du flux (Wb) | \(\Delta t\) : durée de la variation (s)</div>
+</div>
+<p>La tension induite augmente donc avec le <strong>nombre de spires</strong> et avec la <strong>rapidité de la variation</strong> (aimant plus rapide ou champ plus fort).</p>
+<div class="box ex"><span class="label">Exemple</span>
+  <p>Le flux dans une bobine de 100 spires varie de 0,02 Wb en 0,1 s : \(e = 100 \times \dfrac{0{,}02}{0{,}1} = 20\ \text{V}\).</p>
+  <p>La même variation en 0,05 s, donc deux fois plus rapide, donne 40 V.</p>
+</div>
+<div class="box def"><span class="label">Loi de Lenz</span>
+  <p>Le courant induit circule toujours dans le sens qui <strong>s'oppose à la variation qui le produit</strong>. Si on approche un aimant d'une bobine fermée, le courant induit crée un champ qui repousse l'aimant ; si on l'éloigne, ce champ le retient. C'est pour cela qu'il faut fournir un effort mécanique pour produire de l'électricité.</p>
+</div>
+<p>L'induction a aussi un effet indésirable : un flux variable induit des courants parasites dans les masses de métal, les <strong>courants de Foucault</strong>, qui chauffent les noyaux. On les limite avec des noyaux faits de tôles minces (voir la page <a href="transformateurs.html">Les transformateurs</a>).</p>
+
+<h2>4. La bobine et le condensateur</h2>
+<p>Ces deux composants emmagasinent de l'énergie, chacun à sa façon, et ils se comportent de manière opposée.</p>
+<table class="tight">
+  <tr><th></th><th>Bobine (inductance)</th><th>Condensateur (capacité)</th></tr>
+  <tr><td><strong>Construction</strong></td><td>Fil enroulé, souvent sur un noyau de fer</td><td>Deux plaques conductrices séparées par un isolant</td></tr>
+  <tr><td><strong>Grandeur et unité</strong></td><td>Inductance \(L\), en henrys (H)</td><td>Capacité \(C\), en farads (F) ; en pratique en microfarads (µF)</td></tr>
+  <tr><td><strong>Emmagasine l'énergie</strong></td><td>Dans un champ <strong>magnétique</strong></td><td>Dans un champ <strong>électrique</strong></td></tr>
+  <tr><td><strong>S'oppose aux variations</strong></td><td>du <strong>courant</strong></td><td>de la <strong>tension</strong></td></tr>
+  <tr><td><strong>En courant continu établi</strong></td><td>Se comporte comme un simple fil</td><td>Bloque le courant une fois chargé (circuit ouvert)</td></tr>
+  <tr><td><strong>En courant alternatif</strong></td><td>Réactance inductive : \(X_L = 2\pi f L\)</td><td>Réactance capacitive : \(X_C = \dfrac{1}{2\pi f C}\)</td></tr>
+  <tr><td><strong>Si la fréquence augmente</strong></td><td>\(X_L\) augmente</td><td>\(X_C\) diminue</td></tr>
+  <tr><td><strong>Déphasage</strong></td><td>Le courant est en retard de 90° sur la tension</td><td>Le courant est en avance de 90° sur la tension</td></tr>
+  <tr><td><strong>Où on les trouve</strong></td><td>Bobine de relais, enroulements de moteur et de transformateur</td><td>Démarrage de moteur, correction du facteur de puissance, filtres</td></tr>
+</table>
+<p>Une réactance se mesure en ohms, comme une résistance : elle limite le courant alternatif, mais sans le transformer en chaleur. Les détails sont à la page <a href="alternatif.html">Bases du courant alternatif</a>.</p>
+<div class="box ex"><span class="label">Exemple à 60 Hz</span>
+  <p>Bobine de 0,1 H : \(X_L = 2\pi \times 60 \times 0{,}1 = 37{,}7\ \Omega\).</p>
+  <p>Condensateur de 100 µF : \(X_C = \dfrac{1}{2\pi \times 60 \times 100 \times 10^{-6}} = 26{,}5\ \Omega\).</p>
+</div>
+<div class="box warn"><span class="label">Sécurité : un condensateur reste chargé</span>
+  <p>Un condensateur peut garder sa charge longtemps après la coupure de l'alimentation. Avant d'y toucher, on le <strong>décharge</strong> avec un moyen prévu pour cela, puis on vérifie l'absence de tension au voltmètre.</p>
+  <p>Une bobine, elle, produit une pointe de tension quand on ouvre brusquement son circuit : c'est ce qui cause l'arc aux contacts d'un interrupteur ou d'un relais.</p>
+</div>
+<h3>Associer des condensateurs</h3>
+<p>Attention, c'est l'<strong>inverse des résistances</strong> : les capacités s'additionnent en parallèle, pas en série.</p>
+<div class="formula"><div class="title">Condensateurs en parallèle et en série</div>
+\[\text{Parallèle : } C_T = C_1 + C_2 + \dots \qquad \text{Série : } \frac{1}{C_T} = \frac{1}{C_1} + \frac{1}{C_2} + \dots\]
+<div class="cond">Pour deux condensateurs en série : \(C_T = \dfrac{C_1 \times C_2}{C_1 + C_2}\)</div>
+</div>
+<figure class="fig wide" data-fig="condos-assoc"><figcaption>Avec 10 µF et 20 µF : 30 µF en parallèle, 6,67 µF en série. En série, le total est toujours plus petit que le plus petit des condensateurs.</figcaption></figure>
+<p>Les <strong>inductances</strong>, elles, s'associent comme les résistances : en série on les additionne, en parallèle on additionne leurs inverses.</p>
+
+<h2>5. Génératrice et alternateur</h2>
+<p>Une génératrice transforme de l'<strong>énergie mécanique</strong> en <strong>énergie électrique</strong> grâce à l'induction : on fait tourner un champ magnétique devant des bobines, et une tension y est induite.</p>
+<ul>
+  <li><strong>L'alternateur</strong> produit du courant alternatif. C'est la machine des centrales : une turbine fait tourner le <strong>rotor</strong>, un électroaimant alimenté en courant continu. La tension est induite dans les bobines fixes du <strong>stator</strong>.</li>
+  <li><strong>La génératrice à courant continu</strong> (dynamo) fonctionne sur le même principe, mais un collecteur et des balais redressent le courant à la sortie.</li>
+</ul>
+<figure class="fig wide" data-fig="alternateur"><figcaption>Chaque tour du rotor à deux pôles fait passer un nord puis un sud devant le bobinage : la tension fait un cycle complet par tour.</figcaption></figure>
+<div class="formula"><div class="title">Fréquence d'un alternateur</div>
+\[f = \frac{p \times n}{120}\]
+<div class="cond">\(f\) : fréquence (Hz) | \(p\) : nombre de pôles | \(n\) : vitesse de rotation en tours par minute (r/min)</div>
+</div>
+<div class="box ex"><span class="label">Exemples</span>
+  <p>Alternateur à 2 pôles qui tourne à 3&nbsp;600 r/min : \(f = \dfrac{2 \times 3\,600}{120} = 60\ \text{Hz}\).</p>
+  <p>Avec 4 pôles, 1&nbsp;800 r/min suffisent : \(4 \times 1\,800 \div 120 = 60\ \text{Hz}\).</p>
+  <p>Un alternateur de centrale hydroélectrique tourne lentement et compte beaucoup de pôles. Avec 60 pôles, il lui suffit de 120 r/min : \(60 \times 120 \div 120 = 60\ \text{Hz}\).</p>
+</div>
+<p>Pour garder exactement 60 Hz, la vitesse d'un alternateur doit rester constante. La valeur de la tension, elle, se règle avec le courant envoyé dans l'électroaimant du rotor.</p>
+
+<h2>6. Les moteurs</h2>
+<p>Un moteur fait l'inverse d'une génératrice : il transforme l'<strong>énergie électrique</strong> en <strong>énergie mécanique</strong>. Le principe : un conducteur parcouru par un courant et placé dans un champ magnétique subit une <strong>force</strong>. Dans un moteur, cette force fait tourner le rotor.</p>
+<p>Le plus répandu est le <strong>moteur asynchrone</strong>, aussi appelé moteur à induction ou moteur à cage d'écureuil. Le champ tournant de son stator induit des courants dans le rotor, sans balais ni collecteur : il est simple, robuste et demande peu d'entretien. C'est le moteur des pompes, des ventilateurs et des compresseurs.</p>
+<h3>La vitesse synchrone</h3>
+<p>Dans un moteur à courant alternatif, le champ du stator tourne. Sa vitesse, la <strong>vitesse synchrone</strong>, ne dépend que de la fréquence du réseau et du nombre de pôles du moteur. C'est la formule de l'alternateur, retournée.</p>
+<div class="formula"><div class="title">Vitesse synchrone</div>
+\[n_s = \frac{120 \times f}{p}\]
+<div class="cond">\(n_s\) en tours par minute (r/min) | \(f\) : fréquence (Hz) | \(p\) : nombre de pôles (toujours un nombre pair)</div>
+</div>
+<table class="tight">
+  <tr><th>Nombre de pôles</th><th>Vitesse synchrone à 60 Hz</th><th>Vitesse typique d'un moteur asynchrone à pleine charge</th></tr>
+  <tr><td>2</td><td>3&nbsp;600 r/min</td><td>environ 3&nbsp;500 r/min</td></tr>
+  <tr><td>4</td><td>1&nbsp;800 r/min</td><td>environ 1&nbsp;750 r/min</td></tr>
+  <tr><td>6</td><td>1&nbsp;200 r/min</td><td>environ 1&nbsp;150 r/min</td></tr>
+  <tr><td>8</td><td>900 r/min</td><td>environ 875 r/min</td></tr>
+</table>
+<p>Plus un moteur a de pôles, plus il tourne lentement.</p>
+<h3>Le glissement</h3>
+<p>Le rotor d'un moteur asynchrone ne peut pas tourner à la vitesse synchrone. S'il rattrapait le champ, il ne verrait plus aucune variation de flux : plus de courant induit, donc plus de force. Il tourne donc toujours <strong>un peu moins vite</strong> que le champ. Cet écart s'appelle le <strong>glissement</strong>.</p>
+<div class="formula"><div class="title">Glissement</div>
+\[s = \frac{n_s - n}{n_s} \times 100\ \%\]
+<div class="cond">\(n_s\) : vitesse synchrone | \(n\) : vitesse réelle du rotor</div>
+</div>
+<div class="box ex"><span class="label">Exemple</span>
+  <p>Un moteur à 4 pôles tourne à 1&nbsp;750 r/min sur un réseau à 60 Hz.</p>
+  <p>Vitesse synchrone : \(n_s = \dfrac{120 \times 60}{4} = 1\,800\ \text{r/min}\).</p>
+  <p>Glissement : \(s = \dfrac{1\,800 - 1\,750}{1\,800} \times 100 = 2{,}8\ \%\).</p>
+</div>
+<div class="widget" data-widget="vitesse-moteur"></div>
+<h3>La plaque signalétique</h3>
+<p>La plaque fixée sur le moteur donne ses valeurs nominales, c'est-à-dire celles pour lesquelles il est construit.</p>
+<table class="tight">
+  <tr><th>Inscription</th><th>Ce qu'elle indique</th></tr>
+  <tr><td><strong>Tension (V)</strong></td><td>La tension d'alimentation prévue. Un moteur marqué 575 V est fait pour un réseau de 600 V.</td></tr>
+  <tr><td><strong>Courant (A)</strong></td><td>Le courant absorbé à pleine charge.</td></tr>
+  <tr><td><strong>Puissance (HP ou kW)</strong></td><td>La puissance <strong>mécanique</strong> fournie à l'arbre, pas la puissance électrique absorbée.</td></tr>
+  <tr><td><strong>Fréquence (Hz)</strong></td><td>60 Hz en Amérique du Nord.</td></tr>
+  <tr><td><strong>Vitesse (r/min)</strong></td><td>La vitesse à pleine charge, par exemple 1&nbsp;750 r/min.</td></tr>
+  <tr><td><strong>Phases</strong></td><td>1 (monophasé) ou 3 (triphasé).</td></tr>
+  <tr><td><strong>Facteur de puissance, rendement</strong></td><td>\(\cos\varphi\) et \(\eta\) à pleine charge.</td></tr>
+</table>
+<div class="formula"><div class="title">Cheval-vapeur et rendement</div>
+\[1\ \text{HP} = 746\ \text{W} \qquad \eta = \frac{P_{\text{utile}}}{P_{\text{absorbée}}} \qquad P_{\text{absorbée}} = \frac{P_{\text{utile}}}{\eta}\]
+<div class="cond">\(\eta\) (êta) : rendement, toujours inférieur à 1 (ou à 100 %)</div>
+</div>
+<div class="box ex"><span class="label">Exemple : moteur de 5 HP, rendement de 85 %</span>
+  <p>Puissance utile : \(5 \times 746 = 3\,730\ \text{W}\).</p>
+  <p>Puissance absorbée : \(\dfrac{3\,730}{0{,}85} = 4\,388\ \text{W}\). La différence, 658 W, part en chaleur dans le moteur.</p>
+</div>
+<p>Au démarrage, un moteur tire pendant quelques instants plusieurs fois son courant nominal (souvent de 5 à 7 fois). Ses protections doivent tolérer cette pointe : c'est le rôle des fusibles temporisés de la section suivante.</p>
+<div class="box key"><span class="label">À savoir pour le métier : le sens de rotation</span>
+  <p>On inverse le sens de rotation d'un moteur <strong>triphasé</strong> en <strong>intervertissant deux de ses trois phases</strong>. Si un branchement triphasé est refait avec deux phases croisées, tous les moteurs du client tournent à l'envers. C'est pourquoi l'installateur vérifie que la <strong>séquence de rotation des phases</strong> est la même après son intervention qu'avant. Voir <a href="triphase.html#sequence">la séquence des phases</a>.</p>
+</div>
+
+<h2>7. Appareillage de commande et de protection</h2>
+<p>Trois défauts menacent un circuit. Il faut savoir les distinguer, parce que les protections ne réagissent pas de la même façon à chacun.</p>
+<figure class="fig wide" data-fig="trois-defauts"><figcaption>Surcharge : le courant dépasse un peu le calibre. Court-circuit : il n'est plus limité par aucune charge. Défaut à la terre : il emprunte un chemin qui n'est pas prévu pour lui.</figcaption></figure>
+<ul>
+  <li><strong>Surcharge :</strong> un courant un peu trop élevé pendant longtemps (trop de charges sur le circuit, moteur qui force). Les conducteurs chauffent.</li>
+  <li><strong>Court-circuit :</strong> un contact direct entre deux conducteurs. Le courant devient énorme en un instant.</li>
+  <li><strong>Défaut à la terre :</strong> une fuite de courant vers la terre ou vers une masse métallique (isolant abîmé, humidité). Le courant peut être élevé, ou très faible et quand même dangereux pour une personne.</li>
+</ul>
+<h3>Les appareils</h3>
+<table class="tight">
+  <tr><th>Appareil</th><th>Rôle</th><th>À savoir</th></tr>
+  <tr><td><strong>Fusible</strong></td><td>Protection : un élément fond quand le courant est trop élevé.</td><td>Usage unique : on le remplace par un fusible identique. Trois valeurs à respecter : le <strong>calibre</strong> (A), la <strong>tension nominale</strong> (V) et le <strong>pouvoir de coupure</strong> (kA). Le fusible <strong>temporisé</strong> tolère la pointe de démarrage d'un moteur.</td></tr>
+  <tr><td><strong>Disjoncteur</strong></td><td>Protection : il déclenche, puis on le réarme.</td><td>Déclencheur <strong>thermique</strong> (un bilame qui chauffe) pour les surcharges, à retardement : plus la surcharge est forte, plus il agit vite. Déclencheur <strong>magnétique</strong> (une bobine) pour les courts-circuits, instantané.</td></tr>
+  <tr><td><strong>Interrupteur</strong></td><td>Commande : il ouvre et ferme un circuit en charge.</td><td>Il ne protège pas contre les surintensités.</td></tr>
+  <tr><td><strong>Sectionneur</strong></td><td>Isolement : il sépare un circuit de sa source.</td><td>Il ne se manœuvre pas en charge, sauf s'il est conçu pour (interrupteur-sectionneur). Il sert au cadenassage.</td></tr>
+  <tr><td><strong>Relais</strong></td><td>Commande : une bobine actionne des contacts.</td><td>Un petit courant de commande pilote un autre circuit, sans lien électrique entre les deux.</td></tr>
+  <tr><td><strong>Contacteur</strong></td><td>Commande : un gros relais pour les circuits de puissance.</td><td>Moteurs, chauffage, éclairage. Avec un relais de surcharge, il forme un démarreur de moteur.</td></tr>
+  <tr><td><strong>DDFT</strong></td><td>Protection des personnes.</td><td>Il compare le courant de la ligne et celui du neutre. S'il manque quelques milliampères (environ 5 mA), c'est qu'ils fuient vers la terre : il coupe.</td></tr>
+</table>
+<div class="box def"><span class="label">Pouvoir de coupure</span>
+  <p>C'est le plus grand courant de court-circuit qu'un fusible ou un disjoncteur peut interrompre sans se détruire. Il doit être au moins égal au courant de court-circuit possible à l'endroit où l'appareil est installé.</p>
+</div>
+<h3>Les contacts NO et NF</h3>
+<p>Un relais ou un contacteur a une <strong>bobine</strong> et des <strong>contacts</strong>. Quand la bobine est alimentée, elle attire une pièce de fer qui fait changer d'état tous les contacts en même temps.</p>
+<ul>
+  <li><strong>Contact NO</strong> (normalement ouvert) : ouvert au repos, il se <strong>ferme</strong> quand la bobine est alimentée.</li>
+  <li><strong>Contact NF</strong> (normalement fermé) : fermé au repos, il s'<strong>ouvre</strong> quand la bobine est alimentée.</li>
+</ul>
+<p>« Normalement » veut dire <strong>au repos</strong> : bobine hors tension, ou bouton relâché. Sur les appareils, on voit souvent les abréviations anglaises NO et NC. Les symboles sont à la page <a href="schemas.html">Lecture de schémas électriques</a>.</p>
+<div class="widget" data-widget="relais"></div>
+
+<h2>À retenir</h2>
+<div class="box key"><span class="label">L'essentiel</span>
+  <ul>
+    <li>Pôles identiques : répulsion. Pôles contraires : attraction. Lignes de champ : du nord vers le sud à l'extérieur de l'aimant.</li>
+    <li>Un courant crée un champ magnétique (main droite : pouce = courant, doigts = champ). Force magnétomotrice : <span class="unit">\(\text{FMM} = N \times I\)</span>, en ampères-tours ; un noyau de fer renforce le champ.</li>
+    <li>Induction : il faut une <strong>variation</strong> de flux pour induire une tension. Loi de Lenz : l'effet induit s'oppose à la variation.</li>
+    <li>Bobine : champ magnétique, s'oppose aux variations de courant, \(X_L = 2\pi f L\). Condensateur : champ électrique, s'oppose aux variations de tension, \(X_C = 1 / (2\pi f C)\).</li>
+    <li>Condensateurs : on additionne en parallèle, on additionne les inverses en série.</li>
+    <li>\(f = p \times n / 120\) et \(n_s = 120 \times f / p\). À 60 Hz : 3&nbsp;600, 1&nbsp;800, 1&nbsp;200 et 900 r/min pour 2, 4, 6 et 8 pôles.</li>
+    <li>1 HP = 746 W. Puissance absorbée = puissance utile ÷ rendement.</li>
+    <li>Moteur triphasé : intervertir deux phases inverse le sens de rotation.</li>
+    <li>Thermique = surcharge, avec délai. Magnétique = court-circuit, instantané. NO et NF se lisent bobine hors tension.</li>
+  </ul>
+</div>
+<div class="box trap"><span class="label">Pièges fréquents</span>
+  <ul>
+    <li>Croire qu'un aimant immobile induit une tension : sans variation de flux, il n'y a rien.</li>
+    <li>Associer les condensateurs comme des résistances : c'est l'inverse.</li>
+    <li>Confondre la vitesse synchrone (1&nbsp;800 r/min) et la vitesse réelle du moteur asynchrone (environ 1&nbsp;750 r/min).</li>
+    <li>Diviser par le nombre de <strong>paires</strong> de pôles : dans les formules avec 120, \(p\) est le nombre de pôles.</li>
+    <li>Multiplier par le rendement au lieu de diviser : la puissance absorbée est toujours plus grande que la puissance utile.</li>
+    <li>Inverser NO et NF, ou les lire bobine alimentée.</li>
+    <li>Confondre surcharge (un peu trop de courant, longtemps) et court-circuit (courant énorme, tout de suite).</li>
+    <li>Toucher un condensateur sans l'avoir déchargé.</li>
+  </ul>
+</div>
+
+<section class="quiz" data-bank="electrotechnique"></section>
+<div class="prevnext"><a class="prev" href="alternatif.html">← Bases du courant alternatif</a><a class="next" href="transformateurs.html">Les transformateurs →</a></div>
+</article>
+</main>
+<footer class="footer">Site d'étude personnel et non officiel : il n'est pas produit par Hydro-Québec et ne contient aucune question réelle du test. Les questions et les exemples ont été écrits pour s'exercer sur les sujets annoncés.</footer>
+<script defer src="assets/katex/katex.min.js?v=f4e1ebdc"></script>
+<script defer src="assets/katex/contrib/auto-render.min.js?v=71052e38"></script>
+<script defer src="assets/app.js?v=61dab5d2"></script>
+<script defer src="assets/draw.js?v=ca488361"></script>
+<script defer src="assets/bank.js?v=1a2737bc"></script>
+<script defer src="assets/figs-electrotechnique.js?v=440e1f56"></script>
+</body>
+</html>

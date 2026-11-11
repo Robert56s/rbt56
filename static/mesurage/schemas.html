@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Lecture de schémas électriques | Préparation Installateur Mesurage</title>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<link rel="stylesheet" href="assets/style.css?v=94dbb397">
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="index.html">Installateur Mesurage <small>Préparation au test technique</small></a>
+  <nav>
+    <a href="index.html">Accueil</a>
+    <a href="index.html#theorie" class="active">Théorie</a>
+    <a href="pratique.html">Exercices</a>
+    <a href="tests.html">Tests pratiques</a>
+    <a href="formules.html">Formules</a>
+    <button class="theme-btn" type="button">Thème</button>
+  </nav>
+</header>
+<nav class="subnav" aria-label="Sujets de théorie"><a href="unites.html"><span class="n">0</span>Unités</a><a href="base.html"><span class="n">1</span>Base</a><a href="calculs.html"><span class="n">2</span>Calculs</a><a href="alternatif.html"><span class="n">3</span>Alternatif</a><a href="electrotechnique.html"><span class="n">4</span>Électrotechnique</a><a href="transformateurs.html"><span class="n">5</span>Transformateurs</a><a href="triphase.html"><span class="n">6</span>Mono et triphasé</a><a href="mesure.html"><span class="n">7</span>Mesure et comptage</a><a href="securite.html"><span class="n">8</span>Sécurité</a><a href="schemas.html" class="active"><span class="n">9</span>Schémas</a></nav>
+<main class="layout">
+<aside class="toc"></aside>
+<article class="content">
+<style>
+.sym-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: .5rem; }
+.sym-cell { border: 1px solid var(--border); border-radius: 10px; padding: .3rem .25rem .45rem; text-align: center; background: var(--surface); }
+.sym-cell svg.hq { width: 100%; max-width: 120px; height: auto; }
+.sym-name { font-size: .82em; font-weight: 600; line-height: 1.2; }
+.sym-sub { font-size: .76em; color: var(--muted); line-height: 1.2; }
+.sym-card { display: flex; justify-content: center; margin: .3rem auto; padding: .4rem; max-width: 280px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); }
+.sym-ctx { text-align: center; min-height: 1.5em; }
+.sym-choices { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); margin: .5rem 0; }
+</style>
+<div class="course-hero">
+  <div class="kicker">Théorie | Sujet 9</div>
+  <h1>Lecture de schémas électriques</h1>
+  <p class="meta">Sujet annoncé dans l'invitation : « Lecture de schémas électriques » | Lecture : environ 25 minutes</p>
+  <p><span class="pill accent">Types de schémas</span><span class="pill accent">Symboles</span><span class="pill accent">Série et parallèle</span><span class="pill accent">Schéma en échelle</span><span class="pill accent">Schéma unifilaire</span><span class="pill accent">Valeurs sur un schéma</span></p>
+  <p class="small">But de la page : reconnaître les symboles courants, suivre le chemin du courant, dire ce qui s'allume ou s'éteint quand un contact change d'état, lire un schéma de commande et un schéma unifilaire, et trouver une tension ou un courant à partir d'un schéma coté.</p>
+</div>
+
+<h2>1. Les types de schémas</h2>
+<p>Un même montage peut se dessiner de plusieurs façons, selon ce qu'on veut montrer.</p>
+<table class="tight">
+  <tr><th>Type de schéma</th><th>Ce qu'il montre</th><th>À quoi il sert</th></tr>
+  <tr><td><strong>Schéma unifilaire</strong></td><td>Un seul trait représente tous les conducteurs d'un circuit.</td><td>Voir d'un coup d'œil l'ensemble d'une distribution : source, transformateurs, protections, mesurage, charges.</td></tr>
+  <tr><td><strong>Schéma multifilaire</strong> (ou développé)</td><td>Tous les conducteurs sont dessinés, un trait par fil.</td><td>Comprendre le fonctionnement et suivre chaque conducteur.</td></tr>
+  <tr><td><strong>Schéma de commande en échelle</strong></td><td>Deux montants verticaux (l'alimentation) et des échelons horizontaux.</td><td>Lire la logique d'une commande : boutons, contacts, bobines.</td></tr>
+  <tr><td><strong>Schéma de câblage</strong> (ou de raccordement)</td><td>Les connexions réelles : bornes, numéros de fils, position des appareils.</td><td>Installer, raccorder et dépanner.</td></tr>
+  <tr><td><strong>Plan d'implantation</strong></td><td>Le plan du bâtiment avec les prises, les luminaires et les interrupteurs.</td><td>Savoir où se trouve chaque appareil.</td></tr>
+</table>
+
+<h2>2. Les symboles</h2>
+<p>Un schéma est écrit avec des symboles. Voici ceux qu'il faut reconnaître sans hésiter.</p>
+<figure class="fig" data-fig="symboles"><figcaption>Les symboles varient un peu d'une norme à l'autre (la résistance, par exemple, se dessine en zigzag ou en rectangle). En cas de doute, on se fie à la légende du plan.</figcaption></figure>
+<div class="box tip"><span class="label">Les paires à ne pas confondre</span>
+  <ul>
+    <li><strong>Résistance et bobine :</strong> zigzag pointu pour la résistance, boucles arrondies pour la bobine.</li>
+    <li><strong>Résistance (rectangle) et fusible :</strong> le fusible est traversé par un trait.</li>
+    <li><strong>Condensateur et contact NO :</strong> deux traits parallèles dans les deux cas. Dans un schéma de commande, c'est un contact ; dans un schéma de circuit, un condensateur.</li>
+    <li><strong>Pile et condensateur :</strong> la pile a un trait long et un trait court.</li>
+    <li><strong>Lampe, moteur, appareils de mesure :</strong> tous des cercles. C'est ce qu'il y a dedans qui les distingue (croix, M, V, A, W, kWh).</li>
+    <li><strong>Croisement et connexion :</strong> sans point, les fils ne se touchent pas.</li>
+  </ul>
+</div>
+<div class="widget" data-widget="cartes-symboles"></div>
+
+<h2>3. La méthode de lecture</h2>
+<div class="box method"><span class="label">Méthode : lire un schéma en cinq étapes</span>
+  <ol>
+    <li><strong>Repère la source et le retour.</strong> D'où part le courant ? Par où revient-il ?</li>
+    <li><strong>Suis le chemin du courant</strong> du doigt, de la source jusqu'au retour. Devant un contact ouvert, il s'arrête.</li>
+    <li><strong>Reconnais ce qui est en série et ce qui est en parallèle.</strong> En série, il n'y a qu'un chemin. En parallèle, le chemin se divise en branches.</li>
+    <li><strong>Note l'état des contacts.</strong> Ils sont toujours dessinés <strong>au repos</strong> : hors tension et non actionnés.</li>
+    <li><strong>Lis la légende et les repères :</strong> noms des appareils, numéros de fils, bornes.</li>
+  </ol>
+</div>
+<table class="tight">
+  <tr><th>Ce que tu vois</th><th>Ce que ça veut dire</th></tr>
+  <tr><td>Un point à la rencontre de deux traits</td><td>Les conducteurs sont reliés.</td></tr>
+  <tr><td>Deux traits qui se croisent sans point</td><td>Aucune connexion : les fils se croisent sans se toucher.</td></tr>
+  <tr><td>Un contact dessiné ouvert</td><td>C'est son état au repos, pas forcément son état quand l'installation fonctionne.</td></tr>
+  <tr><td>NO et NF</td><td>Normalement ouvert et normalement fermé : « normalement » veut dire au repos.</td></tr>
+  <tr><td>La même lettre sur une bobine et sur des contacts (M, K1)</td><td>Ces contacts changent d'état quand cette bobine est alimentée.</td></tr>
+  <tr><td>Des numéros sur les fils et les bornes</td><td>Des repères pour retrouver le même fil sur le schéma et dans l'appareillage.</td></tr>
+</table>
+
+<h2>4. Lire un circuit simple</h2>
+<p>Avec des interrupteurs, tout se ramène à une question : y a-t-il un <strong>chemin fermé</strong> de la source à la lampe et de la lampe à la source ?</p>
+<figure class="fig wide" data-fig="circuits-simples"><figcaption>Des interrupteurs en série doivent tous être fermés : c'est la fonction ET. En parallèle, un seul suffit : c'est la fonction OU.</figcaption></figure>
+<table class="tight">
+  <tr><th>S1</th><th>S2</th><th>Lampe, S1 et S2 en série (ET)</th><th>Lampe, S1 et S2 en parallèle (OU)</th></tr>
+  <tr><td>ouvert</td><td>ouvert</td><td>éteinte</td><td>éteinte</td></tr>
+  <tr><td>fermé</td><td>ouvert</td><td>éteinte</td><td><strong>allumée</strong></td></tr>
+  <tr><td>ouvert</td><td>fermé</td><td>éteinte</td><td><strong>allumée</strong></td></tr>
+  <tr><td>fermé</td><td>fermé</td><td><strong>allumée</strong></td><td><strong>allumée</strong></td></tr>
+</table>
+<h3>Commander une lampe de deux endroits</h3>
+<p>Dans un escalier ou un corridor, deux <strong>interrupteurs à trois voies</strong> commandent la même lampe. Chacun a une borne commune et deux bornes reliées à l'autre interrupteur par deux fils <strong>voyageurs</strong>.</p>
+<figure class="fig wide" data-fig="trois-voies"><figcaption>La lampe s'allume quand les deux interrupteurs sont sur le même voyageur. Basculer l'un ou l'autre change toujours l'état de la lampe.</figcaption></figure>
+<h3>Qu'est-ce qui s'éteint ?</h3>
+<p>Beaucoup d'exercices de lecture de schéma reviennent à ceci : un interrupteur s'ouvre, un fusible fond ou une lampe grille, et il faut dire ce qui reste allumé. Exerce-toi avec ce circuit.</p>
+<div class="widget" data-widget="circuit-interrupteurs"></div>
+<div class="box ex"><span class="label">Exemple : trois questions sur le circuit de la démo</span>
+  <p>Au départ, le fusible est intact et S1, S2 et S3 sont fermés : L1 et L2 sont allumées.</p>
+  <ol>
+    <li><strong>S3 s'ouvre.</strong> Seule la branche de L2 est coupée : L2 s'éteint, L1 reste allumée.</li>
+    <li><strong>S1 s'ouvre.</strong> S1 est en série avec les deux branches : L1 et L2 s'éteignent.</li>
+    <li><strong>Le fusible fond.</strong> Il est en série avec tout le circuit : L1 et L2 s'éteignent.</li>
+  </ol>
+  <p>La règle : un élément <strong>en série</strong> qui s'ouvre coupe tout ce qui est après lui. Une <strong>branche en parallèle</strong> qui s'ouvre ne coupe qu'elle-même.</p>
+</div>
+
+<h2>5. Le schéma de commande en échelle</h2>
+<p>Un schéma en échelle se lit comme un texte : de gauche à droite et de haut en bas. Les deux montants sont l'alimentation (ici L1 et N). Chaque échelon est un circuit : si tous ses contacts laissent passer le courant, sa bobine est alimentée.</p>
+<figure class="fig wide" data-fig="echelle"><figcaption>Le circuit marche-arrêt à auto-maintien. Le contact M en parallèle avec le bouton de marche appartient au contacteur M : il se ferme quand la bobine M est alimentée.</figcaption></figure>
+<ol class="steps">
+  <li><strong>Au repos :</strong> le bouton d'arrêt (NF) laisse passer le courant, mais le bouton de marche (NO) et le contact M sont ouverts. La bobine n'est pas alimentée.</li>
+  <li><strong>On appuie sur Marche :</strong> le chemin L1, Arrêt, Marche, bobine M, N est fermé. Le contacteur s'enclenche.</li>
+  <li><strong>Le contact M se ferme</strong> et contourne le bouton de marche.</li>
+  <li><strong>On relâche Marche :</strong> la bobine reste alimentée par le contact M. C'est l'<strong>auto-maintien</strong>.</li>
+  <li><strong>On appuie sur Arrêt :</strong> le circuit s'ouvre, la bobine n'est plus alimentée et le contact M se rouvre. Relâcher Arrêt ne redémarre rien.</li>
+</ol>
+<div class="box key"><span class="label">Deux conséquences à retenir</span>
+  <ul>
+    <li><strong>Coupure de courant :</strong> la bobine n'est plus alimentée et le contact M s'ouvre. Au retour du courant, l'équipement ne redémarre pas tout seul : il faut appuyer de nouveau sur Marche.</li>
+    <li><strong>Bouton d'arrêt NF :</strong> un fil coupé dans le circuit d'arrêt a le même effet qu'un appui sur Arrêt. L'équipement s'arrête au lieu de devenir impossible à arrêter.</li>
+  </ul>
+</div>
+
+<h2>6. Le schéma unifilaire d'un branchement</h2>
+<p>Le schéma unifilaire suit l'électricité de la ligne du distributeur jusqu'aux circuits du client. Un seul trait remplace tous les conducteurs ; de petits traits obliques indiquent parfois leur nombre.</p>
+<figure class="fig wide" data-fig="unifilaire-branchement"><figcaption>En haut, une installation courante : le compteur, dans son embase, est traversé par tout le courant. En bas, une grosse installation : le courant est trop fort pour le compteur, qui est alimenté par des transformateurs de courant.</figcaption></figure>
+<table class="tight">
+  <tr><th>Élément</th><th>Son rôle</th></tr>
+  <tr><td><strong>Ligne du distributeur</strong></td><td>Amène l'électricité à moyenne tension.</td></tr>
+  <tr><td><strong>Transformateur</strong></td><td>Abaisse la tension à la valeur d'utilisation (120/240 V pour une maison).</td></tr>
+  <tr><td><strong>Branchement</strong></td><td>Relie le réseau à l'installation du client.</td></tr>
+  <tr><td><strong>Compteur dans son embase</strong></td><td>Mesure et enregistre l'énergie consommée (voir <a href="mesure.html">Mesure et comptage</a>).</td></tr>
+  <tr><td><strong>Coffret de branchement</strong></td><td>Contient l'interrupteur principal ou le disjoncteur principal : il coupe et protège toute l'installation.</td></tr>
+  <tr><td><strong>Panneau de distribution</strong></td><td>Répartit l'électricité entre les circuits, chacun protégé par son disjoncteur.</td></tr>
+</table>
+
+<h2>7. Trouver une valeur sur un schéma</h2>
+<p>Un schéma coté donne les valeurs des composants. On applique la méthode de lecture, puis les règles des circuits en série et en parallèle (voir <a href="calculs.html">Les calculs électriques simples</a>).</p>
+<figure class="fig wide" data-fig="schema-cote"><figcaption>R1 est en série avec le groupe formé de R2 et de R3 en parallèle. Les valeurs en couleur sont les réponses de l'exemple, avec l'interrupteur S fermé.</figcaption></figure>
+<div class="box ex"><span class="label">Exemple complet, S fermé</span>
+  <ol>
+    <li><strong>Lire le schéma.</strong> Tout le courant traverse R1, puis se partage entre R2 et R3, et revient à la source.</li>
+    <li><strong>Résistance du groupe en parallèle :</strong> \(\dfrac{60 \times 30}{60 + 30} = \dfrac{1800}{90} = 20\ \Omega\).</li>
+    <li><strong>Résistance totale :</strong> \(20 + 20 = 40\ \Omega\).</li>
+    <li><strong>Courant fourni par la source :</strong> \(I = \dfrac{120}{40} = 3\ \text{A}\). C'est aussi le courant dans R1.</li>
+    <li><strong>Tension aux bornes de R1 :</strong> \(U_1 = 20 \times 3 = 60\ \text{V}\). Entre A et B, il reste \(120 - 60 = 60\ \text{V}\).</li>
+    <li><strong>Courant dans chaque branche :</strong> \(I_2 = \dfrac{60}{60} = 1\ \text{A}\) et \(I_3 = \dfrac{60}{30} = 2\ \text{A}\). Vérification : \(1 + 2 = 3\ \text{A}\).</li>
+  </ol>
+</div>
+<div class="box ex"><span class="label">Et si l'interrupteur S s'ouvre ?</span>
+  <p>La branche de R3 est coupée. Il reste R1 et R2 en série : \(20 + 60 = 80\ \Omega\).</p>
+  <ul>
+    <li>Courant : \(I = \dfrac{120}{80} = 1{,}5\ \text{A}\). Il diminue de moitié.</li>
+    <li>Tension aux bornes de R1 : \(20 \times 1{,}5 = 30\ \text{V}\).</li>
+    <li>Tension entre A et B : \(120 - 30 = 90\ \text{V}\). Elle monte de 60 V à 90 V.</li>
+  </ul>
+  <p>Retirer une branche en parallèle augmente la résistance totale : le courant total baisse, et la tension se répartit autrement.</p>
+</div>
+
+<h2>À retenir</h2>
+<div class="box key"><span class="label">L'essentiel</span>
+  <ul>
+    <li>Unifilaire : un trait pour tous les conducteurs, vue d'ensemble. Multifilaire : tous les fils. Échelle : la commande. Câblage : les connexions réelles.</li>
+    <li>Un point : connexion. Un croisement sans point : pas de connexion.</li>
+    <li>Les contacts sont dessinés au repos. NO : ouvert au repos. NF : fermé au repos.</li>
+    <li>Interrupteurs en série : fonction ET. En parallèle : fonction OU.</li>
+    <li>Un élément en série qui s'ouvre coupe tout. Une branche en parallèle qui s'ouvre ne coupe qu'elle-même.</li>
+    <li>Auto-maintien : un contact NO du contacteur en parallèle avec le bouton de marche. Le bouton d'arrêt est NF, en série.</li>
+    <li>Branchement : ligne, transformateur, branchement, compteur dans son embase, coffret de branchement, panneau, circuits.</li>
+  </ul>
+</div>
+<div class="box trap"><span class="label">Pièges fréquents</span>
+  <ul>
+    <li>Lire un contact dans l'état où il est dessiné, alors que la question décrit un bouton enfoncé ou une bobine alimentée.</li>
+    <li>Voir une connexion là où deux fils se croisent sans point.</li>
+    <li>Confondre NO et NF, ou croire que « normalement » veut dire « la plupart du temps ».</li>
+    <li>Oublier qu'un fusible ou un interrupteur placé avant une dérivation commande toutes les branches.</li>
+    <li>Confondre le zigzag de la résistance et les boucles de la bobine, ou le fusible et la résistance en rectangle.</li>
+    <li>Calculer un groupe en parallèle en additionnant simplement les résistances.</li>
+  </ul>
+</div>
+
+<section class="quiz" data-bank="schemas"></section>
+<div class="prevnext"><a class="prev" href="securite.html">← Règles de sécurité électrique</a><a class="next" href="pratique.html">Passer aux exercices →</a></div>
+</article>
+</main>
+<footer class="footer">Site d'étude personnel et non officiel : il n'est pas produit par Hydro-Québec et ne contient aucune question réelle du test. Les questions et les exemples ont été écrits pour s'exercer sur les sujets annoncés.</footer>
+<script defer src="assets/katex/katex.min.js?v=f4e1ebdc"></script>
+<script defer src="assets/katex/contrib/auto-render.min.js?v=71052e38"></script>
+<script defer src="assets/app.js?v=61dab5d2"></script>
+<script defer src="assets/draw.js?v=ca488361"></script>
+<script defer src="assets/bank.js?v=1a2737bc"></script>
+<script defer src="assets/figs-schemas.js?v=5550d8a2"></script>
+</body>
+</html>

@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Électricité de base | Préparation Installateur Mesurage</title>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<link rel="stylesheet" href="assets/style.css?v=94dbb397">
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="index.html">Installateur Mesurage <small>Préparation au test technique</small></a>
+  <nav>
+    <a href="index.html">Accueil</a>
+    <a href="index.html#theorie" class="active">Théorie</a>
+    <a href="pratique.html">Exercices</a>
+    <a href="tests.html">Tests pratiques</a>
+    <a href="formules.html">Formules</a>
+    <button class="theme-btn" type="button">Thème</button>
+  </nav>
+</header>
+<nav class="subnav" aria-label="Sujets de théorie"><a href="unites.html"><span class="n">0</span>Unités</a><a href="base.html" class="active"><span class="n">1</span>Base</a><a href="calculs.html"><span class="n">2</span>Calculs</a><a href="alternatif.html"><span class="n">3</span>Alternatif</a><a href="electrotechnique.html"><span class="n">4</span>Électrotechnique</a><a href="transformateurs.html"><span class="n">5</span>Transformateurs</a><a href="triphase.html"><span class="n">6</span>Mono et triphasé</a><a href="mesure.html"><span class="n">7</span>Mesure et comptage</a><a href="securite.html"><span class="n">8</span>Sécurité</a><a href="schemas.html"><span class="n">9</span>Schémas</a></nav>
+<main class="layout">
+<aside class="toc"></aside>
+<article class="content">
+<div class="course-hero">
+  <div class="kicker">Théorie | Sujet 1</div>
+  <h1>Électricité de base</h1>
+  <p class="meta">Sujet annoncé dans l'invitation : « Électricité de base » | Lecture : environ 25 minutes</p>
+  <p><span class="pill accent">Tension, courant, résistance</span><span class="pill accent">Circuit électrique</span><span class="pill accent">Loi d'Ohm</span><span class="pill accent">Conducteurs et isolants</span><span class="pill accent">Continu et alternatif</span></p>
+  <p class="small">But de la page : expliquer ce que sont la tension, le courant et la résistance, reconnaître un circuit ouvert, fermé ou en court-circuit, et appliquer la loi d'Ohm sans hésiter. Tout le reste du site s'appuie sur ces notions.</p>
+</div>
+
+<h2>1. D'où vient l'électricité</h2>
+<p>Toute matière est faite d'atomes. Chaque atome a un noyau (protons de charge positive et neutrons) entouré d'<strong>électrons</strong> de charge négative. Dans un métal, les électrons les plus éloignés du noyau se détachent facilement : ce sont des <strong>électrons libres</strong>. Le <strong>courant électrique</strong> est le déplacement ordonné de ces électrons dans un conducteur.</p>
+<table class="tight">
+  <tr><th>Famille</th><th>Ce qui se passe</th><th>Exemples</th></tr>
+  <tr><td><strong>Conducteurs</strong></td><td>Beaucoup d'électrons libres : le courant passe facilement.</td><td>Argent, cuivre, or, aluminium, fer, eau non pure, corps humain</td></tr>
+  <tr><td><strong>Isolants</strong></td><td>Presque aucun électron libre : le courant ne passe pas.</td><td>Caoutchouc, plastique (PVC), verre, porcelaine, bois sec, air sec, huile</td></tr>
+  <tr><td><strong>Semiconducteurs</strong></td><td>Entre les deux, selon les conditions.</td><td>Silicium (diodes, transistors, compteurs électroniques)</td></tr>
+</table>
+<div class="box warn"><span class="label">Un isolant a ses limites</span>
+  <p>Aucun isolant n'est parfait. Au-delà d'une certaine tension, il « claque » et laisse passer le courant. C'est pour cela que les gants isolants, les outils et les câbles portent une <strong>tension nominale</strong> à ne pas dépasser, et qu'un isolant mouillé ou sale protège beaucoup moins bien.</p>
+</div>
+
+<h2>2. Tension, courant et résistance</h2>
+<p>Trois grandeurs décrivent n'importe quel circuit. Il faut connaître par cœur leur symbole et leur unité.</p>
+<table class="tight">
+  <tr><th>Grandeur</th><th>Symbole</th><th>Unité</th><th>Ce que c'est</th><th>Appareil de mesure</th></tr>
+  <tr><td><strong>Tension</strong></td><td>\(U\) (aussi \(E\) ou \(V\) selon les manuels)</td><td>volt (V)</td><td>La « pression » électrique entre deux points, qui pousse les électrons. On dit aussi différence de potentiel.</td><td>Voltmètre, branché entre deux points</td></tr>
+  <tr><td><strong>Courant</strong></td><td>\(I\)</td><td>ampère (A)</td><td>Le débit d'électrons qui passe en un point. 1 A = 1 coulomb par seconde.</td><td>Ampèremètre, inséré dans le circuit</td></tr>
+  <tr><td><strong>Résistance</strong></td><td>\(R\)</td><td>ohm (Ω)</td><td>L'opposition au passage du courant. Elle transforme l'énergie électrique en chaleur.</td><td>Ohmmètre, circuit hors tension</td></tr>
+</table>
+<figure class="fig wide" data-fig="analogie-eau"><figcaption>L'analogie de l'eau : la pompe crée une pression (tension), l'eau circule avec un certain débit (courant), et un passage étroit freine l'eau (résistance). Plus la pression est forte, plus le débit est grand ; plus le passage est étroit, plus le débit est faible.</figcaption></figure>
+<div class="box key"><span class="label">À bien distinguer</span>
+  <ul>
+    <li>La tension se mesure <strong>entre deux points</strong>. Le courant se mesure <strong>en un point</strong> du circuit.</li>
+    <li>Une tension peut exister sans courant : une prise où rien n'est branché a 120 V à ses bornes et 0 A.</li>
+    <li>Sans tension, il n'y a jamais de courant.</li>
+  </ul>
+</div>
+
+<h2>3. Le circuit électrique</h2>
+<p>Un circuit est un chemin fermé dans lequel le courant peut circuler. On y retrouve toujours les mêmes rôles :</p>
+<ul>
+  <li><strong>La source</strong> fournit la tension : pile, batterie, génératrice, réseau.</li>
+  <li><strong>Les conducteurs</strong> transportent le courant : fils, câbles, barres.</li>
+  <li><strong>La charge</strong> (ou récepteur) utilise l'énergie : lampe, élément chauffant, moteur.</li>
+  <li><strong>La commande</strong> ouvre ou ferme le circuit : interrupteur, contacteur.</li>
+  <li><strong>La protection</strong> coupe le circuit si le courant devient dangereux : fusible, disjoncteur.</li>
+</ul>
+<div class="widget" data-widget="etat-circuit"></div>
+<h3>Le sens du courant</h3>
+<p>Par convention, on dit que le courant sort de la borne <strong>positive</strong> de la source, traverse le circuit et revient à la borne <strong>négative</strong> : c'est le <strong>sens conventionnel</strong>, celui des schémas et des calculs. En réalité, les électrons se déplacent en sens inverse, de la borne négative vers la borne positive (sens électronique). Les deux descriptions donnent les mêmes résultats.</p>
+
+<h2>4. La loi d'Ohm</h2>
+<p>La loi d'Ohm relie les trois grandeurs. C'est la formule la plus utilisée de tout le test.</p>
+<div class="formula"><div class="title">Loi d'Ohm</div>
+\[U = R \times I \qquad I = \frac{U}{R} \qquad R = \frac{U}{I}\]
+<div class="cond">\(U\) en volts, \(R\) en ohms, \(I\) en ampères. Si une valeur est donnée en mA, en kΩ ou en kV, on la convertit d'abord (voir la page <a href="unites.html">Unités et préfixes</a>).</div>
+</div>
+<figure class="fig" data-fig="triangle-ohm"><figcaption>Le triangle aide-mémoire : on cache la grandeur cherchée, et ce qui reste donne la formule.</figcaption></figure>
+<div class="box ex"><span class="label">Trois exemples types</span>
+  <ol>
+    <li>Un élément chauffant de 24 Ω est branché sur 240 V. Courant : \(I = \dfrac{U}{R} = \dfrac{240}{24} = 10\ \text{A}\).</li>
+    <li>Un courant de 0,5 A traverse une résistance de 220 Ω. Tension à ses bornes : \(U = R \times I = 220 \times 0{,}5 = 110\ \text{V}\).</li>
+    <li>Une lampe branchée sur 120 V tire 0,8 A. Sa résistance : \(R = \dfrac{U}{I} = \dfrac{120}{0{,}8} = 150\ \Omega\).</li>
+  </ol>
+</div>
+<p><strong>Lire la formule sans calculer :</strong> pour une résistance donnée, le courant est proportionnel à la tension (tension doublée, courant doublé). Pour une tension donnée, le courant est inversement proportionnel à la résistance (résistance doublée, courant divisé par deux). Ce genre de question « que se passe-t-il si... » revient souvent dans un test à choix de réponses.</p>
+<div class="widget" data-widget="loi-ohm"></div>
+
+<h2>5. La résistance d'un fil</h2>
+<p>Un fil n'est pas un conducteur parfait. Sa résistance dépend de quatre choses :</p>
+<div class="formula"><div class="title">Résistance d'un conducteur</div>
+\[R = \rho\,\frac{L}{A}\]
+<div class="cond">\(\rho\) : résistivité du matériau (en \(\Omega\cdot\text{m}\)) | \(L\) : longueur (m) | \(A\) : section (m²)</div>
+</div>
+<ul>
+  <li><strong>La longueur :</strong> fil deux fois plus long, résistance deux fois plus grande.</li>
+  <li><strong>La section :</strong> fil deux fois plus gros (en section), résistance deux fois plus petite.</li>
+  <li><strong>Le matériau :</strong> le cuivre (\(1{,}72 \times 10^{-8}\ \Omega\cdot\text{m}\)) conduit mieux que l'aluminium (\(2{,}82 \times 10^{-8}\ \Omega\cdot\text{m}\)) ; l'argent est un peu meilleur que le cuivre.</li>
+  <li><strong>La température :</strong> la résistance d'un métal augmente quand il chauffe.</li>
+</ul>
+<p>Au Canada, la grosseur des fils est donnée en <strong>calibre AWG</strong> : plus le numéro est <em>petit</em>, plus le fil est <em>gros</em>. Repères pour le cuivre dans une maison : 14 AWG pour un circuit de 15 A, 12 AWG pour 20 A, 10 AWG pour 30 A.</p>
+<div class="box ex"><span class="label">Exemple : chute de tension dans un long fil</span>
+  <p>Une charge de 12 A est alimentée en 120 V par 30 m de câble de cuivre 14 AWG (section de 2,08 mm²). Le courant fait l'aller et le retour, donc \(L = 60\ \text{m}\).</p>
+  <p>\(R = \rho\,\dfrac{L}{A} = 1{,}72 \times 10^{-8} \times \dfrac{60}{2{,}08 \times 10^{-6}} = 0{,}50\ \Omega\)</p>
+  <p>Tension perdue dans le fil : \(U = R \times I = 0{,}50 \times 12 = 6\ \text{V}\), soit 5 % des 120 V. La charge ne reçoit que 114 V. C'est la <strong>chute de tension</strong> : elle augmente avec la longueur et avec le courant.</p>
+</div>
+
+<h2>6. Courant continu et courant alternatif</h2>
+<figure class="fig wide" data-fig="cc-ca"><figcaption>En continu, la tension garde la même valeur et le même sens. En alternatif, elle suit une sinusoïde : elle monte, redescend, s'inverse, et recommence 60 fois par seconde sur le réseau nord-américain.</figcaption></figure>
+<table class="tight">
+  <tr><th></th><th>Courant continu (CC)</th><th>Courant alternatif (CA)</th></tr>
+  <tr><td><strong>Sens</strong></td><td>Toujours le même</td><td>S'inverse périodiquement</td></tr>
+  <tr><td><strong>Sources</strong></td><td>Piles, batteries, panneaux solaires, blocs d'alimentation</td><td>Alternateurs des centrales, réseau électrique, prises de la maison</td></tr>
+  <tr><td><strong>Fréquence</strong></td><td>0 Hz</td><td>60 Hz en Amérique du Nord (50 Hz en Europe)</td></tr>
+  <tr><td><strong>Atout</strong></td><td>Stockage dans des batteries, électronique</td><td>Se transforme facilement en haute ou basse tension avec un transformateur</td></tr>
+</table>
+<p>La loi d'Ohm s'applique dans les deux cas. En alternatif, on utilise les <strong>valeurs efficaces</strong> (le « 120 V » d'une prise en est une) : voir la page <a href="alternatif.html">Bases du courant alternatif</a>.</p>
+
+<h2>7. Les sources et leurs tensions</h2>
+<ul>
+  <li><strong>Piles en série</strong> (le + de l'une sur le − de la suivante) : les tensions s'additionnent. Quatre piles de 1,5 V donnent 6 V.</li>
+  <li><strong>Piles en parallèle</strong> (tous les + ensemble, tous les − ensemble) : la tension reste la même, mais la réserve d'énergie s'additionne.</li>
+</ul>
+<table class="tight">
+  <tr><th>Tension</th><th>Où on la trouve</th></tr>
+  <tr><td>1,5 V | 9 V | 12 V</td><td>Piles, batterie d'auto (courant continu)</td></tr>
+  <tr><td>120 V</td><td>Prises et éclairage d'une maison</td></tr>
+  <tr><td>240 V</td><td>Cuisinière, sécheuse, chauffe-eau, plinthes électriques</td></tr>
+  <tr><td>120/208 V et 347/600 V</td><td>Immeubles, commerces et industries (triphasé)</td></tr>
+  <tr><td>25 kV</td><td>Lignes de distribution dans les rues (moyenne tension)</td></tr>
+  <tr><td>120 kV à 735 kV</td><td>Lignes de transport (haute tension)</td></tr>
+</table>
+
+<h2>8. Les effets du courant</h2>
+<ul>
+  <li><strong>Effet thermique</strong> (effet Joule) : tout conducteur parcouru par un courant chauffe. Utile dans un élément chauffant ou un fusible, nuisible dans un fil trop petit.</li>
+  <li><strong>Effet magnétique :</strong> un courant crée un champ magnétique. C'est le principe des moteurs, des relais et des transformateurs.</li>
+  <li><strong>Effet lumineux :</strong> lampes, DEL.</li>
+  <li><strong>Effet chimique :</strong> recharge d'une batterie, électrolyse, corrosion.</li>
+  <li><strong>Effet physiologique :</strong> le courant qui traverse le corps provoque des contractions, des brûlures ou un arrêt cardiaque. Voir la page <a href="securite.html">Sécurité électrique</a>.</li>
+</ul>
+
+<h2>À retenir</h2>
+<div class="box key"><span class="label">L'essentiel</span>
+  <ul>
+    <li>Tension \(U\) en volts, courant \(I\) en ampères, résistance \(R\) en ohms.</li>
+    <li>Loi d'Ohm : \(U = R \times I\), \(I = U / R\), \(R = U / I\).</li>
+    <li>Circuit ouvert : courant nul. Court-circuit : résistance presque nulle, courant énorme, la protection doit couper.</li>
+    <li>Sens conventionnel : du + vers le − à l'extérieur de la source.</li>
+    <li>Fil plus long : plus de résistance. Fil plus gros : moins de résistance. Numéro AWG plus petit : fil plus gros.</li>
+    <li>Réseau nord-américain : courant alternatif à 60 Hz.</li>
+  </ul>
+</div>
+<div class="box trap"><span class="label">Pièges fréquents</span>
+  <ul>
+    <li>Oublier de convertir : 250 mA, c'est 0,25 A ; 4,7 kΩ, c'est 4 700 Ω.</li>
+    <li>Inverser la division : le courant est \(U / R\), pas \(R / U\).</li>
+    <li>Croire qu'un circuit ouvert est sans danger : la tension est toujours présente d'un côté de la coupure.</li>
+    <li>Confondre le sens conventionnel (du + vers le −) et le sens des électrons (du − vers le +).</li>
+  </ul>
+</div>
+
+<section class="quiz" data-bank="base"></section>
+<div class="prevnext"><a class="prev" href="unites.html">← Unités, préfixes et notation scientifique</a><a class="next" href="calculs.html">Les calculs électriques simples →</a></div>
+</article>
+</main>
+<footer class="footer">Site d'étude personnel et non officiel : il n'est pas produit par Hydro-Québec et ne contient aucune question réelle du test. Les questions et les exemples ont été écrits pour s'exercer sur les sujets annoncés.</footer>
+<script defer src="assets/katex/katex.min.js?v=f4e1ebdc"></script>
+<script defer src="assets/katex/contrib/auto-render.min.js?v=71052e38"></script>
+<script defer src="assets/app.js?v=61dab5d2"></script>
+<script defer src="assets/draw.js?v=ca488361"></script>
+<script defer src="assets/bank.js?v=1a2737bc"></script>
+<script defer src="assets/figs-base.js?v=e754c94b"></script>
+</body>
+</html>

@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Unités, préfixes et notation scientifique | Préparation Installateur Mesurage</title>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<link rel="stylesheet" href="assets/style.css?v=94dbb397">
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="index.html">Installateur Mesurage <small>Préparation au test technique</small></a>
+  <nav>
+    <a href="index.html">Accueil</a>
+    <a href="index.html#theorie" class="active">Théorie</a>
+    <a href="pratique.html">Exercices</a>
+    <a href="tests.html">Tests pratiques</a>
+    <a href="formules.html">Formules</a>
+    <button class="theme-btn" type="button">Thème</button>
+  </nav>
+</header>
+<nav class="subnav" aria-label="Sujets de théorie"><a href="unites.html" class="active"><span class="n">0</span>Unités</a><a href="base.html"><span class="n">1</span>Base</a><a href="calculs.html"><span class="n">2</span>Calculs</a><a href="alternatif.html"><span class="n">3</span>Alternatif</a><a href="electrotechnique.html"><span class="n">4</span>Électrotechnique</a><a href="transformateurs.html"><span class="n">5</span>Transformateurs</a><a href="triphase.html"><span class="n">6</span>Mono et triphasé</a><a href="mesure.html"><span class="n">7</span>Mesure et comptage</a><a href="securite.html"><span class="n">8</span>Sécurité</a><a href="schemas.html"><span class="n">9</span>Schémas</a></nav>
+<main class="layout">
+<aside class="toc"></aside>
+<article class="content">
+<div class="course-hero">
+  <div class="kicker">Théorie | Sujet 0</div>
+  <h1>Unités, préfixes et notation scientifique</h1>
+  <p class="meta">Outil de base pour tous les sujets annoncés dans l'invitation | Lecture : environ 20 minutes</p>
+  <p><span class="pill accent">Grandeurs et unités</span><span class="pill accent">Préfixes : k, M, m, µ</span><span class="pill accent">Conversions</span><span class="pill accent">Notation scientifique</span><span class="pill accent">Calculatrice</span><span class="pill accent">Ordre de grandeur</span></p>
+  <p class="small">But de la page : ne jamais perdre de points sur une conversion. Tu revois les unités, tu passes d'un préfixe à l'autre sans te tromper d'un facteur 1000, tu écris un nombre en notation scientifique et tu utilises ta calculatrice sans piège. Ces réflexes servent dans tous les calculs des pages suivantes.</p>
+</div>
+
+<h2>1. Les grandeurs et leurs unités</h2>
+<p>Chaque grandeur électrique a un <strong>symbole</strong> (la lettre dans les formules) et une <strong>unité</strong> (ce qu'on écrit après le nombre). Dans \(U = 120\ \text{V}\), \(U\) est la grandeur et V est l'unité. Ce tableau est à connaître par cœur.</p>
+<table class="tight">
+  <tr><th>Grandeur</th><th>Symbole</th><th>Unité</th><th>À savoir</th></tr>
+  <tr><td><strong>Tension</strong></td><td>\(U\) (aussi \(E\) ou \(V\))</td><td>volt (V)</td><td>120 V à une prise, 240 V pour une cuisinière</td></tr>
+  <tr><td><strong>Courant</strong></td><td>\(I\)</td><td>ampère (A)</td><td>1 A = 1 coulomb par seconde</td></tr>
+  <tr><td><strong>Résistance</strong></td><td>\(R\)</td><td>ohm (Ω)</td><td>1 Ω laisse passer 1 A sous 1 V</td></tr>
+  <tr><td><strong>Puissance</strong> (active)</td><td>\(P\)</td><td>watt (W)</td><td>1 W = 1 V × 1 A ; 1 HP = 746 W</td></tr>
+  <tr><td><strong>Énergie</strong></td><td>\(E\) (ou \(W\))</td><td>joule (J), wattheure (Wh), kilowattheure (kWh)</td><td>1 J = 1 W pendant 1 s ; le compteur d'électricité compte des kWh</td></tr>
+  <tr><td><strong>Temps</strong></td><td>\(t\)</td><td>seconde (s), heure (h)</td><td>1 h = 3&nbsp;600 s</td></tr>
+  <tr><td><strong>Fréquence</strong></td><td>\(f\)</td><td>hertz (Hz)</td><td>Nombre de cycles par seconde : 60 Hz sur le réseau</td></tr>
+  <tr><td><strong>Charge électrique</strong></td><td>\(Q\)</td><td>coulomb (C)</td><td>1 C correspond à environ \(6{,}24 \times 10^{18}\) électrons</td></tr>
+  <tr><td><strong>Capacité</strong></td><td>\(C\)</td><td>farad (F)</td><td>Condensateurs ; en pratique des µF</td></tr>
+  <tr><td><strong>Inductance</strong></td><td>\(L\)</td><td>henry (H)</td><td>Bobines ; souvent des mH</td></tr>
+  <tr><td><strong>Puissance apparente</strong></td><td>\(S\)</td><td>voltampère (VA)</td><td>Transformateurs : kVA</td></tr>
+  <tr><td><strong>Puissance réactive</strong></td><td>\(Q\)</td><td>var (voltampère réactif)</td><td>Bobines et condensateurs en alternatif</td></tr>
+  <tr><td><strong>Impédance, réactance</strong></td><td>\(Z\), \(X\)</td><td>ohm (Ω)</td><td>L'opposition au courant en alternatif</td></tr>
+</table>
+<div class="box ex"><span class="label">Deux liens à comprendre</span>
+  <ul>
+    <li><strong>Le kWh en joules :</strong> 1 kWh, c'est 1&nbsp;000 W pendant 3&nbsp;600 s, donc \(1\,000 \times 3\,600 = 3\,600\,000\ \text{J} = 3{,}6\ \text{MJ}\).</li>
+    <li><strong>L'ampère et le coulomb :</strong> un courant de 15 A pendant 1 minute transporte \(Q = I \times t = 15 \times 60 = 900\ \text{C}\).</li>
+  </ul>
+</div>
+<div class="box warn"><span class="label">Des lettres qui servent deux fois</span>
+  <p>\(C\) est le symbole de la capacité, mais C est aussi l'unité de charge (le coulomb). \(Q\) désigne la charge et aussi la puissance réactive. \(E\) désigne la tension dans certains manuels et l'énergie dans d'autres. W est l'unité de puissance. Regarde toujours l'unité écrite après le nombre : c'est elle qui tranche.</p>
+</div>
+
+<h2>2. Les préfixes</h2>
+<p>Un préfixe remplace une puissance de 10. Il évite d'écrire des rangées de zéros : 25&nbsp;000 V devient 25 kV, 0,03 A devient 30 mA. Chaque préfixe vaut <strong>1000 fois</strong> le suivant.</p>
+<table class="tight">
+  <tr><th>Préfixe</th><th>Symbole</th><th>Facteur</th><th>En clair</th><th>Exemple du métier</th></tr>
+  <tr><td>giga</td><td><strong>G</strong></td><td>\(10^{9}\)</td><td class="num">1&nbsp;000&nbsp;000&nbsp;000</td><td>1 GW = 1&nbsp;000 MW, l'ordre de grandeur d'une très grande centrale</td></tr>
+  <tr><td>méga</td><td><strong>M</strong></td><td>\(10^{6}\)</td><td class="num">1&nbsp;000&nbsp;000</td><td>10 MΩ de résistance d'isolement ; 1 MW</td></tr>
+  <tr><td>kilo</td><td><strong>k</strong></td><td>\(10^{3}\)</td><td class="num">1&nbsp;000</td><td>25 kV (ligne de distribution) ; 4,7 kΩ ; 1,5 kW ; kWh</td></tr>
+  <tr><td>(unité de base)</td><td></td><td>\(10^{0}\)</td><td class="num">1</td><td>120 V ; 15 A ; 12,8 Ω</td></tr>
+  <tr><td>milli</td><td><strong>m</strong></td><td>\(10^{-3}\)</td><td class="num">0,001</td><td>30 mA (un courant déjà dangereux à travers le corps) ; 16,67 ms</td></tr>
+  <tr><td>micro</td><td><strong>µ</strong></td><td>\(10^{-6}\)</td><td class="num">0,000&nbsp;001</td><td>100 µF (condensateur) ; courant de fuite de quelques µA</td></tr>
+  <tr><td>nano</td><td><strong>n</strong></td><td>\(10^{-9}\)</td><td class="num">0,000&nbsp;000&nbsp;001</td><td>100 nF (petit condensateur d'un circuit électronique)</td></tr>
+  <tr><td>pico</td><td><strong>p</strong></td><td>\(10^{-12}\)</td><td class="num">0,000&nbsp;000&nbsp;000&nbsp;001</td><td>22 pF (très petit condensateur)</td></tr>
+</table>
+<figure class="fig wide" data-fig="escalier-prefixes"><figcaption>L'escalier des préfixes : chaque marche vaut un facteur 1000. Quand tu descends vers un préfixe plus petit, le nombre grossit (× 1000 par marche). Quand tu montes vers un préfixe plus grand, le nombre rapetisse (÷ 1000 par marche).</figcaption></figure>
+<div class="box tip"><span class="label">Le réflexe de vérification</span>
+  <p><strong>Préfixe plus petit, nombre plus grand</strong> (et l'inverse). 0,5 A = 500 mA : le milliampère est mille fois plus petit que l'ampère, il en faut donc mille fois plus pour dire la même chose.</p>
+</div>
+<div class="box trap"><span class="label">Majuscule ou minuscule : ça change tout</span>
+  <ul>
+    <li><strong>m</strong> (milli, un millième) et <strong>M</strong> (méga, un million) : il y a un facteur d'un milliard entre 1 mΩ et 1 MΩ.</li>
+    <li><strong>k</strong> (kilo) s'écrit toujours en minuscule : kV, kW, kΩ, kWh.</li>
+    <li><strong>µ</strong> (micro) est parfois écrit « u » ou « MFD » sur les appareils : 35 uF et 35 MFD sur un condensateur veulent dire 35 µF.</li>
+  </ul>
+</div>
+<div class="widget" data-widget="convertisseur-prefixes"></div>
+
+<h2>3. La méthode sûre : passer par les unités de base</h2>
+<p>Les formules d'électricité sont écrites pour les <strong>unités de base</strong> : volts, ampères, ohms, watts, secondes. Si tu y mets des kΩ ou des mA sans réfléchir, la réponse sort fausse d'un facteur 1000.</p>
+<div class="box method"><span class="label">Méthode</span>
+  <ol class="steps">
+    <li><strong>Repère les préfixes</strong> dans l'énoncé (souligne-les).</li>
+    <li><strong>Convertis tout en unités de base :</strong> V, A, Ω, W.</li>
+    <li><strong>Calcule</strong> avec la formule.</li>
+    <li><strong>Reconvertis le résultat</strong> avec le préfixe qui donne un nombre facile à lire (entre 1 et 1000).</li>
+  </ol>
+</div>
+<figure class="fig wide" data-fig="virgule-conversion"><figcaption>Convertir, c'est déplacer la virgule de 3 rangs par marche. Vers une unité plus petite (kΩ vers Ω), la virgule va vers la droite et on ajoute des zéros. Vers une unité plus grande (mA vers A), elle va vers la gauche.</figcaption></figure>
+<table class="tight">
+  <tr><th>Valeur donnée</th><th>Opération</th><th>Résultat</th></tr>
+  <tr><td>4,7 kΩ en ohms</td><td>× 1000</td><td>4&nbsp;700 Ω</td></tr>
+  <tr><td>2,2 MΩ en ohms</td><td>× 1&nbsp;000&nbsp;000</td><td>2&nbsp;200&nbsp;000 Ω</td></tr>
+  <tr><td>14,4 kV en volts</td><td>× 1000</td><td>14&nbsp;400 V</td></tr>
+  <tr><td>35 mA en ampères</td><td>÷ 1000</td><td>0,035 A</td></tr>
+  <tr><td>450 µF en farads</td><td>÷ 1&nbsp;000&nbsp;000</td><td>0,00045 F</td></tr>
+  <tr><td>1&nbsp;500 W en kilowatts</td><td>÷ 1000</td><td>1,5 kW</td></tr>
+  <tr><td>0,035 A en milliampères</td><td>× 1000</td><td>35 mA</td></tr>
+</table>
+<div class="box ex"><span class="label">Exemple complet</span>
+  <p>Une résistance de 4,7 kΩ est branchée sur 12 V. Quel courant la traverse ?</p>
+  <ol>
+    <li>Préfixe repéré : kΩ.</li>
+    <li>Conversion : \(4{,}7\ \text{k}\Omega = 4\,700\ \Omega\).</li>
+    <li>Calcul : \(I = \dfrac{U}{R} = \dfrac{12}{4\,700} = 0{,}00255\ \text{A}\).</li>
+    <li>Résultat lisible : \(0{,}00255\ \text{A} = 2{,}55\ \text{mA}\).</li>
+  </ol>
+  <p>L'erreur classique : taper 12 ÷ 4,7 et répondre 2,55 A. C'est mille fois trop.</p>
+</div>
+<h3>Les raccourcis utiles</h3>
+<p>Quand tu es à l'aise, certaines combinaisons de préfixes donnent directement le bon résultat. Elles servent surtout à vérifier une réponse rapidement.</p>
+<table class="tight">
+  <tr><th>Combinaison</th><th>Donne</th><th>Exemple</th></tr>
+  <tr><td>V ÷ kΩ</td><td><strong>mA</strong></td><td>12 V ÷ 4,7 kΩ = 2,55 mA</td></tr>
+  <tr><td>V ÷ MΩ</td><td><strong>µA</strong></td><td>120 V ÷ 10 MΩ = 12 µA</td></tr>
+  <tr><td>mA × kΩ</td><td><strong>V</strong></td><td>2 mA × 4,7 kΩ = 9,4 V</td></tr>
+  <tr><td>kV × A</td><td><strong>kVA</strong></td><td>14,4 kV × 10 A = 144 kVA</td></tr>
+  <tr><td>W ÷ 1000</td><td><strong>kW</strong></td><td>1&nbsp;500 W = 1,5 kW</td></tr>
+  <tr><td>kW × h</td><td><strong>kWh</strong></td><td>1,5 kW × 8 h = 12 kWh</td></tr>
+</table>
+<p class="small">En cas de doute, oublie les raccourcis et reviens aux unités de base : c'est plus long de dix secondes, mais c'est toujours juste.</p>
+
+<h2>4. La notation scientifique</h2>
+<p>La notation scientifique écrit n'importe quel nombre avec <strong>un seul chiffre (de 1 à 9) avant la virgule</strong>, multiplié par une puissance de 10.</p>
+<div class="formula"><div class="title">Notation scientifique</div>
+\[a \times 10^{n} \qquad \text{avec } 1 \le a \lt 10\]
+<div class="cond">\(n\) positif : grand nombre | \(n\) négatif : nombre plus petit que 1 | \(10^{0} = 1\)</div>
+</div>
+<figure class="fig wide" data-fig="notation-sci-anatomie"><figcaption>L'exposant dit de combien de rangs la virgule se déplace : vers la droite s'il est positif, vers la gauche s'il est négatif.</figcaption></figure>
+<p>La <strong>notation d'ingénieur</strong> est la même idée, mais l'exposant est toujours un <strong>multiple de 3</strong>. L'avantage : chaque exposant correspond directement à un préfixe (\(10^{3}\) = k, \(10^{-3}\) = m, \(10^{-6}\) = µ).</p>
+<table class="tight">
+  <tr><th>Nombre</th><th>Notation scientifique</th><th>Notation d'ingénieur</th><th>Avec préfixe</th></tr>
+  <tr><td>4&nbsp;700 Ω</td><td>\(4{,}7 \times 10^{3}\)</td><td>\(4{,}7 \times 10^{3}\)</td><td>4,7 kΩ</td></tr>
+  <tr><td>25&nbsp;000 V</td><td>\(2{,}5 \times 10^{4}\)</td><td>\(25 \times 10^{3}\)</td><td>25 kV</td></tr>
+  <tr><td>2&nbsp;200&nbsp;000 Ω</td><td>\(2{,}2 \times 10^{6}\)</td><td>\(2{,}2 \times 10^{6}\)</td><td>2,2 MΩ</td></tr>
+  <tr><td>0,035 A</td><td>\(3{,}5 \times 10^{-2}\)</td><td>\(35 \times 10^{-3}\)</td><td>35 mA</td></tr>
+  <tr><td>0,00047 F</td><td>\(4{,}7 \times 10^{-4}\)</td><td>\(470 \times 10^{-6}\)</td><td>470 µF</td></tr>
+</table>
+<h3>Calculer avec les puissances de 10</h3>
+<div class="formula"><div class="title">Règles des exposants</div>
+\[10^{a} \times 10^{b} = 10^{a+b} \qquad \frac{10^{a}}{10^{b}} = 10^{a-b} \qquad 10^{-n} = \frac{1}{10^{n}}\]
+<div class="cond">On multiplie : on additionne les exposants. On divise : on soustrait les exposants. Les nombres devant se calculent à part.</div>
+</div>
+<div class="box ex"><span class="label">Trois exemples</span>
+  <ol>
+    <li><strong>Multiplier :</strong> \((3 \times 10^{-3}) \times (4 \times 10^{3}) = 12 \times 10^{-3+3} = 12 \times 10^{0} = 12\). C'est le calcul 3 mA × 4 kΩ = 12 V.</li>
+    <li><strong>Diviser :</strong> \(\dfrac{5\ \text{V}}{2 \times 10^{-3}\ \text{A}} = 2{,}5 \times 10^{0-(-3)} = 2{,}5 \times 10^{3}\ \Omega = 2{,}5\ \text{k}\Omega\).</li>
+    <li><strong>Passer à un préfixe :</strong> \(0{,}00047 = 4{,}7 \times 10^{-4} = 470 \times 10^{-6}\), donc 470 µ (par exemple 470 µF).</li>
+  </ol>
+</div>
+<div class="widget" data-widget="notation-sci"></div>
+
+<h2>5. La calculatrice scientifique</h2>
+<p>L'invitation au test demande d'apporter une calculatrice scientifique (aucune n'est fournie sur place) : prends un modèle que tu connais déjà, et exerce-toi avec celui-là. Le nom des touches change d'une marque à l'autre, mais les fonctions sont les mêmes. Note qu'une calculatrice affiche un <strong>point</strong> à la place de la virgule.</p>
+<table class="tight">
+  <tr><th>Touche</th><th>À quoi elle sert</th><th>Exemple</th></tr>
+  <tr><td><kbd>EE</kbd>, <kbd>EXP</kbd> ou <kbd>×10<sup>x</sup></kbd></td><td>Entrer une puissance de 10. Elle veut dire « fois 10 exposant ».</td><td>\(4{,}7 \times 10^{3}\) se tape <span class="unit"><kbd>4.7</kbd> <kbd>EE</kbd> <kbd>3</kbd></span></td></tr>
+  <tr><td><kbd>(−)</kbd> ou <kbd>+/−</kbd></td><td>Le signe négatif d'un nombre ou d'un exposant. Ce n'est pas la touche de soustraction.</td><td>\(2 \times 10^{-3}\) se tape <span class="unit"><kbd>2</kbd> <kbd>EE</kbd> <kbd>(−)</kbd> <kbd>3</kbd></span></td></tr>
+  <tr><td><kbd>ENG</kbd> (touche ou mode)</td><td>Afficher le résultat avec un exposant multiple de 3 : tu lis directement le préfixe.</td><td>0,00255 s'affiche \(2{,}55 \times 10^{-3}\), donc 2,55 m</td></tr>
+  <tr><td>Mode <kbd>DEG</kbd></td><td>Les angles en degrés, pour les cosinus et les sinus de l'alternatif.</td><td>Test : <span class="unit"><kbd>cos</kbd> <kbd>60</kbd></span> doit donner 0,5</td></tr>
+  <tr><td><kbd>x²</kbd> et <kbd>√</kbd></td><td>Le carré et la racine carrée.</td><td>\(P = R \times I^{2}\) ; \(Z = \sqrt{R^{2} + X^{2}}\)</td></tr>
+  <tr><td><kbd>1/x</kbd> ou <kbd>x<sup>−1</sup></kbd></td><td>L'inverse d'un nombre. Très pratique pour les résistances en parallèle.</td><td><span class="unit"><kbd>60</kbd> <kbd>1/x</kbd></span> donne 0,01667</td></tr>
+  <tr><td><kbd>(</kbd> et <kbd>)</kbd></td><td>Regrouper un calcul, surtout sous une barre de fraction.</td><td>\(1 \div (2 \times \pi \times 60 \times 0{,}0001)\)</td></tr>
+</table>
+<figure class="fig wide" data-fig="touches-calculatrice"><figcaption>La touche EE contient déjà le « × 10 ». Pour entrer \(10^{3}\) tout seul, on tape 1 EE 3. Taper 10 EE 3 donne dix fois trop.</figcaption></figure>
+<div class="box warn"><span class="label">Le piège du 10 EE 3</span>
+  <p><span class="unit"><kbd>10</kbd> <kbd>EE</kbd> <kbd>3</kbd></span> veut dire \(10 \times 10^{3} = 10\,000\), pas 1&nbsp;000. Pour \(10^{3}\), on tape <span class="unit"><kbd>1</kbd> <kbd>EE</kbd> <kbd>3</kbd></span>. De la même façon, \(10^{-6}\) se tape <span class="unit"><kbd>1</kbd> <kbd>EE</kbd> <kbd>(−)</kbd> <kbd>6</kbd></span>.</p>
+</div>
+<div class="box ex"><span class="label">Tout faire sur une seule ligne</span>
+  <p>Trois résistances de 60 Ω, 40 Ω et 24 Ω sont en parallèle (voir la page <a href="calculs.html">Calculs électriques</a>). La résistance totale vaut \(1 \div \left(\dfrac{1}{60} + \dfrac{1}{40} + \dfrac{1}{24}\right)\).</p>
+  <ul>
+    <li><strong>Sur une ligne :</strong> <kbd>60</kbd> <kbd>1/x</kbd> <kbd>+</kbd> <kbd>40</kbd> <kbd>1/x</kbd> <kbd>+</kbd> <kbd>24</kbd> <kbd>1/x</kbd> <kbd>=</kbd> <kbd>1/x</kbd> <kbd>=</kbd> donne <strong>12 Ω</strong>.</li>
+    <li><strong>En arrondissant en chemin :</strong> 0,02 + 0,03 + 0,04 = 0,09, puis 1 ÷ 0,09 = 11,1 Ω. La réponse est fausse de presque 1 Ω.</li>
+  </ul>
+  <p>Garde tous les chiffres dans la machine et n'arrondis qu'à la fin.</p>
+</div>
+<div class="box trap"><span class="label">Les parenthèses sous une fraction</span>
+  <p>Pour \(\dfrac{1}{2 \times \pi \times 60 \times 0{,}0001}\), il faut taper <kbd>1</kbd> <kbd>÷</kbd> <kbd>(</kbd> <kbd>2</kbd> <kbd>×</kbd> <kbd>π</kbd> <kbd>×</kbd> <kbd>60</kbd> <kbd>×</kbd> <kbd>0.0001</kbd> <kbd>)</kbd>, ce qui donne 26,5. Sans les parenthèses, la machine divise seulement par 2, puis multiplie par tout le reste : elle affiche 0,0094.</p>
+</div>
+
+<h2>6. Arrondis et ordre de grandeur</h2>
+<ul>
+  <li><strong>Arrondis à la fin seulement.</strong> Trois chiffres significatifs suffisent presque toujours : 18,8 A, 2,55 mA, 0,833.</li>
+  <li><strong>Dans un choix de réponses,</strong> fais ton calcul, puis choisis la valeur la plus proche. Un petit écart sur le dernier chiffre vient d'un arrondi, pas d'une erreur.</li>
+  <li><strong>Vérifie l'ordre de grandeur.</strong> Un courant de maison se compte en ampères, pas en kiloampères. Une résistance d'isolement se compte en mégohms, pas en milliohms.</li>
+  <li><strong>Méfie-toi des jumeaux.</strong> Les mauvaises réponses typiques sont la bonne valeur multipliée ou divisée par 1000 : c'est l'erreur de préfixe.</li>
+</ul>
+<figure class="fig wide" data-fig="echelle-courants"><figcaption>Repères d'ordre de grandeur pour le courant. Chaque graduation vaut dix fois la précédente. Si ton résultat tombe loin de la zone attendue, cherche une erreur de préfixe.</figcaption></figure>
+<div class="box ex"><span class="label">Démasquer les mauvaises réponses</span>
+  <p>Une résistance de 2,2 kΩ est branchée sur 120 V. Quel courant la traverse ? Choix proposés : 54,5 A | 54,5 mA | 18,3 A | 264 A.</p>
+  <ul>
+    <li>Calcul : \(I = \dfrac{120}{2\,200} = 0{,}0545\ \text{A} = 54{,}5\ \text{mA}\). C'est la bonne réponse.</li>
+    <li>54,5 A : le préfixe k a été oublié (120 ÷ 2,2).</li>
+    <li>18,3 A : la division a été faite à l'envers (2&nbsp;200 ÷ 120).</li>
+    <li>264 A : multiplication au lieu de division (120 × 2,2).</li>
+  </ul>
+  <p>Vérification rapide : des volts divisés par des kilohms donnent des milliampères.</p>
+</div>
+
+<h2>7. Est-ce que ce sera au test ?</h2>
+<div class="box def"><span class="label">Réponse honnête</span>
+  <p>Personne ne connaît les questions à l'avance, et ce site ne contient aucune question réelle. Voici seulement ce qu'on peut dire avec bon sens.</p>
+  <ul>
+    <li><strong>Les préfixes</strong> (mA, kΩ, MΩ, kV, kW, kWh, µF) font partie de presque tous les calculs d'électricité. Il faut s'attendre à en croiser, même dans une question qui porte sur autre chose.</li>
+    <li><strong>La notation scientifique avec de grands exposants</strong> (comme \(10^{18}\)) est plus rare dans un test de métier. On la croise surtout dans la définition du coulomb et dans les résistivités des matériaux (voir la page <a href="base.html">Électricité de base</a>).</li>
+  </ul>
+</div>
+<table class="tight">
+  <tr><th>Notion</th><th>Où elle sert</th><th>Priorité de révision</th></tr>
+  <tr><td>Convertir mA, kΩ, kV, kW</td><td>Loi d'Ohm, puissance, énergie, transformateurs</td><td><strong>Élevée</strong></td></tr>
+  <tr><td>Passer de W à kW et de Wh à kWh</td><td>Énergie et comptage</td><td><strong>Élevée</strong></td></tr>
+  <tr><td>µF, mH</td><td>Condensateurs, bobines, alternatif</td><td>Moyenne</td></tr>
+  <tr><td>Touche EE et parenthèses</td><td>Tous les calculs à la calculatrice</td><td>Moyenne</td></tr>
+  <tr><td>Grands exposants (\(10^{18}\), \(10^{-8}\))</td><td>Coulomb, résistivité</td><td>Faible</td></tr>
+</table>
+<p class="small">Les priorités de ce tableau sont un conseil d'étude, pas une information sur le contenu du test.</p>
+
+<h2>À retenir</h2>
+<div class="box key"><span class="label">L'essentiel</span>
+  <ul>
+    <li>Unités : volt (V), ampère (A), ohm (Ω), watt (W), hertz (Hz), farad (F), henry (H), coulomb (C), voltampère (VA), var.</li>
+    <li>Énergie : joule, Wh et kWh. 1 kWh = 3&nbsp;600&nbsp;000 J = 3,6 MJ.</li>
+    <li>Préfixes : G (\(10^{9}\)), M (\(10^{6}\)), k (\(10^{3}\)), m (\(10^{-3}\)), µ (\(10^{-6}\)), n (\(10^{-9}\)), p (\(10^{-12}\)). Chaque marche vaut 1000.</li>
+    <li>Préfixe plus petit, nombre plus grand : 0,035 A = 35 mA.</li>
+    <li>Méthode sûre : unités de base, calcul, puis préfixe lisible.</li>
+    <li>Raccourcis : V ÷ kΩ = mA ; V ÷ MΩ = µA ; mA × kΩ = V ; kV × A = kVA.</li>
+    <li>Puissances de 10 : on additionne les exposants pour multiplier, on les soustrait pour diviser.</li>
+    <li>Sur la calculatrice, la touche EE remplace « × 10 exposant ».</li>
+  </ul>
+</div>
+<div class="box trap"><span class="label">Pièges fréquents</span>
+  <ul>
+    <li>Confondre m (milli) et M (méga).</li>
+    <li>Oublier le préfixe : taper 12 ÷ 4,7 au lieu de 12 ÷ 4&nbsp;700.</li>
+    <li>Convertir dans le mauvais sens : 35 mA, c'est 0,035 A, pas 35&nbsp;000 A.</li>
+    <li>Taper 10 EE 3 pour \(10^{3}\) : le résultat est dix fois trop grand.</li>
+    <li>Utiliser la touche de soustraction au lieu de la touche de signe pour un exposant négatif.</li>
+    <li>Oublier les parenthèses sous une barre de fraction.</li>
+    <li>Laisser la calculatrice en radians : cos 60 doit donner 0,5.</li>
+    <li>Arrondir en cours de calcul au lieu d'arrondir à la fin.</li>
+  </ul>
+</div>
+
+<section class="quiz" data-bank="unites"></section>
+<div class="prevnext"><a class="prev" href="index.html">← Accueil</a><a class="next" href="base.html">Électricité de base →</a></div>
+</article>
+</main>
+<footer class="footer">Site d'étude personnel et non officiel : il n'est pas produit par Hydro-Québec et ne contient aucune question réelle du test. Les questions et les exemples ont été écrits pour s'exercer sur les sujets annoncés.</footer>
+<script defer src="assets/katex/katex.min.js?v=f4e1ebdc"></script>
+<script defer src="assets/katex/contrib/auto-render.min.js?v=71052e38"></script>
+<script defer src="assets/app.js?v=61dab5d2"></script>
+<script defer src="assets/draw.js?v=ca488361"></script>
+<script defer src="assets/bank.js?v=1a2737bc"></script>
+<script defer src="assets/figs-unites.js?v=98dcf32d"></script>
+</body>
+</html>

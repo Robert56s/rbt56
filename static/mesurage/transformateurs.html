@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Les transformateurs | Préparation Installateur Mesurage</title>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<link rel="stylesheet" href="assets/style.css?v=94dbb397">
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="index.html">Installateur Mesurage <small>Préparation au test technique</small></a>
+  <nav>
+    <a href="index.html">Accueil</a>
+    <a href="index.html#theorie" class="active">Théorie</a>
+    <a href="pratique.html">Exercices</a>
+    <a href="tests.html">Tests pratiques</a>
+    <a href="formules.html">Formules</a>
+    <button class="theme-btn" type="button">Thème</button>
+  </nav>
+</header>
+<nav class="subnav" aria-label="Sujets de théorie"><a href="unites.html"><span class="n">0</span>Unités</a><a href="base.html"><span class="n">1</span>Base</a><a href="calculs.html"><span class="n">2</span>Calculs</a><a href="alternatif.html"><span class="n">3</span>Alternatif</a><a href="electrotechnique.html"><span class="n">4</span>Électrotechnique</a><a href="transformateurs.html" class="active"><span class="n">5</span>Transformateurs</a><a href="triphase.html"><span class="n">6</span>Mono et triphasé</a><a href="mesure.html"><span class="n">7</span>Mesure et comptage</a><a href="securite.html"><span class="n">8</span>Sécurité</a><a href="schemas.html"><span class="n">9</span>Schémas</a></nav>
+<main class="layout">
+<aside class="toc"></aside>
+<article class="content">
+<div class="course-hero">
+  <div class="kicker">Théorie | Sujet 5</div>
+  <h1>Les transformateurs</h1>
+  <p class="meta">Sujet annoncé dans l'invitation : « Transformateurs » | Lecture : environ 25 minutes</p>
+  <p><span class="pill accent">Rapport de transformation</span><span class="pill accent">Abaisseur et élévateur</span><span class="pill accent">kVA et courant nominal</span><span class="pill accent">Pertes et rendement</span><span class="pill accent">120/240 V</span><span class="pill accent">TC et TT</span><span class="pill accent">Multiplicateur</span></p>
+  <p class="small">But de la page : calculer une tension, un courant ou un nombre de spires avec le rapport de transformation, trouver un courant nominal à partir des kVA, expliquer d'où vient le 120/240 V d'une maison, et connaître les transformateurs de mesure (TC et TT) qui alimentent les compteurs, avec leurs deux règles de sécurité.</p>
+</div>
+
+<h2>1. Rôle et principe</h2>
+<p>Un transformateur change le niveau de la tension en courant alternatif : il l'abaisse ou il l'élève, sans changer la fréquence. La puissance reste presque la même des deux côtés : si la tension baisse, le courant monte dans la même proportion.</p>
+<p>C'est ce qui rend le réseau possible. On transporte l'énergie à haute tension, donc avec peu de courant et peu de pertes dans les fils, puis on abaisse la tension près des clients.</p>
+<div class="box ex"><span class="label">Exemple : pourquoi on distribue à tension élevée</span>
+  <p>Pour acheminer 100 kW sous 14&nbsp;400 V, il faut \(I = \dfrac{100\,000}{14\,400} = 6{,}9\ \text{A}\).</p>
+  <p>Sous 240 V, il faudrait \(I = \dfrac{100\,000}{240} = 417\ \text{A}\), soit 60 fois plus.</p>
+  <p>Les pertes dans un fil valent \(R \times I^2\) : avec 60 fois moins de courant, le même fil perd 3&nbsp;600 fois moins de puissance.</p>
+</div>
+<h3>Construction</h3>
+<ul>
+  <li><strong>Le primaire</strong> est l'enroulement qui <strong>reçoit</strong> l'énergie de la source.</li>
+  <li><strong>Le secondaire</strong> est l'enroulement qui la <strong>fournit</strong> à la charge.</li>
+  <li><strong>Le noyau</strong> guide le flux magnétique d'un enroulement à l'autre. Il est fait de tôles de fer minces, isolées entre elles et empilées : un noyau <strong>feuilleté</strong> limite les courants de Foucault, donc l'échauffement.</li>
+</ul>
+<figure class="fig wide" data-fig="transfo-principe"><figcaption>Le courant alternatif du primaire crée un flux variable dans le noyau. Ce flux traverse le secondaire et y induit une tension. Ici, le secondaire a deux fois moins de spires que le primaire : sa tension est deux fois plus basse.</figcaption></figure>
+<p>C'est l'<strong>induction mutuelle</strong> : le primaire et le secondaire n'ont aucun lien électrique, l'énergie passe de l'un à l'autre par le champ magnétique (voir la page <a href="electrotechnique.html">Électrotechnique de base</a>).</p>
+<div class="box warn"><span class="label">Seulement en courant alternatif</span>
+  <p>Sans variation de flux, il n'y a pas de tension induite. Alimenté en courant continu, un transformateur ne fournit rien au secondaire, et son primaire, qui n'a plus que la faible résistance du fil pour limiter le courant, surchauffe.</p>
+</div>
+
+<h2>2. Le rapport de transformation</h2>
+<p>Chaque spire du primaire et du secondaire est traversée par le même flux : la tension par spire est la même des deux côtés. La tension de chaque enroulement est donc proportionnelle à son nombre de spires. Le courant, lui, fait l'inverse.</p>
+<div class="formula"><div class="title">Rapport de transformation</div>
+\[a = \frac{N_1}{N_2} = \frac{U_1}{U_2} = \frac{I_2}{I_1}\]
+<div class="cond">\(N\) : nombre de spires | \(U\) : tension (certains manuels écrivent \(E\) ou \(V\)) | \(I\) : courant | indice 1 : primaire | indice 2 : secondaire</div>
+</div>
+<table class="tight">
+  <tr><th>Type</th><th>Spires</th><th>Rapport</th><th>Tension au secondaire</th><th>Courant au secondaire</th></tr>
+  <tr><td><strong>Abaisseur</strong></td><td>Moins de spires au secondaire</td><td>\(a \gt 1\)</td><td>Plus basse</td><td>Plus fort</td></tr>
+  <tr><td><strong>Élévateur</strong></td><td>Plus de spires au secondaire</td><td>\(a \lt 1\)</td><td>Plus haute</td><td>Plus faible</td></tr>
+</table>
+<p>Le côté basse tension porte le plus fort courant : c'est lui qui a le plus gros fil. Le côté haute tension a beaucoup de spires de fil fin.</p>
+<div class="box ex"><span class="label">Exemple : de 600 V à 120 V</span>
+  <ol>
+    <li>Rapport : \(a = \dfrac{U_1}{U_2} = \dfrac{600}{120} = 5\). C'est un abaisseur.</li>
+    <li>Si le primaire a 500 spires, le secondaire en a \(N_2 = \dfrac{N_1}{a} = \dfrac{500}{5} = 100\).</li>
+    <li>Une charge tire 12 A au secondaire. Courant au primaire : \(I_1 = \dfrac{I_2}{a} = \dfrac{12}{5} = 2{,}4\ \text{A}\).</li>
+  </ol>
+  <p>Vérification : \(600 \times 2{,}4 = 1\,440\ \text{VA}\) au primaire et \(120 \times 12 = 1\,440\ \text{VA}\) au secondaire.</p>
+</div>
+<p>Certains manuels définissent le rapport dans l'autre sens (\(N_2 \div N_1\)). Dans une question, repère simplement le côté qui a le plus de spires : c'est toujours celui de la plus haute tension et du plus faible courant.</p>
+<div class="widget" data-widget="transfo"></div>
+
+<h2>3. La puissance d'un transformateur</h2>
+<p>Un transformateur ne crée pas d'énergie. Si on néglige ses pertes (transformateur idéal), la puissance qui entre est celle qui sort.</p>
+<div class="formula"><div class="title">Transformateur idéal</div>
+\[S_1 = S_2 \qquad U_1 \times I_1 = U_2 \times I_2\]
+<div class="cond">\(S\) : puissance apparente, en voltampères (VA) ou en kilovoltampères (kVA)</div>
+</div>
+<p>La puissance nominale d'un transformateur est donnée en <strong>kVA</strong>, et non en kW. La raison : son échauffement dépend de la tension qu'on lui applique et du courant qui le traverse, quel que soit le facteur de puissance de la charge. Les kVA disent donc directement quel courant il peut fournir.</p>
+<div class="formula"><div class="title">Courant nominal</div>
+\[\text{Monophasé : } I = \frac{S}{U} \qquad \text{Triphasé : } I = \frac{S}{\sqrt{3} \times U_L}\]
+<div class="cond">\(S\) en VA (1 kVA = 1&nbsp;000 VA) | \(U\) : tension de l'enroulement | \(U_L\) : tension de ligne, entre deux phases | \(\sqrt{3} = 1{,}732\)</div>
+</div>
+<div class="box ex"><span class="label">Exemple : transformateur monophasé de 25 kVA, 14&nbsp;400 V / 240 V</span>
+  <p>Primaire : \(I_1 = \dfrac{25\,000}{14\,400} = 1{,}74\ \text{A}\).</p>
+  <p>Secondaire : \(I_2 = \dfrac{25\,000}{240} = 104\ \text{A}\).</p>
+</div>
+<div class="box ex"><span class="label">Exemple : transformateur triphasé de 75 kVA, 600 V / 208 V</span>
+  <p>Côté 600 V : \(I = \dfrac{75\,000}{1{,}732 \times 600} = 72{,}2\ \text{A}\).</p>
+  <p>Côté 208 V : \(I = \dfrac{75\,000}{1{,}732 \times 208} = 208\ \text{A}\).</p>
+</div>
+
+<h2>4. Pertes et rendement</h2>
+<p>Un vrai transformateur chauffe un peu : une petite partie de la puissance absorbée est perdue.</p>
+<table class="tight">
+  <tr><th></th><th>Pertes fer</th><th>Pertes cuivre</th></tr>
+  <tr><td><strong>Où</strong></td><td>Dans le noyau</td><td>Dans les enroulements</td></tr>
+  <tr><td><strong>Cause</strong></td><td>Hystérésis et courants de Foucault</td><td>Effet Joule dans la résistance du fil : \(R \times I^2\)</td></tr>
+  <tr><td><strong>Variation</strong></td><td>À peu près <strong>constantes</strong> dès que le transformateur est sous tension, même à vide</td><td>Elles <strong>varient avec la charge</strong> : courant doublé, pertes multipliées par quatre</td></tr>
+  <tr><td><strong>Comment on les réduit</strong></td><td>Tôles minces, feuilletées et isolées</td><td>Fil de plus grosse section</td></tr>
+</table>
+<figure class="fig wide" data-fig="pertes-transfo"><figcaption>Bilan de puissance : ce qui sort est ce qui entre, moins les pertes.</figcaption></figure>
+<div class="formula"><div class="title">Rendement</div>
+\[\eta = \frac{P_2}{P_1} \times 100\ \% \qquad P_1 = P_2 + \text{pertes}\]
+<div class="cond">\(P_1\) : puissance absorbée au primaire | \(P_2\) : puissance fournie au secondaire</div>
+</div>
+<div class="box ex"><span class="label">Exemple</span>
+  <p>Un transformateur absorbe 10 kW et en fournit 9,7 kW : \(\eta = \dfrac{9{,}7}{10} \times 100 = 97\ \%\). Les pertes sont de 0,3 kW, soit 300 W.</p>
+</div>
+<p>Le transformateur n'a aucune pièce en mouvement : son rendement est très élevé, de l'ordre de 95 à 99 %. La chaleur des pertes doit quand même être évacuée : par l'air (transformateur de <strong>type sec</strong>) ou par un bain d'<strong>huile</strong> isolante, comme dans les transformateurs installés sur les poteaux.</p>
+
+<h2>5. Le transformateur de distribution</h2>
+<p>C'est le transformateur installé sur le poteau, ou sur un socle au sol quand le réseau est souterrain. Il alimente souvent plusieurs maisons.</p>
+<ul>
+  <li><strong>Son primaire</strong> est branché entre une phase de la ligne moyenne tension et le neutre : 14&nbsp;400 V. C'est la tension phase-neutre d'un réseau de 25 kV (\(25 \div 1{,}732 = 14{,}4\ \text{kV}\)).</li>
+  <li><strong>Son secondaire</strong> fournit 240 V. Une <strong>prise médiane</strong>, au milieu de l'enroulement, est reliée au neutre et mise à la terre.</li>
+  <li>Résultat : <strong>120 V</strong> entre chaque ligne et le neutre, <strong>240 V</strong> entre les deux lignes. C'est le branchement monophasé à trois fils 120/240 V des maisons (voir la page <a href="triphase.html">Circuits monophasés et triphasés</a>).</li>
+</ul>
+<figure class="fig wide" data-fig="transfo-distribution"><figcaption>Le secondaire est coupé en deux moitiés de 120 V par la prise médiane. Entre L1 et L2, on retrouve l'enroulement complet : 240 V.</figcaption></figure>
+<div class="box ex"><span class="label">Exemple</span>
+  <p>Rapport de transformation : \(a = \dfrac{14\,400}{240} = 60\).</p>
+  <p>Si les maisons tirent ensemble 100 A sous 240 V, le primaire ne porte que \(I_1 = \dfrac{100}{60} = 1{,}67\ \text{A}\).</p>
+</div>
+
+<h2>6. Polarité et bornes</h2>
+<p>Les bornes d'un transformateur sont repérées par des lettres :</p>
+<ul>
+  <li><strong>H1, H2</strong> : les bornes du côté <strong>haute tension</strong> ;</li>
+  <li><strong>X1, X2</strong> : les bornes du côté <strong>basse tension</strong>. Avec une prise médiane, on a X1, X2 et X3, et X2 est la prise du milieu.</li>
+</ul>
+<p>La <strong>polarité</strong> indique quelles bornes vont ensemble : H1 et X1 ont la même polarité au même instant. Sur un schéma, on le montre par un <strong>point</strong> à côté de chaque enroulement. Quand le courant entre par la borne marquée du primaire, il sort par la borne marquée du secondaire.</p>
+<figure class="fig" data-fig="polarite"><figcaption>Les points marquent les bornes de même polarité, ici H1 et X1 : au même instant, elles sont positives ensemble, puis négatives ensemble.</figcaption></figure>
+<p>La polarité compte chaque fois qu'on relie des transformateurs entre eux (en parallèle ou en groupe triphasé), et surtout pour les <strong>transformateurs de mesure</strong> : si un transformateur de courant est raccordé à l'envers, le compteur reçoit un courant inversé et son enregistrement est faussé.</p>
+
+<h2>7. Les transformateurs de mesure</h2>
+<p>On ne branche pas un compteur directement sur 14&nbsp;400 V, ni sur une ligne de 800 A. Un transformateur de mesure ramène la tension ou le courant à une valeur faible et normalisée, et il isole l'appareil de la ligne. Il en existe deux sortes.</p>
+<figure class="fig wide" data-fig="tc-tt"><figcaption>Le TC se place en série avec la ligne, le TT en parallèle. Le secondaire de chacun est mis à la terre en un point, par sécurité.</figcaption></figure>
+<h3>Le transformateur de courant (TC)</h3>
+<ul>
+  <li>Son primaire est <strong>en série</strong> avec la ligne. Souvent, c'est le conducteur lui-même qui traverse un tore : il forme une seule spire.</li>
+  <li>Son secondaire est normalisé à <strong>5 A</strong> quand la ligne porte le courant nominal du primaire.</li>
+  <li>Le rapport s'écrit 200:5. On le calcule : \(200 \div 5 = 40\).</li>
+</ul>
+<div class="box ex"><span class="label">Exemple</span>
+  <p>Avec un TC de 200:5, l'ampèremètre branché au secondaire indique 3,2 A. Courant réel dans la ligne : \(3{,}2 \times 40 = 128\ \text{A}\).</p>
+</div>
+<div class="box warn"><span class="label">Ne jamais ouvrir le secondaire d'un TC en service</span>
+  <p>Le courant du primaire est imposé par la ligne. Si le secondaire est ouvert, plus rien ne s'oppose au flux dans le noyau : une <strong>tension dangereuse</strong> apparaît aux bornes du secondaire et le TC peut être endommagé.</p>
+  <p>Avant de débrancher l'appareil, on <strong>court-circuite</strong> donc le secondaire du TC.</p>
+</div>
+<h3>Le transformateur de tension (TT)</h3>
+<p>On l'appelle aussi transformateur de potentiel (TP).</p>
+<ul>
+  <li>Son primaire est <strong>en parallèle</strong> sur la ligne, comme un voltmètre.</li>
+  <li>Son secondaire fournit généralement <strong>120 V</strong> quand la ligne est à sa tension nominale.</li>
+  <li>Exemple de rapport : 14&nbsp;400:120, soit \(14\,400 \div 120 = 120\). Si le voltmètre indique 118 V, la ligne est à \(118 \times 120 = 14\,160\ \text{V}\).</li>
+</ul>
+<div class="box warn"><span class="label">Ne jamais court-circuiter le secondaire d'un TT</span>
+  <p>C'est une source de tension : un court-circuit y ferait circuler un courant énorme. Le TT est protégé par des <strong>fusibles</strong>.</p>
+</div>
+<table class="tight">
+  <tr><th></th><th>Transformateur de courant (TC)</th><th>Transformateur de tension (TT)</th></tr>
+  <tr><td><strong>Il réduit</strong></td><td>Le courant</td><td>La tension</td></tr>
+  <tr><td><strong>Primaire</strong></td><td>En série avec la ligne</td><td>En parallèle sur la ligne</td></tr>
+  <tr><td><strong>Secondaire normalisé</strong></td><td>5 A</td><td>120 V</td></tr>
+  <tr><td><strong>Il alimente</strong></td><td>Ampèremètre, circuit de courant du compteur</td><td>Voltmètre, circuit de tension du compteur</td></tr>
+  <tr><td><strong>Règle de sécurité</strong></td><td>Ne jamais <strong>ouvrir</strong> le secondaire : on le court-circuite avant d'intervenir</td><td>Ne jamais <strong>court-circuiter</strong> le secondaire : il est protégé par des fusibles</td></tr>
+  <tr><td><strong>Exemple de rapport</strong></td><td>200:5, soit 40</td><td>14&nbsp;400:120, soit 120</td></tr>
+</table>
+<h3>Le multiplicateur du compteur</h3>
+<p>Un compteur branché sur des transformateurs de mesure ne voit qu'une fraction du courant et de la tension réels. Pour obtenir l'énergie réelle, on multiplie ce qu'il enregistre par un <strong>multiplicateur</strong>.</p>
+<div class="formula"><div class="title">Multiplicateur</div>
+\[\text{Multiplicateur} = \text{rapport du TC} \times \text{rapport du TT}\]
+<div class="cond">Avec seulement des TC (le compteur est alors branché directement sur la tension), le multiplicateur est le rapport du TC.</div>
+</div>
+<div class="box ex"><span class="label">Exemples</span>
+  <p>TC de 200:5 et TT de 14&nbsp;400:120 : multiplicateur \(= 40 \times 120 = 4\,800\). Si le compteur enregistre 2,5 kWh, l'énergie réelle est \(2{,}5 \times 4\,800 = 12\,000\ \text{kWh}\).</p>
+  <p>TC de 400:5, sans TT : multiplicateur \(= 400 \div 5 = 80\).</p>
+</div>
+<div class="widget" data-widget="tc"></div>
+
+<h2>8. Autres types de transformateurs</h2>
+<table class="tight">
+  <tr><th>Type</th><th>Particularité</th><th>Utilisation</th></tr>
+  <tr><td><strong>Autotransformateur</strong></td><td>Un seul enroulement, avec une prise. Plus petit et moins cher, mais <strong>aucune isolation</strong> entre le primaire et le secondaire.</td><td>Adapter une tension voisine (600 V vers 480 V), démarrage de moteurs</td></tr>
+  <tr><td><strong>Transformateur d'isolement</strong></td><td>Rapport 1:1. Il ne change pas la tension : il sépare un circuit du réseau.</td><td>Sécurité, appareils sensibles</td></tr>
+  <tr><td><strong>Transformateur triphasé</strong></td><td>Trois primaires et trois secondaires, couplés en étoile (Y) ou en triangle (Δ).</td><td>Immeubles et industries, par exemple 600 V vers 120/208 V (voir <a href="triphase.html">Monophasé et triphasé</a>)</td></tr>
+</table>
+<figure class="fig wide" data-fig="autotransfo"><figcaption>Dans un autotransformateur, une partie de l'enroulement sert à la fois à l'entrée et à la sortie : un défaut peut amener la pleine tension du primaire du côté secondaire.</figcaption></figure>
+
+<h2>À retenir</h2>
+<div class="box key"><span class="label">L'essentiel</span>
+  <ul>
+    <li>Un transformateur ne fonctionne qu'en courant alternatif. Il change la tension et le courant, pas la fréquence ni (presque) la puissance.</li>
+    <li>\(a = N_1 / N_2 = U_1 / U_2 = I_2 / I_1\). Plus de spires : plus de tension, moins de courant.</li>
+    <li>Puissance nominale en kVA. Courant nominal : \(I = S / U\) en monophasé, \(I = S / (1{,}732 \times U_L)\) en triphasé.</li>
+    <li>Pertes fer : dans le noyau, constantes. Pertes cuivre : dans les enroulements, elles varient avec le carré du courant. Rendement de 95 à 99 %.</li>
+    <li>Transformateur de distribution : 14&nbsp;400 V au primaire, 240 V au secondaire avec prise médiane au neutre : 120/240 V. Rapport de 60.</li>
+    <li>Bornes H du côté haute tension, bornes X du côté basse tension. H1 et X1 ont la même polarité.</li>
+    <li>TC : en série, secondaire de 5 A, on ne l'ouvre jamais. TT : en parallèle, secondaire de 120 V, on ne le court-circuite jamais.</li>
+    <li>Multiplicateur du compteur = rapport du TC × rapport du TT.</li>
+  </ul>
+</div>
+<div class="box trap"><span class="label">Pièges fréquents</span>
+  <ul>
+    <li>Inverser le rapport des courants : le courant est le plus fort du côté de la tension la plus <strong>basse</strong>.</li>
+    <li>Lire 200:5 comme un rapport de 200 : le rapport est \(200 \div 5 = 40\).</li>
+    <li>Oublier de convertir les kVA en VA avant de diviser par la tension.</li>
+    <li>Oublier le \(\sqrt{3}\) dans le courant d'un transformateur triphasé.</li>
+    <li>Confondre les deux règles : le TC ne s'<strong>ouvre</strong> pas, le TT ne se <strong>court-circuite</strong> pas.</li>
+    <li>Croire qu'un transformateur fonctionne en courant continu.</li>
+    <li>Confondre primaire et haute tension : le primaire est le côté de la source. Dans un élévateur, c'est le côté basse tension.</li>
+  </ul>
+</div>
+
+<section class="quiz" data-bank="transformateurs"></section>
+<div class="prevnext"><a class="prev" href="electrotechnique.html">← Électrotechnique de base</a><a class="next" href="triphase.html">Circuits monophasés et triphasés →</a></div>
+</article>
+</main>
+<footer class="footer">Site d'étude personnel et non officiel : il n'est pas produit par Hydro-Québec et ne contient aucune question réelle du test. Les questions et les exemples ont été écrits pour s'exercer sur les sujets annoncés.</footer>
+<script defer src="assets/katex/katex.min.js?v=f4e1ebdc"></script>
+<script defer src="assets/katex/contrib/auto-render.min.js?v=71052e38"></script>
+<script defer src="assets/app.js?v=61dab5d2"></script>
+<script defer src="assets/draw.js?v=ca488361"></script>
+<script defer src="assets/bank.js?v=1a2737bc"></script>
+<script defer src="assets/figs-transformateurs.js?v=ebaebf96"></script>
+</body>
+</html>
