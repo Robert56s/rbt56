@@ -4,6 +4,7 @@
      S.comp('R', 100, 40, 220, 40, { label: 'R1', val: '10 Ω' });   // composant entre deux points (horizontal ou vertical)
      S.wire([[220, 40], [300, 40], [300, 160]]);                    // fil
      return S;                                                       // une figure renvoie S (ou S.node)
+   Le cadre du dessin s'agrandit tout seul si un texte dépasse (voir « Cadre ajusté au contenu ») : inutile de prévoir des marges exactes.
    Classes de couleur (thème clair/sombre automatique) : voir « Dessins SVG » dans style.css. */
 (function () {
   'use strict';
@@ -24,6 +25,42 @@
     for (const id in colors) html += `<marker id="${id}" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0.8 L9,5 L0,9.2 z" style="fill:var(${colors[id]})"/></marker>`;
     svg.innerHTML = html + '</defs>';
     document.body.insertBefore(svg, document.body.firstChild);
+  }
+
+  /* ---------- Cadre ajusté au contenu ----------
+     Une étiquette posée près d'un bord (« 160 V » à gauche d'une source, par exemple) peut dépasser du cadre du dessin.
+     Le navigateur coupe alors ce qui dépasse et on lit « 60 V ». Pour que cela ne puisse plus arriver, chaque dessin
+     mesure ses textes et agrandit son cadre (viewBox) jusqu'à tout contenir. La mesure passe par un canevas :
+     elle fonctionne même quand le dessin n'est pas encore affiché, avec la police réelle de l'appareil. */
+  const FONT_STACK = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif';   // même pile que svg.hq text dans style.css
+  let measureCtx = null;
+  function textWidth(str, size, bold, italic) {
+    try {
+      if (!measureCtx) measureCtx = document.createElement('canvas').getContext('2d');
+      measureCtx.font = (italic ? 'italic ' : '') + (bold ? '700 ' : '') + size + 'px ' + FONT_STACK;
+      return measureCtx.measureText(str).width;
+    } catch (e) { return String(str).length * size * 0.64; }
+  }
+  // lignes d'un <text> : un <tspan> qui porte un attribut x commence une nouvelle ligne, les autres continuent la ligne en cours
+  function textLines(t) {
+    const lines = [''];
+    Array.prototype.forEach.call(t.childNodes, n => {
+      if (n.nodeType === 1 && n.getAttribute('x') != null && lines[lines.length - 1] !== '') lines.push('');
+      lines[lines.length - 1] += n.textContent;
+    });
+    return lines;
+  }
+  const mul = (p, q) => ({ a: p.a * q.a + p.c * q.b, b: p.b * q.a + p.d * q.b, c: p.a * q.c + p.c * q.d, d: p.b * q.c + p.d * q.d, e: p.a * q.e + p.c * q.f + p.e, f: p.b * q.e + p.d * q.f + p.f });
+  // transformation cumulée (translate, rotate...) entre la racine du dessin et un élément
+  function matrixTo(root, node) {
+    const chain = [];
+    for (let n = node; n && n !== root; n = n.parentNode) chain.push(n);
+    let m = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
+    for (let i = chain.length - 1; i >= 0; i--) {
+      const list = chain[i].transform && chain[i].transform.baseVal;
+      for (let j = 0; list && j < list.numberOfItems; j++) m = mul(m, list.getItem(j).matrix);
+    }
+    return m;
   }
 
   /* Symboles : dessinés le long de l'axe x local, centrés en m. len = longueur occupée, h = demi-hauteur (pour placer l'étiquette). */
@@ -68,9 +105,48 @@
     constructor(w, h, label) {
       ensureDefs();
       this.w = w; this.h = h;
-      this.node = document.createElementNS(NS, 'svg');
-      set(this.node, { viewBox: `0 0 ${w} ${h}`, width: w, height: h, class: 'hq', role: 'img', 'aria-label': label || null });
-      this.parent = this.node;
+      this._node = document.createElementNS(NS, 'svg');
+      set(this._node, { viewBox: `0 0 ${w} ${h}`, width: w, height: h, class: 'hq', role: 'img', 'aria-label': label || null });
+      this.parent = this._node;
+      this._box = [0, 0, w, h];
+      // un texte ajouté ou modifié après coup (animation, démo) relance l'ajustement du cadre
+      if (typeof MutationObserver === 'function') {
+        try { new MutationObserver(() => this.fit()).observe(this._node, { childList: true, characterData: true, subtree: true }); } catch (e) { /* sans surveillance : fit() reste appelé par node */ }
+      }
+    }
+    // le dessin terminé : son cadre est ajusté au moment où on le prend pour l'afficher
+    get node() { this.fit(); return this._node; }
+    /* Agrandit le cadre pour contenir tous les textes (jamais de rétrécissement, pour ne pas faire sauter une animation). */
+    fit() {
+      try {
+        const root = this._node, box = this._box;
+        const texts = root.querySelectorAll('text');
+        for (let i = 0; i < texts.length; i++) {
+          const t = texts[i], cls = ' ' + (t.getAttribute('class') || '') + ' ';
+          const size = parseFloat(t.style && t.style.fontSize) || (cls.indexOf(' xs ') >= 0 ? 10 : cls.indexOf(' sm ') >= 0 ? 11.5 : cls.indexOf(' lg ') >= 0 ? 15 : 13);
+          const lines = textLines(t);
+          let w = 0;
+          lines.forEach(ln => { if (ln) w = Math.max(w, textWidth(ln, size, cls.indexOf(' b ') >= 0, cls.indexOf(' it ') >= 0)); });
+          if (!w) continue;
+          const x = parseFloat(t.getAttribute('x')) || 0, y = parseFloat(t.getAttribute('y')) || 0;
+          const anchor = t.getAttribute('text-anchor') || 'start';
+          const left = anchor === 'middle' ? x - w / 2 : anchor === 'end' ? x - w : x;
+          const central = t.getAttribute('dominant-baseline') === 'central';
+          const top = central ? y - size * 0.62 : y - size * 0.9;
+          const bottom = central ? y + size * 0.62 : y + size * 0.3 + (lines.length - 1) * size * 1.25;
+          const m = matrixTo(root, t);
+          [[left, top], [left + w, top], [left, bottom], [left + w, bottom]].forEach(pt => {
+            const X = m.a * pt[0] + m.c * pt[1] + m.e, Y = m.b * pt[0] + m.d * pt[1] + m.f;
+            if (X - 3 < box[0]) box[0] = Math.floor(X - 3);
+            if (Y - 2 < box[1]) box[1] = Math.floor(Y - 2);
+            if (X + 3 > box[2]) box[2] = Math.ceil(X + 3);
+            if (Y + 2 > box[3]) box[3] = Math.ceil(Y + 2);
+          });
+        }
+        const vb = `${box[0]} ${box[1]} ${box[2] - box[0]} ${box[3] - box[1]}`;
+        if (root.getAttribute('viewBox') !== vb) set(root, { viewBox: vb, width: box[2] - box[0], height: box[3] - box[1], 'data-cadre': this.w + ' x ' + this.h });
+      } catch (e) { /* mesure impossible : le dessin garde son cadre */ }
+      return this;
     }
     add(tag, attrs, text) {
       const e = set(document.createElementNS(NS, tag), attrs || {});

@@ -15,8 +15,8 @@
     { lo: 1, hi: 5, col: '--ok', op: 0.28, range: 'Environ 1 à 5 mA', txt: 'perception, picotement' },
     { lo: 5, hi: 10, col: '--warn', op: 0.2, range: 'Environ 5 à 10 mA', txt: 'choc léger ; un DDFT déclenche vers 5 mA' },
     { lo: 10, hi: 30, col: '--warn', op: 0.48, range: 'Environ 10 à 30 mA', txt: 'contraction musculaire, on ne peut plus lâcher prise' },
-    { lo: 30, hi: 75, col: '--bad', op: 0.22, range: 'Environ 30 à 75 mA', txt: 'difficulté à respirer' },
-    { lo: 75, hi: 2000, col: '--bad', op: 0.46, range: '75 mA et plus', txt: 'risque de fibrillation ventriculaire' },
+    { lo: 30, hi: 50, col: '--bad', op: 0.22, range: 'Environ 30 à 50 mA', txt: 'difficulté à respirer' },
+    { lo: 50, hi: 2000, col: '--bad', op: 0.46, range: '50 mA et plus', txt: 'risque d’arrêt cardiaque (fibrillation ventriculaire)' },
     { lo: 2000, hi: 10000, col: '--bad', op: 0.78, range: 'Plusieurs ampères', txt: 'brûlures graves et arrêt cardiaque' }
   ];
 
@@ -37,7 +37,7 @@
 
   /* ---------- Figure : échelle des effets du courant ---------- */
   HQ.figs['echelle-effets'] = function () {
-    const S = HQ.S(760, 224, 'Échelle logarithmique du courant qui traverse le corps, de 0,1 mA à 10 A : perception vers 1 mA, choc léger et seuil d’un DDFT vers 5 mA, impossibilité de lâcher prise de 10 à 20 mA, difficulté à respirer de 30 à 50 mA, fibrillation ventriculaire à partir de 75 à 100 mA, brûlures graves et arrêt cardiaque à plusieurs ampères');
+    const S = HQ.S(760, 224, 'Échelle logarithmique du courant qui traverse le corps, de 0,1 mA à 10 A : perception vers 1 mA, choc léger et seuil d’un DDFT vers 5 mA, impossibilité de lâcher prise de 10 à 20 mA, difficulté à respirer de 30 à 50 mA, arrêt cardiaque possible (fibrillation ventriculaire) à partir de 50 à 100 mA, brûlures graves et arrêt cardiaque à plusieurs ampères');
     const y = 108, h = 28;
     const sx = drawScale(S, 40, 720, y, h);
     S.text((sx(0.1) + sx(1)) / 2, y + 18, 'rien de ressenti', { cls: 'sm mut' });
@@ -52,7 +52,7 @@
     };
     up(1, 88, 'middle', sx(1), '≈ 1 mA', 'seuil de perception');
     up(14, 88, 'middle', sx(14), '10 à 20 mA', 'on ne peut plus lâcher prise');
-    up(87, 44, 'start', sx(87) - 8, '75 à 100 mA et plus', 'risque de fibrillation ventriculaire');
+    up(70, 44, 'start', sx(70) - 8, '50 à 100 mA et plus', 'risque de fibrillation ventriculaire');
     down(5, 'middle', sx(5), '≈ 5 mA', 'choc léger, seuil d’un DDFT');
     down(39, 'start', sx(39) - 8, '30 à 50 mA', 'difficulté à respirer');
     down(4500, 'end', 738, 'plusieurs ampères', 'brûlures graves, arrêt cardiaque');

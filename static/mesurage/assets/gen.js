@@ -8,6 +8,10 @@
   const clean = v => Number(Number(v).toPrecision(10));
   const u = (v, unit, n) => sig(v, n || 3) + NB + unit;
   const int = v => fr(v, 0);
+  // étape en unité de base avant un résultat écrit avec « kilo » : « 9 006 W = » devant « 9,01 kW »
+  const base = (x, unit) => (Math.abs(Number(Number(x).toPrecision(3))) >= 1000 ? int(x) + NB + unit + ' = ' : '');
+  // montant en dollars, toujours avec deux décimales : 0,60 $ et non 0,6 $
+  const money = v => { const c = Math.round(v * 100); return int(Math.floor(c / 100)) + ',' + String(c % 100).padStart(2, '0') + NB + '$'; };
 
   function def(id, t, name, make, opts) { G[id] = Object.assign({ id, t, name, make, w: 1 }, opts || {}); }
 
@@ -92,7 +96,7 @@
       const U = r.pick([5, 12, 24, 48, 120, 240, 600]), p = r.pick(['k', 'k', 'M']), Rv = r.pick([1.2, 2.2, 4.7, 10, 15, 22, 47, 100]);
       const Ro = Rv * Math.pow(10, PFX[p]), I = U / Ro, f = x => eng(x, 'A');
       return item(`Une tension de ${U}${NB}V est appliquée à une résistance de ${fr(Rv, 2)}${NB}${p}Ω. Quel est le courant ?`, mcq(r, I, [I * 1000, I / 1000, U * Rv, Rv / U], f),
-        `On convertit d'abord : ${fr(Rv, 2)}${NB}${p}Ω = ${int(Ro)}${NB}Ω. Puis I = U ÷ R = ${U} ÷ ${int(Ro)} = <strong>${f(I)}</strong>.`);
+        `On convertit d'abord : ${fr(Rv, 2)}${NB}${p}Ω = ${int(Ro)}${NB}Ω. Puis I = U ÷ R = ${U} ÷ ${int(Ro)} = ${sig(I, 3)}${NB}A = <strong>${f(I)}</strong>. Raccourci : des volts divisés par des ${p === 'k' ? 'kilohms donnent des milliampères' : 'mégohms donnent des microampères'}.`);
     }
     if (k === 1) {
       const Iv = r.pick([2, 5, 10, 20, 25, 40, 50]), Rv = r.pick([1, 1.5, 2.2, 3.3, 4.7, 10]), U = Iv * Rv, f = x => u(x, 'V');
@@ -101,7 +105,7 @@
     }
     const U = r.pick([5, 12, 24, 120]), Iv = r.pick([2, 4, 5, 8, 10, 20, 25, 50]), Rr = U / (Iv / 1000), f = x => eng(x, 'Ω');
     return item(`Sous ${U}${NB}V, un circuit laisse passer ${Iv}${NB}mA. Quelle est sa résistance ?`, mcq(r, Rr, [Rr / 1000, Rr * 1000, U * Iv, Iv / U], f),
-      `${Iv}${NB}mA = ${fr(Iv / 1000, 4)}${NB}A. R = U ÷ I = ${U} ÷ ${fr(Iv / 1000, 4)} = <strong>${f(Rr)}</strong>.`);
+      `${Iv}${NB}mA = ${fr(Iv / 1000, 4)}${NB}A. R = U ÷ I = ${U} ÷ ${fr(Iv / 1000, 4)} = ${base(Rr, 'Ω')}<strong>${f(Rr)}</strong>. Raccourci : des volts divisés par des milliampères donnent des kilohms.`);
   }, { w: 3 });
 
   def('sci-ecrire', 'unites', 'Écrire en notation scientifique', r => {
@@ -111,7 +115,7 @@
     const m = mcqS(r, [f(e), f(-e), f(e + 1), f(e - 1)]);
     const n = Math.abs(e);
     return item(`Comment s'écrit ${fr(x, 9)} en notation scientifique ?`, m,
-      `On déplace la virgule pour ne garder qu'un chiffre devant elle : ${n} rang${n > 1 ? 's' : ''} vers la ${e > 0 ? 'gauche, donc un exposant positif' : 'droite, donc un exposant négatif'}. ${fr(x, 9)} = <strong>${f(e)}</strong>.`);
+      `On déplace la virgule pour obtenir un seul chiffre, différent de zéro, devant elle : ${n} rang${n > 1 ? 's' : ''} vers la ${e > 0 ? 'gauche, donc un exposant positif' : 'droite, donc un exposant négatif'}. ${fr(x, 9)} = <strong>${f(e)}</strong>.`);
   });
 
   def('sci-calcul', 'unites', 'Calculer avec des puissances de 10', r => {
@@ -122,7 +126,7 @@
     if (r() < 0.5) {
       const val = a * b * Math.pow(10, m + n);
       return item(`Calcule ${p(a, m)} × ${p(b, n)}.`, mcq(r, val, [a * b * Math.pow(10, m - n), (a + b) * Math.pow(10, m + n), a * b * Math.pow(10, m + n + 1)], f),
-        `On multiplie les nombres : ${a} × ${b} = ${a * b}. On additionne les exposants : ${sg(m)} + ${sg(n)} = ${ng(m + n)}. Résultat : ${a * b}${NB}×${NB}10${sup(m + n)} = <strong>${f(val)}</strong>.`);
+        `On multiplie les nombres : ${a} × ${b} = ${a * b}. On additionne les exposants : ${sg(m)} + ${sg(n)} = ${ng(m + n)}. Résultat : ${a * b < 10 ? '' : a * b + NB + '×' + NB + '10' + sup(m + n) + ' = '}<strong>${f(val)}</strong>.`);
     }
     const A = a * b, val = a * Math.pow(10, m - n);
     return item(`Calcule ${p(A, m)} ÷ ${p(b, n)}.`, mcq(r, val, [a * Math.pow(10, m + n), a * Math.pow(10, n - m), (A - b) * Math.pow(10, m - n)], f),
@@ -133,7 +137,8 @@
   const RL = [4, 6, 8, 10, 12, 15, 20, 24, 30, 40, 48, 60, 80, 100, 120, 240];
   const UL = [12, 24, 48, 120, 208, 240, 347, 600];
   def('ohm-i', 'base', 'Loi d’Ohm : trouver le courant', r => {
-    const U = r.pick(UL), R = r.pick(RL), I = U / R, f = x => u(x, 'A');
+    // si la résistance tirée a la même valeur que la tension, on la divise par deux : sinon U ÷ R et R ÷ U donneraient tous deux 1
+    const U = r.pick(UL), R0 = r.pick(RL), R = R0 === U ? R0 / 2 : R0, I = U / R, f = x => u(x, 'A');
     return item(`Une résistance de ${R}${NB}Ω est branchée sur une source de ${U}${NB}V. Quel courant la traverse ?`, mcq(r, I, [R / U, U * R, Math.abs(U - R), U + R], f),
       `I = U ÷ R = ${U} ÷ ${R} = <strong>${f(I)}</strong>.`);
   });
@@ -143,7 +148,7 @@
       `U = R × I = ${R} × ${fr(I, 1)} = <strong>${f(U)}</strong>.`);
   });
   def('ohm-r', 'base', 'Loi d’Ohm : trouver la résistance', r => {
-    const U = r.pick(UL), I = r.pick([0.5, 1.5, 2, 2.5, 4, 5, 8, 10, 12, 15]), R = U / I, f = x => u(x, 'Ω');
+    const U = r.pick(UL), I0 = r.pick([0.5, 1.5, 2, 2.5, 4, 5, 8, 10, 12, 15]), I = I0 === U ? I0 / 2 : I0, R = U / I, f = x => u(x, 'Ω');
     return item(`Sous ${U}${NB}V, une charge laisse passer ${fr(I, 1)}${NB}A. Quelle est sa résistance ?`, mcq(r, R, [I / U, U * I, Math.abs(U - I), U + I], f),
       `R = U ÷ I = ${U} ÷ ${fr(I, 1)} = <strong>${f(R)}</strong>.`);
   });
@@ -160,15 +165,15 @@
     const k = r.int(0, 4);
     if (k === 0) {
       const U = r.pick([120, 208, 240, 600]), I = r.pick([2, 5, 8, 10, 12.5, 15, 20]), P = U * I, f = x => eng(x, 'W');
-      return item(`Un appareil branché sur ${U}${NB}V tire ${fr(I, 1)}${NB}A. Quelle est sa puissance ?`, mcq(r, P, [U / I, U + I, P * I, P / 2], f), `P = U × I = ${U} × ${fr(I, 1)} = <strong>${f(P)}</strong>.`);
+      return item(`Un appareil branché sur ${U}${NB}V tire ${fr(I, 1)}${NB}A. Quelle est sa puissance ?`, mcq(r, P, [U / I, U + I, P * I, P / 2], f), `P = U × I = ${U} × ${fr(I, 1)} = ${base(P, 'W')}<strong>${f(P)}</strong>.`);
     }
     if (k === 1) {
       const R = r.pick([5, 8, 10, 12, 20, 25, 50]), I = r.pick([2, 3, 4, 5, 10]), P = R * I * I, f = x => eng(x, 'W');
-      return item(`Quelle puissance dissipe une résistance de ${R}${NB}Ω traversée par ${I}${NB}A ?`, mcq(r, P, [R * I, R * R * I, R / I, 2 * R * I], f), `P = R × I² = ${R} × ${I}² = ${R} × ${I * I} = <strong>${f(P)}</strong>.`);
+      return item(`Quelle puissance dissipe une résistance de ${R}${NB}Ω traversée par ${I}${NB}A ?`, mcq(r, P, [R * I, R * R * I, R / I, 2 * R * I], f), `P = R × I² = ${R} × ${I}² = ${R} × ${I * I} = ${base(P, 'W')}<strong>${f(P)}</strong>.`);
     }
     if (k === 2) {
       const U = r.pick([120, 240, 208, 600]), R = r.pick([10, 12, 16, 20, 24, 30, 48, 60]), P = U * U / R, f = x => eng(x, 'W');
-      return item(`Une résistance de ${R}${NB}Ω est branchée sur ${U}${NB}V. Quelle puissance dissipe-t-elle ?`, mcq(r, P, [U / R, U * R, U * U * R, R / U], f), `P = U² ÷ R = ${U}² ÷ ${R} = ${int(U * U)} ÷ ${R} = <strong>${f(P)}</strong>.`);
+      return item(`Une résistance de ${R}${NB}Ω est branchée sur ${U}${NB}V. Quelle puissance dissipe-t-elle ?`, mcq(r, P, [U / R, U * R, U * U * R, R / U], f), `P = U² ÷ R = ${U}² ÷ ${R} = ${int(U * U)} ÷ ${R} = ${base(P, 'W')}<strong>${f(P)}</strong>.`);
     }
     const P = r.pick(PL), U = r.pick([120, 240, 208, 600]);
     if (k === 3) {
@@ -189,13 +194,18 @@
       const f = x => u(x, 'kWh');
       return item(`Un appareil de ${int(P)}${NB}W fonctionne pendant ${dur}. Quelle énergie consomme-t-il ?`, mcq(r, E, [P * h, mins ? P / 1000 * t : E / 10, P / 1000 / h, E * 10], f), `${calc} = <strong>${f(E)}</strong>.`);
     }
-    const cost = E * 0.10, f = x => fr(x, 2) + NB + '$';
-    return item(`Un appareil de ${int(P)}${NB}W fonctionne pendant ${dur}. Avec un tarif fictif de 0,10${NB}$ le kWh, combien coûte cette énergie ?`, mcq(r, cost, [E, cost * 10, cost * 100, cost / 10], f), `${calc} = ${u(E, 'kWh')}. Coût = ${fr(E, 3)} × 0,10 = <strong>${f(cost)}</strong>.`);
+    // Question de coût : valeurs ramenées à un nombre pair d'heures et à 500 W au moins, pour que le coût tombe juste au cent près
+    // (60 W pendant 15 minutes coûterait 0,0015 $, qui s'afficherait « 0 $ »). Aucun tirage supplémentaire : les tests fixes ne changent pas.
+    const Pc = P < 500 ? P * 10 : P, tc = mins ? { 15: 2, 30: 4, 45: 6, 90: 8 }[t] : t + t % 2;
+    const Ec = clean(Pc / 1000 * tc), cost = clean(Ec * 0.10), f = money;
+    return item(`Un appareil de ${int(Pc)}${NB}W fonctionne pendant ${tc}${NB}heures. Avec un tarif fictif de 0,10${NB}$ le kWh, combien coûte cette énergie ?`, mcq(r, cost, [Ec, cost * 1000, cost * 100], f),   // oubli du tarif, watts au lieu de kilowatts, division par le tarif
+      `${int(Pc)}${NB}W = ${fr(Pc / 1000, 3)}${NB}kW. E = P × t = ${fr(Pc / 1000, 3)} × ${tc} = ${u(Ec, 'kWh')}. Coût = ${fr(Ec, 3)} × 0,10 = <strong>${f(cost)}</strong>.`);
   });
 
   def('serie', 'calculs', 'Circuit série', r => {
     const n = r.int(2, 3), Rs = r.shuffle([5, 10, 15, 20, 25, 30, 40, 50, 60]).slice(0, n);
-    const RT = Rs.reduce((s, x) => s + x, 0), I = r.pick([0.5, 1, 2, 3, 4]), U = I * RT, k = r.int(0, 2);
+    // pas de courant de 1 A : la tension de chaque résistance aurait la même valeur que son étiquette en ohms
+    const RT = Rs.reduce((s, x) => s + x, 0), I0 = r.pick([0.5, 1, 2, 3, 4]), I = I0 === 1 ? 1.5 : I0, U = I * RT, k = r.int(0, 2);
     const fig = figSerie(U, Rs), list = Rs.join(' + ');
     if (k === 0) { const f = x => u(x, 'Ω'); return item(`Quelle est la résistance totale de ce circuit série ?`, mcq(r, RT, [1 / Rs.reduce((s, x) => s + 1 / x, 0), RT / n, Math.max.apply(null, Rs)], f), `En série, les résistances s'additionnent : ${list} = <strong>${f(RT)}</strong>.`, fig); }
     if (k === 1) { const f = x => u(x, 'A'); return item(`Quel courant circule dans ce circuit série ?`, mcq(r, I, [U / Rs[0], U / Math.max.apply(null, Rs), U * RT / 1000, I * n], f), `R totale = ${list} = ${RT}${NB}Ω. I = U ÷ R totale = ${fr(U, 1)} ÷ ${RT} = <strong>${f(I)}</strong>. Ce courant est le même partout.`, fig); }
@@ -228,24 +238,25 @@
 
   def('rendement', 'calculs', 'Rendement et pertes', r => {
     const Pin = r.pick([500, 800, 1000, 1500, 2000, 2500, 4000, 5000]), eta = r.pick([0.6, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95]), Pout = clean(Pin * eta), k = r.int(0, 2);
-    if (k === 0) { const f = x => fr(x, 1) + NB + '%'; return item(`Un moteur absorbe ${int(Pin)}${NB}W et fournit ${int(Pout)}${NB}W de puissance utile. Quel est son rendement ?`, mcq(r, eta * 100, [Pin / Pout * 100, (Pin - Pout) / Pin * 100, eta * 10], f), `Rendement = P utile ÷ P absorbée × 100 = ${int(Pout)} ÷ ${int(Pin)} × 100 = <strong>${f(eta * 100)}</strong>.`); }
-    if (k === 1) { const f = x => eng(x, 'W'); return item(`Un appareil absorbe ${int(Pin)}${NB}W avec un rendement de ${fr(eta * 100, 0)}${NB}%. Quelles sont ses pertes ?`, mcq(r, Pin - Pout, [Pout, Pin * eta / 2, Pin + Pout], f), `P utile = ${int(Pin)} × ${fr(eta, 2)} = ${int(Pout)}${NB}W. Pertes = P absorbée − P utile = ${int(Pin)} − ${int(Pout)} = <strong>${f(Pin - Pout)}</strong>.`); }
+    if (k === 0) { const f = x => sig(x, 3) + NB + '%'; return item(`Un moteur absorbe ${int(Pin)}${NB}W et fournit ${int(Pout)}${NB}W de puissance utile. Quel est son rendement ?`, mcq(r, eta * 100, [Pin / Pout * 100, (Pin - Pout) / Pin * 100, eta * 10], f), `Rendement = P utile ÷ P absorbée × 100 = ${int(Pout)} ÷ ${int(Pin)} × 100 = <strong>${f(eta * 100)}</strong>.`); }
+    if (k === 1) { const f = x => eng(x, 'W'); return item(`Un appareil absorbe ${int(Pin)}${NB}W avec un rendement de ${fr(eta * 100, 0)}${NB}%. Quelles sont ses pertes ?`, mcq(r, Pin - Pout, [Pout, Pin * eta / 2, Pin + Pout], f), `P utile = ${int(Pin)} × ${fr(eta, 2)} = ${int(Pout)}${NB}W. Pertes = P absorbée − P utile = ${int(Pin)} − ${int(Pout)} = ${base(Pin - Pout, 'W')}<strong>${f(Pin - Pout)}</strong>.`); }
     const f = x => eng(x, 'W');
-    return item(`Un moteur fournit ${int(Pout)}${NB}W de puissance utile avec un rendement de ${fr(eta * 100, 0)}${NB}%. Quelle puissance absorbe-t-il ?`, mcq(r, Pin, [Pout * eta, Pout, Pout * (1 + eta)], f), `P absorbée = P utile ÷ rendement = ${int(Pout)} ÷ ${fr(eta, 2)} = <strong>${f(Pin)}</strong>. La puissance absorbée est toujours plus grande que la puissance utile.`);
+    return item(`Un moteur fournit ${int(Pout)}${NB}W de puissance utile avec un rendement de ${fr(eta * 100, 0)}${NB}%. Quelle puissance absorbe-t-il ?`, mcq(r, Pin, [Pout * eta, Pout, Pout * (1 + eta)], f), `P absorbée = P utile ÷ rendement = ${int(Pout)} ÷ ${fr(eta, 2)} = ${base(Pin, 'W')}<strong>${f(Pin)}</strong>. La puissance absorbée est toujours plus grande que la puissance utile.`);
   });
 
   def('puissance-tension', 'calculs', 'Même élément, autre tension', r => {
     const pair = r.pick([[240, 120], [240, 208], [208, 240], [600, 480]]), U1 = pair[0], U2 = pair[1], P = r.pick([1000, 1500, 2000, 3000, 4000, 4500]);
     const P2 = P * (U2 / U1) * (U2 / U1), f = x => eng(x, 'W');
     return item(`Un élément chauffant de ${int(P)}${NB}W prévu pour ${U1}${NB}V est branché sur ${U2}${NB}V. Quelle puissance dégage-t-il (résistance supposée constante) ?`, mcq(r, P2, [P * U2 / U1, P, P * (U1 / U2) * (U1 / U2)], f),
-      `La résistance ne change pas et P = U² ÷ R : la puissance varie comme le carré de la tension. P = ${int(P)} × (${U2} ÷ ${U1})² = ${int(P)} × ${fr((U2 / U1) * (U2 / U1), 3)} = <strong>${f(P2)}</strong>.`);
+      `La résistance ne change pas et P = U² ÷ R : la puissance varie comme le carré de la tension. P = ${int(P)} × (${U2} ÷ ${U1})² = ${int(P)} × ${fr((U2 / U1) * (U2 / U1), 3)} = ${base(P2, 'W')}<strong>${f(P2)}</strong>.`);
   });
 
   def('hp', 'calculs', 'Moteur : HP, watts et rendement', r => {
     const hp = r.pick([0.5, 1, 2, 3, 5, 7.5, 10]), eta = r.pick([0.8, 0.85, 0.9]), W = hp * 746, f = x => eng(x, 'W');
-    if (r() < 0.45) return item(`À combien de watts correspond une puissance mécanique de ${fr(hp, 1)}${NB}HP ?`, mcq(r, W, [hp * 1000, hp * 373, W * 2], f), `1 HP = 746 W, donc ${fr(hp, 1)} × 746 = <strong>${f(W)}</strong>.`);
+    // réponse en watts, comme le demande l'énoncé (1 492 W et non 1,49 kW)
+    if (r() < 0.45) { const fw = x => u(x, 'W'); return item(`À combien de watts correspond une puissance mécanique de ${fr(hp, 1)}${NB}HP ?`, mcq(r, W, [hp * 1000, hp * 373, W * 2], fw), `1 HP = 746 W, donc ${fr(hp, 1)} × 746 = <strong>${fw(W)}</strong>.`); }
     return item(`Un moteur de ${fr(hp, 1)}${NB}HP a un rendement de ${fr(eta * 100, 0)}${NB}%. Quelle puissance électrique absorbe-t-il à pleine charge ?`, mcq(r, W / eta, [W * eta, W, hp * 1000 / eta], f),
-      `Puissance utile = ${fr(hp, 1)} × 746 = ${int(W)}${NB}W. P absorbée = P utile ÷ rendement = ${int(W)} ÷ ${fr(eta, 2)} = <strong>${f(W / eta)}</strong>.`);
+      `Puissance utile = ${fr(hp, 1)} × 746 = ${int(W)}${NB}W. P absorbée = P utile ÷ rendement = ${int(W)} ÷ ${fr(eta, 2)} = ${base(W / eta, 'W')}<strong>${f(W / eta)}</strong>.`);
   });
 
   /* ======================= Courant alternatif ======================= */
@@ -253,14 +264,16 @@
     const f0 = r.pick([25, 50, 60, 100, 120, 400, 1000]), T = 1000 / f0;
     if (r() < 0.5) { const f = x => u(x, 'ms'); return item(`Quelle est la période d'un signal de ${int(f0)}${NB}Hz ?`, mcq(r, T, [f0, T * 10, T / 10, T * 2], f), `T = 1 ÷ f = 1 ÷ ${int(f0)} = ${fr(1 / f0, 5)}${NB}s = <strong>${f(T)}</strong>.`); }
     const f = x => u(x, 'Hz');
-    return item(`Un cycle d'une tension alternative dure ${sig(T, 3)}${NB}ms. Quelle est sa fréquence ?`, mcq(r, f0, [T, f0 / 1000, f0 * 2, f0 / 2], f), `f = 1 ÷ T. On convertit : ${sig(T, 3)}${NB}ms = ${fr(T / 1000, 5)}${NB}s. f = 1 ÷ ${fr(T / 1000, 5)} = <strong>${f(f0)}</strong>.`);
+    // période écrite avec 4 chiffres (16,67 ms) : avec 16,7 ms on trouverait 59,9 Hz et non 60 Hz
+    const exact = Number.isInteger(1e6 / f0);
+    return item(`Un cycle d'une tension alternative dure ${sig(T, 4)}${NB}ms. Quelle est sa fréquence ?`, mcq(r, f0, [T, f0 / 1000, f0 * 2, f0 / 2], f), `f = 1 ÷ T. On convertit : ${sig(T, 4)}${NB}ms = ${sig(T / 1000, 4)}${NB}s. f = 1 ÷ ${sig(T / 1000, 4)} ${exact ? '=' : '≈'} <strong>${f(f0)}</strong>.`);
   });
 
   def('efficace-crete', 'alternatif', 'Valeur efficace et valeur de crête', r => {
     const Ue = r.pick([24, 120, 208, 240, 347, 600]), k = r.int(0, 2), f = x => u(x, 'V');
-    if (k === 0) return item(`Quelle est la valeur de crête d'une tension efficace de ${Ue}${NB}V ?`, mcq(r, Ue * R2, [Ue * 0.707, Ue * 2, Ue * R3, Ue], f), `U crête = 1,414 × U efficace = 1,414 × ${Ue} = <strong>${f(Ue * R2)}</strong>.`);
+    if (k === 0) return item(`Une tension sinusoïdale a une valeur efficace de ${Ue}${NB}V. Quelle est sa valeur de crête ?`, mcq(r, Ue * R2, [Ue * 0.707, Ue * 2, Ue * R3, Ue], f), `U crête = 1,414 × U efficace = 1,414 × ${Ue} = <strong>${f(Ue * R2)}</strong>.`);
     if (k === 1) { const Uc = Math.round(Ue * R2); return item(`Une tension sinusoïdale a une valeur de crête de ${Uc}${NB}V. Quelle est sa valeur efficace ?`, mcq(r, Uc / R2, [Uc * R2, Uc / 2, Uc, Uc / R3], f), `U efficace = 0,707 × U crête = 0,707 × ${Uc} = <strong>${f(Uc / R2)}</strong>.`); }
-    return item(`Quelle est la valeur crête à crête d'une tension efficace de ${Ue}${NB}V ?`, mcq(r, 2 * Ue * R2, [Ue * R2, 2 * Ue, Ue, Ue * R3], f), `Crête = 1,414 × ${Ue} = ${f(Ue * R2)}. Crête à crête = 2 × crête = <strong>${f(2 * Ue * R2)}</strong>.`);
+    return item(`Une tension sinusoïdale a une valeur efficace de ${Ue}${NB}V. Quelle est sa valeur crête à crête ?`, mcq(r, 2 * Ue * R2, [Ue * R2, 2 * Ue, Ue, Ue * R3], f), `Crête à crête = 2 × crête = 2 × 1,414 × U efficace = 2,828 × ${Ue} = <strong>${f(2 * Ue * R2)}</strong>. La crête seule vaut 1,414 × ${Ue} = ${f(Ue * R2)}.`);
   });
 
   def('reactance', 'alternatif', 'Réactance d’une bobine ou d’un condensateur', r => {
@@ -279,7 +292,7 @@
     const zcalc = `Z = √(R² + X²) = √(${R}² + ${X}²) = √${int(R * R + X * X)} = ${Z}${NB}Ω`;
     if (k === 0) { const f = x => u(x, 'Ω'); return item(`Un circuit série comprend une résistance de ${R}${NB}Ω et une réactance inductive de ${X}${NB}Ω. Quelle est son impédance ?`, mcq(r, Z, [R + X, Math.abs(R - X), Math.sqrt(R * X)], f), `${zcalc}. On n'additionne pas directement R et X.`); }
     if (k === 1) { const U = r.pick([120, 240]), f = x => u(x, 'A'); return item(`Une résistance de ${R}${NB}Ω et une réactance inductive de ${X}${NB}Ω sont en série sous ${U}${NB}V. Quel courant circule ?`, mcq(r, U / Z, [U / (R + X), U / R, U / X], f), `${zcalc}. I = U ÷ Z = ${U} ÷ ${Z} = <strong>${f(U / Z)}</strong>.`); }
-    const f = x => fr(x, 2);
+    const f = x => fr(x, 3);   // trois décimales : 5 ÷ 13 = 0,385 (0,38 serait à plus de 1 % de la valeur)
     return item(`Un circuit série a une résistance de ${R}${NB}Ω et une réactance inductive de ${X}${NB}Ω. Quel est son facteur de puissance ?`, mcq(r, R / Z, [X / Z, R / X > 1 ? X / R : R / X, R / (R + X)], f), `${zcalc}. cos φ = R ÷ Z = ${R} ÷ ${Z} = <strong>${f(R / Z)}</strong>.`);
   });
 
@@ -287,12 +300,12 @@
     const k = r.int(0, 3);
     if (k <= 1) {
       const U = r.pick([120, 240, 347, 600]), I = r.pick([5, 8, 10, 12, 15, 20, 25]), FP = r.pick([0.6, 0.7, 0.8, 0.85, 0.9]), S = U * I;
-      if (k === 0) { const f = x => eng(x, 'W'); return item(`Une charge monophasée tire ${I}${NB}A sous ${U}${NB}V avec un facteur de puissance de ${fr(FP, 2)}. Quelle est la puissance active ?`, mcq(r, S * FP, [S, S / FP, S * (1 - FP)], f), `P = U × I × cos φ = ${U} × ${I} × ${fr(FP, 2)} = <strong>${f(S * FP)}</strong>. (U × I = ${eng(S, 'VA')} est la puissance apparente.)`); }
+      if (k === 0) { const f = x => eng(x, 'W'); return item(`Une charge monophasée tire ${I}${NB}A sous ${U}${NB}V avec un facteur de puissance de ${fr(FP, 2)}. Quelle est la puissance active ?`, mcq(r, S * FP, [S, S / FP, S * (1 - FP)], f), `P = U × I × cos φ = ${U} × ${I} × ${fr(FP, 2)} = ${base(S * FP, 'W')}<strong>${f(S * FP)}</strong>. (U × I = ${eng(S, 'VA')} est la puissance apparente.)`); }
       const f = x => eng(x, 'VA');
-      return item(`Une charge monophasée tire ${I}${NB}A sous ${U}${NB}V avec un facteur de puissance de ${fr(FP, 2)}. Quelle est la puissance apparente ?`, mcq(r, S, [S * FP, S / FP, S * R3], f), `S = U × I = ${U} × ${I} = <strong>${f(S)}</strong>. Le facteur de puissance ne sert que pour la puissance active.`);
+      return item(`Une charge monophasée tire ${I}${NB}A sous ${U}${NB}V avec un facteur de puissance de ${fr(FP, 2)}. Quelle est la puissance apparente ?`, mcq(r, S, [S * FP, S / FP, S * R3], f), `S = U × I = ${U} × ${I} = ${base(S, 'VA')}<strong>${f(S)}</strong>. Le facteur de puissance n'entre pas dans la puissance apparente : il sert à passer de S à la puissance active (P = S × cos φ).`);
     }
     const t = r.pick(TRI), P = t[0], Qv = t[1], S = t[2];
-    if (k === 2) { const f = x => fr(x, 2); return item(`Une installation absorbe ${P}${NB}kW pour une puissance apparente de ${S}${NB}kVA. Quel est son facteur de puissance ?`, mcq(r, P / S, [Qv / S, 1 - P / S, P / (P + S)], f), `FP = P ÷ S = ${P} ÷ ${S} = <strong>${f(P / S)}</strong>.`); }
+    if (k === 2) { const f = x => fr(x, 3); return item(`Une installation absorbe ${P}${NB}kW pour une puissance apparente de ${S}${NB}kVA. Quel est son facteur de puissance ?`, mcq(r, P / S, [Qv / S, 1 - P / S, P / (P + S)], f), `FP = P ÷ S = ${P} ÷ ${S} = <strong>${f(P / S)}</strong>.`); }
     const f = x => u(x, 'kVA');
     return item(`Une installation absorbe ${P}${NB}kW de puissance active et ${Qv}${NB}kvar de puissance réactive. Quelle est sa puissance apparente ?`, mcq(r, S, [P + Qv, Math.abs(P - Qv), Math.sqrt(P * Qv)], f), `S = √(P² + Q²) = √(${P}² + ${Qv}²) = √${int(P * P + Qv * Qv)} = <strong>${f(S)}</strong>.`);
   }, { w: 2 });
@@ -309,8 +322,9 @@
       const S = HQ.S(540, 262, 'Sinusoïde tracée sur une grille graduée');
       const p = S.plot({ x: 70, y: 34, w: 400, h: 180, xr: [0, 2 * T], yr: [-3 * d, 3 * d], gridx: 8, gridy: 6, xlabel: 't (ms)', ylabel: 'u (V)' });
       p.curve(x => peak * Math.sin(PI2 * x / T), 'c1');
-      for (let i = 1; i <= 4; i++) p.xtick(i * T / 2, fr(i * T / 2, 1));
-      for (let j = -3; j <= 3; j++) if (j !== 0) p.ytick(j * d, fr(j * d, 0));
+      // graduations du temps écrites sous la grille : posées contre l'axe, elles seraient traversées par la courbe là où elle coupe zéro
+      for (let i = 0; i <= 4; i++) { if (i) p.xtick(i * T / 2); S.text(p.sx(i * T / 2), 34 + 180 + 16, fr(i * T / 2, 1), { cls: 'sm mut' }); }
+      for (let j = -3; j <= 3; j++) if (j !== 0) p.ytick(j * d, fr(j * d, 0).replace('-', '−'));
       return S;
     };
     const base = `Sur le graphique, la courbe monte jusqu'à ${fr(peak, 0)}${NB}V et un cycle complet dure ${T}${NB}ms.`;
@@ -334,7 +348,7 @@
     const pr = r.pick(PAR2), C1 = pr[0], C2 = pr[1], par = r() < 0.5, sum = C1 + C2, ser = req(pr), f = x => u(x, 'µF');
     const good = par ? sum : ser;
     return item(`Deux condensateurs de ${C1}${NB}µF et ${C2}${NB}µF sont branchés en ${par ? 'parallèle' : 'série'}. Quelle est la capacité totale ?`, mcq(r, good, [par ? ser : sum, sum / 2, Math.max(C1, C2)], f),
-      par ? `En parallèle, les capacités s'additionnent : ${C1} + ${C2} = <strong>${f(sum)}</strong>. C'est l'inverse des résistances.` : `En série : 1/C = 1/${C1} + 1/${C2}, soit (${C1} × ${C2}) ÷ (${C1} + ${C2}) = <strong>${f(ser)}</strong>. C'est l'inverse des résistances : en série, la capacité diminue.`);
+      par ? `En parallèle, les capacités s'additionnent : ${C1} + ${C2} = <strong>${f(sum)}</strong>. C'est l'inverse des résistances.` : `En série : 1/C = 1/${C1} + 1/${C2}, donc C = (${C1} × ${C2}) ÷ (${C1} + ${C2}) = <strong>${f(ser)}</strong>. C'est l'inverse des résistances : en série, la capacité diminue.`);
   });
 
   def('fmm', 'electrotechnique', 'Force magnétomotrice d’une bobine', r => {
@@ -388,14 +402,14 @@
 
   def('puissance-3ph', 'triphase', 'Puissance en triphasé', r => {
     const U = r.pick([208, 480, 600]), I = r.pick([10, 15, 20, 25, 30, 40, 50]), FP = r.pick([0.8, 0.85, 0.9, 1]), S = R3 * U * I;
-    if (r() < 0.65) { const f = x => eng(x, 'W'); return item(`Une charge triphasée équilibrée tire ${I}${NB}A par ligne sous ${U}${NB}V entre phases, avec un facteur de puissance de ${fr(FP, 2)}. Quelle est sa puissance active ?`, mcq(r, S * FP, [U * I * FP, 3 * U * I * FP, FP < 1 ? S : S * 2, S * FP / 2], f), `P = √3 × U × I × cos φ = 1,732 × ${U} × ${I} × ${fr(FP, 2)} = <strong>${f(S * FP)}</strong>. Sans le √3 : ${f(U * I * FP)} ; avec un 3 : ${f(3 * U * I * FP)}.`); }
+    if (r() < 0.65) { const f = x => eng(x, 'W'); return item(`Une charge triphasée équilibrée tire ${I}${NB}A par ligne sous ${U}${NB}V entre phases, avec un facteur de puissance de ${fr(FP, 2)}. Quelle est sa puissance active ?`, mcq(r, S * FP, [U * I * FP, 3 * U * I * FP, FP < 1 ? S : S * 2, S * FP / 2], f), `P = √3 × U × I × cos φ = 1,732 × ${U} × ${I} × ${fr(FP, 2)} = ${base(S * FP, 'W')}<strong>${f(S * FP)}</strong>. Sans le √3 : ${f(U * I * FP)} ; avec un 3 : ${f(3 * U * I * FP)}.`); }
     const f = x => eng(x, 'VA');
-    return item(`Une charge triphasée équilibrée tire ${I}${NB}A par ligne sous ${U}${NB}V entre phases. Quelle est sa puissance apparente ?`, mcq(r, S, [U * I, 3 * U * I, S / R3 / R3], f), `S = √3 × U × I = 1,732 × ${U} × ${I} = <strong>${f(S)}</strong>.`);
+    return item(`Une charge triphasée équilibrée tire ${I}${NB}A par ligne sous ${U}${NB}V entre phases. Quelle est sa puissance apparente ?`, mcq(r, S, [U * I, 3 * U * I, S / R3 / R3], f), `S = √3 × U × I = 1,732 × ${U} × ${I} = ${base(S, 'VA')}<strong>${f(S)}</strong>.`);
   }, { w: 2 });
 
   def('courant-3ph', 'triphase', 'Courant de ligne en triphasé', r => {
     const U = r.pick([208, 480, 600]), P = r.pick([5, 7.5, 10, 15, 20, 30, 45, 60]), FP = r.pick([0.8, 0.85, 0.9, 1]), I = P * 1000 / (R3 * U * FP), f = x => u(x, 'A');
-    return item(`Une charge triphasée de ${fr(P, 1)}${NB}kW est alimentée en ${U}${NB}V entre phases avec un facteur de puissance de ${fr(FP, 2)}. Quel est le courant de ligne ?`, mcq(r, I, [P * 1000 / (U * FP), P * 1000 / (3 * U * FP), P * 1000 * FP / (R3 * U), I * 2], f),
+    return item(`Une charge triphasée équilibrée de ${fr(P, 1)}${NB}kW est alimentée en ${U}${NB}V entre phases avec un facteur de puissance de ${fr(FP, 2)}. Quel est le courant de ligne ?`, mcq(r, I, [P * 1000 / (U * FP), P * 1000 / (3 * U * FP), P * 1000 * FP / (R3 * U), I * 2], f),
       `I = P ÷ (√3 × U × cos φ) = ${int(P * 1000)} ÷ (1,732 × ${U} × ${fr(FP, 2)}) = <strong>${f(I)}</strong>.`);
   }, { w: 2 });
 
@@ -407,8 +421,10 @@
 
   /* ======================= Mesure et comptage ======================= */
   def('consommation', 'mesure', 'Consommation à partir de deux relevés', r => {
-    const mult = r.pick([1, 1, 20, 40, 80, 120, 160]), prev = r.int(1000, 8500), d = mult === 1 ? r.int(150, 1900) : r.int(12, 95), cur = prev + d, E = d * mult, f = x => int(x) + NB + 'kWh';
-    if (mult === 1) return item(`Compteur à mesurage direct. Relevé précédent : ${int(prev)}. Relevé actuel : ${int(cur)}. Quelle est la consommation ?`, mcq(r, E, [cur, cur + prev, E * 10, E / 10], f), `Consommation = relevé actuel − relevé précédent = ${int(cur)} − ${int(prev)} = <strong>${f(E)}</strong>.`);
+    const mult = r.pick([1, 10, 20, 40, 80, 120, 160]), prev = r.int(1000, 8500), d = mult === 1 ? r.int(150, 1900) : r.int(12, 95), cur = prev + d, E = d * mult, f = x => int(x) + NB + 'kWh';
+    if (mult === 1) return item(`Un compteur à mesurage direct ne porte aucun multiplicateur. Relevé précédent : ${int(prev)}. Relevé actuel : ${int(cur)}. Quelle est la consommation ?`, mcq(r, E, [cur, cur + prev, E * 10, E / 10], f), `Sans multiplicateur, la consommation est l'écart des relevés : ${int(cur)} − ${int(prev)} = <strong>${f(E)}</strong>.`);
+    // multiplicateur inscrit sur le compteur lui-même, sans transformateurs de mesure : l'exemple que publie Hydro-Québec (MULT 10)
+    if (mult === 10) return item(`Un compteur à cadrans porte la mention MULT 10. Relevé précédent : ${int(prev)}. Relevé actuel : ${int(cur)}. Quelle est la consommation ?`, mcq(r, E, [d, d * 100, cur, cur * 10], f), `Écart des relevés = ${int(cur)} − ${int(prev)} = ${d}. La mention MULT 10 veut dire que cet écart est multiplié par 10 : ${d} × 10 = <strong>${f(E)}</strong>.`);
     return item(`Un compteur est alimenté par des transformateurs de courant ${mult * 5}:5. Relevé précédent : ${int(prev)}. Relevé actuel : ${int(cur)}. Quelle est la consommation réelle ?`, mcq(r, E, [d, d * mult * 5, d * 5, cur * mult], f), `Écart des relevés = ${int(cur)} − ${int(prev)} = ${d}. Multiplicateur = ${mult * 5} ÷ 5 = ${mult}. Consommation réelle = ${d} × ${mult} = <strong>${f(E)}</strong>.`);
   }, { w: 2 });
 
@@ -431,7 +447,7 @@
       const part = vals[i] - Math.floor(vals[i]), nx = (dg + 1) % 10;
       let note = '';
       if (i < 3 && part > 0.8) note = ` (elle semble presque sur le ${nx}, mais le cadran de droite n'a pas encore dépassé 0 : le ${nx} n'est pas atteint)`;
-      else if (i < 3 && part < 0.2) note = ` (elle vient à peine de dépasser le ${dg} : le cadran de droite vient de repasser par 0)`;
+      else if (i < 3 && part < 0.1) note = ` (elle est presque sur le ${dg} : le cadran de droite a déjà repassé par 0, donc le ${dg} est bien atteint)`;
       return `${DIALS[i][0]} : l'aiguille est entre ${dg} et ${nx}${note}, on retient <strong>${dg}</strong>`;
     }).join(' ; ');
     return item(`Quel relevé indiquent ces cadrans ? (Les flèches pointillées montrent le sens de rotation de chaque cadran.)`, m,
@@ -446,7 +462,7 @@
 
   def('erreur-mesure', 'mesure', 'Erreur de mesure en pourcentage', r => {
     const real = r.pick([100, 200, 250, 400, 500, 1000]), pct = r.pick([-4, -2, -1, 1, 2, 3, 5]), meas = clean(real * (1 + pct / 100));
-    const s = x => (x > 0 ? '+' : '−') + NB + fr(Math.abs(x), 2) + NB + '%';
+    const s = x => (x > 0 ? '+' : '−') + fr(Math.abs(x), 2) + NB + '%';
     const m = mcqS(r, [s(pct), s(-pct), s(pct * 10), s(meas - real === pct ? pct * 2 : meas - real), s(pct / 10)]);
     return item(`Un compteur en essai enregistre ${fr(meas, 1)}${NB}kWh alors que l'énergie réellement fournie est de ${int(real)}${NB}kWh. Quelle est son erreur ?`, m,
       `Erreur = (mesuré − réel) ÷ réel × 100 = (${fr(meas, 1)} − ${int(real)}) ÷ ${int(real)} × 100 = <strong>${s(pct)}</strong>. Le signe est ${pct > 0 ? 'positif : le compteur enregistre trop' : 'négatif : le compteur n’enregistre pas assez'}.`);
@@ -455,15 +471,19 @@
   def('kh', 'mesure', 'Compteur à disque : puissance à partir de Kh', r => {
     const Kh = r.pick([3.6, 7.2, 14.4, 21.6]), n = r.pick([5, 10, 20]), t = r.pick([20, 30, 40, 60, 90]), P = 3600 * Kh * n / t, f = x => eng(x, 'W');
     return item(`Le disque d'un compteur électromécanique (Kh = ${fr(Kh, 1)}${NB}Wh par tour) fait ${n} tours en ${t}${NB}secondes. Quelle puissance la charge consomme-t-elle ?`, mcq(r, P, [Kh * n / t, Kh * n * t, 3600 * Kh / (n * t), P / 60], f),
-      `Énergie = Kh × tours = ${fr(Kh, 1)} × ${n} = ${fr(Kh * n, 1)}${NB}Wh en ${t}${NB}s. P = 3 600 × Kh × tours ÷ temps = 3 600 × ${fr(Kh, 1)} × ${n} ÷ ${t} = <strong>${f(P)}</strong>.`);
+      `Énergie = Kh × tours = ${fr(Kh, 1)} × ${n} = ${fr(Kh * n, 1)}${NB}Wh en ${t}${NB}s. P = 3 600 × Kh × tours ÷ temps = 3 600 × ${fr(Kh, 1)} × ${n} ÷ ${t} = ${base(P, 'W')}<strong>${f(P)}</strong>.`);
   }, { test: false });
 
   /* ======================= Sécurité ======================= */
   def('courant-corps', 'securite', 'Courant à travers le corps', r => {
-    const U = r.pick([120, 240, 347, 600]), Rb = r.pick([1000, 1500, 2000, 5000, 10000, 50000, 100000]), I = U / Rb, mA = I * 1000, f = x => eng(x, 'A');
-    const effet = mA < 1 ? 'en dessous du seuil de perception' : mA < 5 ? 'perceptible' : mA < 10 ? 'un choc douloureux' : mA < 30 ? 'assez pour ne plus pouvoir lâcher prise' : mA < 75 ? 'assez pour gêner la respiration' : 'assez pour provoquer une fibrillation ventriculaire';
-    return item(`Une personne touche un conducteur à ${U}${NB}V. La résistance de son corps sur ce trajet est d'environ ${int(Rb)}${NB}Ω. Quel courant la traverse ?`, mcq(r, I, [I * 10, I / 10, I * 1000, I / 1000], f),
-      `I = U ÷ R = ${U} ÷ ${int(Rb)} = ${fr(I, 5)}${NB}A = <strong>${f(I)}</strong>. Ordre de grandeur : c'est ${effet}.`);
+    const U = r.pick([120, 240, 347, 600]), R0 = r.pick([1000, 1500, 2000, 5000, 10000, 50000, 100000]);
+    // Une résistance de peau sèche (10 000 Ω et plus) n'a de sens qu'à basse tension : au-delà de 120 V la peau cède et il reste de l'ordre de 1 000 Ω.
+    // Sans cela, « 600 V et 100 000 Ω » donnerait 6 mA et un corrigé rassurant pour un contact en réalité mortel.
+    const Rb = U > 120 && R0 > 5000 ? { 10000: 1000, 50000: 1500, 100000: 2000 }[R0] : R0, sec = Rb > 5000;
+    const I = U / Rb, mA = I * 1000, f = x => eng(x, 'A');
+    const effet = mA < 1 ? 'en dessous du seuil de perception' : mA < 5 ? 'perceptible' : mA < 10 ? 'un choc douloureux' : mA < 30 ? 'assez pour ne plus pouvoir lâcher prise' : mA < 50 ? 'assez pour gêner la respiration' : 'assez pour provoquer un arrêt cardiaque (fibrillation ventriculaire)';
+    return item(`Une personne entre en contact avec une tension de ${U}${NB}V. La résistance de son corps sur ce trajet est d'environ ${int(Rb)}${NB}Ω${sec ? ' (peau sèche)' : ''}. Quel courant la traverse ?`, mcq(r, I, [I * 10, I / 10, I * 1000, I / 1000], f),
+      `I = U ÷ R = ${U} ÷ ${int(Rb)} = ${fr(I, 5)}${NB}A = <strong>${f(I)}</strong>. Ordre de grandeur : c'est ${effet}.${sec ? ' Cette résistance élevée suppose une peau sèche : mouillée, elle tombe vers 1 000 Ω et le même contact devient mortel.' : ''}`);
   });
 
   /* ======================= Lecture de schémas ======================= */
@@ -489,14 +509,20 @@
       `S1 (${st(s1)}) est en série avec tout le circuit${s1 ? '' : ' : comme il est ouvert, aucun courant ne passe'}. L1 a besoin de S1 et S2 fermés (S2 est ${st(s2)}). L2 a besoin de S1 et S3 fermés (S3 est ${st(s3)}). Réponse : <strong>${good}</strong>.`, fig);
   }, { w: 2 });
 
-  const SYMN = [['R', {}, 'Une résistance'], ['L', {}, 'Une bobine (inductance)'], ['C', {}, 'Un condensateur'], ['lamp', {}, 'Une lampe'], ['fuse', {}, 'Un fusible'], ['brk', {}, 'Un disjoncteur'], ['bat', {}, 'Une pile'],
-    ['AC', {}, 'Une source de tension alternative'], ['motor', {}, 'Un moteur'], ['pbno', {}, 'Un bouton-poussoir normalement ouvert'], ['pbnc', {}, 'Un bouton-poussoir normalement fermé'], ['nc', {}, 'Un contact normalement fermé'],
-    ['meter', { letter: 'V' }, 'Un voltmètre'], ['meter', { letter: 'A' }, 'Un ampèremètre'], ['meter', { letter: 'W' }, 'Un wattmètre'], ['sw', {}, 'Un interrupteur ouvert'], ['sw', { closed: true }, 'Un interrupteur fermé']];
+  // [type, options, nom, à quoi on le reconnaît, famille] : deux symboles de la même famille ne sont jamais proposés ensemble
+  // (un bouton-poussoir normalement fermé est, au repos, un contact fermé : « un interrupteur fermé » serait un leurre défendable)
+  const SYMN = [['R', {}, 'Une résistance', 'un trait en zigzag'], ['L', {}, 'Une bobine (inductance)', 'une suite de petites boucles'], ['C', {}, 'Un condensateur', 'deux traits parallèles de même longueur'], ['lamp', {}, 'Une lampe', 'un cercle barré d’une croix'],
+    ['fuse', {}, 'Un fusible', 'un petit rectangle traversé par le fil'], ['brk', {}, 'Un disjoncteur', 'un arc au-dessus de deux bornes'], ['bat', {}, 'Une pile', 'deux traits parallèles, un long et un court'],
+    ['AC', {}, 'Une source de tension alternative', 'un cercle qui contient une petite sinusoïde'], ['motor', {}, 'Un moteur', 'un cercle marqué M'],
+    ['pbno', {}, 'Un bouton-poussoir normalement ouvert', 'une barre surmontée d’un bouton, qui ne touche pas les deux bornes au repos', 'o'], ['pbnc', {}, 'Un bouton-poussoir normalement fermé', 'une barre surmontée d’un bouton, qui relie les deux bornes au repos', 'f'], ['nc', {}, 'Un contact normalement fermé', 'deux traits parallèles barrés d’une diagonale', 'f'],
+    ['meter', { letter: 'V' }, 'Un voltmètre', 'un cercle marqué V'], ['meter', { letter: 'A' }, 'Un ampèremètre', 'un cercle marqué A'], ['meter', { letter: 'W' }, 'Un wattmètre', 'un cercle marqué W'],
+    ['sw', {}, 'Un interrupteur ouvert', 'une lame levée qui ne touche pas la seconde borne', 'o'], ['sw', { closed: true }, 'Un interrupteur fermé', 'une lame qui relie les deux bornes', 'f']];
   def('symbole', 'schemas', 'Reconnaître un symbole', r => {
     const order = r.shuffle(SYMN), s = order[0];
     const fig = () => { const S = HQ.S(200, 84, 'Symbole à identifier'); S.comp(s[0], 30, 50, 170, 50, s[1]); return S; };
-    const m = mcqS(r, [s[2], order[1][2], order[2][2], order[3][2]]);
-    return item(`Que représente ce symbole ?`, m, `C'est le symbole de : <strong>${s[2].toLowerCase()}</strong>. Revois la grille des symboles dans la page Lecture de schémas si tu hésites.`, fig);
+    const others = order.slice(1).filter(o => !(s[4] && o[4] === s[4]));
+    const m = mcqS(r, [s[2], others[0][2], others[1][2], others[2][2]]);
+    return item(`Que représente ce symbole ?`, m, `Ce symbole représente <strong>${s[2].toLowerCase()}</strong> : on le reconnaît à ${s[3]}. Revois la grille des symboles dans la page Lecture de schémas si tu hésites.`, fig);
   });
   /* ---------- figure du problème 12 de la page Exercices ---------- */
   HQ.figs = HQ.figs || {};

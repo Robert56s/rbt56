@@ -45,11 +45,11 @@
     return e;
   }
   const NBSP = ' ';
-  // "1234.5" -> "1234,5" ; espace insécable par groupes de trois à partir de 10 000
+  // "1234.5" -> "1 234,5" ; espace insécable par groupes de trois à partir de 1 000
   function frStr(s) {
     let [int, dec] = String(s).split('.');
     const neg = int.startsWith('-'); if (neg) int = int.slice(1);
-    if (int.length > 4) int = int.replace(/\B(?=(\d{3})+(?!\d))/g, NBSP);
+    if (int.length > 3) int = int.replace(/\B(?=(\d{3})+(?!\d))/g, NBSP);
     return (neg ? '-' : '') + int + (dec ? ',' + dec : '');
   }
   // nombre fixe de décimales (zéros inutiles retirés)
