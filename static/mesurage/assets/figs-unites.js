@@ -66,12 +66,12 @@
     });
     // descendre : vers un préfixe plus petit
     S.add('line', { x1: 436, y1: 94, x2: 712, y2: 186, class: 'c2', 'marker-end': 'url(#ahb)', style: 'stroke-width:2.6' });
-    S.text(746, 26, 'Descendre d’une marche : nombre × 1000', { anchor: 'end', cls: 'b th' });
+    S.text(746, 26, 'Descendre d’une marche : nombre × 1' + NB + '000', { anchor: 'end', cls: 'b th' });
     S.text(746, 43, 'la virgule avance de 3 rangs vers la droite', { anchor: 'end', cls: 'sm' });
     S.text(746, 59, 'exemple : 0,035 A = 35 mA', { anchor: 'end', cls: 'sm mut' });
     // monter : vers un préfixe plus grand
     S.add('line', { x1: 404, y1: 236, x2: 128, y2: 144, class: 'c3', 'marker-end': 'url(#ahd)', style: 'stroke-width:2.6' });
-    S.text(58, 254, 'Monter d’une marche : nombre ÷ 1000', { anchor: 'start', cls: 'b td' });
+    S.text(58, 254, 'Monter d’une marche : nombre ÷ 1' + NB + '000', { anchor: 'start', cls: 'b td' });
     S.text(58, 271, 'la virgule recule de 3 rangs vers la gauche', { anchor: 'start', cls: 'sm' });
     S.text(58, 287, 'exemple : 4' + NB + '700 Ω = 4,7 kΩ', { anchor: 'start', cls: 'sm mut' });
     return S;
@@ -99,8 +99,8 @@
       S.text(cx, 181, result, { cls: 'lg b' });
       S.text(cx, 201, how, { cls: 'sm mut' });
     }
-    panel(170, '4,7 kΩ en ohms : × 1000', ['4', '7', '0', '0'], [2, 3], 1, 4, '4,7 kΩ = 4' + NB + '700 Ω', 'la virgule avance de 3 rangs ; on ajoute 2 zéros');
-    panel(510, '35 mA en ampères : ÷ 1000', ['0', '0', '3', '5'], [0, 1], 4, 1, '35 mA = 0,035 A', 'la virgule recule de 3 rangs ; on ajoute 2 zéros');
+    panel(170, '4,7 kΩ en ohms : × 1' + NB + '000', ['4', '7', '0', '0'], [2, 3], 1, 4, '4,7 kΩ = 4' + NB + '700 Ω', 'la virgule avance de 3 rangs ; on ajoute 2 zéros');
+    panel(510, '35 mA en ampères : ÷ 1' + NB + '000', ['0', '0', '3', '5'], [0, 1], 4, 1, '35 mA = 0,035 A', 'la virgule recule de 3 rangs ; on ajoute 2 zéros');
     S.line(340, 12, 340, 206, 'dash');
     return S;
   };

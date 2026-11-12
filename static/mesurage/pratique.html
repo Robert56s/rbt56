@@ -150,7 +150,7 @@
       <li>\(25 \times 746 = 18\,650\ \text{W}\)</li>
       <li>\(P = \dfrac{18\,650}{0{,}90} = 20\,722\ \text{W}\)</li>
       <li>\(I = \dfrac{20\,722}{1{,}732 \times 600 \times 0{,}85} = 23{,}5\ \text{A}\)</li>
-      <li>\(S = \dfrac{P}{\cos\varphi} = \dfrac{20\,722}{0{,}85} = 24\,380\ \text{VA} = 24{,}4\ \text{kVA}\) (ou \(1{,}732 \times 600 \times 23{,}5\)).</li>
+      <li>\(S = \dfrac{P}{\cos\varphi} = \dfrac{20\,722}{0{,}85} = 24\,379\ \text{VA} \approx 24{,}4\ \text{kVA}\) (ou \(1{,}732 \times 600 \times 23{,}5\)).</li>
     </ol>
     <p class="answer">18 650 W | 20,7 kW | 23,5 A | 24,4 kVA</p>
   </div></details>
@@ -205,15 +205,15 @@
 <article class="exo" data-exo-id="p11">
   <header><span class="tag">Problème 11</span><span class="tag theme">Sécurité</span><h4>Peau sèche, peau mouillée</h4></header>
   <div class="enonce"><p>Une personne touche par accident un conducteur à 347 V par rapport à la terre.</p>
-  <ol type="a"><li>Avec une peau sèche (résistance d'environ 100 kΩ), quel courant la traverse ?</li><li>Avec une peau mouillée (environ 2 kΩ) ?</li><li>Compare ces deux courants aux ordres de grandeur des effets du courant sur le corps.</li></ol></div>
+  <ol type="a"><li>Avec une peau sèche (résistance d'environ 100 kΩ), quel courant la traverse ?</li><li>Avec une peau mouillée (environ 1 kΩ) ?</li><li>Compare ces deux courants aux ordres de grandeur des effets du courant sur le corps.</li></ol></div>
   <details class="hint"><summary>Indice</summary><div class="body"><p>Loi d'Ohm, après avoir converti les kilohms en ohms. Exprime le résultat en milliampères.</p></div></details>
   <details class="sol"><summary>Corrigé</summary><div class="body">
     <ol class="steps">
       <li>\(I = \dfrac{347}{100\,000} = 0{,}00347\ \text{A} = 3{,}5\ \text{mA}\)</li>
-      <li>\(I = \dfrac{347}{2\,000} = 0{,}174\ \text{A} = 174\ \text{mA}\)</li>
-      <li>3,5 mA se sent nettement mais reste sous le seuil où l'on ne peut plus lâcher prise (10 à 20 mA). 174 mA dépasse largement le seuil où une fibrillation ventriculaire devient possible (75 à 100 mA). La même tension peut donc donner un picotement ou tuer : on ne se fie jamais à la résistance de la peau.</li>
+      <li>\(I = \dfrac{347}{1\,000} = 0{,}347\ \text{A} = 347\ \text{mA}\)</li>
+      <li>3,5 mA se sent nettement mais reste sous le seuil où l'on ne peut plus lâcher prise (10 à 20 mA). 347 mA dépasse largement le seuil où un arrêt cardiaque par fibrillation ventriculaire devient possible (dès 50 mA selon Hydro-Québec). La même tension peut donc donner un picotement ou tuer : on ne se fie jamais à la résistance de la peau.</li>
     </ol>
-    <p class="answer">3,5 mA | 174 mA | le second cas est mortel</p>
+    <p class="answer">3,5 mA | 347 mA | le second cas est mortel</p>
   </div></details>
 </article>
 
@@ -226,7 +226,7 @@
   <details class="sol"><summary>Corrigé</summary><div class="body">
     <ol class="steps">
       <li>Groupe parallèle : \(240 / 2 = 120\ \Omega\). Résistance totale : \(240 + 120 = 360\ \Omega\). \(I = 120 / 360 = 0{,}333\ \text{A}\). L1 reçoit \(240 \times 0{,}333 = 80\ \text{V}\) ; L2 et L3 reçoivent \(120 \times 0{,}333 = 40\ \text{V}\) chacune.</li>
-      <li>L1 : tout le courant la traverse et elle a la plus grande tension. Elle dissipe \(80 \times 0{,}333 = 26{,}7\ \text{W}\) contre \(40 \times 0{,}167 = 6{,}7\ \text{W}\) pour L2 et pour L3.</li>
+      <li>L1 : tout le courant la traverse et elle a la plus grande tension. Elle dissipe \(\dfrac{80^2}{240} = 26{,}7\ \text{W}\) contre \(\dfrac{40^2}{240} = 6{,}7\ \text{W}\) pour L2 et pour L3.</li>
       <li>Sans L3, il reste L1 et L2 en série : \(480\ \Omega\), \(I = 0{,}25\ \text{A}\), 60 V chacune. L1 baisse (de 80 V à 60 V) et L2 monte (de 40 V à 60 V) : elles brillent maintenant autant l'une que l'autre.</li>
     </ol>
     <p class="answer">80 V, 40 V et 40 V | L1 | 60 V chacune : L1 faiblit, L2 brille plus</p>

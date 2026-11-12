@@ -81,7 +81,7 @@
     <li><strong>347/600 V :</strong> \(347 \times 1{,}732 = 601\), soit 600 V entre phases. À l'envers : \(600 \div 1{,}732 = 346\), soit 347 V entre phase et neutre.</li>
     <li><strong>120/208 V :</strong> \(120 \times 1{,}732 = 208\ \text{V}\) entre phases.</li>
   </ul>
-  <p>Si les trois phases portent le même courant (charge <strong>équilibrée</strong>), le courant dans le neutre est nul. S'il y a un déséquilibre, le neutre porte la différence.</p>
+  <p>Si les trois phases portent le même courant (charge <strong>équilibrée</strong>), le courant dans le neutre est nul. S'il y a un déséquilibre, le neutre porte le courant de déséquilibre : la somme vectorielle des trois courants, qui ne s'annule plus. Ce n'est pas une simple soustraction comme en 120/240 V.</p>
 </div>
 
 <h2>4. Le couplage en triangle</h2>
@@ -115,7 +115,7 @@
 </div>
 <div class="box ex"><span class="label">Trois exemples types</span>
   <ol>
-    <li><strong>Puissance d'un moteur.</strong> Il tire 20 A sous 600 V avec un facteur de puissance de 0,85.<br>\(S = 1{,}732 \times 600 \times 20 = 20\,785\ \text{VA} \approx 20{,}8\ \text{kVA}\)<br>\(P = 20\,785 \times 0{,}85 = 17\,667\ \text{W} \approx 17{,}7\ \text{kW}\)</li>
+    <li><strong>Puissance d'un moteur.</strong> Il tire 20 A sous 600 V avec un facteur de puissance de 0,85.<br>\(S = 1{,}732 \times 600 \times 20 = 20\,784\ \text{VA} \approx 20{,}8\ \text{kVA}\)<br>\(P = 20\,784 \times 0{,}85 = 17\,666\ \text{W} \approx 17{,}7\ \text{kW}\)</li>
     <li><strong>Courant d'une charge.</strong> Une charge de 30 kW est alimentée en 600 V avec un facteur de puissance de 0,9.<br>\(I_L = \dfrac{30\,000}{1{,}732 \times 600 \times 0{,}9} = 32{,}1\ \text{A}\)</li>
     <li><strong>Chauffage triphasé.</strong> 15 kW sous 600 V, charge résistive (\(\cos\varphi = 1\)).<br>\(I_L = \dfrac{15\,000}{1{,}732 \times 600} = 14{,}4\ \text{A}\)</li>
   </ol>
@@ -150,13 +150,13 @@
 <table class="tight">
   <tr><th>Tension</th><th>Type</th><th>Où on la trouve</th></tr>
   <tr><td><strong>120/240 V</strong></td><td>Monophasé à trois fils</td><td>Maisons, petits commerces</td></tr>
-  <tr><td><strong>120/208 V</strong></td><td>Triphasé en étoile</td><td>Immeubles à logements, commerces, bureaux</td></tr>
+  <tr><td><strong>120/208 V</strong></td><td>Triphasé en étoile</td><td>Immeubles à logements, commerces, bureaux (installations existantes, ou transformateur du client alimenté en 347/600 V)</td></tr>
   <tr><td><strong>347/600 V</strong></td><td>Triphasé en étoile</td><td>Commerces, industries, grands immeubles</td></tr>
   <tr><td><strong>25 kV</strong></td><td>Triphasé, moyenne tension</td><td>Lignes de distribution dans les rues (14,4 kV entre une phase et le neutre)</td></tr>
   <tr><td><strong>Jusqu'à 735 kV</strong></td><td>Triphasé, haute tension</td><td>Lignes de transport entre les centrales et les postes</td></tr>
 </table>
 <div class="box def"><span class="label">Basse, moyenne et haute tension</span>
-  <p>On parle de <strong>basse tension</strong> jusqu'à 750 V entre phases, de <strong>moyenne tension</strong> au-dessus, jusqu'à environ 50 kV, et de <strong>haute tension</strong> au-delà. Le 600 V d'une usine est donc de la basse tension, et le 25 kV d'une ligne de rue de la moyenne tension. « Basse tension » ne veut pas dire sans danger.</p>
+  <p>On parle de <strong>basse tension</strong> jusqu'à 750 V entre phases, de <strong>moyenne tension</strong> au-dessus de 750 V et en dessous de 44 kV, et de <strong>haute tension</strong> à partir de 44 kV (définitions des Conditions de service d'Hydro-Québec). Le 600 V d'une usine est donc de la basse tension, et le 25 kV d'une ligne de rue de la moyenne tension. « Basse tension » ne veut pas dire sans danger.</p>
 </div>
 
 <h2>À retenir</h2>
@@ -195,6 +195,6 @@
 <script defer src="assets/app.js?v=3887a767"></script>
 <script defer src="assets/draw.js?v=c5ce1061"></script>
 <script defer src="assets/bank.js?v=f6f83010"></script>
-<script defer src="assets/figs-triphase.js?v=76e42fd0"></script>
+<script defer src="assets/figs-triphase.js?v=3405d573"></script>
 </body>
 </html>

@@ -142,7 +142,7 @@
     cur(S, 56, 90, 116, '80 A'); cur(S, 244, 90, 304, '80 A');
     S.text(180, 172, 'Tout le courant du client', { cls: 'sm' });
     S.text(180, 188, 'traverse le compteur.', { cls: 'sm' });
-    S.text(180, 246, 'Multiplicateur : 1', { cls: 'b te' });
+    S.text(180, 246, 'Multiplicateur : celui inscrit sur le compteur', { cls: 'b te' });
     S.line(366, 12, 366, 252, 'dash');
     // mesurage avec transformateur de courant
     S.text(585, 22, 'Mesurage avec transformateur de courant', { cls: 'b' });
@@ -165,7 +165,7 @@
   HQ.widgets['lecture-compteur'] = function (c) {
     wk.header(c, 'Lis le compteur', 'Lis les quatre cadrans de gauche à droite, tape le relevé, puis vérifie. Regarde bien le sens de rotation de chaque cadran.');
     const box = el('div', { class: 'mz-dials' });
-    const input = el('input', { type: 'text', inputmode: 'numeric', maxlength: '4', placeholder: '0000', autocomplete: 'off', class: 'mz-in', 'aria-label': 'Relevé lu sur les cadrans, en kWh' });
+    const input = el('input', { type: 'text', inputmode: 'numeric', maxlength: '4', placeholder: '0000', autocomplete: 'off', class: 'mz-in', 'aria-label': 'Relevé lu sur les cadrans' });
     const bCheck = el('button', { type: 'button', class: 'btn' }, 'Vérifier');
     const bNew = el('button', { type: 'button', class: 'btn secondary' }, 'Nouveau compteur');
     const out = el('div');
@@ -202,7 +202,7 @@
       const s = String(good).padStart(4, '0');
       const items = explain().map((t, i) => el('li', { html: '<strong>' + DIAL_NAMES[i] + ' :</strong> ' + t }));
       out.replaceChildren(el('div', { class: 'sol-box' + (ok ? '' : ' wrong') }, [
-        el('div', { class: 'verdict ' + (ok ? 'ok' : 'no') }, ok ? 'Bonne lecture : ' + s + ' kWh' : 'Pas tout à fait : le bon relevé est ' + s + ' kWh'),
+        el('div', { class: 'verdict ' + (ok ? 'ok' : 'no') }, ok ? 'Bonne lecture : ' + s : 'Pas tout à fait : le bon relevé est ' + s),
         el('ul', {}, items)
       ]));
       draw(true);
@@ -210,7 +210,7 @@
     bCheck.addEventListener('click', check);
     bNew.addEventListener('click', fresh);
     input.addEventListener('keydown', ev => { if (ev.key === 'Enter') check(); });
-    c.append(box, el('div', { class: 'w-row' }, [el('label', {}, ['Ton relevé : ', input, ' kWh']), bCheck, bNew]), out);
+    c.append(box, el('div', { class: 'w-row' }, [el('label', {}, ['Ton relevé : ', input]), bCheck, bNew]), out);
     fresh();
   };
 
@@ -218,7 +218,7 @@
   HQ.widgets['multiplicateur'] = function (c) {
     wk.header(c, 'Le multiplicateur de mesurage', 'Choisis les transformateurs de mesure et entre deux relevés du compteur : la démo détaille le calcul de la consommation réelle.');
     const tc = wk.selectInput('Transformateur de courant (TC)', [['0', 'Aucun (mesurage direct)'], ['100', '100:5'], ['200', '200:5'], ['400', '400:5'], ['800', '800:5']], '200');
-    const tt = wk.selectInput('Transformateur de tension (TT)', [['0', 'Aucun'], ['2400', '2400:120'], ['14400', '14 400:120']], '0');
+    const tt = wk.selectInput('Transformateur de tension (TT)', [['0', 'Aucun'], ['2400', '2\u00a0400:120'], ['14400', '14 400:120']], '0');
     const r0 = wk.numInput('Relevé précédent', 2418, { min: 0, step: 1 });
     const r1 = wk.numInput('Relevé actuel', 2468, { min: 0, step: 1 });
     const out = el('div'), note = el('p', { class: 'w-note' });
@@ -237,7 +237,7 @@
         ['Consommation réelle', d < 0 ? 'à recalculer' : f(d) + ' × ' + f(m) + ' = ' + f(d * m) + ' kWh']
       ]));
       if (d < 0) note.innerHTML = '<strong>Vérifie tes valeurs :</strong> le relevé actuel est plus petit que le relevé précédent.';
-      else if (m === 1) note.innerHTML = '<strong>Mesurage direct :</strong> le compteur voit tout le courant et toute la tension. La différence des relevés donne directement la consommation.';
+      else if (m === 1) note.innerHTML = '<strong>Mesurage direct :</strong> le compteur voit tout le courant et toute la tension. La différence des relevés donne la consommation, à multiplier par le chiffre inscrit sur le compteur s’il y en a un (souvent MULT 10 sur un compteur à cadrans).';
       else note.innerHTML = '<strong>Mesurage avec transformateurs :</strong> le compteur ne voit qu’une image réduite. Chaque kWh affiché en représente ' + f(m) + ' en réalité.';
     }
     [tc.input, tt.input].forEach(i => i.addEventListener('change', update));

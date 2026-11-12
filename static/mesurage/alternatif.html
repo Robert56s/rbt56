@@ -61,7 +61,7 @@
   <tr><td><strong>De crête</strong> (maximale), \(U_{\text{max}}\)</td><td>Le sommet de la courbe</td><td>\(1{,}414 \times U_{\text{eff}}\)</td><td>170 V</td></tr>
   <tr><td><strong>Crête à crête</strong></td><td>Du sommet positif au sommet négatif</td><td>\(2 \times U_{\text{max}}\)</td><td>339 V</td></tr>
   <tr><td><strong>Efficace</strong>, \(U_{\text{eff}}\)</td><td>La tension continue qui chaufferait autant une même résistance</td><td>\(0{,}707 \times U_{\text{max}}\)</td><td>120 V</td></tr>
-  <tr><td><strong>Moyenne</strong></td><td>La moyenne de la courbe</td><td>\(0{,}637 \times U_{\text{max}}\) sur une demi-alternance ; 0 sur un cycle complet</td><td>108 V sur une alternance ; 0 V sur un cycle</td></tr>
+  <tr><td><strong>Moyenne</strong></td><td>La moyenne de la courbe</td><td>\(0{,}637 \times U_{\text{max}}\) sur une alternance (un demi-cycle) ; 0 sur un cycle complet</td><td>108 V sur une alternance ; 0 V sur un cycle</td></tr>
 </table>
 <div class="formula"><div class="title">Valeur efficace et valeur de crête</div>
 \[U_{\text{eff}} = \frac{U_{\text{max}}}{\sqrt{2}} = 0{,}707 \times U_{\text{max}} \qquad U_{\text{max}} = \sqrt{2} \times U_{\text{eff}} = 1{,}414 \times U_{\text{eff}}\]
@@ -77,6 +77,7 @@
   <tr><td>347 V</td><td>491 V</td><td>981 V</td></tr>
   <tr><td>600 V</td><td>849 V</td><td>1&nbsp;697 V</td></tr>
 </table>
+<p class="small">Ces valeurs sont calculées avec \(\sqrt{2}\) exact, puis arrondies au volt. Avec 1,414, la calculatrice donne 848,4 V pour 600 V. Et le double d'une crête déjà arrondie peut différer de 1 V : 2 × 170 = 340 V, alors que la valeur exacte est 339,4 V.</p>
 <div class="box ex"><span class="label">Deux exemples</span>
   <ol>
     <li>Une prise fournit 120 V efficaces. Tension de crête : \(1{,}414 \times 120 = 169{,}7\ \text{V}\), soit environ 170 V. Crête à crête : \(2 \times 169{,}7 = 339\ \text{V}\).</li>
@@ -101,7 +102,7 @@
   <tr><td>270°</td><td>3/4</td><td>12,5 ms</td><td>−1</td><td>−169,7 V (crête négative)</td></tr>
   <tr><td>360°</td><td>1</td><td>16,67 ms</td><td>0</td><td>0 V</td></tr>
 </table>
-<p class="small">Pour ces calculs, la calculatrice doit être en mode degrés (DEG) : sin 30 doit donner 0,5. Voir la page <a href="unites.html">Unités et préfixes</a>.</p>
+<p class="small">Pour ces calculs, l'angle est en degrés : la calculatrice doit être en mode degrés (DEG), et sin 30 doit donner 0,5. Pour passer d'un temps à un angle en degrés : angle = 360° × f × t (à 60 Hz, 4,17 ms donnent 360 × 60 × 0,00417 = 90°). Attention : si tu calcules directement \(2\pi f t\) ou \(\omega t\), l'angle obtenu est en radians, et il faut alors le mode RAD. Voir la page <a href="unites.html">Unités et préfixes</a>.</p>
 
 <h2>4. Les trois types de charges</h2>
 <p>En alternatif, c'est la charge qui décide si le courant suit exactement la tension ou s'il est décalé dans le temps. Ce décalage s'appelle le <strong>déphasage</strong>. On le mesure par un angle, \(\varphi\) (phi).</p>
@@ -253,6 +254,6 @@
 <script defer src="assets/app.js?v=3887a767"></script>
 <script defer src="assets/draw.js?v=c5ce1061"></script>
 <script defer src="assets/bank.js?v=f6f83010"></script>
-<script defer src="assets/figs-alternatif.js?v=0d22bcae"></script>
+<script defer src="assets/figs-alternatif.js?v=9ad6a452"></script>
 </body>
 </html>

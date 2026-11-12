@@ -47,7 +47,7 @@
   <tr><td><strong>Ampèremètre</strong></td><td>Courant (A)</td><td>En <strong>série</strong> : il faut ouvrir le circuit pour l'insérer</td><td>Résistance interne très faible. Jamais en parallèle sur une source : c'est un court-circuit.</td></tr>
   <tr><td><strong>Pince ampèremétrique</strong></td><td>Courant (A)</td><td>Autour d'<strong>un seul</strong> conducteur, sans ouvrir le circuit</td><td>Elle capte le champ magnétique créé par le courant.</td></tr>
   <tr><td><strong>Ohmmètre</strong></td><td>Résistance (Ω), continuité</td><td>Aux bornes de l'élément, circuit <strong>hors tension</strong></td><td>Il envoie son propre petit courant. Une résistance presque nulle confirme la continuité.</td></tr>
-  <tr><td><strong>Mégohmmètre</strong></td><td>Résistance d'isolement (MΩ)</td><td>Entre un conducteur et la terre, ou entre deux conducteurs, <strong>hors tension</strong></td><td>Tension d'essai élevée : 500 V ou 1000 V. Plus la valeur lue est grande, meilleur est l'isolant.</td></tr>
+  <tr><td><strong>Mégohmmètre</strong></td><td>Résistance d'isolement (MΩ)</td><td>Entre un conducteur et la terre, ou entre deux conducteurs, <strong>hors tension</strong></td><td>Tension d'essai élevée : 500 V ou 1&nbsp;000 V. Plus la valeur lue est grande, meilleur est l'isolant.</td></tr>
   <tr><td><strong>Wattmètre</strong></td><td>Puissance active (W)</td><td>Un circuit de courant en série et un circuit de tension en parallèle</td><td>Il combine la tension, le courant et le facteur de puissance.</td></tr>
   <tr><td><strong>Multimètre</strong></td><td>Tension, courant, résistance</td><td>Selon la fonction choisie</td><td>Choisir la fonction (CA ou CC), puis le calibre, en commençant par le plus élevé.</td></tr>
   <tr><td><strong>Indicateur d'ordre de phases</strong></td><td>Séquence de rotation des phases</td><td>Sur les trois phases</td><td>Il indique dans quel ordre les phases se suivent (voir <a href="triphase.html">Monophasé et triphasé</a>).</td></tr>
@@ -67,7 +67,7 @@
 <figure class="fig wide" data-fig="pince-conducteurs"><figcaption>La pince mesure le champ magnétique autour du fil. Si elle entoure l'aller et le retour d'un même circuit, les deux champs s'annulent et elle indique environ zéro, même si 12 A circulent.</figcaption></figure>
 <div class="box ex"><span class="label">Exemple : pourquoi un ampèremètre en parallèle est un court-circuit</span>
   <p>Prenons un ampèremètre dont la résistance interne est de 0,1 Ω, branché par erreur directement sur une source de 120 V :</p>
-  <p>\(I = \dfrac{120}{0{,}1} = 1200\ \text{A}\). Son fusible fond aussitôt.</p>
+  <p>\(I = \dfrac{120}{0{,}1} = 1\,200\ \text{A}\). Son fusible fond aussitôt.</p>
   <p>À l'inverse, un voltmètre de 10 MΩ branché sur la même source ne tire presque rien :</p>
   <p>\(I = \dfrac{120}{10\,000\,000} = 0{,}000\,012\ \text{A}\), soit 12 µA. Il ne dérange pas le circuit.</p>
 </div>
@@ -80,7 +80,7 @@
 </ul>
 <div class="formula"><div class="title">Énergie</div>
 \[E = P \times t\]
-<div class="cond">\(E\) en kWh si \(P\) est en kW et \(t\) en heures. 1 kWh, c'est 1000 W pendant 1 heure (3,6 MJ).</div>
+<div class="cond">\(E\) en kWh si \(P\) est en kW et \(t\) en heures. 1 kWh, c'est 1&nbsp;000 W pendant 1 heure (3,6 MJ).</div>
 </div>
 <figure class="fig wide" data-fig="energie-rectangle"><figcaption>La puissance est la hauteur du rectangle, la durée est sa largeur, et l'énergie est sa surface. Image utile : le kW est l'indicateur de vitesse d'une auto, le kWh est son odomètre.</figcaption></figure>
 <div class="box ex"><span class="label">Trois exemples types</span>
@@ -109,26 +109,27 @@
 </table>
 
 <h2>5. Lire un compteur à cadrans</h2>
-<p>Un compteur à cadrans a quatre cadrans : milliers, centaines, dizaines et unités. Deux cadrans voisins tournent <strong>en sens contraires</strong> : regarde toujours dans quel ordre les chiffres sont écrits. La règle de lecture publiée par Hydro-Québec tient en quatre points :</p>
+<p>Un compteur à cadrans a quatre cadrans : milliers, centaines, dizaines et unités. Deux cadrans voisins tournent <strong>en sens contraires</strong> : regarde toujours dans quel ordre les chiffres sont écrits. La règle de lecture tient en quatre points. Les trois premiers sont ceux que publie Hydro-Québec ; le quatrième est la règle d'usage pour une aiguille posée sur un chiffre :</p>
 <ol class="steps">
   <li>Lis les cadrans <strong>de gauche à droite</strong>.</li>
   <li>Si l'aiguille est entre deux chiffres, retiens <strong>le plus petit</strong>.</li>
   <li>Exception : entre 9 et 0, retiens <strong>9</strong> (le 0 joue ici le rôle de 10).</li>
   <li>Si une aiguille semble exactement sur un chiffre, regarde le cadran <strong>de droite</strong> : s'il n'a pas encore dépassé 0, retiens le chiffre précédent.</li>
 </ol>
-<figure class="fig" data-fig="cadrans-exemple"><figcaption>Les flèches pointillées donnent le sens de rotation. Milliers : entre 7 et 8, on retient 7. Centaines : entre 5 et 6, on retient 5. Dizaines : entre 2 et 3, on retient 2. Unités : entre 3 et 4, on retient 3. Relevé : 7523 kWh.</figcaption></figure>
+<figure class="fig" data-fig="cadrans-exemple"><figcaption>Les flèches pointillées donnent le sens de rotation. Milliers : entre 7 et 8, on retient 7. Centaines : entre 5 et 6, on retient 5. Dizaines : entre 2 et 3, on retient 2. Unités : entre 3 et 4, on retient 3. Relevé : 7&nbsp;523.</figcaption></figure>
 <div class="box ex"><span class="label">Exemple : consommation entre deux relevés</span>
-  <p>Relevé précédent : 7300. Relevé actuel : 7523.</p>
-  <p>\(\text{Consommation} = \text{relevé actuel} - \text{relevé précédent} = 7523 - 7300 = 223\ \text{kWh}\)</p>
+  <p>Relevé précédent : 7&nbsp;300. Relevé actuel : 7&nbsp;523. Le compteur porte la mention MULT 10.</p>
+  <p>\(\text{Écart des relevés} = \text{relevé actuel} - \text{relevé précédent} = 7\,523 - 7\,300 = 223\)</p>
+  <p>\(\text{Consommation} = 223 \times 10 = 2\,230\ \text{kWh}\). C'est l'exemple que publie Hydro-Québec. Sans mention de multiplicateur sur le compteur, la consommation serait de 223 kWh.</p>
 </div>
 <div class="widget" data-widget="lecture-compteur"></div>
 
 <h2>6. Mesurage direct ou avec transformateurs de mesure</h2>
-<p>En <strong>mesurage direct</strong>, tout le courant de l'installation traverse le compteur : c'est le cas d'une maison. Selon la norme E.21-10, à 120/240 V, le mesurage est direct jusqu'à 320 A. Au-delà, on utilise des <strong>transformateurs de courant</strong>.</p>
+<p>En <strong>mesurage direct</strong>, tout le courant de l'installation traverse le compteur : c'est le cas d'une maison. Selon la norme E.21-10, le mesurage est direct jusqu'à 320 A à 120/240 V, et jusqu'à 200 A à 120/208 V et à 347/600 V. Au-delà, le compteur est relié à des <strong>transformateurs de courant</strong> (et aussi à des transformateurs de tension à 347/600 V).</p>
 <p>Avec des transformateurs de mesure, le compteur ne voit qu'une <strong>image réduite</strong> de ce qui passe dans la ligne :</p>
 <ul>
   <li>le <strong>transformateur de courant (TC)</strong> réduit le courant. Son secondaire est de 5 A : un TC 200:5 fournit 5 A au compteur quand 200 A passent dans la ligne ;</li>
-  <li>le <strong>transformateur de tension (TT)</strong>, utilisé en moyenne tension, réduit la tension à environ 120 V au secondaire.</li>
+  <li>le <strong>transformateur de tension (TT)</strong>, utilisé en moyenne tension et, selon la norme E.21-10, à 347/600 V au-dessus de 200 A, réduit la tension à environ 120 V au secondaire.</li>
 </ul>
 <figure class="fig wide" data-fig="mesurage-direct-tc"><figcaption>En mesurage direct, le compteur est traversé par les 80 A du client. Avec un TC 200:5, la ligne porte 160 A, mais le compteur n'en reçoit que 4 : il faut multiplier ce qu'il enregistre par 40.</figcaption></figure>
 <div class="formula"><div class="title">Multiplicateur et consommation réelle</div>
@@ -138,9 +139,9 @@
 </div>
 <div class="box ex"><span class="label">Trois exemples types</span>
   <ol>
-    <li><strong>TC 200:5, pas de TT.</strong> Multiplicateur : \(\dfrac{200}{5} = 40\).<br>Relevés 2418 puis 2468 : \((2468 - 2418) \times 40 = 50 \times 40 = 2000\ \text{kWh}\).</li>
-    <li><strong>TC 200:5 et TT 14 400:120.</strong> Rapports : \(\dfrac{200}{5} = 40\) et \(\dfrac{14\,400}{120} = 120\).<br>Multiplicateur : \(40 \times 120 = 4800\).</li>
-    <li><strong>Puissance appelée</strong> (méthode publiée par Hydro-Québec) : valeur lue sur le compteur en W × multiplicateur ÷ 1000 = kW.<br>Lecture de 1250 W, multiplicateur de 80 : \(\dfrac{1250 \times 80}{1000} = 100\ \text{kW}\).</li>
+    <li><strong>TC 200:5, pas de TT.</strong> Multiplicateur : \(\dfrac{200}{5} = 40\).<br>Relevés 2&nbsp;418 puis 2&nbsp;468 : \((2\,468 - 2\,418) \times 40 = 50 \times 40 = 2\,000\ \text{kWh}\).</li>
+    <li><strong>TC 200:5 et TT 14 400:120.</strong> Rapports : \(\dfrac{200}{5} = 40\) et \(\dfrac{14\,400}{120} = 120\).<br>Multiplicateur : \(40 \times 120 = 4\,800\).</li>
+    <li><strong>Puissance appelée</strong> (méthode publiée par Hydro-Québec) : valeur lue sur le compteur en W × multiplicateur ÷ 1&nbsp;000 = kW.<br>Lecture de 1&nbsp;250 W, multiplicateur de 80 : \(\dfrac{1\,250 \times 80}{1\,000} = 100\ \text{kW}\).</li>
   </ol>
 </div>
 <div class="widget" data-widget="multiplicateur"></div>
@@ -178,12 +179,12 @@
 <h3>Pour aller plus loin : la constante Kh</h3>
 <p>Sur un compteur à disque, la constante \(K_h\) donne l'énergie qui correspond à <strong>un tour de disque</strong>, en wattheures par tour. En comptant les tours pendant un temps donné, on retrouve la puissance :</p>
 <div class="formula"><div class="title">Puissance à partir du disque</div>
-\[P = \frac{3600 \times K_h \times \text{nombre de tours}}{\text{temps en secondes}}\]
-<div class="cond">\(P\) en watts, \(K_h\) en Wh par tour. Le 3600 convertit les heures en secondes.</div>
+\[P = \frac{3\,600 \times K_h \times \text{nombre de tours}}{\text{temps en secondes}}\]
+<div class="cond">\(P\) en watts, \(K_h\) en Wh par tour. Le 3&nbsp;600 convertit les heures en secondes.</div>
 </div>
 <div class="box ex"><span class="label">Exemple</span>
   <p>\(K_h = 7{,}2\) Wh par tour. Le disque fait 10 tours en 30 s :</p>
-  <p>\(P = \dfrac{3600 \times 7{,}2 \times 10}{30} = 8640\ \text{W}\), soit 8,64 kW.</p>
+  <p>\(P = \dfrac{3\,600 \times 7{,}2 \times 10}{30} = 8\,640\ \text{W}\), soit 8,64 kW.</p>
 </div>
 
 <h2>À retenir</h2>
@@ -194,7 +195,7 @@
     <li>Le kW est une puissance (un rythme), le kWh est une énergie (une quantité) : \(E = P \times t\).</li>
     <li>Le compteur appartient à Hydro-Québec, l'embase au client. Les compteurs de facturation sont approuvés par Mesures Canada et scellés.</li>
     <li>Cadrans : de gauche à droite, on retient le plus petit des deux chiffres, et 9 entre 9 et 0.</li>
-    <li>Consommation réelle = différence des relevés × multiplicateur. Multiplicateur = rapport du TC × rapport du TT.</li>
+    <li>Consommation réelle = différence des relevés × multiplicateur. Avec transformateurs de mesure : multiplicateur = rapport du TC × rapport du TT. En mesurage direct : le chiffre inscrit sur le compteur (souvent MULT 10 sur un compteur à cadrans), 1 sans mention.</li>
     <li>Secondaire d'un TC : 5 A, jamais ouvert en service.</li>
     <li>Erreur en % = (mesuré − réel) ÷ réel × 100.</li>
   </ul>
@@ -220,6 +221,6 @@
 <script defer src="assets/app.js?v=3887a767"></script>
 <script defer src="assets/draw.js?v=c5ce1061"></script>
 <script defer src="assets/bank.js?v=f6f83010"></script>
-<script defer src="assets/figs-mesure.js?v=51c46d94"></script>
+<script defer src="assets/figs-mesure.js?v=2c817fd8"></script>
 </body>
 </html>

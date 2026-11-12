@@ -27,7 +27,7 @@
 <div class="course-hero">
   <div class="kicker">Référence | À apprendre par cœur</div>
   <h1>Feuille de formules</h1>
-  <p class="meta">Toutes les formules du site, sujet par sujet : notion → formule → remarque ou piège. Imprimable avec Ctrl+P.</p>
+  <p class="meta">Les formules à connaître, sujet par sujet : notion → formule → remarque ou piège. Imprimable avec Ctrl+P.</p>
   <p class="small">L'invitation au test ne mentionne aucune feuille de formules permise : cette page sert à mémoriser. Bonne méthode : cache la colonne du milieu, récite la formule, puis vérifie. La tension est notée \(U\) (certains manuels écrivent \(E\) ou \(V\)).</p>
 </div>
 
@@ -37,7 +37,7 @@
   <tr><th>Valeur</th><th>À retenir</th><th>Sert à</th></tr>
   <tr><td>\(\sqrt{2} = 1{,}414\) et \(\dfrac{1}{\sqrt{2}} = 0{,}707\)</td><td>crête = 1,414 × efficace ; efficace = 0,707 × crête</td><td>Courant alternatif</td></tr>
   <tr><td>\(\sqrt{3} = 1{,}732\)</td><td>ligne = 1,732 × phase</td><td>Triphasé</td></tr>
-  <tr><td>60 Hz</td><td>période de 16,7 ms ; \(2\pi f = 377\)</td><td>Réactances</td></tr>
+  <tr><td>60 Hz</td><td>période de 16,67 ms ; \(2\pi f = 377\)</td><td>Réactances</td></tr>
   <tr><td>1 HP = 746 W</td><td>cheval-vapeur vers watts</td><td>Moteurs</td></tr>
   <tr><td>1 kWh = 3 600 000 J</td><td>1 kW pendant 1 heure</td><td>Énergie</td></tr>
   <tr><td>120/240 V | 120/208 V | 347/600 V | 25 kV</td><td>tensions courantes au Québec</td><td>Monophasé, triphasé, distribution</td></tr>
@@ -84,17 +84,17 @@
   <tr><th class="notion">Circuit parallèle</th><td class="f">\[\frac{1}{R_T} = \frac{1}{R_1} + \frac{1}{R_2} + \frac{1}{R_3}\]\[I_T = I_1 + I_2 + I_3\]</td><td class="rem">Même tension partout. \(R_T\) plus petite que la plus petite branche.</td></tr>
   <tr><th class="notion">Deux résistances en parallèle</th><td class="f">\[R_T = \frac{R_1 \times R_2}{R_1 + R_2}\]\[n\ \text{résistances égales} : R_T = \frac{R}{n}\]</td><td class="rem">Produit sur somme.</td></tr>
   <tr><th class="notion">Lois de Kirchhoff</th><td class="f"><p>Nœud : somme des courants qui entrent = somme des courants qui sortent.</p><p>Maille : somme des tensions fournies = somme des chutes de tension.</p></td><td class="rem"></td></tr>
-  <tr><th class="notion">Pertes en ligne</th><td class="f">\[P_{pertes} = R_{fil} \times I^{2} \qquad U_{chute} = R_{fil} \times I\]</td><td class="rem">D'où le transport en haute tension : moins de courant, beaucoup moins de pertes.</td></tr>
+  <tr><th class="notion">Pertes en ligne</th><td class="f">\[P_{pertes} = R_{fil} \times I^{2} \qquad \Delta U = R_{fil} \times I\]</td><td class="rem">\(\Delta U\) : chute de tension dans le fil. D'où le transport en haute tension : moins de courant, beaucoup moins de pertes.</td></tr>
 </table>
 </section>
 
 <section class="form-section">
 <h2>3. Courant alternatif</h2>
 <table class="formulaire">
-  <tr><th class="notion">Fréquence et période</th><td class="f">\[f = \frac{1}{T} \qquad T = \frac{1}{f}\]</td><td class="rem">60 Hz → 16,7 ms.</td></tr>
-  <tr><th class="notion">Valeurs d'une sinusoïde</th><td class="f">\[U_{max} = \sqrt{2} \times U_{eff} \qquad U_{eff} = 0{,}707 \times U_{max}\]\[U_{cc} = 2 \times U_{max}\]</td><td class="rem">120 V efficace → 170 V de crête. Les appareils indiquent la valeur efficace.</td></tr>
+  <tr><th class="notion">Fréquence et période</th><td class="f">\[f = \frac{1}{T} \qquad T = \frac{1}{f}\]</td><td class="rem">60 Hz → 16,67 ms.</td></tr>
+  <tr><th class="notion">Valeurs d'une sinusoïde</th><td class="f">\[U_{max} = \sqrt{2} \times U_{eff} \qquad U_{eff} = 0{,}707 \times U_{max}\]\[U_{\text{crête à crête}} = 2 \times U_{max}\]</td><td class="rem">120 V efficace → 170 V de crête → 339 V crête à crête. Les appareils indiquent la valeur efficace.</td></tr>
   <tr><th class="notion">Réactances</th><td class="f">\[X_L = 2\pi f L \qquad X_C = \frac{1}{2\pi f C}\]</td><td class="rem">L en henrys, C en farads. \(X_L\) monte avec la fréquence, \(X_C\) descend.</td></tr>
-  <tr><th class="notion">Impédance</th><td class="f">\[Z = \sqrt{R^{2} + X^{2}} \qquad U = Z \times I \qquad \cos\varphi = \frac{R}{Z}\]</td><td class="rem">On n'additionne jamais directement R et X.</td></tr>
+  <tr><th class="notion">Impédance</th><td class="f">\[Z = \sqrt{R^{2} + X^{2}} \qquad U = Z \times I \qquad \cos\varphi = \frac{R}{Z}\]</td><td class="rem">Circuit série, avec \(X = X_L - X_C\). On n'additionne jamais directement R et X.</td></tr>
   <tr><th class="notion">Déphasage</th><td class="f"><p>Résistance : courant en phase. Bobine : courant en retard. Condensateur : courant en avance.</p></td><td class="rem">90° pour une bobine ou un condensateur parfait.</td></tr>
   <tr><th class="notion">Puissances (monophasé)</th><td class="f">\[S = U \times I \qquad P = U \times I \times \cos\varphi\]\[Q = U \times I \times \sin\varphi\]</td><td class="rem">S en VA, P en W, Q en var.</td></tr>
   <tr><th class="notion">Triangle des puissances</th><td class="f">\[S^{2} = P^{2} + Q^{2} \qquad FP = \cos\varphi = \frac{P}{S}\]</td><td class="rem">FP = 1 pour une charge résistive. Les condensateurs corrigent un FP inductif.</td></tr>
@@ -105,9 +105,11 @@
 <section class="form-section">
 <h2>4. Électrotechnique</h2>
 <table class="formulaire">
-  <tr><th class="notion">Force magnétomotrice</th><td class="f">\[F = N \times I\]</td><td class="rem">En ampères-tours.</td></tr>
+  <tr><th class="notion">Force magnétomotrice</th><td class="f">\[\text{FMM} = N \times I\]</td><td class="rem">En ampères-tours.</td></tr>
+  <tr><th class="notion">Loi de Faraday</th><td class="f">\[e = N \times \frac{\Delta \Phi}{\Delta t}\]</td><td class="rem">Sans variation du flux, aucune tension induite.</td></tr>
   <tr><th class="notion">Vitesse synchrone</th><td class="f">\[n_s = \frac{120 \times f}{p}\]</td><td class="rem">p = nombre de pôles. À 60 Hz : 3 600, 1 800, 1 200, 900 r/min pour 2, 4, 6, 8 pôles.</td></tr>
   <tr><th class="notion">Fréquence d'un alternateur</th><td class="f">\[f = \frac{p \times n}{120}\]</td><td class="rem">n en tours par minute.</td></tr>
+  <tr><th class="notion">Glissement d'un moteur asynchrone</th><td class="f">\[s = \frac{n_s - n}{n_s} \times 100\ \%\]</td><td class="rem">n : vitesse réelle du rotor. Ex. : 1 750 r/min pour 1 800 r/min donne 2,8 %.</td></tr>
   <tr><th class="notion">Condensateurs</th><td class="f">\[\text{parallèle} : C_T = C_1 + C_2\]\[\text{série} : \frac{1}{C_T} = \frac{1}{C_1} + \frac{1}{C_2}\]</td><td class="rem">L'inverse des résistances.</td></tr>
   <tr><th class="notion">Moteur</th><td class="f">\[P_{absorb\acute{e}e} = \frac{HP \times 746}{\eta}\]</td><td class="rem">Rendement en décimal (85 % = 0,85).</td></tr>
   <tr><th class="notion">Sens de rotation (triphasé)</th><td class="f"><p>Intervertir deux phases inverse le sens de rotation.</p></td><td class="rem">Vérifier la séquence des phases après une intervention.</td></tr>
@@ -155,7 +157,7 @@
 <h2>8. Sécurité</h2>
 <table class="formulaire">
   <tr><th class="notion">Courant dans le corps</th><td class="f">\[I = \frac{U}{R_{corps}}\]</td><td class="rem">Peau sèche : environ 100 kΩ. Peau mouillée : environ 1 kΩ.</td></tr>
-  <tr><th class="notion">Ordres de grandeur (60 Hz)</th><td class="f"><p>1 mA : perception | 5 mA : choc, seuil d'un DDFT | 10 à 20 mA : impossible de lâcher | 30 à 50 mA : respiration difficile | 75 à 100 mA : fibrillation possible</p></td><td class="rem">Valeurs approximatives, variables selon les sources.</td></tr>
+  <tr><th class="notion">Ordres de grandeur (60 Hz)</th><td class="f"><p>1 mA : perception | 5 mA : choc, seuil d'un DDFT | 10 à 20 mA : impossible de lâcher | 30 à 50 mA : respiration difficile | 50 à 100 mA et plus : arrêt cardiaque possible (fibrillation)</p></td><td class="rem">Valeurs approximatives, variables selon les sources. Hydro-Québec : 50 mA par le cœur peut causer un arrêt cardiaque.</td></tr>
   <tr><th class="notion">Absence de tension</th><td class="f"><p>Tester le vérificateur → tester le circuit → retester le vérificateur.</p></td><td class="rem">Tout conducteur est sous tension tant que ce n'est pas vérifié.</td></tr>
   <tr><th class="notion">Cadenassage</th><td class="f"><p>Identifier → aviser → arrêter → isoler → cadenasser et étiqueter → dissiper l'énergie résiduelle → vérifier l'absence de tension.</p></td><td class="rem">Chacun son cadenas, chacun sa clé.</td></tr>
   <tr><th class="notion">Distances d'approche des lignes</th><td class="f"><p>Moins de 125 kV : 3 m | 125 à 250 kV : 5 m | 250 à 550 kV : 8 m | plus de 550 kV : 12 m</p></td><td class="rem">Travailleurs non habilités. Fil au sol : rester à 10 m.</td></tr>

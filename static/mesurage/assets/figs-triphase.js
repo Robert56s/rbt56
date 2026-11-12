@@ -148,7 +148,7 @@
       S.line(p.sx(theta), 34, p.sx(theta), 222, 'dash');
       order.forEach(name => S.circle(p.sx(theta), p.sy(vals[name]), 4.6, COL[name].fill));
       box.replaceChildren(S.node);
-      const pct = v => (v >= 0 ? '+' : '−') + HQ.fr(Math.abs(100 * v), 0) + ' % de la crête';
+      const pct = v => { const p = Math.round(100 * v); return (p > 0 ? '+' : p < 0 ? '−' : '') + HQ.fr(Math.abs(p), 0) + ' % de la crête'; };
       out.replaceChildren(wk.readout([
         ['Phase A', pct(vals.A)], ['Phase B', pct(vals.B)], ['Phase C', pct(vals.C)],
         ['Somme des trois', '0 (à tout instant)'],

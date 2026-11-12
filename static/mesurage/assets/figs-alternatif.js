@@ -57,7 +57,7 @@
     S.path(`M668,${y + 16} V${y - 8} L692,${y - 28} L716,${y - 8} V${y + 16} Z`, 'body');
     S.rect(686, y - 2, 12, 18, 'sym fill');
     S.text(103, y - 16, 'ex. : 13,8 kV', { cls: 'sm mut' });
-    S.text(270, y - 17, 'Transport : 120 kV à 735 kV', { cls: 'b th' });
+    S.text(270, y - 17, 'Transport : jusqu’à 735 kV', { cls: 'b th' });
     S.text(270, y + 23, 'haute tension, courant faible', { cls: 'sm mut' });
     S.text(480, y - 17, 'Distribution : 25 kV', { cls: 'b te' });
     S.text(480, y + 23, 'dans les rues', { cls: 'sm mut' });
@@ -229,7 +229,7 @@
       S.line(sx(0), sy(um), sx(50) + 8, sy(um), 'dash');
       S.add('line', { x1: sx(0), y1: sy(ue), x2: sx(50) + 8, y2: sy(ue), class: 'c3', style: 'stroke-width:1.5;stroke-dasharray:7 4' });
       p.curve(t => um * Math.sin(w * t), 'c1', 400);
-      p.ytick(N, N + ' V'); p.ytick(0, '0'); p.ytick(-N, '−' + N + ' V');
+      p.ytick(N, HQ.fr(N, 0) + ' V'); p.ytick(0, '0'); p.ytick(-N, '−' + HQ.fr(N, 0) + ' V');
       [10, 20, 30, 40, 50].forEach(t => { p.xtick(t); S.text(sx(t), 30 + 230 + 16, String(t), { cls: 'sm mut' }); });
       S.text(sx(50) + 12, sy(um) - 3, 'crête : ' + fmt(um, 'V', 3), { anchor: 'start', cls: 'sm b' });
       S.text(sx(50) + 12, sy(ue) + 13, 'efficace : ' + fmt(ue, 'V', 3), { anchor: 'start', cls: 'sm b td' });

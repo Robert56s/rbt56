@@ -267,7 +267,8 @@
       labels.forEach((t, i) => { const q = polar(cx, cy, 78, thF + (i + 0.5) * 360 / p); t.setAttribute('x', q[0]); t.setAttribute('y', q[1]); });
     }
     function build() {
-      const ns = 120 * f / p, s = slip.value, n = ns * (1 - s / 100);
+      // l'écart est arrondi une seule fois, puis soustrait : la soustraction affichée tombe toujours juste
+      const ns = 120 * f / p, s = slip.value, n = ns - Math.round(ns * s / 100);
       const S = HQ.S(540, 262, 'Coupe d’un moteur : l’anneau de pôles nord et sud représente le champ tournant du stator, le disque central représente le rotor');
       S.circle(cx, cy, 112, 'body'); S.circle(cx, cy, 90, 'sym fill');
       field = S.g({}, () => {
@@ -287,10 +288,10 @@
       S.line(282, 122, 308, 122, 'needle');
       S.text(316, 126, 'Rotor (repère rouge)', { anchor: 'start', cls: 'sm' });
       S.text(282, 151, 'Vitesse du rotor : ' + nb(n, 0) + ' r/min', { anchor: 'start', cls: 'b' });
-      S.text(282, 176, s > 0 ? 'Le rotor perd ' + nb(ns - n, 0) + ' tours par minute sur le champ' : 'Glissement nul : le rotor suit exactement le champ', { anchor: 'start', cls: 'sm mut' });
+      S.text(282, 176, s > 0 ? 'Le rotor perd ' + nb(ns - n, 0) + ' tours par minute sur le champ' : 'Glissement nul : cas limite, impossible en charge', { anchor: 'start', cls: 'sm mut' });
       S.text(282, 214, 'Animation ralentie 120 fois', { anchor: 'start', cls: 'xs mut' });
+      frame();   // place les étiquettes N et S avant de remettre le dessin : son cadre se mesure sur leur vraie position
       box.replaceChildren(S.node);
-      frame();
       out.replaceChildren(wk.readout([
         ['Vitesse synchrone n<sub>s</sub> = 120 × f ÷ p', '120 × ' + f + ' ÷ ' + p + ' = ' + nb(ns, 0) + ' r/min'],
         ['Glissement', HQ.fr(s, 1) + ' % de ' + nb(ns, 0) + ' = ' + nb(ns - n, 0) + ' r/min'],
