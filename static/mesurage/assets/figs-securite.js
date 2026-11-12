@@ -11,13 +11,13 @@
 
   /* Zones d'effets du courant à 60 Hz (ordres de grandeur). Bornes en mA, choisies pour que les zones se touchent. */
   const ZONES = [
-    { lo: 0.1, hi: 1, col: '--muted', op: 0.12, range: 'Moins de 1 mA', txt: 'sous le seuil de perception, on ne sent rien' },
-    { lo: 1, hi: 5, col: '--ok', op: 0.28, range: 'Environ 1 à 5 mA', txt: 'perception, picotement' },
+    { lo: 0.1, hi: 0.25, col: '--muted', op: 0.12, range: 'Moins de 0,25 mA', txt: 'sous le seuil de perception, on ne sent rien' },
+    { lo: 0.25, hi: 5, col: '--ok', op: 0.28, range: 'Environ 0,25 à 5 mA', txt: 'perception : fourmillement, picotement' },
     { lo: 5, hi: 10, col: '--warn', op: 0.2, range: 'Environ 5 à 10 mA', txt: 'choc léger ; un DDFT déclenche vers 5 mA' },
     { lo: 10, hi: 30, col: '--warn', op: 0.48, range: 'Environ 10 à 30 mA', txt: 'contraction musculaire, on ne peut plus lâcher prise' },
     { lo: 30, hi: 50, col: '--bad', op: 0.22, range: 'Environ 30 à 50 mA', txt: 'difficulté à respirer' },
     { lo: 50, hi: 2000, col: '--bad', op: 0.46, range: '50 mA et plus', txt: 'risque d’arrêt cardiaque (fibrillation ventriculaire)' },
-    { lo: 2000, hi: 10000, col: '--bad', op: 0.78, range: 'Plusieurs ampères', txt: 'brûlures graves et arrêt cardiaque' }
+    { lo: 2000, hi: 10000, col: '--bad', op: 0.78, range: 'Plusieurs ampères', txt: 'arrêt cardiaque ; brûlures graves au-delà de 10 A' }
   ];
 
   // bande graduée (échelle logarithmique de 0,1 mA à 10 A) ; renvoie la fonction de position
@@ -37,10 +37,9 @@
 
   /* ---------- Figure : échelle des effets du courant ---------- */
   HQ.figs['echelle-effets'] = function () {
-    const S = HQ.S(760, 224, 'Échelle logarithmique du courant qui traverse le corps, de 0,1 mA à 10 A : perception vers 1 mA, choc léger et seuil d’un DDFT vers 5 mA, impossibilité de lâcher prise de 10 à 20 mA, difficulté à respirer de 30 à 50 mA, arrêt cardiaque possible (fibrillation ventriculaire) à partir de 50 à 100 mA, brûlures graves et arrêt cardiaque à plusieurs ampères');
+    const S = HQ.S(760, 224, 'Échelle logarithmique du courant qui traverse le corps, de 0,1 mA à 10 A : perception dès 0,25 mA environ, choc léger et seuil d’un DDFT vers 5 mA, impossibilité de lâcher prise au-delà de 10 mA, difficulté à respirer de 30 à 50 mA, arrêt cardiaque possible (fibrillation ventriculaire) à partir de 50 mA, brûlures graves au-delà de 10 A');
     const y = 108, h = 28;
     const sx = drawScale(S, 40, 720, y, h);
-    S.text((sx(0.1) + sx(1)) / 2, y + 18, 'rien de ressenti', { cls: 'sm mut' });
     // repères au-dessus : (valeur, y du texte, ancre, x du texte, titre, effet)
     const up = (v, ty, anchor, tx, l1, l2) => {
       S.line(sx(v), y, sx(v), ty + 8, 'ln');
@@ -50,12 +49,12 @@
       S.line(sx(v), y + h, sx(v), 174, 'ln');
       S.text(tx, 188, l1, { anchor, cls: 'b' }); S.text(tx, 203, l2, { anchor, cls: 'sm' });
     };
-    up(1, 88, 'middle', sx(1), '≈ 1 mA', 'seuil de perception');
-    up(14, 88, 'middle', sx(14), '10 à 20 mA', 'on ne peut plus lâcher prise');
-    up(70, 44, 'start', sx(70) - 8, '50 à 100 mA et plus', 'risque de fibrillation ventriculaire');
+    up(0.25, 88, 'middle', sx(0.25) + 14, '≈ 0,25 mA', 'seuil de perception');
+    up(10, 88, 'middle', sx(14), 'plus de 10 mA', 'on ne peut plus lâcher prise');
+    up(50, 44, 'start', sx(50) - 8, '50 mA et plus', 'risque d’arrêt cardiaque (fibrillation)');
     down(5, 'middle', sx(5), '≈ 5 mA', 'choc léger, seuil d’un DDFT');
     down(39, 'start', sx(39) - 8, '30 à 50 mA', 'difficulté à respirer');
-    down(4500, 'end', 738, 'plusieurs ampères', 'brûlures graves, arrêt cardiaque');
+    up(10000, 88, 'end', 738, 'au-delà de 10 A', 'brûlures graves');   // au-dessus de l'échelle : en dessous, le trait couperait la graduation « 10 A »
     return S;
   };
 
@@ -113,7 +112,7 @@
 
   /* ---------- Figure : défaut à la masse et mise à la terre ---------- */
   HQ.figs['defaut-terre'] = function () {
-    const S = HQ.S(760, 300, 'Un fil sous tension touche le boîtier métallique d’un appareil. Le courant de défaut retourne à la source par le fil de mise à la terre et fait déclencher le disjoncteur');
+    const S = HQ.S(760, 300, 'Un fil sous tension touche le boîtier métallique d’un appareil. Le courant de défaut retourne à la source par le fil de continuité des masses et fait déclencher le disjoncteur');
     S.rect(450, 50, 240, 196, 'body', 10);
     S.text(570, 236, 'Boîtier métallique de l’appareil', { cls: 'sm b' });
     S.comp('AC', 90, 204, 90, 90, { label: 'Source', val: '120 V', side: 'l' });
@@ -129,7 +128,7 @@
     S.dot(140, 204); S.gnd(140, 204);
     S.wire([[490, 246], [490, 272], [200, 272], [200, 204]], 'wire gnd');
     S.dot(200, 204); S.dot(490, 246);
-    S.text(345, 290, 'fil de mise à la terre (vert ou nu)', { cls: 'sm tok' });
+    S.text(345, 290, 'fil de continuité des masses (vert ou nu)', { cls: 'sm tok' });
     cur(S, 326, 80, 414, 'courant de défaut');
     cur(S, 414, 262, 326);
     return S;
@@ -159,7 +158,7 @@
 
   /* ---------- Figure : tension de pas près d'un fil tombé ---------- */
   HQ.figs['tension-pas'] = function () {
-    const S = HQ.S(740, 262, 'Un fil tombé met le sol sous tension. Le potentiel du sol baisse quand on s’éloigne. Près du fil, un grand pas place les deux pieds à des potentiels différents. Il faut rester à au moins 10 m et s’éloigner à petits pas');
+    const S = HQ.S(740, 262, 'Un fil tombé met le sol sous tension. Le potentiel du sol baisse quand on s’éloigne. Près du fil, un grand pas place les deux pieds à des potentiels différents. Il faut rester à plus de 10 m et s’éloigner en glissant les pieds ou à petits sauts, pieds joints');
     const g = 208, base = 108, xc = 140;
     const V = x => 80 * Math.exp(-(x - xc) / 110);
     // potentiel du sol en fonction de la distance
@@ -194,8 +193,8 @@
     S.text(262, 167, 'les deux pieds ne sont pas', { anchor: 'start', cls: 'sm' });
     S.text(262, 182, 'au même potentiel.', { anchor: 'start', cls: 'sm' });
     person(604, 616);
-    S.text(630, 152, 'Petits pas,', { anchor: 'start', cls: 'sm b' });
-    S.text(630, 167, 'pieds rapprochés', { anchor: 'start', cls: 'sm' });
+    S.text(630, 152, 'Pieds joints,', { anchor: 'start', cls: 'sm b' });
+    S.text(630, 167, 'sans les soulever', { anchor: 'start', cls: 'sm' });
     // distance de sécurité
     S.line(xc, g, xc, g + 34, 'dash'); S.line(560, g, 560, g + 34, 'dash');
     S.add('line', { x1: xc + 2, y1: g + 26, x2: 558, y2: g + 26, class: 'ln', 'marker-start': 'url(#ah)', 'marker-end': 'url(#ah)' });
@@ -212,9 +211,11 @@
     let R = 100000;
     const skin = wk.seg([['100000', 'Peau sèche (≈ 100 kΩ)'], ['10000', 'Peau humide (≈ 10 kΩ)'], ['1000', 'Peau mouillée (≈ 1 kΩ)']], '100000', v => { R = parseFloat(v); update(); });
     const box = el('div', { class: 'svg-wrap' }), out = el('div'), zone = el('p', { class: 'center' });
-    const note = el('p', { class: 'w-note', html: '<strong>Ordres de grandeur seulement.</strong> La résistance réelle du corps change d’une personne et d’une situation à l’autre, et les seuils entre les zones sont approximatifs. Un petit résultat ne prouve jamais qu’un contact est sans danger.' });
+    const note = el('p', { class: 'w-note', html: '<strong>Ordres de grandeur seulement.</strong> La résistance réelle du corps change d’une personne et d’une situation à l’autre, et les seuils entre les zones sont approximatifs. Au-delà d’environ 120 V, la peau cède et la résistance tombe vers 1 000 à 2 000 Ω, même si elle est sèche. Un petit résultat ne prouve jamais qu’un contact est sans danger.' });
     function update() {
-      const u = U.value, i = u / R * 1000;          // courant en mA
+      const u = U.value;
+      const Rb = u > 120 && R > 5000 ? (R > 50000 ? 2000 : 1000) : R;   // au-delà de 120 V, la peau cède (même règle que gen.js)
+      const i = u / Rb * 1000;          // courant en mA
       const z = ZONES.find(zz => i < zz.hi) || ZONES[ZONES.length - 1];
       const S = HQ.S(520, 122, 'Échelle des effets du courant avec un repère à ' + HQ.eng(i / 1000, 'A'));
       const sx = drawScale(S, 26, 494, 62, 26, 'mut');
@@ -226,7 +227,7 @@
       zone.innerHTML = '<strong>' + z.range + ' :</strong> ' + z.txt;
       out.replaceChildren(wk.readout([
         ['Tension de contact U', u + ' V'],
-        ['Résistance du corps R', HQ.eng(R, 'Ω')],
+        ['Résistance du corps R', HQ.eng(Rb, 'Ω') + (Rb !== R ? ' (au-delà de 120 V, la peau cède)' : '')],
         ['Courant I = U ÷ R', HQ.eng(i / 1000, 'A')],
         ['Effet probable', z.txt]
       ]));
@@ -280,7 +281,7 @@
       const good = order.filter((v, i) => v === i).length, ok = good === STEPS.length;
       const kids = [el('div', { class: 'verdict ' + (ok ? 'ok' : 'no') }, ok ? 'Bon ordre : les 7 étapes sont à leur place.' : good + ' étape' + (good > 1 ? 's' : '') + ' sur 7 à la bonne place. Le bon ordre :')];
       if (!ok) kids.push(el('ol', {}, STEPS.map(s => el('li', {}, s))));
-      kids.push(el('p', {}, 'La logique : on prépare (identifier, aviser), on coupe (arrêter, isoler), on verrouille (cadenasser, étiqueter), puis on s’assure qu’il ne reste aucune énergie (dissiper, vérifier).'));
+      kids.push(el('p', {}, 'La logique : on prépare (identifier, aviser), on coupe (arrêter, isoler), on verrouille (cadenasser, étiqueter), puis on s’assure qu’il ne reste aucune énergie (dissiper, vérifier). Selon les sources, « dissiper » se place parfois avant « cadenasser » : retiens surtout que la vérification vient en dernier.'));
       out.replaceChildren(el('div', { class: 'sol-box' + (ok ? '' : ' wrong') }, kids));
     });
     bReset.addEventListener('click', shuffle);

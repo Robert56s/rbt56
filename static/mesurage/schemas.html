@@ -48,8 +48,8 @@
 <table class="tight">
   <tr><th>Type de schéma</th><th>Ce qu'il montre</th><th>À quoi il sert</th></tr>
   <tr><td><strong>Schéma unifilaire</strong></td><td>Un seul trait représente tous les conducteurs d'un circuit.</td><td>Voir d'un coup d'œil l'ensemble d'une distribution : source, transformateurs, protections, mesurage, charges.</td></tr>
-  <tr><td><strong>Schéma multifilaire</strong> (ou développé)</td><td>Tous les conducteurs sont dessinés, un trait par fil.</td><td>Comprendre le fonctionnement et suivre chaque conducteur.</td></tr>
-  <tr><td><strong>Schéma de commande en échelle</strong></td><td>Deux montants verticaux (l'alimentation) et des échelons horizontaux.</td><td>Lire la logique d'une commande : boutons, contacts, bobines.</td></tr>
+  <tr><td><strong>Schéma multifilaire</strong></td><td>Tous les conducteurs sont dessinés, un trait par fil.</td><td>Suivre chaque conducteur d'un circuit.</td></tr>
+  <tr><td><strong>Schéma de commande en échelle</strong> (schéma développé)</td><td>Deux montants verticaux (l'alimentation) et des échelons horizontaux. Les contacts et la bobine d'un même appareil sont dessinés séparément, dans l'ordre du fonctionnement.</td><td>Lire la logique d'une commande : boutons, contacts, bobines.</td></tr>
   <tr><td><strong>Schéma de câblage</strong> (ou de raccordement)</td><td>Les connexions réelles : bornes, numéros de fils, position des appareils.</td><td>Installer, raccorder et dépanner.</td></tr>
   <tr><td><strong>Plan d'implantation</strong></td><td>Le plan du bâtiment avec les prises, les luminaires et les interrupteurs.</td><td>Savoir où se trouve chaque appareil.</td></tr>
 </table>
@@ -106,7 +106,7 @@
 <p>Beaucoup d'exercices de lecture de schéma reviennent à ceci : un interrupteur s'ouvre, un fusible fond ou une lampe grille, et il faut dire ce qui reste allumé. Exerce-toi avec ce circuit.</p>
 <div class="widget" data-widget="circuit-interrupteurs"></div>
 <div class="box ex"><span class="label">Exemple : trois questions sur le circuit de la démo</span>
-  <p>Au départ, le fusible est intact et S1, S2 et S3 sont fermés : L1 et L2 sont allumées.</p>
+  <p>Ferme d'abord S1 dans la démo. Le fusible est alors intact et S1, S2 et S3 sont fermés : L1 et L2 sont allumées.</p>
   <ol>
     <li><strong>S3 s'ouvre.</strong> Seule la branche de L2 est coupée : L2 s'éteint, L1 reste allumée.</li>
     <li><strong>S1 s'ouvre.</strong> S1 est en série avec les deux branches : L1 et L2 s'éteignent.</li>
@@ -134,7 +134,7 @@
 
 <h2>6. Le schéma unifilaire d'un branchement</h2>
 <p>Le schéma unifilaire suit l'électricité de la ligne du distributeur jusqu'aux circuits du client. Un seul trait remplace tous les conducteurs ; de petits traits obliques indiquent parfois leur nombre.</p>
-<figure class="fig wide" data-fig="unifilaire-branchement"><figcaption>En haut, une installation courante : le compteur, dans son embase, est traversé par tout le courant. En bas, une grosse installation : le courant est trop fort pour le compteur, qui est alimenté par des transformateurs de courant.</figcaption></figure>
+<figure class="fig wide" data-fig="unifilaire-branchement"><figcaption>En haut, une installation courante : le compteur, dans son embase, est traversé par tout le courant. En bas, une grosse installation : le courant est trop fort pour le compteur, qui est alimenté par des transformateurs de courant placés en aval d'un dispositif de sectionnement (ici le coffret de branchement).</figcaption></figure>
 <table class="tight">
   <tr><th>Élément</th><th>Son rôle</th></tr>
   <tr><td><strong>Ligne du distributeur</strong></td><td>Amène l'électricité à moyenne tension.</td></tr>
@@ -200,7 +200,7 @@
 <script defer src="assets/katex/contrib/auto-render.min.js?v=71052e38"></script>
 <script defer src="assets/app.js?v=3887a767"></script>
 <script defer src="assets/draw.js?v=c5ce1061"></script>
-<script defer src="assets/bank.js?v=f6f83010"></script>
-<script defer src="assets/figs-schemas.js?v=5550d8a2"></script>
+<script defer src="assets/bank.js?v=3ac7f4e9"></script>
+<script defer src="assets/figs-schemas.js?v=0f138141"></script>
 </body>
 </html>

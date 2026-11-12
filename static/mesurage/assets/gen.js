@@ -481,7 +481,7 @@
     // Sans cela, « 600 V et 100 000 Ω » donnerait 6 mA et un corrigé rassurant pour un contact en réalité mortel.
     const Rb = U > 120 && R0 > 5000 ? { 10000: 1000, 50000: 1500, 100000: 2000 }[R0] : R0, sec = Rb > 5000;
     const I = U / Rb, mA = I * 1000, f = x => eng(x, 'A');
-    const effet = mA < 1 ? 'en dessous du seuil de perception' : mA < 5 ? 'perceptible' : mA < 10 ? 'un choc douloureux' : mA < 30 ? 'assez pour ne plus pouvoir lâcher prise' : mA < 50 ? 'assez pour gêner la respiration' : 'assez pour provoquer un arrêt cardiaque (fibrillation ventriculaire)';
+    const effet = mA < 0.25 ? 'en dessous du seuil de perception' : mA < 5 ? 'perceptible' : mA < 10 ? 'un choc net, qui devient douloureux' : mA < 30 ? 'assez pour ne plus pouvoir lâcher prise' : mA < 50 ? 'assez pour gêner la respiration' : 'assez pour provoquer un arrêt cardiaque (fibrillation ventriculaire)';
     return item(`Une personne entre en contact avec une tension de ${U}${NB}V. La résistance de son corps sur ce trajet est d'environ ${int(Rb)}${NB}Ω${sec ? ' (peau sèche)' : ''}. Quel courant la traverse ?`, mcq(r, I, [I * 10, I / 10, I * 1000, I / 1000], f),
       `I = U ÷ R = ${U} ÷ ${int(Rb)} = ${fr(I, 5)}${NB}A = <strong>${f(I)}</strong>. Ordre de grandeur : c'est ${effet}.${sec ? ' Cette résistance élevée suppose une peau sèche : mouillée, elle tombe vers 1 000 Ω et le même contact devient mortel.' : ''}`);
   });

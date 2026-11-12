@@ -141,7 +141,7 @@
 
   /* ---------- Figure : schéma unifilaire d'un branchement ---------- */
   HQ.figs['unifilaire-branchement'] = function () {
-    const S = HQ.S(780, 330, 'Schéma unifilaire d’un branchement : ligne du distributeur, transformateur, branchement, compteur dans son embase, coffret de branchement avec disjoncteur principal, panneau de distribution et circuits. En dessous, la variante d’une grosse installation, où le compteur est alimenté par des transformateurs de courant');
+    const S = HQ.S(780, 330, 'Schéma unifilaire d’un branchement : ligne du distributeur, transformateur, branchement, compteur dans son embase, coffret de branchement avec disjoncteur principal, panneau de distribution et circuits. En dessous, la variante d’une grosse installation, le coffret de branchement vient en premier, puis les transformateurs de courant qui alimentent le compteur');
     function start(y) {
       S.line(45, y - 42, 45, y + 42, 'wire thick'); S.dot(45, y);
       S.wire([[45, y], [138, y]]);
@@ -174,14 +174,20 @@
     // grosse installation : mesurage avec transformateurs de courant
     S.line(20, 176, 760, 176, 'dash');
     S.text(20, 198, 'Variante pour une grosse installation : le compteur est alimenté par des transformateurs de courant (TC).', { anchor: 'start', cls: 'sm b' });
+    // un dispositif de sectionnement doit se trouver immédiatement en amont des transformateurs de mesure : le coffret vient donc avant les TC
     y = 252;
     start(y);
-    const ct = S.comp('ct', 162, y, 420, y, { label: 'TC' });
-    S.wire([ct.s1, [281, y + 26], [261, y + 26], [261, y + 52]], 'wire acc');
-    S.wire([ct.s2, [301, y + 26], [321, y + 26], [321, y + 52]], 'wire acc');
-    S.comp('meter', 261, y + 52, 321, y + 52, { letter: 'kWh', wire: 'wire acc' });
-    S.text(336, y + 56, 'Compteur', { anchor: 'start', cls: 'sm b' });
-    end(y, [-24, 24]);
+    S.wire([[162, y], [200, y]]);
+    S.rect(200, y - 27, 80, 54, 'panel', 6);
+    S.comp('brk', 200, y, 280, y);
+    S.text(240, y + 42, 'Coffret de branchement', { cls: 'sm b' });
+    const ct = S.comp('ct', 280, y, 580, y, { label: 'TC' });
+    S.wire([ct.s1, [420, y + 26], [400, y + 26], [400, y + 52]], 'wire acc');
+    S.wire([ct.s2, [440, y + 26], [460, y + 26], [460, y + 52]], 'wire acc');
+    S.comp('meter', 400, y + 52, 460, y + 52, { letter: 'kWh', wire: 'wire acc' });
+    S.text(475, y + 56, 'Compteur', { anchor: 'start', cls: 'sm b' });
+    S.line(580, y - 36, 580, y + 36, 'wire thick');
+    [-24, 24].forEach(d => { S.comp('brk', 580, y + d, 680, y + d); S.arrow(680, y + d, 716, y + d, 'wire', 'ah'); });
     return S;
   };
 

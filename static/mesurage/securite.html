@@ -79,7 +79,7 @@
   <p>Tout conducteur est considéré comme <strong>sous tension</strong> tant que l'absence de tension n'a pas été vérifiée. Un interrupteur ouvert ne prouve rien.</p>
 </div>
 <h3>Le cadenassage</h3>
-<p>Le cadenassage empêche qu'un équipement soit remis sous tension pendant qu'on y travaille. Les étapes se font dans cet ordre :</p>
+<p>Le cadenassage empêche qu'un équipement soit remis sous tension pendant qu'on y travaille. Les étapes se font habituellement dans cet ordre :</p>
 <ol class="steps">
   <li><strong>Identifier</strong> toutes les sources d'énergie.</li>
   <li><strong>Aviser</strong> les personnes concernées.</li>
@@ -89,11 +89,12 @@
   <li><strong>Dissiper l'énergie résiduelle</strong> : condensateurs, ressorts.</li>
   <li><strong>Vérifier</strong> l'absence de tension et faire un essai de démarrage.</li>
 </ol>
+<p class="small">D'une source à l'autre, deux détails changent : certaines placent « aviser » avant « identifier », et d'autres (le CCHST, par exemple) dissipent l'énergie résiduelle avant de poser les cadenas. Ce qui ne change jamais : on arrête et on isole avant de cadenasser, et on termine par la vérification.</p>
 <figure class="fig wide" data-fig="cadenassage"><figcaption>Les numéros renvoient aux étapes de la liste (l'étape 2, aviser, ne se dessine pas). En amont du sectionneur ouvert, la source est toujours sous tension. Avec un cadenas par travailleur, personne ne peut refermer le sectionneur tant qu'il reste quelqu'un au travail.</figcaption></figure>
 <div class="widget" data-widget="ordre-cadenassage"></div>
 <h3>Vérifier l'absence de tension en trois temps</h3>
 <figure class="fig wide" data-fig="trois-temps"><figcaption>Un vérificateur en panne affiche 0 V même sur un circuit sous tension. En le testant sur une source connue avant et après, on sait que le « 0 V » lu sur le circuit est fiable.</figcaption></figure>
-<p>À l'étape 2, on teste <strong>chaque phase</strong>, <strong>entre les phases</strong> et <strong>par rapport à la terre</strong>.</p>
+<p>Au deuxième temps (tester le circuit), on teste <strong>chaque phase</strong>, <strong>entre les phases</strong> et <strong>par rapport à la terre</strong>.</p>
 <h3>La mise à la terre temporaire</h3>
 <p>Sur les installations de moyenne tension, on pose des mises à la terre temporaires <strong>après</strong> avoir vérifié l'absence de tension. Elles protègent contre une réalimentation ou une tension induite.</p>
 
@@ -108,7 +109,7 @@
   <tr><td><strong>Chaussures à semelle isolante</strong></td><td>Limitent le passage du courant vers le sol.</td></tr>
 </table>
 <div class="box ex"><span class="label">Exemple : la classe des gants isolants</span>
-  <p>Chaque classe de gants a une tension maximale d'utilisation. Par exemple : <strong>classe 0 jusqu'à 1&nbsp;000 V</strong>, <strong>classe 2 jusqu'à 17 000 V</strong>.</p>
+  <p>Chaque classe de gants a une tension maximale d'utilisation (valeurs en courant alternatif). Par exemple : <strong>classe 0 jusqu'à 1&nbsp;000 V</strong>, <strong>classe 2 jusqu'à 17 000 V</strong>.</p>
   <p>Pour une installation à 600 V, des gants de classe 0 conviennent : 600 V est sous leur limite de 1&nbsp;000 V. Un gant d'une classe trop basse ne protège pas.</p>
 </div>
 <p>Les bonnes habitudes :</p>
@@ -122,13 +123,13 @@
 <p>Au Canada, la norme de référence pour la sécurité électrique au travail est la <strong>CSA Z462</strong>.</p>
 
 <h2>5. Les protections d'une installation</h2>
-<figure class="fig wide" data-fig="defaut-terre"><figcaption>Un fil sous tension touche le boîtier métallique. Comme le boîtier est relié à la terre, le courant de défaut trouve un chemin de retour très peu résistant : il devient très élevé et le disjoncteur déclenche. Sans ce fil, le boîtier resterait sous tension et la première personne à le toucher servirait de chemin.</figcaption></figure>
+<figure class="fig wide" data-fig="defaut-terre"><figcaption>Un fil sous tension touche le boîtier métallique. Comme le boîtier est relié à la source par le fil de continuité des masses (le fil vert ou nu, souvent appelé fil de mise à la terre), le courant de défaut trouve un chemin de retour très peu résistant : il devient très élevé et le disjoncteur déclenche. Sans ce fil, le boîtier resterait sous tension et la première personne à le toucher servirait de chemin.</figcaption></figure>
 <table class="tight">
   <tr><th>Protection</th><th>Ce qu'elle fait</th><th>Ce qu'elle protège</th></tr>
   <tr><td><strong>Mise à la terre et continuité des masses</strong></td><td>Relie les boîtiers et les pièces métalliques à la terre.</td><td>Les personnes : un boîtier ne reste pas sous tension après un défaut.</td></tr>
   <tr><td><strong>Fusible, disjoncteur</strong></td><td>Coupe quand le courant dépasse son calibre (surcharge, court-circuit).</td><td>Les conducteurs et l'installation. <strong>Pas les personnes.</strong></td></tr>
   <tr><td><strong>DDFT</strong> (disjoncteur différentiel de fuite à la terre)</td><td>Compare le courant de la ligne et celui du neutre. Coupe dès qu'il manque environ 5 mA.</td><td>Les personnes.</td></tr>
-  <tr><td><strong>DDFA</strong> (protection anti-arc)</td><td>Détecte les arcs dans le circuit et coupe.</td><td>Le bâtiment, contre les incendies causés par les arcs.</td></tr>
+  <tr><td><strong>Disjoncteur anti-arcs</strong> (DCAA ou DDAA selon les documents ; AFCI en anglais)</td><td>Détecte les arcs dans le circuit et coupe.</td><td>Le bâtiment, contre les incendies causés par les arcs.</td></tr>
 </table>
 <figure class="fig wide" data-fig="ddft"><figcaption>Le DDFT ne mesure pas le courant total : il surveille la différence entre l'aller et le retour. Si une partie du courant revient par un autre chemin, par exemple à travers une personne, il coupe.</figcaption></figure>
 <div class="box ex"><span class="label">Exemple : pourquoi un disjoncteur ne protège pas les personnes</span>
@@ -143,7 +144,7 @@
 </table>
 
 <h2>6. Les distances et les situations à risque</h2>
-<p>Près d'une ligne aérienne, pas besoin de toucher le fil pour être en danger. Le Code de sécurité pour les travaux de construction du Québec fixe une <strong>distance d'approche minimale</strong> pour les travailleurs non habilités et le public :</p>
+<p>Près d'une ligne aérienne, pas besoin de toucher le fil pour être en danger. Le Code de sécurité pour les travaux de construction du Québec fixe une <strong>distance d'approche minimale</strong> que personne ne doit franchir sur un chantier, ni avec une pièce, une charge ou une machine, sans mesures convenues avec l'exploitant du réseau. Hydro-Québec donne la même consigne de 3 m au public :</p>
 <table class="tight">
   <tr><th>Tension de la ligne</th><th>Distance d'approche minimale</th></tr>
   <tr><td>Moins de 125 kV</td><td><strong>3 m</strong></td></tr>
@@ -152,7 +153,7 @@
   <tr><td>Plus de 550 kV</td><td><strong>12 m</strong></td></tr>
 </table>
 <p>Une ligne de distribution à 25 kV est dans la première catégorie : 3 m. La distance vaut aussi pour ce qu'on tient ou manœuvre : échelle, perche, tuyau.</p>
-<figure class="fig wide" data-fig="tension-pas"><figcaption>Un fil tombé met le sol sous tension autour de lui. Entre deux pieds écartés, il y a une différence de potentiel : la tension de pas. On reste à au moins 10 m, et si on est déjà trop près, on s'éloigne à petits pas, les pieds rapprochés.</figcaption></figure>
+<figure class="fig wide" data-fig="tension-pas"><figcaption>Un fil tombé met le sol sous tension autour de lui. Entre deux pieds écartés, il y a une différence de potentiel : la tension de pas. On reste à plus de 10 m, et si on est déjà trop près, on s'éloigne en glissant les pieds sans les soulever, ou à petits sauts, pieds joints.</figcaption></figure>
 <table class="tight">
   <tr><th>Situation à risque</th><th>Pourquoi c'est dangereux</th></tr>
   <tr><td><strong>Fil tombé au sol</strong></td><td>Il peut être sous tension, et le sol autour aussi. Rester à au moins 10 m.</td></tr>
@@ -166,9 +167,9 @@
 <h2>7. En cas d'accident</h2>
 <ol class="steps">
   <li><strong>Ne touche pas la victime</strong> tant que le courant n'est pas coupé : tu deviendrais la deuxième victime.</li>
-  <li><strong>Coupe l'alimentation.</strong></li>
+  <li><strong>Coupe l'alimentation</strong> si tu peux le faire sans danger (interrupteur, disjoncteur, fiche). Sinon, reste à l'écart : pour un fil tombé ou une ligne, à plus de 10 m.</li>
   <li><strong>Appelle le 911.</strong></li>
-  <li>Si tu es formé : <strong>réanimation</strong> et <strong>défibrillateur</strong>.</li>
+  <li>Si tu es formé et que le courant est coupé : <strong>réanimation</strong> et <strong>défibrillateur</strong>.</li>
   <li>Toute personne électrisée doit <strong>consulter un médecin</strong>, même si elle se sent bien.</li>
 </ol>
 <h3>Feu d'origine électrique</h3>
@@ -193,14 +194,14 @@
 <h2>À retenir</h2>
 <div class="box key"><span class="label">L'essentiel</span>
   <ul>
-    <li>C'est le courant qui blesse : perception vers 1 mA, impossible de lâcher prise vers 10 à 20 mA, arrêt cardiaque possible dès 50 mA (fibrillation ventriculaire).</li>
+    <li>C'est le courant qui blesse : perception dès 0,25 mA environ, impossible de lâcher prise au-delà de 10 mA, arrêt cardiaque possible dès 50 mA (fibrillation ventriculaire).</li>
     <li>Corps : de l'ordre de 100 000 Ω peau sèche, 1&nbsp;000 Ω peau mouillée. Sur 120 V mouillé : 120 mA.</li>
     <li>Tout conducteur est sous tension tant que l'absence de tension n'est pas vérifiée.</li>
     <li>Cadenassage : identifier, aviser, arrêter, isoler, cadenasser et étiqueter, dissiper, vérifier.</li>
     <li>Absence de tension en trois temps : tester le vérificateur, tester le circuit, retester le vérificateur.</li>
-    <li>Fusible et disjoncteur protègent les conducteurs ; le DDFT (environ 5 mA) protège les personnes ; le DDFA protège contre les incendies dus aux arcs.</li>
+    <li>Fusible et disjoncteur protègent les conducteurs ; le DDFT (environ 5 mA) protège les personnes ; le disjoncteur anti-arcs protège contre les incendies dus aux arcs.</li>
     <li>Vert ou nu : terre. Blanc : neutre. Noir et rouge : sous tension.</li>
-    <li>Lignes aériennes : 3 m sous 125 kV, puis 5 m, 8 m et 12 m. Fil tombé : 10 m.</li>
+    <li>Lignes aériennes : 3 m à moins de 125 kV, puis 5 m, 8 m et 12 m. Fil tombé : 10 m.</li>
     <li>Accident : ne pas toucher, couper, 911. Feu électrique : classe C, jamais d'eau.</li>
   </ul>
 </div>
@@ -208,12 +209,12 @@
   <ul>
     <li>Croire qu'une « basse » tension est sans danger : 120 V suffit pour tuer.</li>
     <li>Croire qu'un disjoncteur protège les personnes : il protège les conducteurs.</li>
-    <li>Confondre DDFT (fuite à la terre, personnes) et DDFA (arcs, incendies).</li>
+    <li>Confondre le DDFT (fuite à la terre, personnes) et le disjoncteur anti-arcs (arcs, incendies).</li>
     <li>Vérifier l'absence de tension sans tester le vérificateur avant et après.</li>
     <li>Poser la mise à la terre temporaire avant d'avoir vérifié l'absence de tension.</li>
     <li>Partager un cadenas ou une clé : c'est un cadenas par travailleur.</li>
     <li>Confondre électrisation (un courant traverse le corps) et électrocution (elle est mortelle).</li>
-    <li>Courir pour s'éloigner d'un fil tombé : on s'éloigne à petits pas.</li>
+    <li>Courir ou marcher à grands pas pour s'éloigner d'un fil tombé : on glisse les pieds sans les soulever, ou on avance à petits sauts, pieds joints.</li>
   </ul>
 </div>
 
@@ -226,7 +227,7 @@
 <script defer src="assets/katex/contrib/auto-render.min.js?v=71052e38"></script>
 <script defer src="assets/app.js?v=3887a767"></script>
 <script defer src="assets/draw.js?v=c5ce1061"></script>
-<script defer src="assets/bank.js?v=f6f83010"></script>
-<script defer src="assets/figs-securite.js?v=5a912005"></script>
+<script defer src="assets/bank.js?v=3ac7f4e9"></script>
+<script defer src="assets/figs-securite.js?v=0016d092"></script>
 </body>
 </html>
