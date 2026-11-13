@@ -69,7 +69,7 @@ function header(filterType) {
  * The method's own parameters, in a script for a band filter built by
  * transformation: the script can then be switched back to the cascade.
  */
-function bandParams({ topologyBand, topologyNotch, orderBand, opampGbw }) {
+function bandParams({ topologyBand, topologyNotch, orderBand, opampGbw, mfbOpamp }) {
 	return `
 // How the band is built: 'cascade' (a high-pass section and a low-pass
 // section in series for a band-pass, a low-pass branch and a high-pass
@@ -81,20 +81,52 @@ const BAND_METHOD = "transformed";
 const TOPOLOGY_BAND = ${JSON.stringify(topologyBand)};    // 'transformed': the band-pass stages, 'mfb' (multiple feedback, 1 op-amp) or 'towThomas' (3)
 const TOPOLOGY_NOTCH = ${JSON.stringify(topologyNotch)}; // 'transformed': the notch stages, 'boctor' (1 op-amp, a Tow-Thomas notch where Boctor cannot) or 'towThomas' (3)
 const ORDER_BAND = ${orderBand ?? null};                // 'transformed': the prototype's order, null for the minimum
-${opampGbw !== undefined ? opampParam(opampGbw) : ''}`;
+${opampGbw !== undefined ? opampParam(opampGbw, mfbOpamp) : ''}`;
 }
 
 /**
  * The op-amp a transformed band-pass's MFB band-pass stages are built for,
  * in a script the page writes with one (opampGbw: Hz, or null for none).
  */
-function opampParam(gbw) {
+function opampParam(gbw, part = null) {
 	return `// 'transformed' band-pass, 'mfb' stages: the op-amp they are built for, as
 // a single-pole gain-bandwidth in Hz (${OPAMP_GBW.TL082} for a TL082 / TL072, ${OPAMP_GBW.LM741} for
 // an LM741, as measured on their models), or null for an ideal op-amp. Each
 // stage's circuit is then designed at a higher f0 and a lower Q, so that
 // with that op-amp it lands on its target.
 const OPAMP_GBW = ${gbw ?? null};
+// The part OPAMP_GBW stands for: 'TL082' or 'LM741', or null for another
+// figure. Stages built for it, the notes on the loads name it (else OPAMP_PART).
+const OPAMP_GBW_PART = ${JSON.stringify(opampPartName(part))};
+`;
+}
+
+/** An op-amp the notes on the loads can name: a TL082 or an LM741 (both datasheets give +-10 V into 2 kohm), else null. */
+const opampPartName = (id) => (id === 'TL082' || id === 'LM741' ? id : null);
+
+/**
+ * The source, the limits and the op-amp of a script for a low-pass,
+ * high-pass or band filter: SOURCE_R (ohms, 0 an ideal source),
+ * PAST_LIMITS (the set past the limits, when the page offers one) and
+ * OPAMP_PART (the op-amp of the page's LTspice file, for the notes).
+ */
+function sourceParams({ sourceR, pastLimits, opampPart }) {
+	return `// The source that drives the filter: its output resistance, in ohms, in
+// series with the filter's input (50 for a function generator, 0 for an
+// ideal source). The part search, the figures of the stage on the input
+// (both first stages of a band-stop's two branches) and the response
+// include it, as on the page.
+const SOURCE_R = ${Number.isFinite(sourceR) && sourceR > 0 ? sourceR : 0};
+// The limits on the parts: every resistor from 1 kohm to 1 Mohm, every
+// capacitor from 47 pF, every op-amp output loaded by 2 kohm or more over
+// the passband. The search keeps them first. false: the best set within
+// them, met or not; true: when that set misses the template and a set past
+// the limits meets it, that set instead, as the page shows it when asked.
+const PAST_LIMITS = ${pastLimits ? 'true' : 'false'};
+// The op-amp the circuit is built with, named in the notes on the loads (a
+// TL082 or an LM741 swings +-10 V only into 2 kohm or more): 'TL082',
+// 'LM741', or null for a general-purpose op-amp.
+const OPAMP_PART = ${JSON.stringify(opampPartName(opampPart))};
 `;
 }
 
@@ -107,7 +139,7 @@ function pairLimitParam(limit) {
 `;
 }
 
-function paramsBlock({ amaxDb, aminDb, amaxDbHp, aminDbHp, amaxDbLp, aminDbLp, fp, fs, fl, fh, fsl, fsh, filterType, response, responseHp, responseLp, topology, topologyHp, topologyLp, order, orderHp, orderLp, capOverrides, resistorStock, resistorPairs, capacitorStock, transformed = false, topologyBand, topologyNotch, orderBand, opampGbw, pairLimit = null, placement = 'edge' }) {
+function paramsBlock({ amaxDb, aminDb, amaxDbHp, aminDbHp, amaxDbLp, aminDbLp, fp, fs, fl, fh, fsl, fsh, filterType, response, responseHp, responseLp, topology, topologyHp, topologyLp, order, orderHp, orderLp, capOverrides, resistorStock, resistorPairs, capacitorStock, transformed = false, topologyBand, topologyNotch, orderBand, opampGbw, mfbOpamp = null, pairLimit = null, placement = 'edge', sourceR = 0, pastLimits = false, opampPart = null }) {
 	const hasOverrides = capOverrides && Object.keys(capOverrides).length > 0;
 	return `// =====================================================================
 // PARAMETERS - the only block meant to be edited
@@ -150,7 +182,7 @@ const RESISTOR_PAIRS = ${resistorPairs ? 'true' : 'false'};   // with an array a
 ${pairLimit !== null ? pairLimitParam(pairLimit) : ''}const CAPACITORS = ${JSON.stringify(capacitorStock ?? null)};
 // null for the usual E6/E12 capacitor grids, or an array of farad values.
 const SUMMING_R = 10000;          // ohms, band-stop's summing amplifier (any equal value works)
-
+${sourceParams({ sourceR, pastLimits, opampPart })}
 // Used when FILTER_TYPE is 'lowpass' or 'highpass':
 const fp   = ${fp};           // Hz, passband edge (the higher edge for a high-pass)
 const fs   = ${fs};           // Hz, stopband edge (the lower edge for a high-pass)
@@ -173,7 +205,7 @@ const fsl  = ${fsl};           // Hz
 const fsh  = ${fsh};           // Hz
 const ORDER_HP = ${orderHp};                 // set to null to use the minimum order for the high-pass section/branch
 const ORDER_LP = ${orderLp};                 // set to null to use the minimum order for the low-pass section/branch
-${transformed ? bandParams({ topologyBand, topologyNotch, orderBand, opampGbw }) : ''}
+${transformed ? bandParams({ topologyBand, topologyNotch, orderBand, opampGbw, mfbOpamp }) : ''}
 // Capacitor values (farads) to use instead of the automatic search, keyed
 // by stage index (0-based, same order as the STAGES report below). Leave a
 // stage out of this object to keep searching automatically for it. Needs
@@ -453,10 +485,14 @@ if (design.placement.mode !== 'edge' && design.placement.idealMargin > 0) consol
 const searchRun = (t, g, L) => `// The parts of the whole filter, chosen as the page chooses them
 // (searchFilterParts): every stage lists the ways the stock builds it, each
 // judged on its rounded parts, and the set whose whole response meets the
-// template best is kept, the stage designers' own picks among them. Its
-// resistors start at PART_R_FLOOR and every op-amp output must see at
-// least PART_LOAD_MIN over the passband; a filter that meets its template
-// only past those limits keeps the designers' range and says where.
+// template best is kept, the stage designers' own picks among them, with
+// the source's SOURCE_R on the input. The parts keep the limits first:
+// every resistor from PART_R_FLOOR to PART_R_MAX, every capacitor from
+// C_FLOOR, every op-amp output loaded by PART_LOAD_MIN or more over the
+// passband. The best set within them is kept even when it misses the
+// template, and when a set past them meets it, PAST_LIMITS shows that one;
+// where no set within them can be built at all, the parts keep the
+// designers' range and say where.
 const MENUS = ${t ? 'BAND_TRANSFORMED ? BAND_MENUS : ' : ''}{ method: 'cascade', highpass: topologyOf('highpass'), lowpass: topologyOf('lowpass') };
 // a list's summing resistor is its value nearest SUMMING_R, as on the page
 const COMBINER_R = Array.isArray(RESISTOR_SERIES) ? nearestResistor(SUMMING_R, RESISTOR_SERIES) : SUMMING_R;
@@ -470,7 +506,9 @@ ${
 }
 `
 		: ''
-}const SEARCH = searchFilterParts(design, { menus: MENUS, ...OPTS, pairLimit: PAIR_LIMIT, overrides: CAP_OVERRIDES, combinerR: COMBINER_R });
+}const FOUND = searchFilterParts(design, { menus: MENUS, ...OPTS, pairLimit: PAIR_LIMIT, overrides: CAP_OVERRIDES, combinerR: COMBINER_R, sourceR: SOURCE_R });
+// the set shown: the best within the limits, or with PAST_LIMITS the one past them that meets the template, when there is one
+const SEARCH = PAST_LIMITS && FOUND.alternative ? FOUND.alternative : FOUND;
 const failed = SEARCH.stages.findIndex((r) => !r);
 if (failed >= 0) {
 	const stage = design.stages[failed];
@@ -480,23 +518,29 @@ const realized = SEARCH.stages;
 const searched = SEARCH.picks.filter((p) => p === 'search').length;
 console.log(\`parts chosen on the whole filter's response: \${searched} of \${realized.length} stage\${realized.length === 1 ? '' : 's'} from the search\${searched < realized.length ? ', the others as their designer picks them alone' : ''}\`);
 if (SEARCH.pairPlan) console.log(filterPairPlanSummary(SEARCH.pairPlan));
-// a load the page flags: which op-amp, and what hangs on its output
-const opampName = (tag) => (tag === '' ? 'the op-amp' : /^[abc]$/.test(tag) ? \`A\${'abc'.indexOf(tag) + 1}\` : \`U\${tag}\`);
-const alertText = (a) => {
-	const typed = a.manual ? ', around the capacitors of CAP_OVERRIDES' : '';
-	if (a.kind === 'floor') return \`\${a.resistor} = \${ohms(a.value)} is under the search's floor of \${PART_R_FLOOR} ohm\${typed}\`;
-	const on = a.on === 'next' ? " with the next stage's input on it" : a.on === 'combiner' ? ' with the summing amplifier on it' : '';
-	const who = \`\${a.output ? 'the output of ' : ''}\${opampName(a.opamp)}\${a.output ? '' : "'s output"}\`;
-	const at = \`at \${Number(a.freq.toPrecision(4))} Hz\`;
-	// an output that swings less than the filter's input there: the current it draws at the largest signal the filter passes
-	const sees = a.atInput ? \`draws as much current\${on} \${at} as \${a.load.toFixed(0)} ohm would at full swing\` : \`sees \${a.load.toFixed(0)} ohm\${on} \${at}\`;
-	return \`\${who} \${sees}, under \${PART_LOAD_MIN} ohm: a TL082 swings +-10 V only into 2 kohm or more\${typed}\`;
+// the notes on the limits, in the page's words (limitAlertText), the op-amp
+// named as the page names it (limitAlertOpamp): the part the MFB band-pass
+// stages are built for, else OPAMP_PART, else a general-purpose one
+const OPAMP_NAME = limitAlertOpamp(SEARCH, ${g ? 'OPAMP_GBW_PART' : 'null'}, OPAMP_PART);
+const NOTES = limitAlertText(SEARCH, OPAMP_NAME);
+// the source on the input node: the figures of the stage(s) there with it (filterSource)
+const SOURCE = SEARCH.source;
+if (SOURCE) console.log(\`source: \${SOURCE_R} ohm in series with the input (SOURCE_R)\${SOURCE.shared ? ', on the node both branches start from' : ''}; the figures "with the source" and the response below include it\`);
+/** A stage's figures with the source, against its targets. */
+const withSource = (a, stage) => {
+	const pct = (actual, target) => (100 * (actual - target) / target).toFixed(2);
+	if (stage.order === 1) return \`tau = \${a.tau.toExponential(4)} s (\${pct(a.tau, stage.tau)}%)\`;
+	const f0 = a.wn / (2 * Math.PI);
+	const gain = Number.isFinite(a.dcGain) ? \`, DC gain = \${a.dcGain.toFixed(4)}\` : Number.isFinite(a.gain) ? \`, gain = \${a.gain.toFixed(4)}\` : '';
+	return \`f0 = \${f0.toFixed(1)} Hz (\${pct(a.wn, stage.wn)}%), Q = \${a.q.toFixed(4)} (\${pct(a.q, stage.q)}%)\${gain}\`;
 };
 // a stage whose parts were rounded around the same design on the passband edge is printed against that stage
 const EDGE_DESIGN = SEARCH.fromEdge.some(Boolean) ? edgeDesignOf(design) : null;
 realized.forEach((r, i) => {
 	const stage = SEARCH.fromEdge[i] && EDGE_DESIGN ? EDGE_DESIGN.stages[i] : design.stages[i];
 	${t ? 'if (BAND_TRANSFORMED) printBandStage(stage, i, r);\n\telse ' : ''}printStage(stage, i, r);
+	const fig = SOURCE ? SOURCE.figures.find((x) => x.stage === i) : null;
+	if (fig) console.log(\`  with the source (\${SOURCE_R} ohm\${fig.adds ? \` in series with \${fig.adds}\` : ''}): \${withSource(fig.with, stage)}\${fig.extraPoles.length ? \`; the source adds a pole at \${fig.extraPoles.map((f) => formatHz(f)).join(' and ')}\` : ''}\`);
 	const how = SEARCH.picks[i] === 'search' ? "  parts from the search, judged on the whole filter's response" : '  parts as the stage designer picks them alone';
 	const edgeNote = SEARCH.edgeOnly[i]
 		? ', built as this stage of the same design on the passband edge (the figures above): centred, it is out of reach of its circuit'
@@ -504,12 +548,13 @@ realized.forEach((r, i) => {
 	console.log(\`\${how}\${SEARCH.fromEdge[i] ? edgeNote : SEARCH.picks[i] === 'search' ? '' : ': the search found nothing closer'}\`);
 	const cut = SEARCH.pairPlan && SEARCH.pairPlan.limited ? filterPairLimitSentence(SEARCH.pairPlan.stages[i], PAIR_LIMIT) : '';
 	if (cut) console.log(\`  \${cut}\`);
-	for (const a of SEARCH.alerts) if (a.stage === i) console.log(\`  note: \${alertText(a)}\`);
+	const note = NOTES.stages.find((s) => s.stage === i);
+	if (note) console.log(\`  note: \${note.text}\`);
 });
-const LIMITS = \`resistors from \${PART_R_FLOOR} ohm, every op-amp output \${PART_LOAD_MIN} ohm or more over the passband\`;
-if (SEARCH.withinLimits === false) console.log(\`limits of the search (\${LIMITS}): the filter meets its template, or comes closest to it, only past them, so the parts keep the designers' range; the notes above say where\`);
-else if (SEARCH.alerts.length) console.log(\`limits of the search (\${LIMITS}): kept, but where no part keeps them; the notes above say where\`);
-else console.log(\`limits of the search (\${LIMITS}): kept\`);
+const LIMITS = \`resistors from \${formatOhms(PART_R_FLOOR)} to \${formatOhms(PART_R_MAX)}, capacitors from \${formatFarads(C_FLOOR)}, every op-amp output \${formatOhms(PART_LOAD_MIN)} or more over the passband\`.replace(/\\.0+ /g, ' ');
+console.log(\`limits of the search (\${LIMITS}): \${NOTES.summary || 'kept'}\`);
+if (NOTES.offer) console.log(\`\${NOTES.offer} PAST_LIMITS = true shows them.\`);
+else if (PAST_LIMITS && !FOUND.alternative && FOUND.withinLimits) console.log(\`PAST_LIMITS: \${FOUND.measure.meets ? 'the parts within the limits meet the template' : 'no set past the limits meets the template either'}, so these are the parts within them.\`);
 `;
 
 function reportBlock(t = false, g = false, L = false) {
@@ -628,7 +673,8 @@ console.log();
 console.log('='.repeat(72));
 console.log('FREQUENCY RESPONSE (from the rounded, realized components)');
 console.log('='.repeat(72));
-${g ? BAND_RESPONSE_GBW : ''}// measured as the page measures it (measureFilter): from the top of the
+${g ? BAND_RESPONSE_GBW : ''}if (SOURCE_R > 0) console.log(\`  (from the source's own voltage, through its \${SOURCE_R} ohm: SOURCE_R)\`);
+// measured as the page measures it (measureFilter): from the top of the
 // passband (an even-order Chebyshev or elliptic ripples above its DC gain),
 // the worst loss over the whole passband against Amax, the least
 // attenuation over the whole stopband against its Amin (an elliptic or
@@ -1061,7 +1107,15 @@ function narrowScript({ f0, narrowBy, q, bandwidth, gain = 1, stages = 1, circui
  * page's "Place the design" menu, 'centred' or 'edge' (left out: 'edge',
  * the library's default): the script carries it as PLACEMENT. The parts
  * are the page's: searchFilterParts (partSearch.js) on the whole filter,
- * with its notes on the resistor floor and the op-amp loads.
+ * with its notes on the limits (limitAlertText). `sourceR` is the source
+ * resistance of panel 01, ohms (left out: 0, an ideal source, the
+ * library's default), carried as SOURCE_R; `pastLimits` true shows the set
+ * past the limits the page offers when the one within them misses
+ * (PAST_LIMITS); `spiceOpamp` is the op-amp of the page's LTspice file and
+ * `mfbOpamp` its "Design the MFB stages for" choice ('TL082', 'LM741',
+ * 'ideal' or 'other'), carried as OPAMP_PART and, with opampGbw,
+ * OPAMP_GBW_PART: the notes on the loads name the op-amp as the page does
+ * (limitAlertOpamp).
  * filterType 'narrowband' writes the narrow band-pass script instead
  * (narrowScript above: f0, narrowBy, q, bandwidth, gain, stages, circuit,
  * circuitMenu, opampGbw, and the same stock and capacitor arguments).
@@ -1100,6 +1154,10 @@ export function generateScript({
 	opampGbw = undefined,
 	resistorPairLimit = null,
 	placement = 'edge',
+	sourceR = 0,
+	pastLimits = false,
+	spiceOpamp = null,
+	mfbOpamp = null,
 	f0,
 	narrowBy,
 	q,
@@ -1154,8 +1212,12 @@ export function generateScript({
 			topologyNotch,
 			orderBand,
 			opampGbw: gbw ? opampGbw : undefined,
+			mfbOpamp,
 			pairLimit: limited ? resistorPairLimit : null,
-			placement: placement === 'centred' ? 'centred' : 'edge'
+			placement: placement === 'centred' ? 'centred' : 'edge',
+			sourceR,
+			pastLimits: Boolean(pastLimits),
+			opampPart: spiceOpamp
 		}),
 		'// ===================================================================== \n// ENGINE - same code the web tool runs\n// =====================================================================\n',
 		inline(eseriesSrc),

@@ -529,10 +529,11 @@ for (const lowSide of [true, false]) for (const q of [0.6, 0.9, 1.2]) for (const
 // lib-parts.mjs): placed on the passband edge and centred, on the page's
 // settings (every topology, the notches, a band-stop's two branches with the
 // search's combiner, both transformations, the stocks, pairs, capacitors
-// typed). The netlist the page writes for them, solved here (with the
-// single-pole op-amp where MFB band-pass stages are built for one), gives
-// the page's response, the one its verdict reads (measureFilter); the .asc
-// is the same circuit and drawn clean; a pair's note names its two parts.
+// typed, a source resistance, the set past the limits). The netlist the
+// page writes for them, solved here (with the single-pole op-amp where MFB
+// band-pass stages are built for one), gives the page's response, the one
+// its verdict reads (measureFilter, the source included); the .asc is the
+// same circuit and drawn clean; a pair's note names its two parts.
 {
 	const { PAGE_CASES, pageNetlistOpts, pageParts } = await import('./lib-parts.mjs');
 	const { seriesPair } = await import('../src/lib/filter/eseries.js');
@@ -567,7 +568,7 @@ for (const lowSide of [true, false]) for (const q of [0.6, 0.9, 1.2]) for (const
 				}
 			}
 			const asc = generateSchematic(opts);
-			const wanted = buildElements({ realizedStages: opts.realizedStages, filterType: opts.filterType, method: opts.method, lpCount: opts.lpCount, combinerMode: opts.combinerMode, combinerR: opts.combinerR, combinerResistors: opts.combinerResistors }).filter((e) => e.kind !== 'LABEL');
+			const wanted = buildElements({ realizedStages: opts.realizedStages, filterType: opts.filterType, method: opts.method, lpCount: opts.lpCount, combinerMode: opts.combinerMode, combinerR: opts.combinerR, combinerResistors: opts.combinerResistors, sourceR: opts.sourceR }).filter((e) => e.kind !== 'LABEL');
 			const { problems } = ascParity(asc, wanted, generateNetlist(opts));
 			const issues = audit(asc);
 			// every resistor of the list's stages that is two in series gets its note
@@ -583,6 +584,94 @@ for (const lowSide of [true, false]) for (const q of [0.6, 0.9, 1.2]) for (const
 		}
 	}
 	check(`page's parts: ${ran} designs exported as the page exports them`, ran === 2 * PAGE_CASES.length && paired > 0, `${paired} pair notes`);
+}
+
+// The source resistance of panel 01 (sourceR): V1 stands on node vs and
+// drives the filter's input vin through RS, both branches of a band-stop
+// from that one node. On the page's parts for that source, every circuit
+// first, at 50, 600 and 4700 ohm: the netlist solved here gives the page's
+// response (measureFilter with the source), complex (a band-stop's summing
+// amplifier inverts, which the page's response leaves out), the .asc is
+// the same circuit (RS drawn between V1 and the first stage), drawn clean,
+// also on a TL082 and an LM741, and both files say so in their notes. With
+// no source the files are what they were (V1 on vin, no RS), and a narrow
+// band-pass, which keeps its own circuits, takes none.
+{
+	const { pageNetlistOpts, pageParts } = await import('./lib-parts.mjs');
+	const { LAB_KIT } = await import('../src/lib/filter/eseries.js');
+	const KIT = { resistorStock: LAB_KIT.resistors, capacitorStock: LAB_KIT.capacitors };
+	const LP = { filterType: 'lowpass', response: 'butterworth', amaxDb: 3, aminDb: 40, fp: 10000, fs: 35000, order: null, capOverrides: {}, topology: 'mfb', placement: 'centred' };
+	const BP = { ...LP, filterType: 'bandpass', fl: 1000, fh: 10000, fsl: 300, fsh: 30000, orderHp: null, orderLp: null };
+	const BS = { ...LP, filterType: 'bandstop', fl: 1000, fh: 30000, fsl: 3000, fsh: 10000, orderHp: null, orderLp: null };
+	const designs = [
+		['low-pass, MFB, lab kit', { ...LP, ...KIT }],
+		['Chebyshev low-pass, Sallen-Key, E24', { ...LP, response: 'chebyshev', amaxDb: 1, fs: 25000, topology: 'sallenKey' }],
+		['high-pass, MFB, E96', { ...LP, filterType: 'highpass', fs: 3000, resistorStock: 'E96' }],
+		['Chebyshev high-pass, Tow-Thomas, lab resistors', { ...LP, filterType: 'highpass', response: 'chebyshev', amaxDb: 1, fp: 3000, fs: 1000, topology: 'towThomas', resistorStock: LAB_KIT.resistors }],
+		['elliptic low-pass, Boctor, E24', { ...LP, response: 'elliptic', amaxDb: 1, fs: 20000, topology: 'boctor' }],
+		['the default band-pass, transformed, MFB for the LM741, lab kit', { ...BP, bandMethod: 'transformed', topologyBand: 'mfb', topologyNotch: 'boctor', opampGbw: OPAMP_GBW.LM741, ...KIT }],
+		['band-pass transformed, Tow-Thomas, E24', { ...BP, topology: 'towThomas', bandMethod: 'transformed', topologyBand: 'towThomas', topologyNotch: 'towThomas' }],
+		['band-stop transformed, Boctor, lab kit', { ...BS, bandMethod: 'transformed', topologyBand: 'mfb', topologyNotch: 'boctor', ...KIT }],
+		['band-stop of two branches, MFB, lab kit', { ...BS, ...KIT }],
+		['band-stop of two branches, Sallen-Key, E96', { ...BS, topology: 'sallenKey', resistorStock: 'E96' }],
+		['band-stop of two branches, Tow-Thomas, lab resistors', { ...BS, topology: 'towThomas', resistorStock: LAB_KIT.resistors }]
+	];
+	const problems = [];
+	let worst = 0;
+	let files = 0;
+	for (const [label, spec] of designs) {
+		for (const sourceR of [50, 600, 4700]) {
+			const args = { ...spec, sourceR };
+			const page = pageParts(args);
+			const opts = pageNetlistOpts(args, page);
+			const name = `${label}, ${sourceR} ohm`;
+			const netlist = generateNetlist(opts.correctedGbw ? opts : { ...opts, ideal: true });
+			const model = opts.correctedGbw ? opampParams(netlist) : null;
+			const elements = parseNetlist(netlist);
+			if (!/^V1 vs 0 AC 1 /m.test(netlist) || !new RegExp(`^RS vs vin ${spiceValue(sourceR)}$`, 'm').test(netlist) || !/^\* The source V1 drives the filter through RS = /m.test(netlist)) problems.push(`${name}: V1, RS or the note missing from the .cir`);
+			const t = page.result.measure.template;
+			const sign = t.parallel ? -1 : 1;
+			const lo = Math.min(...t.stop.map((r) => r.from), ...t.pass.map((r) => r.from));
+			const hi = Math.max(...t.stop.map((r) => r.to), ...t.pass.map((r) => r.to));
+			for (let i = 0; i <= 40; i++) {
+				const f = lo * (hi / lo) ** (i / 40);
+				const sim = solveAt(elements, f, model);
+				const want = page.result.measure.responseAt(f);
+				if (abs(want) < 1e-9) continue;
+				const err = abs(sub(sim, { re: sign * want.re, im: sign * want.im })) / abs(want);
+				worst = Math.max(worst, model ? 0 : err);
+				// (the netlist's single-pole op-amp has an open-loop gain of 1e6, the page's an infinite one)
+				if (err > (model ? 1e-4 : 1e-8)) {
+					problems.push(`${name} at ${f.toFixed(0)} Hz: ${err.toExponential(1)} off`);
+					break;
+				}
+			}
+			const asc = generateSchematic(opts);
+			const wanted = buildElements(opts).filter((e) => e.kind !== 'LABEL');
+			const { problems: parity } = ascParity(asc, wanted, generateNetlist(opts));
+			const issues = audit(asc);
+			const real = ['TL082', 'LM741'].map((part) => realOpampProblems(asc, generateSchematic({ ...opts, opamp: part }), part));
+			const realBad = real.flatMap((x) => [...x.problems, ...x.issues.map((e) => `${e.kind}: ${e.detail}`)]);
+			const rs = wanted.find((e) => e.name === 'RS');
+			if (!rs || rs.nodes.join() !== 'vs,vin' || wanted.find((e) => e.name === 'V1').nodes.join() !== 'vs,0' || !/The source V1 drives the filter through RS = /.test(asc)) problems.push(`${name}: the .asc's source`);
+			if (parity.length || issues.length || realBad.length) problems.push(`${name}: ${parity[0] ?? (issues[0] ? `${issues[0].kind}: ${issues[0].detail}` : realBad[0])}`);
+			files++;
+		}
+		// no source: the files as they were
+		const none = pageParts({ ...spec, sourceR: 0 });
+		const opts0 = pageNetlistOpts({ ...spec, sourceR: 0 }, none);
+		const { sourceR: _, ...without } = opts0;
+		if (generateNetlist(opts0) !== generateNetlist(without) || generateSchematic(opts0) !== generateSchematic(without) || /^RS /m.test(generateNetlist(opts0)) || !/^V1 vin 0 /m.test(generateNetlist(opts0))) problems.push(`${label}: with no source, not the files as they were`);
+	}
+	// a narrow band-pass keeps an ideal source
+	{
+		const { designNarrowBand, realizeNarrow } = await import('../src/lib/filter/narrowBand.js');
+		const d = designNarrowBand({ f0: 10000, q: 5, gain: 1, stages: 1 });
+		const r = realizeNarrow(d, 'mfbBp', {});
+		const o = { realizedStages: r.stages, filterType: 'narrowband', circuit: r.circuit, f0: d.f0, B: d.B, q: d.q, gain: d.gain, n: d.n, f1: d.f1, f2: d.f2, fp: d.f1, fs: d.f2 };
+		if (generateNetlist({ ...o, sourceR: 50 }) !== generateNetlist(o) || generateSchematic({ ...o, sourceR: 50 }) !== generateSchematic(o)) problems.push('the narrow band-pass took a source');
+	}
+	check(`the source resistance in the files: ${files} netlists (every circuit first, the band-stop's shared node, 50 to 4700 ohm) give the page's response with RS, the .asc the same circuit drawn clean (also on a TL082 and an LM741), the notes say so; no source and the narrow band-pass leave the files as they were`, problems.length === 0 && files === 3 * designs.length, problems.length ? problems.slice(0, 3).join('; ') : `worst ${worst.toExponential(1)} relative`);
 }
 
 console.log(fails === 0 ? 'netlists LTspice conformes au modele de l outil' : `${fails} failure(s)`);

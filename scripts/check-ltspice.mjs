@@ -540,13 +540,23 @@ for (const { only, sides, ...spec } of filterSpecs) {
 // lib-parts.mjs), centred as the page opens, and the default low-pass on
 // the passband edge too: every topology, the notches, a band-stop's
 // branches with the search's combiner, a transformation, the stocks, pairs
-// and capacitors typed. LTspice netlists the drawn .asc into the .cir, and
-// the .cir with an op-amp too fast to matter gives the page's response (the
-// one its verdict reads) at every .meas point.
+// and capacitors typed, a source resistance (RS ahead of the input, both
+// branches of a band-stop on its node) and the set past the limits (on the
+// edge, where the band-stop transformed misses within them). LTspice
+// netlists the drawn .asc into the .cir, and the .cir with an op-amp too
+// fast to matter gives the page's response (the one its verdict reads, the
+// source included) at every .meas point. The default band-pass, its MFB
+// stages built for the LM741, runs with the single-pole op-amp at 1 MHz,
+// which the page's response includes, both placements.
 {
 	const { PAGE_CASES, pageNetlistOpts, pageParts } = await import('./lib-parts.mjs');
 	const runs = PAGE_CASES.filter(([, s]) => !Number.isFinite(s.opampGbw)).map(([label, spec]) => [label, { ...spec, placement: 'centred' }]);
 	runs.push([`${PAGE_CASES[0][0]}, edge`, { ...PAGE_CASES[0][1], placement: 'edge' }]);
+	for (const [label, spec] of PAGE_CASES.filter(([, s]) => s.pastLimits)) runs.push([`${label}, edge`, { ...spec, placement: 'edge' }]);
+	// (the stages built for an op-amp run with it: the single pole at their GBW)
+	for (const [label, spec] of PAGE_CASES.filter(([, s]) => Number.isFinite(s.opampGbw) && s.sourceR > 0)) for (const placement of ['edge', 'centred']) runs.push([`${label}, ${placement}`, { ...spec, placement }]);
+	let sourced = 0;
+	let past = 0;
 	for (const [label, args] of runs) {
 		const page = pageParts(args);
 		const opts = pageNetlistOpts(args, page);
@@ -558,16 +568,21 @@ for (const { only, sides, ...spec } of filterSpecs) {
 		run(['-netlist', asc], 60000);
 		const netFile = join(dir, `${stem}.net`);
 		const problems = existsSync(netFile) ? sameCircuit(readFileSync(cir, 'utf8'), readFileSync(netFile, 'latin1')) : ['LTspice wrote no netlist'];
-		check(`${stem}: LTspice netlists the drawn .asc into our .cir`, problems.length === 0, problems.slice(0, 3).join('; '));
+		// a source resistance: RS in LTspice's netlist too (sameCircuit holds it to our RS from vs to vin)
+		const source = opts.sourceR > 0 ? existsSync(netFile) && /^RS vs vin /m.test(readFileSync(cir, 'utf8')) && new RegExp(`^RS \\S+ \\S+ ${opts.sourceR}$`, 'mi').test(readFileSync(netFile, 'latin1').replace(/\r/g, '')) : true;
+		if (opts.sourceR > 0) sourced++;
+		if (page.result !== page.found) past++;
+		check(`${stem}: LTspice netlists the drawn .asc into our .cir${opts.sourceR > 0 ? `, RS = ${opts.sourceR} ohm from V1 to the input` : ''}`, problems.length === 0 && source, problems.slice(0, 3).join('; ') || (source ? '' : 'no RS from vs to vin in LTspice\'s netlist'));
 		const fast = `${stem}-fast`;
-		writeFileSync(join(dir, `${fast}.cir`), filterNetlist({ ...opts, gbw: '100g' }));
+		writeFileSync(join(dir, `${fast}.cir`), filterNetlist(opts.correctedGbw ? opts : { ...opts, gbw: '100g' }));
 		run(['-b', join(dir, `${fast}.cir`)]);
 		const logFile = join(dir, `${fast}.log`);
 		const log = existsSync(logFile) ? readFileSync(logFile, 'latin1') : '';
 		const meas = [...log.matchAll(/^v_(\w+): V\(vout\)\s*=\(([-+0-9.e]+)dB,[^)]*\) at ([-+0-9.e]+)/gim)].map((m) => ({ name: m[1], db: Number(m[2]), f: Number(m[3]) }));
 		const worst = meas.reduce((w, m) => Math.max(w, Math.abs(m.db - page.result.measure.gainDbAt(m.f))), 0);
-		check(`${stem}: LTspice gives the page's response at the band edges`, meas.length >= 2 && worst < 0.05, meas.length ? `${meas.map((m) => `${m.name} ${m.db.toFixed(2)} dB`).join(', ')}; worst ${worst.toFixed(3)} dB off` : 'no .meas in the log');
+		check(`${stem}: LTspice gives the page's response at the band edges${opts.correctedGbw ? ' (the single-pole op-amp at the GBW the stages are built for)' : ''}`, meas.length >= 2 && worst < 0.05, meas.length ? `${meas.map((m) => `${m.name} ${m.db.toFixed(2)} dB`).join(', ')}; worst ${worst.toFixed(3)} dB off` : 'no .meas in the log');
 	}
+	check(`the page's parts in LTspice: ${runs.length} runs, ${sourced} with a source resistance, ${past} past the limits`, sourced >= 5 && past >= 1);
 }
 
 /* -------------------------- MFB band-pass stages built for their op-amp */

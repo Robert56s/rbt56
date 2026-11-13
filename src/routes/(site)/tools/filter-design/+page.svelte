@@ -51,7 +51,7 @@
 	import { explainPlacement, placedRipple, placedScale, placementReason, placementTex } from '$lib/filter/explainPlacement';
 	import { capRatio } from '$lib/filter/sallenKey';
 	import { resistorRatioHp as capRatioHp } from '$lib/filter/sallenKeyHighPass';
-	import { designPlacedAs, edgeDesignOf, filterTemplate, PART_LOAD_MIN, PART_R_FLOOR, PASSBAND_SLACK_DB, placedOpampCount, searchFilterParts } from '$lib/filter/partSearch';
+	import { designPlacedAs, edgeDesignOf, filterTemplate, limitAlertOpamp, limitAlertText, PART_LOAD_MIN, PART_R_FLOOR, PART_R_MAX, PASSBAND_SLACK_DB, placedOpampCount, searchFilterParts, SOURCE_R_DEFAULT, sourceRoundsFor } from '$lib/filter/partSearch';
 	import {
 		mfbBpSensitivity,
 		mfbSensitivity,
@@ -87,6 +87,9 @@
 
 	const MAX_ORDER = 16;
 
+	// the script download is hidden until the script is reworked; true brings its buttons and paragraphs back
+	const SCRIPT_DOWNLOAD = false;
+
 	let amaxDb = $state(3);
 	let aminDb = $state(40);
 	// a band-pass or band-stop is two filters, so each side has its own
@@ -121,6 +124,20 @@
 	// edge and all the room left to the stopband. Each side of a band filter,
 	// or its prototype, is placed in its own template.
 	let placement = $state('centred'); // 'centred' | 'edge'
+	// The resistance of the source that drives the filter, in series with its
+	// input: a function generator's 50 ohm by default, 0 for an ideal source.
+	// Only the stages on the input node see it (partSearch.js, the source):
+	// the search, the measure, the Bode plot and the first stage's figures
+	// include it. The narrow band-pass keeps its own circuits and an ideal source.
+	let sourceR = $state(SOURCE_R_DEFAULT);
+	/** The source resistance in ohms as the search takes it: 0 for an ideal source, or for a value that is not one. */
+	const sourceOhms = $derived(Number.isFinite(Number(sourceR)) && Number(sourceR) > 0 && sourceR !== null && sourceR !== '' ? Number(sourceR) : 0);
+	/** Whether the field holds something other than a resistance of 0 or more. */
+	const sourceBad = $derived(sourceR === null || sourceR === '' || sourceR === undefined || !Number.isFinite(Number(sourceR)) || Number(sourceR) < 0);
+	// Parts within the limits come first; when they miss the template and a
+	// set past the limits meets it, this shows that set instead (the search's
+	// alternative): the tables, drawings, Bode plot, files and verdict follow it.
+	let showPast = $state(false);
 	// A band filter can also be built the other way: one low-pass prototype
 	// turned into band-pass stages (notch stages for a band-stop) around f0,
 	// which builds a narrow band with far fewer op-amps. 'auto' takes the
@@ -135,6 +152,9 @@
 	// (OPAMP_GBW), 'other' the gain-bandwidth typed in MHz, 'ideal' none.
 	let mfbOpamp = $state('TL082'); // 'TL082' | 'LM741' | 'ideal' | 'other'
 	let mfbGbwMHz = $state(OPAMP_GBW.TL082 / 1e6);
+	// the op-amp the LTspice file uses: the ideal single-pole model, or a
+	// real part on +/-15 V rails (the load alerts name it too, see limitAlertOpamp)
+	let spiceOpamp = $state(DEFAULT_OPAMP);
 	/** The gain-bandwidth (Hz) picked for the MFB band-pass stages, or null for an ideal op-amp. */
 	const mfbGbwChosen = $derived(
 		mfbOpamp === 'ideal' ? null : mfbOpamp === 'other' ? (Number(mfbGbwMHz) > 0 && Number.isFinite(Number(mfbGbwMHz)) ? Number(mfbGbwMHz) * 1e6 : null) : OPAMP_GBW[mfbOpamp]
@@ -701,9 +721,11 @@
 		pairs: componentOpts.pairs,
 		pairLimit: componentOpts.pairs ? componentOpts.pairLimit : null,
 		overrides: capOverridesInFarads(capOverrides),
-		combinerR
+		combinerR,
+		// the source in series with the input, ohms (0: an ideal source)
+		sourceR: sourceOhms
 	});
-	/** Everything a search reads, as one string: the targets of the stages, the template, the placement and the settings. */
+	/** Everything a search reads, as one string: the targets of the stages, the template, the placement and the settings (the source among them). */
 	const partKey = (d, settings) =>
 		JSON.stringify([d.stages.map((s) => [s.order, s.filterType, s.wn, s.q, s.wz, s.tau, s.gain, s.gainAt, s.hfGain, s.notch, s.w0]), filterTemplate(d), d.placement?.mode ?? null, settings]);
 
@@ -728,9 +750,13 @@
 	const partShown = $derived(!partRequest || partReady || !partHeld || partHeld.kind !== partRequest.kind ? partRequest : partHeld);
 	$effect(() => {
 		const request = partRequest;
+		// (a spec that cannot be built keeps the parts held before it: the next
+		// one that can waits the same pause as any change, rather than being
+		// searched at once while the field is typed)
+		if (!request) return;
 		// shown at once (searched before, the first one, another kind of
 		// design): the next change holds on to it
-		if (!request || partShown === request) {
+		if (partShown === request) {
 			partHeld = request;
 			return;
 		}
@@ -739,7 +765,18 @@
 	});
 	/** Whether the parts shown belong to the inputs before the last change, the next ones waiting. */
 	const partsPending = $derived(partShown !== partRequest);
-	const parts = $derived(partShown ? partsOf(partShown) : null);
+	/** The search's whole result: the best set within the limits, and the set past them it may offer (alternative). */
+	const found = $derived(partShown ? partsOf(partShown) : null);
+	/** The parts shown: the set within the limits, or the alternative past them when asked for and there is one. Everything below follows it. */
+	const parts = $derived(showPast && found?.alternative ? found.alternative : found);
+	// (the choice is for the case it was made on: a change to the inputs shows the parts within the limits first again)
+	const partRequestKey = $derived(partRequest?.key ?? null);
+	$effect(() => {
+		void partRequestKey;
+		showPast = false;
+	});
+	/** Whether the parts shown are the alternative, past the limits. */
+	const pastShown = $derived(Boolean(parts?.pastLimits));
 	/** The design the parts shown were chosen for: panels 04 and 05 read their targets from it. */
 	const rd = $derived(partShown?.design ?? null);
 
@@ -785,64 +822,23 @@
 		return `Boctor cannot realize stage ${list} with the available capacitor range and positive resistors. ${boctorUnavailable.length ? 'The high-pass form needs Q < 1 / (1 - (fz/f0)²).' : 'The capacitor ratio or resistor range is insufficient.'} Select Tow-Thomas for this side, or change the specification. ${tail}`;
 	});
 
-	/* ------------------------------------------ the floor and the loads */
+	/* ------------------------------------------ the limits on the parts */
 
-	// The search keeps the resistors of the stages it searches at
-	// PART_R_FLOOR or more, and every op-amp output at a load of
-	// PART_LOAD_MIN or more over the passband, the next stage's input
-	// included: a TL082 swings its full +-10 V only into 2 kohm or more.
-	// Where the parts break either limit, the stage says which part, and why.
-	const OPAMP_WORD = { '': 'its op-amp', a: 'A1', b: 'A2', c: 'A3', g: 'its gyrator op-amp', 1: 'op-amp 1', 2: 'op-amp 2' };
-	// the circuits whose designer gives one way to build a stage, which the search keeps as it is
-	const UNSEARCHED = ['boctor', 'boctorHp', 'mfbBp', 'towThomasBp'];
-	const limitAlerts = $derived.by(() => {
-		if (!parts || !realizedStages.length || !parts.alerts.length) return [];
-		const out = [];
-		for (let i = 0; i < realizedStages.length; i++) {
-			const here = parts.alerts.filter((a) => a.stage === i);
-			if (!here.length) continue;
-			const floor = here.filter((a) => a.kind === 'floor');
-			const load = here.find((a) => a.kind === 'load');
-			const pieces = [];
-			if (floor.length) {
-				// the parts of one value read as one: R1 and R3 = 680 Ω
-				const byValue = new Map();
-				for (const a of floor) byValue.set(a.value, [...(byValue.get(a.value) ?? []), a.resistor]);
-				const named = [...byValue].map(([v, names]) => `${listText(names)} = ${formatOhms(v)}`);
-				pieces.push(`${named.join(', ')}, under ${formatOhms(PART_R_FLOOR)}`);
-			}
-			if (load) {
-				const who = load.output ? `the output${OPAMP_WORD[load.opamp] && load.opamp !== '' ? ` (${OPAMP_WORD[load.opamp]})` : ''}` : (OPAMP_WORD[load.opamp] ?? 'an op-amp');
-				// what hangs on the output besides the stage's own network, when it made the load the least: the next stage, or a summed band-stop's combiner
-				const also = load.on === 'next' ? ', the next stage included' : load.on === 'combiner' ? ', the summing amplifier included' : '';
-				// an output that swings less than the filter's input there is judged by the current it draws at the largest signal
-				pieces.push(
-					load.atInput
-						? `${who} draws as much current ${loadWhere(load.freq)}${also ? `${also},` : ''} as ${formatOhms(load.load)} would at full swing, under ${formatOhms(PART_LOAD_MIN)}`
-						: `${who} drives ${formatOhms(load.load)} ${loadWhere(load.freq)}${also}, under ${formatOhms(PART_LOAD_MIN)}`
-				);
-			}
-			const manual = here.some((a) => a.manual);
-			const why = manual
-				? 'The capacitors typed for this stage need these values.'
-				: UNSEARCHED.includes(realizedStages[i].topology)
-					? 'This circuit is built one way only, so the search keeps it.'
-					: parts.withinLimits === false
-						? `No set of parts within the limits meets the template${parts.measure?.meets ? '' : ' or comes as close to it'}, so this stage keeps its designer's range.`
-						: !floor.length && load?.on === 'next'
-							? 'No parts for this stage and the next keep that load at once.'
-							: 'No way the stock builds this stage stays within the limits.';
-			out.push({ stage: i, manual, text: `Past the limits: ${pieces.join(', and ')}. ${why}` });
-		}
-		return out;
-	});
-	/** The alert of stage i, or null. */
-	const limitAlertOf = (i) => limitAlerts.find((a) => a.stage === i) ?? null;
-	/** The limits the alerts name, for the summary: both, or the one they break. */
-	const limitsBroken = $derived.by(() => {
-		const kinds = new Set((parts?.alerts ?? []).map((a) => a.kind));
-		return kinds.size > 1 ? 'those limits' : kinds.has('floor') ? 'the resistor floor' : 'the load limit';
-	});
+	// The search keeps every resistor of a stage from PART_R_FLOOR to
+	// PART_R_MAX, every capacitor at C_FLOOR or more, and every op-amp output
+	// at a load of PART_LOAD_MIN or more over the passband, the next stage's
+	// input included: a TL082 or an LM741 swings its full +-10 V only into
+	// 2 kohm or more. The library puts the alerts in words (limitAlertText),
+	// the same as the script's, naming the op-amp the MFB band-pass stages are
+	// built for, else the one of the LTspice file (limitAlertOpamp).
+	const alertOpamp = $derived(parts ? limitAlertOpamp(parts, mfbOpamp, spiceOpamp) : null);
+	const alertWords = $derived(parts && realizedStages.length ? limitAlertText(parts, alertOpamp) : { stages: [], summary: '', offer: '' });
+	/** The alert of stage i, { stage, manual, text }, or null. */
+	const limitAlertOf = (i) => alertWords.stages.find((a) => a.stage === i) ?? null;
+	/** The line that offers the set past the limits, from the set within them: '' when there is none to offer. */
+	const pastOffer = $derived(found && !found.stages?.some((s) => !s) ? limitAlertText(found, null).offer : '');
+	/** The parts within the limits miss the template: the verdict says so, and what lies past the limits. */
+	const withinMiss = $derived(Boolean(found?.measure) && found.withinLimits === true && !found.measure.meets && realizedStages.length > 0);
 	/**
 	 * Where on the frequency axis a reading was taken: at f, or from f down
 	 * (up) when f is the end of the passband's grid away from its edge, the
@@ -859,11 +855,6 @@
 	const centredRoom = $derived(rd && (rd.placement?.mode ?? 'edge') === 'edge' ? (designPlacedAs(rd, 'centred')?.placement?.idealMargin ?? 0) : null);
 	/** Whether a passband of the design shown ripples (Chebyshev, elliptic): its every dip sits at Amax on the edge. */
 	const designRipples = $derived(Boolean(rd) && [rd.placement, rd.placement?.hp, rd.placement?.lp].some((pl) => pl?.kind === 'ripple'));
-	/** Where a load was read, in a few words: from the bottom of a passband down (a load there holds to DC), else at its frequency (a load keeps falling past the top one read). */
-	const loadWhere = (f) => {
-		const where = rd && gridWhere(f, filterTemplate(rd));
-		return where && where.endsWith('down') ? where : `at ${formatHz(f)}`;
-	};
 
 	// Panel 02 of a transformed design: where each stopband edge lands on
 	// the prototype, and the order each one asks for.
@@ -914,14 +905,12 @@
 			? ` ${short.length > 1 ? `Stages ${listText(short.map(String))} need` : `Stage ${short[0]} needs`} more pairs than that to be built from the list, so ${short.length > 1 ? 'they are' : 'it is'} shown with the full E24 and E6 grids.`
 			: '';
 		const alone = plan.total ? ` With pairs where they help, the stages' own designers would make ${resistors(plan.total)} two in series.` : '';
-		// a smaller limit with nothing within the floor and the load that meets the template goes past them, for more margin
-		const first = parts?.withinLimits && parts.measure?.meets ? ' Parts that keep the resistor floor and the load limit come first: where a smaller limit finds none that meets the template, it keeps a set past them, flagged, which can have more margin than this one.' : '';
 		if (!plan.count) {
 			return plan.total
-				? `Up to ${resistors(plan.limit)} may be two in series.${alone} The parts that meet the template best within the limit are all single parts.${shortText}${first}`
+				? `Up to ${resistors(plan.limit)} may be two in series.${alone} The parts that meet the template best within the limit are all single parts.${shortText}`
 				: `No resistor here needs two in series, so the limit of ${plan.limit} changes nothing.`;
 		}
-		return `Up to ${resistors(plan.limit)} may be two in series, and the parts chosen use ${plan.count}: ${kept.join(', ')}.${alone}${shortText} Every other resistor is a single part.${first}`;
+		return `Up to ${resistors(plan.limit)} may be two in series, and the parts chosen use ${plan.count}: ${kept.join(', ')}.${alone}${shortText} Every other resistor is a single part.`;
 	});
 
 	// Band-stop only: the two branches (low-pass, high-pass) that run in
@@ -958,11 +947,20 @@
 		combinerMode === 'difference' ? buildDifferenceAmpDiagram(combinerR, combinerParts?.resistors) : buildSummingAmpDiagram(combinerR, combinerParts?.resistors)
 	);
 
+	// the response from the source's EMF, as measured: the source on the
+	// input node included (measureFilter), the same curve as before without one
 	const bodePoints = $derived.by(() => {
 		if (!rd || realizedStages.length === 0) return [];
-		if (filterType === 'bandpass') return sweep(realizedStages, fsl / 10, fsh * 10, 240);
-		if (filterType === 'bandstop') return parallelSum && bandStopBranches ? sweepParallelSum(bandStopBranches, fl / 10, fh * 10, 240, combineSigns) : sweep(realizedStages, fl / 10, fh * 10, 240);
-		return sweep(realizedStages, fp / 50, fs * 10, 240);
+		const [from, to] = filterType === 'bandpass' ? [fsl / 10, fsh * 10] : filterType === 'bandstop' ? [fl / 10, fh * 10] : [fp / 50, fs * 10];
+		if (measure?.magnitudePhaseAt) {
+			const at = measure.magnitudePhaseAt;
+			return Array.from({ length: 240 }, (_, i) => {
+				const freq = 10 ** (Math.log10(from) + ((Math.log10(to) - Math.log10(from)) * i) / 239);
+				return { freq, ...at(freq) };
+			});
+		}
+		if (filterType === 'bandstop' && parallelSum && bandStopBranches) return sweepParallelSum(bandStopBranches, from, to, 240, combineSigns);
+		return sweep(realizedStages, from, to, 240);
 	});
 
 	// Amax and Amin are measured from the top of the passband. For a
@@ -1039,7 +1037,9 @@
 	const PASSBAND_LEVEL_DB = 0.5;
 	const passbandLevelDb = $derived.by(() => {
 		if (!transformed || !rd || realizedStages.length === 0) return null;
-		return magnitudePhaseAt(realizedStages, filterType === 'bandstop' ? fl / 1000 : rd.f0).db;
+		// (with the source on the input node, as the Bode plot)
+		const f = filterType === 'bandstop' ? fl / 1000 : rd.f0;
+		return measure?.gainDbAt ? measure.gainDbAt(f) : magnitudePhaseAt(realizedStages, f).db;
 	});
 
 	/* ------------------------------------------ the narrow band-pass, built */
@@ -1220,6 +1220,8 @@
 	const narrowDb = (x) => (Math.abs(x) < 0.005 ? '0.00' : x.toFixed(2));
 	/** A circuit's name inside a sentence: the multiple feedback band-pass, the RLC, gyrator inductor. */
 	const narrowName = narrowLabelInText;
+	/** A round value as a sentence reads it: 1 kΩ, 47 pF rather than 1.00 kΩ, 47.0 pF. */
+	const roundValue = (text) => text.replace(/\.0+(?= )/, '');
 	/** Names as a sentence lists them: Ra, Rb and R2. */
 	const listText = (names) => (names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names.join(''));
 	const ratioText = (x) => (x >= 1e4 ? Math.round(x).toLocaleString('en-US') : x >= 10 ? x.toFixed(0) : x.toFixed(1));
@@ -1502,9 +1504,7 @@
 				? stageDesign?.manual
 					? 'The search over the whole filter picked these parts: of the ways the stock builds this stage with the capacitors typed for it (each resistor just below or just above its ideal value), this one meets the template best with the other stages.'
 					: 'The search over the whole filter picked these parts: of the ways the stock builds this stage (every capacitor choice it allows, each resistor just below or just above its ideal value), this one meets the template best with the other stages.'
-				: UNSEARCHED.includes(stageDesign?.topology)
-					? "This circuit is built one way only: these are its designer's parts, which the search keeps."
-					: "These are the parts this stage's designer picks alone: with the other stages, no other way the stock builds it meets the template better.";
+				: "These are the parts this stage's designer picks alone: with the other stages, no other way the stock builds it meets the template better.";
 		if (!parts.fromEdge[i]) return how;
 		const t = targetOf(i);
 		const own = rd.stages[i];
@@ -1512,12 +1512,56 @@
 		return `${how} They are rounded around the same stage of the design on the passband edge, ${figures(t)}, where this design asks for ${figures(own)}: that set meets the template better than any rounded around this design's own targets.`;
 	}
 
+	/** The figures of stage i with the source ahead of it, for a stage on the input node (filterSource in partSearch.js), else null. */
+	const sourceFigOf = (i) => parts?.source?.figures?.find((f) => f.stage === i) ?? null;
+	/** The figures panel 04 shows for stage i: with the source for a stage on the input node, else its own. */
+	const actualOf = (i, stageDesign) => sourceFigOf(i)?.with ?? stageDesign.actual;
+	/**
+	 * Below this, a pole the source adds to the input node is worth naming
+	 * (Hz): the top of the template, the highest frequency the measure reads
+	 * (100 times the last edge). Above it, the pole moves nothing the
+	 * template or the plot shows.
+	 */
+	const sourcePoleShown = $derived(parts?.measure?.template ? Math.max(...parts.measure.template.pass.map((r) => r.to), ...parts.measure.template.stop.map((r) => r.to)) : 0);
+	/** What the source does to a stage on the input node, in a sentence or two, or ''. */
+	function sourceText(i) {
+		const fig = sourceFigOf(i);
+		if (!fig || !parts?.source) return '';
+		const r = roundValue(formatOhms(parts.source.r));
+		const other = parts.source.inputs.filter((k) => k !== i).map((k) => `stage ${k + 1}`);
+		const stageDesign = realizedStages[i];
+		// (the search rounds the input resistor of these for R + Rs, sourceRoundsFor; a Tow-Thomas R1 feeds a virtual
+		// ground, where Rs only lowers the gain; a stage the search did not round for it says so)
+		const where = fig.adds
+			? sourceRoundsFor(stageDesign)
+				? stageDesign.sourceRounded
+					? `The source's ${r} adds to ${fig.adds}, so ${fig.adds} is chosen with it`
+					: parts.picks?.[i] === 'search'
+						? `The source's ${r} adds to ${fig.adds}, and the search judged these parts with it`
+						: `The source's ${r} adds to ${fig.adds}, which this stage's designer chose for an ideal source`
+				: `The source's ${r} adds to ${fig.adds}, into a virtual ground, so it only lowers the gain`
+			: fig.shared
+				? `The source's ${r} feeds this stage and ${listText(other)} through one input node`
+				: `The source's ${r} sits ahead of this stage's input`;
+		const poles = fig.extraPoles.filter((f) => f < sourcePoleShown);
+		const pole = poles.length ? ` It adds a pole at ${listText(poles.map((f) => formatHz(f)))}.` : '';
+		const corner = (tau) => formatHz(1 / (2 * Math.PI * tau));
+		if (stageDesign?.order === 1) {
+			return Number.isFinite(fig.with.tau) && Number.isFinite(fig.without.tau) ? `${where}: with it the corner is at ${corner(fig.with.tau)}, against ${corner(fig.without.tau)} without it.${pole}` : `${where}.${pole}`;
+		}
+		// (an MFB band-pass stage built for an op-amp keeps it: the row "Circuit alone" has neither)
+		const withOpamp = stageDesign?.topology === 'mfbBp' && Number.isFinite(stageDesign.actual?.gbw) ? ', the op-amp kept' : '';
+		const alone = Number.isFinite(fig.without.wn) && Number.isFinite(fig.without.q) ? ` Without the source${withOpamp}, f0 = ${formatHz(fig.without.wn / (2 * Math.PI))} and Q = ${fig.without.q.toFixed(4)}.` : '';
+		return `${where}: the figures above include it.${alone}${pole}`;
+	}
+
 	/** How far off its own target a searched stage may land before it says that is on purpose, in %. */
 	const DETUNE_PCT = 3;
 	/** A stage the search placed well off its own f0, Q or time constant says why, or ''. */
 	function detuneText(stageDesign, t, i) {
 		if (parts?.picks?.[i] !== 'search' || !stageDesign?.actual || !t) return '';
-		const a = stageDesign.actual;
+		// (a stage on the input node is read with the source, as its table shows it)
+		const a = actualOf(i, stageDesign);
 		const word = (e) => `${Math.abs(e).toFixed(1)} % ${e < 0 ? 'low' : 'high'}`;
 		const off = [];
 		if (t.order === 1) {
@@ -1545,8 +1589,8 @@
 		// a stage the search picked says so instead of its designer's own rule
 		const opts = { searched: parts?.picks?.[i] === 'search' };
 		if (stageDesign.topology === 'boctor' || stageDesign.topology === 'boctorHp') return explainBoctor(stageDesign, notchContext);
-		if (stageDesign.topology === 'mfbBp') return explainMfbBp(stageDesign, t.wn, t.q);
-		if (stageDesign.topology === 'towThomasBp') return explainTowThomasBp(stageDesign, t.wn, t.q);
+		if (stageDesign.topology === 'mfbBp') return explainMfbBp(stageDesign, t.wn, t.q, opts);
+		if (stageDesign.topology === 'towThomasBp') return explainTowThomasBp(stageDesign, t.wn, t.q, opts);
 		if (stageDesign.topology === 'mfb') return explainMfb(stageDesign, t.wn, t.q, opts);
 		if (stageDesign.topology === 'sallenKey') return explainSallenKey(stageDesign, t.q, opts);
 		if (stageDesign.topology === 'mfbHp') return explainMfbHp(stageDesign, t.wn, t.q, opts);
@@ -1612,14 +1656,18 @@
 			resistorPairs: componentOpts.pairs,
 			// the cap on pairs, when one is set: the script shares them out as the page does
 			...(componentOpts.pairs && componentOpts.pairLimit !== null ? { resistorPairLimit: componentOpts.pairLimit } : {}),
-			capacitorStock: componentOpts.capacitors
+			capacitorStock: componentOpts.capacitors,
+			// the source in series with the input, ohms (0: an ideal source), as panel 01 has it
+			sourceR: sourceOhms,
+			// the parts past the limits in place of those within them, when asked for here (the script falls back the same way)
+			pastLimits: showPast,
+			// the op-amps the load alerts name, as the page picks the name (limitAlertOpamp): the LTspice file's, and the one the MFB stages are built for
+			spiceOpamp,
+			mfbOpamp
 		});
 		saveFile(code, 'filter-design.js', 'text/javascript');
 	}
 
-	// the op-amp the LTspice file uses: the ideal single-pole model, or a
-	// real part on +/-15 V rails
-	let spiceOpamp = $state(DEFAULT_OPAMP);
 	// MFB band-pass stages built for an op-amp: the single-pole model in the
 	// file then takes that gain-bandwidth, so the run matches the page
 	const correctedStages = $derived(realizedStages.some((s) => s.topology === 'mfbBp' && Number.isFinite(s.actual.gbw)));
@@ -1670,7 +1718,9 @@
 			combinerResistors: combinerParts?.resistors ?? null,
 			// the file keeps each pair's sum; its notes name the two parts
 			resistorStock: componentOpts.resistorSeries,
-			pairs: componentOpts.pairs
+			pairs: componentOpts.pairs,
+			// the source's series resistance, ohms (0: an ideal source)
+			sourceR: sourceOhms
 		});
 		saveFile(schematic, 'filter-design.asc', 'text/plain');
 	}
@@ -1902,8 +1952,15 @@
 					<option value="edge">On the passband edge</option>
 				</select>
 			</div>
+			<div class="field">
+				<label for="sourceR">Source resistance (Ω)</label>
+				<input id="sourceR" type="number" min="0" step="10" bind:value={sourceR} />
+			</div>
 			{/if}
 		</div>
+		{#if !isNarrow && sourceBad}
+			<p class="flag warn">The source resistance must be 0 Ω or more: until it is, the filter is driven from an ideal source.</p>
+		{/if}
 
 		{#if isBandType}
 			<div class="grid fill">
@@ -2220,6 +2277,10 @@
 					: 'uses the selected notch topology'}; an odd order adds one first-order RC stage.
 			{/if}
 		</p>
+		<p class="note">
+			The source resistance is the output resistance of what drives the filter, in series with its input: 50 Ω for a
+			function generator, 0 for an ideal source. The parts, the Bode plot and the figures of the {parallelSum ? 'first stage of each branch' : 'first stage'} include it.
+		</p>
 		{/if}
 
 		{#if blocked}
@@ -2263,7 +2324,7 @@
 		minutes={5}
 		blocks={isNarrow
 			? // a narrow band-pass gets a line of its own, then the basics told on a low-pass
-				filterBasics({ filterType: 'narrowband', design: narrowDesign, stock, pairs: componentOpts.pairs, pairLimit: componentOpts.pairLimit })
+				filterBasics({ filterType: 'narrowband', design: narrowDesign, stock, pairs: componentOpts.pairs, pairLimit: componentOpts.pairLimit, script: SCRIPT_DOWNLOAD })
 			: filterBasics({
 			filterType,
 			// the transformation's figures: one response and Amax, order 2n,
@@ -2302,7 +2363,11 @@
 			pairs: componentOpts.pairs,
 			pairLimit: componentOpts.pairLimit,
 			// the stage each part set was rounded around: its own, or the same stage on the passband edge
-			partTargets: rd && realizedStages.length ? realizedStages.map((_, i) => targetOf(i)) : null
+			partTargets: rd && realizedStages.length ? realizedStages.map((_, i) => targetOf(i)) : null,
+			// stage 1 there takes an ideal source, and says so when panel 04 reads it with this one
+			sourceR: sourceOhms,
+			// 06 Download names the script only while its download shows
+			script: SCRIPT_DOWNLOAD
 		})}
 		widgets={{ 'two-tones': TwoTonesDemo, 'rc-on-spec': RcOnSpecDemo, 'order-on-spec': OrderOnSpecDemo, 'stages-multiply': StagesMultiplyDemo }}
 	/>
@@ -2793,17 +2858,21 @@
 						<h2>Download</h2>
 					</div>
 
-					<p class="note">
-						A standalone JavaScript file with this exact design: the same stage calculation and
-						component search as this page, parameterized at the top so it can be edited and rerun with
-						<code>node filter-design.js</code>. It also prints the same report shown above, plus notes on
-						simulating, building and testing the result.
-					</p>
+					{#if SCRIPT_DOWNLOAD}
+						<p class="note">
+							A standalone JavaScript file with this exact design: the same stage calculation and
+							component search as this page, parameterized at the top so it can be edited and rerun with
+							<code>node filter-design.js</code>. It also prints the same report shown above, plus notes on
+							simulating, building and testing the result.
+						</p>
+					{/if}
 
 					<OpampPicker id="spiceOpamp" label="Op-amp in the LTspice file" bind:value={spiceOpamp} />
 
 					<div class="row downloads">
-						<button type="button" onclick={downloadNarrowScript}>Download filter-design.js</button>
+						{#if SCRIPT_DOWNLOAD}
+							<button type="button" onclick={downloadNarrowScript}>Download filter-design.js</button>
+						{/if}
 						<button type="button" onclick={downloadNarrowSchematic}>Download filter-design.asc (LTspice)</button>
 					</div>
 
@@ -2850,6 +2919,28 @@
 			{/if}
 		{/if}
 	{:else if valid && !blocked && !realizationFailures.length}
+		<!-- the parts within the limits miss the template: by how much, and the set past the limits that meets it, with the control that shows it -->
+		{#snippet pastControl(underVerdict)}
+			{#if withinMiss && measure}
+				<div class="past-offer">
+					<!-- (in panel 04 the alerts already say the parts shown are past the limits) -->
+					{#if underVerdict || !pastShown}<p class="note">
+						{#if pastShown}
+							These parts are past the limits on the parts: they meet the template with {parts.measure.margin.toFixed(2)} dB of margin, where the best set within the limits misses it by {(-found.measure.margin).toFixed(2)} dB.
+						{:else if pastOffer}
+							These parts keep the limits on the parts, and miss the template by {(-found.measure.margin).toFixed(2)} dB: no set within the limits meets it. {pastOffer}
+						{:else}
+							These parts keep the limits on the parts, and miss the template by {(-found.measure.margin).toFixed(2)} dB: no set within the limits meets it, and none past them either.
+						{/if}
+					</p>{/if}
+					{#if found.alternative}
+						<button type="button" class="ghost small" aria-pressed={pastShown} onclick={() => (showPast = !pastShown)}>
+							{pastShown ? 'Show the parts within the limits' : 'Show the parts past the limits'}
+						</button>
+					{/if}
+				</div>
+			{/if}
+		{/snippet}
 		{#snippet methodTable()}
 			<h3 class="subhead">Two ways to build it</h3>
 			<div class="tableScroll">
@@ -2901,6 +2992,15 @@
 			{/each}
 			<p class="note">{placementReason(d)}</p>
 			<MathPanel summary="Show where this window comes from" blocks={explainPlacement(d)} />
+		{/snippet}
+		<!-- the placement blocks in one closed dropdown, as the page's other "Show ..." ones: [[design, name], ...] -->
+		{#snippet placementDetails(list)}
+			<details class="placement-details">
+				<summary>Show how the design is placed in the template</summary>
+				<div class="placement-content">
+					{#each list as [d, name] (name)}{@render placementBlock(d, name)}{/each}
+				</div>
+			</details>
 		{/snippet}
 		{#if transformed}
 			<section class="panel">
@@ -2959,7 +3059,7 @@
 							cascade needs no extra gain stage.
 						{/if}
 					</p>
-					{#if design}{@render placementBlock(design, 'the prototype')}{/if}
+					{#if design}{@render placementDetails([[design, 'the prototype']])}{/if}
 				{/if}
 			</section>
 		{:else if isBandType}
@@ -3105,9 +3205,7 @@
 				{/if}
 				{#if design && design.hp && design.lp}
 					<!-- each side placed in its own template, listed from the lower frequencies up -->
-					{#each filterType === 'bandstop' ? [[design.lp, `low-pass ${sideWord}`], [design.hp, `high-pass ${sideWord}`]] : [[design.hp, `high-pass ${sideWord}`], [design.lp, `low-pass ${sideWord}`]] as [side, name] (name)}
-						{@render placementBlock(side, name)}
-					{/each}
+					{@render placementDetails(filterType === 'bandstop' ? [[design.lp, `low-pass ${sideWord}`], [design.hp, `high-pass ${sideWord}`]] : [[design.hp, `high-pass ${sideWord}`], [design.lp, `low-pass ${sideWord}`]])}
 				{/if}
 			</section>
 		{:else}
@@ -3157,7 +3255,7 @@
 							: ''}, cascaded. The ideal response is normalized to unity passband gain, so the
 						product of the stages meets the spec with no extra gain stage needed.
 					</p>
-					{#if design}{@render placementBlock(design, '')}{/if}
+					{#if design}{@render placementDetails([[design, '']])}{/if}
 				{/if}
 			</section>
 		{/if}
@@ -3238,13 +3336,13 @@
 					/>
 				{:else if filterType === 'highpass'}
 					<p class="note">
-						Denormalized with s → s/ωc (high-pass; ωc = 2π·fp·ε^(+1/n) for Butterworth, 2π·fp for the other responses{placedScale(design) !== 1 ? `, each divided by the scale σ = ${placedScale(design).toFixed(4)} that centres it in the template` : ''}{placedRipple(design) !== null ? `, with the ripple of ${Number(placedRipple(design).toFixed(4))} dB that centres it in the template` : ''}, derived below). Each row is
+						Denormalized with s → s/ωc (high-pass; ωc = 2π·fp·ε^(+1/n) for Butterworth, 2π·fp for the other responses, derived below{placedScale(design) !== 1 ? `; each divided by the scale σ = ${placedScale(design).toFixed(4)} that centres it in the template, from the placement in panel 02` : ''}{placedRipple(design) !== null ? `; with the ripple of ${Number(placedRipple(design).toFixed(4))} dB that centres it in the template, from the placement in panel 02` : ''}). Each row is
 						one realizable second-order block:
 					</p>
 					<Equation tex={`H(s) = \\dfrac{s^2}{s^2 + \\frac{\\omega_n}{Q}s + \\omega_n^2}`} />
 				{:else}
 					<p class="note">
-						Denormalized with s → s/ωc (low-pass; ωc = 2π·fp·ε^(-1/n) for Butterworth, 2π·fp for the other responses{placedScale(design) !== 1 ? `, each times the scale σ = ${placedScale(design).toFixed(4)} that centres it in the template` : ''}{placedRipple(design) !== null ? `, with the ripple of ${Number(placedRipple(design).toFixed(4))} dB that centres it in the template` : ''}, derived below). Each row is one realizable
+						Denormalized with s → s/ωc (low-pass; ωc = 2π·fp·ε^(-1/n) for Butterworth, 2π·fp for the other responses, derived below{placedScale(design) !== 1 ? `; each times the scale σ = ${placedScale(design).toFixed(4)} that centres it in the template, from the placement in panel 02` : ''}{placedRipple(design) !== null ? `; with the ripple of ${Number(placedRipple(design).toFixed(4))} dB that centres it in the template, from the placement in panel 02` : ''}). Each row is one realizable
 						second-order block:
 					</p>
 					<Equation tex={`H(s) = \\dfrac{\\omega_n^2}{s^2 + \\frac{\\omega_n}{Q}s + \\omega_n^2}`} />
@@ -3332,7 +3430,7 @@
 					<span class="num">04</span>
 					<h2>Components</h2>
 					<span class="hint">
-						{partsPending ? 'choosing the parts, ' : ''}{transformed
+						{partsPending ? 'choosing the parts, ' : ''}{pastShown ? 'parts past the limits, ' : ''}{transformed
 							? transformedHint
 							: isBandType && topologyHp !== topologyLp
 							? `${TOPOLOGY_WORD[topologyHp]} high-pass, ${TOPOLOGY_WORD[topologyLp]} low-pass`
@@ -3350,28 +3448,31 @@
 
 				<p class="note">
 					The parts of all the stages are chosen together. Each stage lists the ways {stockPhrase}
-					builds it, each resistor rounded just below and just above its ideal value. The set kept
+					builds it, each resistor rounded just below and just above its ideal value. The limits on the
+					parts come first: resistors from {roundValue(formatOhms(PART_R_FLOOR))} to {roundValue(formatOhms(PART_R_MAX))}, capacitors of
+					{roundValue(formatFarads(C_FLOOR))} or more, and op-amp outputs that drive {roundValue(formatOhms(PART_LOAD_MIN))} or more. Within them, the set kept
 					meets the template best over the whole passband and the whole stopband, with a margin up to
 					the ideal design's own{parts?.ideal ? (parts.ideal.margin > 0.005 ? ` (${parts.ideal.margin.toFixed(2)} dB here)` : ' (none on the passband edge)') : ''},
-					then lands closest to the ideal response. Resistors stay at {formatOhms(PART_R_FLOOR)} or more, and every
-					op-amp output drives {formatOhms(PART_LOAD_MIN)} or more.
+					then lands closest to the ideal response. Of the sets that do about as well, it takes the one
+					whose resistors sit nearest 10 kΩ and whose capacitors are not tiny. The best set within the
+					limits is kept even when it misses the template; a set past them that meets it is then offered.
 					{#if restrictedStock}
 						With {stock === 'labR' ? 'the lab resistors and the usual capacitor series' : 'those values only'} the f0 and Q error columns below grow{componentOpts.pairs ? ', less so with two in series' : ''}; the Bode plot and the spec check at the end show whether the result still meets the spec.
 					{/if}
 				</p>
+				{#if parts?.source}
+					<p class="note">
+						The source drives the input through {roundValue(formatOhms(parts.source.r))}: the response and the figures of {parts.source.inputs.length > 1 ? `stages ${listText(parts.source.inputs.map((k) => String(k + 1)))}, on the input node,` : `stage ${parts.source.inputs[0] + 1}`} include it.
+					</p>
+				{/if}
 				{#if pairPlanText}
 					<!-- the cap on pairs: how many the parts chosen use, and where -->
 					<p class="note">{pairPlanText}</p>
 				{/if}
-				{#if limitAlerts.length}
-					<p class="flag warn">
-						A TL082 swings its full ±10 V only into {formatOhms(PART_LOAD_MIN)} or more, and a resistor under {formatOhms(PART_R_FLOOR)} loads the op-amp behind it.
-						{limitAlerts.length > 1 ? `Stages ${listText(limitAlerts.map((a) => String(a.stage + 1)))} break` : `Stage ${limitAlerts[0].stage + 1} breaks`} {limitsBroken}: see under {limitAlerts.length > 1 ? 'each' : 'it'}.
-						{#if parts?.withinLimits === false && !limitAlerts.every((a) => a.manual)}
-							No set of parts within the limits meets the template{parts.measure?.meets ? '' : ' or comes as close to it'}, so these keep the designers' own range, from 200 Ω.
-						{/if}
-					</p>
+				{#if alertWords.stages.length && alertWords.summary}
+					<p class="flag warn">{alertWords.summary}</p>
 				{/if}
+				{@render pastControl(false)}
 
 				{#if shortfallStages.length > 0}
 					<p class="flag warn">
@@ -3444,6 +3545,9 @@
 
 				{#each realizedStages as stageDesign, i (i)}
 					{@const sens = sensitivityFor(stageDesign)}
+					<!-- a stage on the input node is read with the source ahead of it -->
+					{@const act = actualOf(i, stageDesign)}
+					{@const srcFig = sourceFigOf(i)}
 					<div class="stage-block">
 						<h3>
 							Stage {i + 1} ·{transformed
@@ -3479,11 +3583,11 @@
 											<tr>
 												<th>f0 actual</th>
 												<td>
-													{formatHz(stageDesign.actual.wn / (2 * Math.PI))}
+													{formatHz(act.wn / (2 * Math.PI))}
 													<span class="err"
 														>({formatPercent(
 															relativeErrorPercent(
-																stageDesign.actual.wn,
+																act.wn,
 																targetOf(i).wn
 															)
 														)})</span
@@ -3493,10 +3597,10 @@
 											<tr>
 												<th>Q actual</th>
 												<td>
-													{stageDesign.actual.q.toFixed(4)}
+													{act.q.toFixed(4)}
 													<span class="err"
 														>({formatPercent(
-															relativeErrorPercent(stageDesign.actual.q, targetOf(i).q)
+															relativeErrorPercent(act.q, targetOf(i).q)
 														)})</span
 													>
 												</td>
@@ -3515,38 +3619,38 @@
 												<tr>
 													<th>fz actual</th>
 													<td>
-														{formatHz(stageDesign.actual.wz / (2 * Math.PI))}
-														<span class="err">({formatPercent(relativeErrorPercent(stageDesign.actual.wz, targetOf(i).wz))})</span>
+														{formatHz(act.wz / (2 * Math.PI))}
+														<span class="err">({formatPercent(relativeErrorPercent(act.wz, targetOf(i).wz))})</span>
 													</td>
 												</tr>
 												<tr>
 													<th>{stageDesign.lowSide ? 'DC gain' : 'Gain above fz'}</th>
 													<td>
-														{(stageDesign.lowSide ? stageDesign.actual.dcGain : stageDesign.actual.gain).toFixed(3)}
-														<span class="err">({(20 * Math.log10(Math.abs(stageDesign.lowSide ? stageDesign.actual.dcGain : stageDesign.actual.gain))).toFixed(2)} dB)</span>
+														{(stageDesign.lowSide ? act.dcGain : act.gain).toFixed(3)}
+														<span class="err">({(20 * Math.log10(Math.abs(stageDesign.lowSide ? act.dcGain : act.gain))).toFixed(2)} dB)</span>
 													</td>
 												</tr>
 											{:else if stageDesign.topology === 'mfbBp' || stageDesign.topology === 'towThomasBp'}
 												<tr>
 													<th>Peak gain</th>
 													<td>
-														{Math.abs(stageDesign.actual.gain).toFixed(3)}
-														<span class="err">({formatPercent(relativeErrorPercent(Math.abs(stageDesign.actual.gain), targetOf(i).gain))})</span>
+														{Math.abs(act.gain).toFixed(3)}
+														<span class="err">({formatPercent(relativeErrorPercent(Math.abs(act.gain), targetOf(i).gain))})</span>
 													</td>
 												</tr>
 												{#if stageDesign.ideal}
-													<!-- the rows above are the stage with its op-amp; the same parts alone sit higher and wider -->
+													<!-- the rows above are the stage with its op-amp (and the source, on the input node); the same parts alone sit higher and wider -->
 													<tr>
 														<th>Circuit alone</th>
 														<td>
 															{formatHz(stageDesign.ideal.wn / (2 * Math.PI))}, Q {stageDesign.ideal.q.toFixed(4)}, gain {Math.abs(stageDesign.ideal.gain).toFixed(3)}
-															<span class="err">(ideal op-amp)</span>
+															<span class="err">(ideal op-amp{srcFig ? ', no source' : ''})</span>
 														</td>
 													</tr>
 												{/if}
 											{/if}
 											{#if transformed && filterType === 'bandpass'}
-												{@const atF0 = magnitudePhaseAt([stageDesign], rd.f0).db}
+												{@const atF0 = srcFig ? 20 * Math.log10(Math.max(Math.hypot(srcFig.responseAt(rd.f0).re, srcFig.responseAt(rd.f0).im), 1e-12)) : magnitudePhaseAt([stageDesign], rd.f0).db}
 												<!-- what the stage passes at the band's centre, which the design holds at 1 -->
 												<tr>
 													<th>Gain at {formatHz(rd.f0)}</th>
@@ -3558,7 +3662,10 @@
 											{/if}
 										</tbody>
 									</table>
-									{#if stageDesign.boctorFallback}
+									{#if srcFig}
+									<p class="note">{sourceText(i)}</p>
+								{/if}
+								{#if stageDesign.boctorFallback}
 										<p class="note">
 											{stageDesign.boctorFallback === 'symmetric'
 												? 'Boctor cannot build a notch whose zero sits on its own f0 (its two forms need fz above or below it), so this stage is a Tow-Thomas notch.'
@@ -3595,9 +3702,11 @@
 											Built for {mfbOpampLabel}: f0, Q and gain above are with that op-amp. Another op-amp needs another correction.
 										</p>
 									{/if}
+								{:else if srcFig}
+									<p class="note">{sourceText(i)}</p>
 								{/if}
 								{#if limitAlertOf(i)}
-									<!-- a resistor under the floor, an output under its load -->
+									<!-- a resistor past the floor or the ceiling, a capacitor under 47 pF, an output under its load -->
 									<p class="flag warn">{limitAlertOf(i).text}</p>
 								{/if}
 							</div>
@@ -3697,8 +3806,8 @@
 								{/if}
 								{#if stageDesign.outOfRange}
 									<p class="flag warn">
-										The resulting resistor value falls outside a realistic 200 ohm to 2 megohm
-										range for these capacitors; consider different values.
+										These capacitors need a resistor outside 200 Ω to 2 MΩ, past even the range the
+										designers work in.
 									</p>
 								{/if}
 							</div>
@@ -3803,19 +3912,19 @@
 					<p class="note">
 						The top of the passband is at {passbandPeakDb > 0 ? '+' : ''}{passbandPeakDb.toFixed(2)} dB:
 						{#if transformed && realizedStages.some((s) => s.topology.startsWith('boctor'))}
-							Boctor stages keep their own gain, and component rounding also shifts the passband level.
+							Boctor stages keep their own gain, and component rounding{parts?.source ? ' and the source also shift' : ' also shifts'} the passband level.
 						{:else if realizedStages.some(s => s.topology === 'boctorHp')}
-							Boctor high-pass sections have gain above one, and component rounding also shifts the passband level.
+							Boctor high-pass sections have gain above one, and component rounding{parts?.source ? ' and the source also shift' : ' also shifts'} the passband level.
 						{:else if transformed && !(['chebyshev', 'elliptic'].includes(rd.response) && rd.n % 2 === 0)}
-							<!-- the ideal stages hold f0 (or DC) at the top of the passband: what is left is rounding -->
-							rounding the parts of the stages moves the passband level a little.
+							<!-- the ideal stages hold f0 (or DC) at the top of the passband: what is left is rounding, and the source -->
+							rounding the parts of the stages{parts?.source ? ' and the source move' : ' moves'} the passband level a little.
 						{:else if passbandPeakDb > 0 && rippleAbove}
 							a response with passband ripple (Chebyshev, elliptic) built from stages of unity gain ripples above 0 dB
-							{isBandType && !transformed ? 'where the ripples of its two sides meet' : 'when its order is even'}{hasZeros ? ', and rounding the notch components also shifts the gain' : ''}.
+							{isBandType && !transformed ? 'where the ripples of its two sides meet' : 'when its order is even'}{hasZeros ? ', and rounding the notch components also shifts the gain' : ''}{parts?.source ? ', and the source moves it too' : ''}.
 						{:else if passbandPeakDb > 0}
-							the rounded parts leave a small peak in the passband{hasZeros ? ', and rounding the notch components also shifts the gain' : ''}.
+							the rounded parts{parts?.source ? ' and the source' : ''} leave a small peak in the passband{hasZeros ? ', and rounding the notch components also shifts the gain' : ''}.
 						{:else}
-							rounding the {hasZeros ? 'notch components' : 'parts'} moves the passband level a little.
+							rounding the {hasZeros ? 'notch components' : 'parts'}{parts?.source ? ' and the source move' : ' moves'} the passband level a little.
 						{/if}
 						The spec's limits are measured from that top, so the amber Amax and Amin lines and the figures below
 						sit {Math.abs(passbandPeakDb).toFixed(2)} dB {passbandPeakDb > 0 ? 'higher' : 'lower'} than they would from 0 dB.
@@ -3826,11 +3935,11 @@
 						The gain {filterType === 'bandstop' ? 'at DC' : `at f0 = ${formatHz(rd.f0)}`} is {passbandLevelDb > 0 ? '+' : ''}{passbandLevelDb.toFixed(2)} dB,
 						where the ideal design gives 0 dB: {realizedStages.some((s) => s.topology.startsWith('boctor'))
 							? 'the Boctor stages keep their own gain, which this circuit cannot set, and the rounded parts move it too'
-							: 'the rounded parts move it'}. It is a shift of the whole passband: the limits are measured from its top.
+							: `the rounded parts${parts?.source ? ' and the source' : ''} move it`}. It is a shift of the whole passband: the limits are measured from its top.
 					</p>
 				{/if}
-				<div class="legend">
-					<span><i class="line blue"></i>simulated response (rounded components{correctedStages ? `, the MFB band-pass stages with the ${formatHz(mfbGbw)} op-amp model` : ''})</span>
+				<div class="legend" class:wrap={Boolean(parts?.source) || correctedStages}>
+					<span><i class="line blue"></i>simulated response (rounded components{correctedStages ? `, the MFB band-pass stages with the ${formatHz(mfbGbw)} op-amp model` : ''}{parts?.source ? `, from a source of ${roundValue(formatOhms(parts.source.r))}` : ''})</span>
 					<span
 						><i class="line amber"></i>Amax / Amin / {isBandType
 							? 'fl / fh / fsl / fsh'
@@ -3902,21 +4011,21 @@
 						<p class="flag warn">
 							Passband with rounded parts: {w.loss.toFixed(2)} dB lost {at}{othersText}, against Amax = {limitText}{there}.
 							{rd?.placement?.mode === 'edge'
-								? `On the passband edge the ideal design loses exactly Amax at ${listText(measure.passEdges.map((e) => e.name))}${designRipples ? ' and at every dip of its ripple' : ''}, so the rounding to ${stockPhrase} has no room there, and no set of parts from it meets the template more closely.${
+								? `On the passband edge the ideal design loses exactly Amax at ${listText(measure.passEdges.map((e) => e.name))}${designRipples ? ' and at every dip of its ripple' : ''}, so the rounding to ${stockPhrase} has no room there, and no set of parts from it${parts?.withinLimits ? ' within the limits on the parts' : ''} meets the template more closely.${
 										centredRoom > -w.margin + 0.005
 											? ` Centred in the template (panel 01), the ideal design keeps ${centredRoom.toFixed(2)} dB of room, more than this miss.`
 											: centredRoom > 0.005
 												? ` Centred in the template (panel 01), the ideal design keeps only ${centredRoom.toFixed(2)} dB of room, less than this miss.`
 												: ''
 									}`
-								: `The ideal design keeps ${(parts?.ideal?.margin ?? 0).toFixed(2)} dB of room; the rounding to ${stockPhrase} takes more than that, and no set of parts from it meets the template more closely.`}
+								: `The ideal design keeps ${(parts?.ideal?.margin ?? 0).toFixed(2)} dB of room; the rounding to ${stockPhrase} takes more than that, and no set of parts from it${parts?.withinLimits ? ' within the limits on the parts' : ''} meets the template more closely.`}
 							That is smaller than the shift the parts' own tolerance produces on a real board.
 						</p>
 					{:else if restrictedStock}
 						<p class="flag warn">
 							Passband: {w.loss.toFixed(2)} dB lost {at}{othersText}, against Amax = {limitText}{there}.
 							More than rounding explains, and the limited value list is the likely reason: no set of parts
-							from it comes closer. Add values, {componentOpts.pairs ? '' : 'try two resistors in series, '}loosen
+							from it{parts?.withinLimits ? ' within the limits on the parts' : ''} comes closer. Add values, {componentOpts.pairs ? '' : 'try two resistors in series, '}loosen
 							Amax, or accept the wider passband if the stopband still holds.
 						</p>
 					{:else}
@@ -3926,6 +4035,7 @@
 						</p>
 					{/if}
 				{/if}
+				{@render pastControl(true)}
 			</section>
 
 			<section class="panel">
@@ -3934,24 +4044,28 @@
 					<h2>Download</h2>
 				</div>
 
-				<p class="note">
-					A standalone JavaScript file with this exact design: the same order, pole-placement,
-					denormalization and component-search code as this page, parameterized at the top so it
-					can be edited and rerun with <code>node filter-design.js</code>. It also prints the same
-					report shown above, plus notes on simulating, building and testing the result.
-				</p>
+				{#if SCRIPT_DOWNLOAD}
+					<p class="note">
+						A standalone JavaScript file with this exact design: the same order, pole-placement,
+						denormalization and component-search code as this page, parameterized at the top so it
+						can be edited and rerun with <code>node filter-design.js</code>. It also prints the same
+						report shown above, plus notes on simulating, building and testing the result.
+					</p>
+				{/if}
 
 				<OpampPicker id="spiceOpamp" label="Op-amp in the LTspice file" bind:value={spiceOpamp} />
 
 				<div class="row downloads">
-					<button type="button" onclick={downloadScript}>Download filter-design.js</button>
+					{#if SCRIPT_DOWNLOAD}
+						<button type="button" onclick={downloadScript}>Download filter-design.js</button>
+					{/if}
 					<button type="button" onclick={downloadSchematic}>Download filter-design.asc (LTspice)</button>
 				</div>
 
 				<p class="note">
 					An LTspice schematic with the same component values as the tables above and the AC
 					analysis already set up: open it, press Run, plot V(vout). Each stage is drawn wire by
-					wire, the way a textbook draws it.
+					wire, the way a textbook draws it.{sourceOhms > 0 ? ` The source drives the filter through RS, the ${roundValue(formatOhms(sourceOhms))} of panel 01, as on the page.` : ''}
 					{#if OPAMP_MODELS[spiceOpamp]?.real}
 						Each op-amp is the {spiceOpamp} with its supply pins showing, on +15 V and -15 V rails
 						(the two sources under the drawing, nets v++ and v--); its model is written into the
@@ -4267,6 +4381,38 @@
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
 		column-gap: 0.6rem;
+	}
+
+	/* the placement in the template of panel 02, closed until asked for, as the page's other "Show ..." dropdowns */
+	.placement-details {
+		margin-top: 0.9rem;
+	}
+
+	.placement-details > summary {
+		cursor: pointer;
+		font-family: var(--mono);
+		font-size: 0.8rem;
+		font-weight: 500;
+		color: var(--blue);
+		user-select: none;
+		width: fit-content;
+	}
+
+	.placement-details > summary:hover {
+		color: var(--blueLight);
+	}
+
+	.placement-content {
+		margin-top: 0.2rem;
+	}
+
+	/* the set past the limits offered under the verdict, its control under the line */
+	.past-offer {
+		margin-top: 0.8rem;
+	}
+
+	.past-offer button {
+		margin-top: 0.5rem;
 	}
 
 	/* the parts of the inputs before the last change, kept on screen while the next ones are chosen */

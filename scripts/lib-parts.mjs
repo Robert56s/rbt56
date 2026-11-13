@@ -5,17 +5,24 @@
 // these parts, so the checks build both from one set of arguments:
 //   pageDesign(args)   the design, placed as args.placement says
 //   pageSettings(args) the search's settings: the menus, the stock, the
-//                      pairs and their limit, the capacitors typed (farads)
-//                      and the band-stop's summing resistor
-//   pageParts(args)    { design, settings, result } with the search's result
+//                      pairs and their limit, the capacitors typed (farads),
+//                      the band-stop's summing resistor and the source
+//                      resistance (args.sourceR, ohms; left out 0, as
+//                      generateScript takes it)
+//   pageParts(args)    { design, settings, found, result, opamp }: the
+//                      search's result (found), the set the page shows
+//                      (result: found's alternative with args.pastLimits
+//                      when it has one, else found), and the op-amp its
+//                      alerts name (limitAlertOpamp of args.mfbOpamp and
+//                      args.spiceOpamp)
 //   pageNetlistOpts(args, page)  what the page hands spice.js for them
 //   scriptParts(out)   the parts a script printed, [[name, value]] in order
-//   partsProblems(out, page)  where a script's parts, response points and
-//                      verdict differ from the page's (page: pageParts's
-//                      result), [] when they agree
+//   partsProblems(out, page)  where a script's parts, response points,
+//                      verdict and notes on the limits differ from the
+//                      page's (page: pageParts's), [] when they agree
 
 import { LAB_KIT, nearestResistor } from '../src/lib/filter/eseries.js';
-import { searchFilterParts } from '../src/lib/filter/partSearch.js';
+import { limitAlertOpamp, limitAlertText, searchFilterParts } from '../src/lib/filter/partSearch.js';
 import { designBandPass, designBandPassTransformed, designBandStop, designBandStopTransformed, designHighPass, designLowPass } from '../src/lib/filter/stages.js';
 
 const KIT = { resistorStock: LAB_KIT.resistors, capacitorStock: LAB_KIT.capacitors };
@@ -29,7 +36,9 @@ const NARROW = { filterType: 'bandpass', response: 'butterworth', amaxDb: 3, ami
  * arguments (each run on both placements): every topology the search
  * covers, the notches of both circuits, a band-stop's two branches and its
  * combiner, both transformations (the MFB band-pass stages built for the
- * TL082), the stocks, pairs under a limit and capacitors typed by hand.
+ * TL082 and the LM741), the stocks, pairs under a limit, capacitors typed
+ * by hand, a source resistance (sourceR, the band-stop's shared node among
+ * them) and the set past the limits (pastLimits).
  */
 export const PAGE_CASES = [
 	['low-pass, MFB, lab kit', { ...LP, topology: 'mfb', ...KIT }],
@@ -43,7 +52,14 @@ export const PAGE_CASES = [
 	['Bessel band-stop of two branches, Sallen-Key, E96', { ...BS, response: 'bessel', aminDb: 30, topology: 'sallenKey', resistorStock: 'E96' }],
 	['narrow band-pass transformed, TL082, lab kit, 2 pairs', { ...NARROW, topology: 'mfb', topologyBand: 'mfb', topologyNotch: 'boctor', opampGbw: 3450000, ...KIT, resistorPairs: true, resistorPairLimit: 2 }],
 	['elliptic band-pass transformed, Tow-Thomas, lab kit', { ...NARROW, response: 'elliptic', topology: 'towThomas', topologyBand: 'towThomas', topologyNotch: 'towThomas', ...KIT }],
-	['band-stop transformed, Boctor, E96', { ...BS, bandMethod: 'transformed', topology: 'mfb', topologyBand: 'mfb', topologyNotch: 'boctor', resistorStock: 'E96' }]
+	['band-stop transformed, Boctor, E96', { ...BS, bandMethod: 'transformed', topology: 'mfb', topologyBand: 'mfb', topologyNotch: 'boctor', resistorStock: 'E96' }],
+	// the page's defaults: a 50 ohm source ahead of the input (RS in the files), the MFB band-pass stages built for the LM741
+	['the default band-pass, transformed, MFB for the LM741, lab kit, 50 ohm source', { ...BP, bandMethod: 'transformed', topology: 'mfb', topologyBand: 'mfb', topologyNotch: 'boctor', opampGbw: 1000000, mfbOpamp: 'LM741', spiceOpamp: 'TL082', ...KIT, sourceR: 50 }],
+	['low-pass, MFB, lab kit, 50 ohm source', { ...LP, topology: 'mfb', ...KIT, sourceR: 50 }],
+	// a 600 ohm source on the node both branches start from
+	['band-stop of two branches, Tow-Thomas, lab resistors, 600 ohm source', { ...BS, topology: 'towThomas', resistorStock: LAB_KIT.resistors, sourceR: 600 }],
+	// on the edge the best set within the limits misses: the set past them that meets, shown (PAST_LIMITS)
+	['band-stop transformed, Boctor, lab kit, 50 ohm source, past the limits', { ...BS, bandMethod: 'transformed', topology: 'mfb', topologyBand: 'mfb', topologyNotch: 'boctor', ...KIT, sourceR: 50, pastLimits: true }]
 ];
 
 /** generateScript's arguments with its own defaults filled in. */
@@ -111,15 +127,25 @@ export function pageSettings(args) {
 		pairs,
 		pairLimit: pairs && a.resistorPairLimit !== null && a.resistorPairLimit !== undefined ? a.resistorPairLimit : null,
 		overrides: a.capOverrides,
-		combinerR: Array.isArray(resistorSeries) ? nearestResistor(10000, resistorSeries) : 10000
+		combinerR: Array.isArray(resistorSeries) ? nearestResistor(10000, resistorSeries) : 10000,
+		sourceR: Number.isFinite(a.sourceR) && a.sourceR > 0 ? a.sourceR : 0
 	};
 }
 
-/** The design and the parts the page shows for generateScript's arguments. */
+/**
+ * The design and the parts the page shows for generateScript's arguments:
+ * the search's result, the set shown (past the limits when asked and
+ * offered) and the op-amp the alerts name.
+ */
 export function pageParts(args) {
+	const a = filled(args);
 	const design = pageDesign(args);
 	const settings = pageSettings(args);
-	return { design, settings, result: searchFilterParts(design, settings) };
+	const found = searchFilterParts(design, settings);
+	const result = a.pastLimits && found.alternative ? found.alternative : found;
+	// (the MFB stages' op-amp counts for a transformed band-pass only, as generateScript writes OPAMP_GBW_PART)
+	const builtFor = isTransformed(a) && a.filterType === 'bandpass' && a.opampGbw !== undefined ? (a.mfbOpamp ?? null) : null;
+	return { design, settings, found, result, opamp: limitAlertOpamp(result, builtFor, a.spiceOpamp ?? null) };
 }
 
 /**
@@ -167,7 +193,9 @@ export function pageNetlistOpts(args, { design, settings, result }) {
 		combinerR: settings.combinerR,
 		combinerResistors: combiner ? combiner.parts.resistors : null,
 		resistorStock: settings.resistorSeries,
-		pairs: settings.pairs
+		pairs: settings.pairs,
+		// the source's resistance ahead of the input (RS), as the page's measure has it
+		sourceR: settings.sourceR
 	};
 }
 
@@ -199,11 +227,14 @@ export function pageLines(result) {
 
 /**
  * Where a script's output differs from the page's result: its parts, the
- * response at the points it prints, and the figures of its verdict (the
- * worst passband loss, the least stopband attenuation, the margin and the
- * whole template's OK or NOT MET). [] when they agree.
+ * response at the points it prints, the figures of its verdict (the worst
+ * passband loss, the least stopband attenuation, the margin and the whole
+ * template's OK or NOT MET), and with `opamp` given (pageParts's) its notes
+ * on the limits, word for word the page's (limitAlertText: one per stage,
+ * the summary on the limits line, the offer of parts past them). [] when
+ * they agree.
  */
-export function partsProblems(out, { design, result }) {
+export function partsProblems(out, { design, result, opamp }) {
 	const problems = [];
 	if (/^ERROR/m.test(out)) return [out.slice(out.indexOf('ERROR'), out.indexOf('ERROR') + 200)];
 	const got = scriptParts(out);
@@ -231,5 +262,14 @@ export function partsProblems(out, { design, result }) {
 	if (!pass || Math.abs(Number(pass[1]) - m.pass.loss) > 5.1e-4) problems.push(`worst passband loss ${pass?.[1]} against ${m.pass.loss.toFixed(3)}`);
 	if (!stop || Math.abs(Number(stop[1]) - m.stop.db) > 0.051) problems.push(`stopband ${stop?.[1]} against ${m.stop.db.toFixed(1)}`);
 	if (!margin || Math.abs(Number(margin[1]) - m.margin) > 5.1e-4 || (margin[2] === 'OK') !== m.meets) problems.push(`margin ${margin?.[1]} ${margin?.[2]} against ${m.margin.toFixed(3)} ${m.meets ? 'OK' : 'NOT MET'}`);
+	if (opamp !== undefined) {
+		const text = limitAlertText(result, opamp);
+		const notes = [...out.matchAll(/^ {2}note: (.*)$/gm)].map((x) => x[1]).filter((x) => !/^CAP_OVERRIDES/.test(x));
+		const want = text.stages.map((s) => s.text);
+		if (notes.length !== want.length || notes.some((x, k) => x !== want[k])) problems.push(`notes: ${notes.length} printed against ${want.length}${notes.length || want.length ? `, first "${notes[0] ?? ''}" against "${want[0] ?? ''}"` : ''}`);
+		const line = /^limits of the search \([^)]*\): (.*)$/m.exec(out);
+		if (!line || line[1] !== (text.summary || 'kept')) problems.push(`limits line "${line?.[1]}" against "${text.summary || 'kept'}"`);
+		if (out.includes(text.offer || '\u0000') !== Boolean(text.offer)) problems.push(`offer "${text.offer}" not printed`);
+	}
 	return problems;
 }

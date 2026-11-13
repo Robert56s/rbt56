@@ -1734,17 +1734,49 @@
 				1. the template met over the whole passband and the whole stopband; 2. the larger
 				min(m, m<sub>ideal</sub>), the ideal design's own margin at its placement (0 on the passband
 				edge), so no more margin is sought than the design has; 3. the response closest to the ideal
-				one; 4. fewer resistors two in series. Resistors stay at 1 k&Omega; or more, and every op-amp
-				output drives 2 k&Omega; or more over the passband (a TL082 swings &plusmn;10 V only into
-				2 k&Omega;; a passband that runs up is read to about 200 kHz, where it stops swinging its
-				full range, and at least a decade), read at the largest signal the filter passes there: an output that swings less
-				than the input draws less current, and counts as the resistor that would draw as much at
-				full swing. Where only parts past those limits meet the template, they are kept and flagged.
+				one; 4. sensible values: of the sets within 0.03 dB of that margin and 0.2 dB of that
+				closeness (or a third of it, where that is more), the one whose resistors sit nearest 10
+				k&Omega; and whose capacitors are not tiny;
+				5. fewer resistors two in series.
+			</p>
+			<p class="note">
+				The limits on the parts come first. Every resistor stays from 1 k&Omega; to 1 M&Omega;, every
+				capacitor at 47 pF or more (under it, a breadboard's stray capacitance counts), and every
+				op-amp output drives 2 k&Omega; or more over the passband: a TL082 or an LM741 swings
+				&plusmn;10 V only into 2 k&Omega;. A passband that runs up is read to about 200 kHz, where
+				it stops swinging its full range, and at least a decade. Each load is read at the largest
+				signal the filter passes there: an output that swings less than the input draws less current,
+				and counts as the resistor that would draw as much at full swing. The best set within the
+				limits is kept even when it misses the template. When it misses and a set past the limits
+				meets it, that set is offered too, flagged.
 			</p>
 			<p class="note">
 				<strong>How to use:</strong> the passband verdict reads the worst loss anywhere in the
 				passband, not only at fp: a rounded Chebyshev can dip past Amax inside its passband while
 				its edge holds.
+			</p>
+		</div>
+
+		<div class="formula">
+			<h3>The source resistance</h3>
+			<p class="note">
+				What drives the filter has an output resistance R<sub>s</sub> in series with its input: 50
+				&Omega; for a function generator, 0 for an ideal source. Only the stages on the input node
+				see it: the first stage, or the first stage of both branches of a summed band-stop, which
+				share one node. With Y the sum of their input admittances, nodal analysis of that node
+				gives the factor the whole response is multiplied by:
+			</p>
+			<Equation tex={`F(j\\omega) = \\dfrac{V_{in}}{V_s} = \\dfrac{1}{1 + R_s\\,Y(j\\omega)}, \\qquad H_{total} = F \\cdot H`} />
+			<p class="note">
+				<strong>How to use:</strong> where the input is one resistor, R<sub>s</sub> adds to it, and
+				the search rounds that resistor with R<sub>s</sub> in it: R of a first-order stage and R1 of a
+				multiple feedback band-pass as R - R<sub>s</sub>; R1 of a multiple feedback low-pass, whose
+				R3 is the same value without R<sub>s</sub>, around R1 - R<sub>s</sub>/2; the two equal R of a
+				Sallen-Key low-pass so that (R + R<sub>s</sub>)&middot;R stays the product they need. R1 of a
+				Tow-Thomas stage feeds a virtual ground: R<sub>s</sub> only lowers its gain, which the
+				template, read from the top of the passband, does not see. An input capacitor C into the
+				circuit adds a pole near 1/(2&pi; R<sub>s</sub> C) instead, and a Boctor section, fed through
+				two branches, a pole of its own: the search weighs both with the rest of the filter.
 			</p>
 		</div>
 	</section>

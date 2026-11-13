@@ -36,8 +36,12 @@
  *                   figures and counts follow the prototype (passband edge B, stopband edge
  *                   Omega B, its own Amax and Amin) instead of a low-pass side
  *   topologyNotch   transformed only: the Notch stages menu, 'boctor' | 'towThomas'
+ *   sourceR         the page's source resistance, ohms (0: an ideal source): stage 1 here
+ *                   takes an ideal source, and says so when panel 04 reads it with one
+ *   script          false when the page hides its script download: 06 Download then names
+ *                   the LTspice file alone (default true, for every type)
  * For 'narrowband' only design (designNarrowBand's result, for the numbers
- * of its line) is read: the type gets a line of its own, then short
+ * of its line) and script are read: the type gets a line of its own, then short
  * steps of its own (the band and Q, one stage, several, the six circuits,
  * the panels), every one true of the page in that mode.
  */
@@ -686,11 +690,16 @@ function stageCorner(stage) {
 	return { f, tex: `${lhs} = ${numeric} = ${hzTex(f)}${where ? ` \\qquad ${where.replace('\\quad ', '')}` : ''}` };
 }
 
+/** Stage 1 here takes an ideal source, where panel 04 reads it with the source resistance of panel 01: said when there is one. */
+const idealSource = (sourceR) => (isNum(sourceR) && sourceR > 0 ? ` (from an ideal source here; panel 04 includes the ${plainOhms(sourceR)} source)` : '');
+/** A resistance as a sentence reads it: 50 Ω, 1.5 kΩ. */
+const plainOhms = (r) => (r >= 1e3 ? `${Number((r / 1e3).toPrecision(3))} kΩ` : `${Number(r.toPrecision(3))} Ω`);
+
 /** How the parts are rounded with two in series allowed: where no single one comes close, for up to pairLimit resistors when a limit is set. */
 const pairsRounding = (pairs, pairLimit) =>
 	!pairs ? '' : pairLimit ? ` (or, for up to ${pairLimit} of them in the whole filter, to two resistors in series where no single one comes close)` : ' (or to two resistors in series where no single one comes close)';
 
-function stagesToParts({ topology, stock, design, realizedStages, needsTowThomas, pairs = false, pairLimit = null, partTargets = null }) {
+function stagesToParts({ topology, stock, design, realizedStages, needsTowThomas, pairs = false, pairLimit = null, partTargets = null, sourceR = 0 }) {
 	const known = TOPOLOGY_LINE[topology] ? topology : 'mfb';
 	const others = Object.keys(TOPOLOGY_LINE).filter((t) => t !== known);
 	// order 1: every stage is first order, which the Topology menu does not touch
@@ -726,8 +735,8 @@ function stagesToParts({ topology, stock, design, realizedStages, needsTowThomas
 	if (corner) {
 		tex = corner.tex;
 		intro = isNum(asked)
-			? `Stage 1's corner from its own rounded parts, with the values in panel 04, next to the ${hzText(asked)} it was asked for; the difference is the cost of rounding:`
-			: "Stage 1's corner from its own rounded parts, with the values in panel 04:";
+			? `Stage 1's corner from its own rounded parts, with the values in panel 04, next to the ${hzText(asked)} it was asked for; the difference is the cost of rounding${idealSource(sourceR)}:`
+			: `Stage 1's corner from its own rounded parts, with the values in panel 04${idealSource(sourceR)}:`;
 	} else {
 		const fallback = CORNER[stage?.topology] ?? CORNER[known] ?? CORNER.mfb;
 		tex = fallback.sym;
@@ -761,7 +770,7 @@ const NOTCH_LINE = {
  * Band-pass stages menu, and the Notch stages menu for the notch stages
  * (every stage of a band-stop, the pole pairs of a band-pass with zeros).
  */
-function transformedStagesToParts({ type, topology, topologyNotch, stock, design, realizedStages, pairs = false, pairLimit = null, partTargets = null }) {
+function transformedStagesToParts({ type, topology, topologyNotch, stock, design, realizedStages, pairs = false, pairLimit = null, partTargets = null, sourceR = 0 }) {
 	const stop = type === 'bandstop';
 	const stages = design && Array.isArray(design.stages) ? design.stages : [];
 	const realized = Array.isArray(realizedStages) ? realizedStages.filter(Boolean) : [];
@@ -798,8 +807,8 @@ function transformedStagesToParts({ type, topology, topologyNotch, stock, design
 	if (corner) {
 		tex = corner.tex;
 		intro = isNum(asked)
-			? `Stage 1's ${word} from its own rounded parts, with the values in panel 04, next to the ${hzText(asked)} it was asked for; the difference is the cost of rounding:`
-			: `Stage 1's ${word} from its own rounded parts, with the values in panel 04:`;
+			? `Stage 1's ${word} from its own rounded parts, with the values in panel 04, next to the ${hzText(asked)} it was asked for; the difference is the cost of rounding${idealSource(sourceR)}:`
+			: `Stage 1's ${word} from its own rounded parts, with the values in panel 04${idealSource(sourceR)}:`;
 	} else {
 		tex = CORNER[stage?.topology]?.sym ?? (stop ? CORNER.towThomasNotch.sym : bandMenu === 'towThomas' ? CORNER.towThomasBp.sym : MFB_BP_CORNER);
 		intro = `A stage's ${word} from its parts, for the wiring chosen:`;
@@ -818,7 +827,7 @@ function transformedStagesToParts({ type, topology, topologyNotch, stock, design
 
 /* ------------------------------------------------ 7. the rest of the page */
 
-function restOfPage({ type, amaxDb, aminDb, bandLimits = null, k, stages, attenuationAtFs, attenuationAtFp, attenuationAtFsl, attenuationAtFsh, attenuationAtFl, attenuationAtFh, transformed = false, design = null }) {
+function restOfPage({ type, amaxDb, aminDb, bandLimits = null, k, stages, attenuationAtFs, attenuationAtFp, attenuationAtFsl, attenuationAtFsh, attenuationAtFl, attenuationAtFh, transformed = false, design = null, script = true }) {
 	const band = type === 'bandpass' || type === 'bandstop';
 	const high = type === 'highpass';
 	// a transformed design has one Amax and the Amin of each stopband edge
@@ -848,7 +857,7 @@ function restOfPage({ type, amaxDb, aminDb, bandLimits = null, k, stages, attenu
 			`The page runs top to bottom in the order the design is done. 01 Specification holds the inputs met above: filter type, Amax, Amin, the edges, response, topology. 02 Order applies the exact count and ${kText}; its slider allows a higher order than the minimum, for margin. 03 Stages lists f0 and Q for each stage. 04 Components gives the resistors and capacitors of ${everyStage}, rounded to values in stock, with the shift in f0 and Q that the rounding cost, and draws the circuit.`
 		),
 		p(
-			`05 Bode plot is the report card: the curve is computed from the rounded parts, the amber lines are the ${band ? 'edges and limits' : 'four numbers'} of 01, ${flags}. 06 Download exports the circuit as an LTspice file ready to simulate, and the same calculation as a standalone script. 07 Next steps lists what to check on the bench. Every Show the math block is optional reading.`
+			`05 Bode plot is the report card: the curve is computed from the rounded parts, the amber lines are the ${band ? 'edges and limits' : 'four numbers'} of 01, ${flags}. 06 Download exports the circuit as an LTspice file ready to simulate${script ? ', and the same calculation as a standalone script' : ''}. 07 Next steps lists what to check on the bench. Every Show the math block is optional reading.`
 		)
 	];
 }
@@ -915,7 +924,7 @@ const NARROW_TERMS = [
  * steps of the four other types speak of passbands, stopbands, Amax, an
  * order and a response, which this type has none of.
  */
-function narrowBasics(design) {
+function narrowBasics(design, script = true) {
 	return [
 		...narrowTypeLine(design),
 		h('What a filter does'),
@@ -948,7 +957,7 @@ function narrowBasics(design) {
 		),
 		h('Reading the rest of the page'),
 		p(
-			'01 Specification holds f0, Q or B, K and N. 02 Stages gives the Q and the gain of each stage. 03 Transfer function writes H(s) with its numbers. 04 Components compares the six circuits and builds the one chosen, its parts rounded to values in stock, with what the rounding costs. 05 Bode plot is the report card: the curve from the rounded parts with f0, f1, f2 and the gain marked, and the figures on a TL082 under it. 06 Download exports the circuit as an LTspice file and the same calculation as a standalone script. 07 Next steps lists what to check on the bench. Every Show the math block is optional reading.'
+			`01 Specification holds f0, Q or B, K and N. 02 Stages gives the Q and the gain of each stage. 03 Transfer function writes H(s) with its numbers. 04 Components compares the six circuits and builds the one chosen, its parts rounded to values in stock, with what the rounding costs. 05 Bode plot is the report card: the curve from the rounded parts with f0, f1, f2 and the gain marked, and the figures on a TL082 under it. 06 Download exports the circuit as an LTspice file${script ? ' and the same calculation as a standalone script' : ''}. 07 Next steps lists what to check on the bench. Every Show the math block is optional reading.`
 		),
 		h('Words used on this page'),
 		terms(NARROW_TERMS)
@@ -989,11 +998,13 @@ export function filterBasics({
 	pairLimit = null,
 	method,
 	topologyNotch,
-	partTargets = null
+	partTargets = null,
+	sourceR = 0,
+	script = true
 } = {}) {
 	const type = TYPES.includes(filterType) ? filterType : 'lowpass';
 	// a narrow band-pass: its own line and steps
-	if (type === 'narrowband') return narrowBasics(design);
+	if (type === 'narrowband') return narrowBasics(design, script);
 	const transformed = (type === 'bandpass' || type === 'bandstop') && (method === 'transformed' || design?.method === 'transformed');
 	const side = sideOf({ type, fp, fs, fl, fh, fsl, fsh, lpFp, lpFs, design, transformed });
 	// the prototype's own limits: Amax, and the Amin it is designed with (a fitted floor kept to two decimals, rounded down)
@@ -1006,9 +1017,9 @@ export function filterBasics({
 		...theOrder({ type, response, side, ...limits, ok, order }),
 		...opampAndQ({ type, response, side, ...limits, ok }),
 		...(transformed
-			? transformedStagesToParts({ type, topology, topologyNotch, stock, design, realizedStages, pairs, pairLimit, partTargets })
-			: stagesToParts({ topology, stock, design, realizedStages, needsTowThomas, pairs, pairLimit, partTargets })),
-		...restOfPage({ type, amaxDb, aminDb, bandLimits, k, stages, attenuationAtFs, attenuationAtFp, attenuationAtFsl, attenuationAtFsh, attenuationAtFl, attenuationAtFh, transformed, design }),
+			? transformedStagesToParts({ type, topology, topologyNotch, stock, design, realizedStages, pairs, pairLimit, partTargets, sourceR })
+			: stagesToParts({ topology, stock, design, realizedStages, needsTowThomas, pairs, pairLimit, partTargets, sourceR })),
+		...restOfPage({ type, amaxDb, aminDb, bandLimits, k, stages, attenuationAtFs, attenuationAtFp, attenuationAtFsl, attenuationAtFsh, attenuationAtFl, attenuationAtFh, transformed, design, script }),
 		h('Words used on this page'),
 		terms(transformed ? [...GLOSSARY, ...BAND_TERMS] : GLOSSARY)
 	];

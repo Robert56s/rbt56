@@ -1,5 +1,5 @@
 import { polyRoots } from './approximations';
-import { SERIES, anyPairAllowed, capacitorCandidates, pairAllowed, pairedResistor, seriesValues, smallCapPenalty } from './eseries';
+import { SERIES, anyPairAllowed, capacitorCandidates, pairAllowed, pairedResistor, seriesValues, smallCapPenalty, stockNeighbours } from './eseries';
 
 /**
  * Multiple-feedback band-pass (Delyiannis-Friend) with an input
@@ -97,6 +97,38 @@ export function mfbBandPassResponse({ R1, R2, R3, C1, C2 }, f, gbw = null) {
 	}
 	const d = den.re * den.re + den.im * den.im;
 	return { re: (num.re * den.re + num.im * den.im) / d, im: (num.im * den.re - num.re * den.im) / d };
+}
+
+/** mfbBandPassResponse at every frequency of a list, as { re, im } arrays: the same figures, for a search that reads many stages on many points. */
+export function mfbBandPassResponseOn({ R1, R2, R3, C1, C2 }, freqs, gbw = null) {
+	const n = freqs.length;
+	const re = new Float64Array(n);
+	const im = new Float64Array(n);
+	const g1 = 1 / (R1 * C1);
+	const a = (C1 + C2) / (R3 * C1 * C2);
+	const b = (1 / R1 + 1 / R2) / (R3 * C1 * C2);
+	const corrected = mfbBpCorrected(gbw);
+	const wt = corrected ? 2 * Math.PI * gbw : 0;
+	const c2 = corrected ? wt + a + (1 / R1 + 1 / R2) / C1 : 0;
+	for (let k = 0; k < n; k++) {
+		const w = 2 * Math.PI * freqs[k];
+		let nr, ni, dr, di;
+		if (!corrected) {
+			nr = 0;
+			ni = -g1 * w;
+			dr = b - w * w;
+			di = a * w;
+		} else {
+			nr = 0;
+			ni = -wt * g1 * w;
+			dr = wt * b - c2 * w * w;
+			di = (wt * a + b) * w - w * w * w;
+		}
+		const d = dr * dr + di * di;
+		re[k] = (nr * dr + ni * di) / d;
+		im[k] = (ni * dr - nr * di) / d;
+	}
+	return { re, im };
 }
 
 /**
@@ -230,6 +262,25 @@ export function mfbBpFitsWith(wn, q, gain, C1, C2, gbw, solved = null) {
 	if (!pre || !mfbBpFits(pre.wn, pre.q, pre.gain, C1, C2)) return null;
 	return mfbBpLoopGain(pre.wn, pre.q, C2 / C1, gbw) >= MFB_BP_LOOP_MIN ? pre : null;
 }
+
+/**
+ * The circuit-alone targets of a stage by C2/C1, a Map for mfbBpFitsWith,
+ * shared by every search of the same stage and op-amp (a pair limit asks for
+ * one stage with many lists of names to pair, and the joint search lists its
+ * candidates too). Cleared when full.
+ */
+function mfbBpSolved(wn, q, gain, gbw) {
+	const key = `${wn} ${q} ${gain} ${gbw}`;
+	let solved = MFB_BP_SOLVED.get(key);
+	if (!solved) {
+		if (MFB_BP_SOLVED.size >= MFB_BP_SOLVED_SIZE) MFB_BP_SOLVED.clear();
+		solved = new Map();
+		MFB_BP_SOLVED.set(key, solved);
+	}
+	return solved;
+}
+const MFB_BP_SOLVED = new Map();
+const MFB_BP_SOLVED_SIZE = 500;
 
 /** Whether C2/C1 is within MFB_BP_CAP_RATIO either way. */
 function mfbBpRatioFits(C1, C2) {
@@ -385,7 +436,7 @@ function mfbBpResult(wn, q, gain, C1, C2, ideal, parts, resistorSeries) {
 		theoretical: { R1: ideal.R1, R2: ideal.R2, R3: ideal.R3, C1, C2 },
 		components: { R1: parts.R1, R2: parts.R2, R3: parts.R3, C1, C2 },
 		actual: mfbBandPassActual({ R1: parts.R1, R2: parts.R2, R3: parts.R3, C1, C2 }),
-		steps: { a: wn / q, b: wn * wn, C1, C2, gainTarget: gain, maxGain, noiseGain: 1 + maxGain, R1Target: parts.R1Target, R2Target: parts.R2Target, resistorSeries }
+		steps: { a: wn / q, b: wn * wn, C1, C2, gainTarget: gain, maxGain, noiseGain: 1 + maxGain, R1Target: parts.R1Target, R2Target: parts.R2Target, resistorSeries, ...(parts.sourceR > 0 ? { sourceR: parts.sourceR } : {}) }
 	};
 }
 
@@ -396,12 +447,12 @@ function mfbBpResult(wn, q, gain, C1, C2, ideal, parts, resistorSeries) {
  * (a, b, maxGain, noiseGain and the resistor targets are the circuit's),
  * with the stage's gain target, the op-amp, k and the loop gain.
  */
-function mfbBpCorrectedResult(wn, q, gain, gbw, pre, C1, C2, ideal, parts, resistorSeries) {
+function mfbBpCorrectedResult(wn, q, gain, gbw, pre, C1, C2, ideal, parts, resistorSeries, effective = null) {
 	const base = mfbBpResult(pre.wn, pre.q, pre.gain, C1, C2, ideal, parts, resistorSeries);
 	const ratio = C2 / C1;
 	return {
 		...base,
-		actual: { ...mfbBandPassEffective(base.components, gbw), gbw },
+		actual: { ...(effective ?? mfbBandPassEffective(base.components, gbw)), gbw },
 		ideal: base.actual,
 		steps: {
 			...base.steps,
@@ -414,21 +465,15 @@ function mfbBpCorrectedResult(wn, q, gain, gbw, pre, C1, C2, ideal, parts, resis
 	};
 }
 
-// What a set of parts does with the op-amp (mfbBandPassEffective, a cubic
-// solved), kept by parts: a pair limit asks one stage for many lists of
-// names to pair, and most capacitor pairs round to the same parts in them
-// all. Cleared when full.
-const MFB_BP_EFFECTIVE = new Map();
-const MFB_BP_EFFECTIVE_SIZE = 20000;
+// What a set of parts does with the op-amp, for the score of a capacitor
+// pair: mfbBandPassEffective's figures (a cubic solved) by Newton's method
+// (mfbBpEffectiveFast, the same to 1e-14 on a sweep of 200,000 random
+// parts), the search tries thousands of pairs for each list of names to
+// pair a limit asks for. The designer's own stage is built with
+// mfbBandPassEffective itself, a stage of the whole filter's search
+// (mfbBandPassFromParts) with the figures its candidate was judged on.
 function mfbBpEffectiveKept(parts, C1, C2, gbw) {
-	const key = `${parts.R1} ${parts.R2} ${parts.R3} ${C1} ${C2} ${gbw}`;
-	let found = MFB_BP_EFFECTIVE.get(key);
-	if (!found) {
-		if (MFB_BP_EFFECTIVE.size >= MFB_BP_EFFECTIVE_SIZE) MFB_BP_EFFECTIVE.clear();
-		found = mfbBandPassEffective({ ...parts, C1, C2 }, gbw);
-		MFB_BP_EFFECTIVE.set(key, found);
-	}
-	return found;
+	return mfbBpEffectiveFast(parts.R1, parts.R2, parts.R3, C1, C2, gbw);
 }
 
 /**
@@ -440,7 +485,7 @@ function mfbBpEffectiveKept(parts, C1, C2, gbw) {
 function mfbBpSearchWith(wn, q, size, gbw, resistorSeries, capacitors, pairs) {
 	const caps = capacitorCandidates(capacitors);
 	const f0Weight = mfbBpF0Weight(q);
-	const solved = new Map();
+	const solved = mfbBpSolved(wn, q, size, gbw);
 	let best = null;
 	for (const C1 of caps) {
 		for (const C2 of caps) {
@@ -563,4 +608,146 @@ function mfbBpFromCapsWith(wn, q, C1, C2, { gain, resistorSeries, pairs, gbw }) 
 	if (!mfbBpBuilt(parts) || mfbBpClamped(ideal, parts, resistorSeries, pairs)) return failure('parts');
 	const outOfRange = ![parts.R1, parts.R2, parts.R3].every(mfbBpInRange);
 	return { ...mfbBpCorrectedResult(wn, q, size, gbw, pre, C1, C2, ideal, parts, resistorSeries), ok: true, manual: true, outOfRange };
+}
+
+/* ------------------------------------------------- candidates for a joint search */
+
+/**
+ * mfbBandPassEffective for the many parts a search judges: the op-amp's
+ * real pole by Newton's method from -c2, left of it (the three roots sum
+ * to -c2, the other two left of zero), where the cubic is negative and
+ * concave, so the steps climb to the root without passing it. The same
+ * figures as mfbBandPassEffective to rounding.
+ */
+function mfbBpEffectiveFast(R1, R2, R3, C1, C2, gbw) {
+	const wt = 2 * Math.PI * gbw;
+	const a = (C1 + C2) / (R3 * C1 * C2);
+	const b = (1 / R1 + 1 / R2) / (R3 * C1 * C2);
+	const c2 = wt + a + (1 / R1 + 1 / R2) / C1;
+	const c1 = wt * a + b;
+	const c0 = wt * b;
+	let s = -c2;
+	for (let i = 0; i < 40; i++) {
+		const step = (((s + c2) * s + c1) * s + c0) / ((3 * s + 2 * c2) * s + c1);
+		s -= step;
+		if (!(Math.abs(step) > 1e-15 * Math.abs(s))) break;
+	}
+	const p = -s;
+	const wn = Math.sqrt(c0 / p);
+	// |H(j wn)| as mfbBandPassResponse gives it
+	const den = Math.hypot(wt * b - c2 * wn * wn, (wt * a + b) * wn - wn * wn * wn);
+	return { wn, q: (wn * p) / (c1 - wn * wn), gain: -(wt * wn) / (R1 * C1 * den) };
+}
+
+/**
+ * Every way the stock builds this stage, each judged on its rounded parts,
+ * for a search over the whole filter (partSearch.js): every capacitor pair
+ * within MFB_BP_CAP_RATIO either way, equal or not (both from `caps` when
+ * typed by hand, one of them when only one is), each solved as
+ * designMfbBandPass solves it (for its own circuit-alone targets with
+ * `gbw`, a pair that leaves the op-amp a loop gain under MFB_BP_LOOP_MIN
+ * skipped), and rounded inside the loop: R3 to the stocked values just
+ * below and just above its ideal value, R1 the same around the value that
+ * gives the gain with that R3, R2 around the value that puts f0 back with
+ * both (stockNeighbours: two in series too where `pairs` lets them). A
+ * part a list of values only reaches by clamping to its end is skipped
+ * (mfbBpPastStock), and every resistor stays in [rMin, rMax).
+ * Returns light records { miss, wn, q, pairs, small, level, parts }, parts
+ * = { C1, C2, R1n, R2n, R3n, R1Target, R2Target, ideal, pre, rs } (pre the
+ * circuit-alone targets with `gbw`, else null; rs only when given), unsorted;
+ * mfbBandPassFromParts builds one. miss is mfbBpMiss of what the parts do
+ * (with the op-amp when there is one), its f0 miss counted
+ * max(1, 2Q) times: near its band edges the stage moves about 2Q times as
+ * much for 1 % of f0 as for 1 % of Q. level is the designer's: how far
+ * the resistors sit from 10 kohm, equal capacitors preferred.
+ * `rs`, the resistance of the source driving the stage, adds to R1: R1 is
+ * rounded around R1Target - rs too, R2 solved against R1 + rs, and the
+ * misses are of what the parts do with R1 + rs.
+ */
+export function mfbBandPassCandidates(wn, q, { gain = 1, resistorSeries = 'E24', capacitors = null, pairs = false, caps = null, rMin = MFB_BP_R_MIN, rMax = MFB_BP_R_MAX, gbw = null, rs = 0 } = {}) {
+	const size = Math.abs(gain);
+	if (![wn, q, size].every((v) => Number.isFinite(v) && v > 0)) return [];
+	const corrected = mfbBpCorrected(gbw);
+	const all = capacitorCandidates(capacitors);
+	const list1 = caps?.C1 > 0 ? [caps.C1] : all;
+	const list2 = caps?.C2 > 0 ? [caps.C2] : all;
+	const f0Weight = mfbBpF0Weight(q);
+	const solved = corrected ? mfbBpSolved(wn, q, size, gbw) : null;
+	const pairR1 = pairAllowed(pairs, 'R1');
+	const pairR2 = pairAllowed(pairs, 'R2');
+	const pairR3 = pairAllowed(pairs, 'R3');
+	const near = (target, pair) => stockNeighbours(target, resistorSeries, pair).filter((r) => r.value >= rMin * (1 - 1e-9) && r.value < rMax);
+	const far = (R) => !(R >= rMin / 2 && R <= rMax * 2);
+	const out = [];
+	for (const C1 of list1) {
+		for (const C2 of list2) {
+			// the targets the parts are solved for: the circuit's own with an op-amp to correct for
+			let t;
+			let pre = null;
+			if (corrected) {
+				pre = mfbBpFitsWith(wn, q, size, C1, C2, gbw, solved);
+				if (!pre) continue;
+				t = pre;
+			} else {
+				if (!mfbBpRatioFits(C1, C2) || !(size < q * q * (1 + C2 / C1))) continue;
+				t = { wn, q, gain: size };
+			}
+			const ideal = mfbBpIdeal(t.wn, t.q, t.gain, C1, C2);
+			// an ideal part far outside the range cannot round into it
+			if (far(ideal.R1) || far(ideal.R2) || far(ideal.R3)) continue;
+			if (mfbBpPastStock(ideal.R3, resistorSeries, pairR3)) continue;
+			const small = smallCapPenalty(C1, C2) > 0;
+			const unequal = MFB_BP_UNEQUAL * Math.log(C1 / C2) ** 2;
+			for (const r3 of near(ideal.R3, pairR3)) {
+				const R1Target = (r3.value * C2) / (t.gain * (C1 + C2));
+				if (mfbBpPastStock(R1Target, resistorSeries, pairR1)) continue;
+				let r1s = near(R1Target, pairR1);
+				if (rs > 0) {
+					const seen = new Set(r1s.map((r) => r.value));
+					r1s = [...r1s, ...near(R1Target - rs, pairR1).filter((r) => !seen.has(r.value) && seen.add(r.value))];
+				}
+				for (const r1 of r1s) {
+					// (R1 with the source in series: what the input sees)
+					const R1e = r1.value + rs;
+					// close under the gain ceiling a rounded R1 can leave no room for R2
+					const g2 = t.wn * t.wn * r3.value * C1 * C2 - 1 / R1e;
+					if (!(g2 > 0)) continue;
+					const R2Target = 1 / g2;
+					if (mfbBpPastStock(R2Target, resistorSeries, pairR2)) continue;
+					for (const r2 of near(R2Target, pairR2)) {
+						const actual = corrected ? mfbBpEffectiveFast(R1e, r2.value, r3.value, C1, C2, gbw) : mfbBandPassActual({ R1: R1e, R2: r2.value, R3: r3.value, C1, C2 });
+						const miss = mfbBpMiss(actual, wn, q, size, f0Weight);
+						if (!Number.isFinite(miss)) continue;
+						const level = (Math.log(r1.value / MFB_BP_R_SWEET) ** 2 + Math.log(r2.value / MFB_BP_R_SWEET) ** 2 + Math.log(r3.value / MFB_BP_R_SWEET) ** 2) / 3 + unequal;
+						out.push({
+							miss,
+							wn: actual.wn,
+							q: actual.q,
+							pairs: (r1.pair ? 1 : 0) + (r2.pair ? 1 : 0) + (r3.pair ? 1 : 0),
+							small,
+							level,
+							parts: { C1, C2, R1n: r1.value, R2n: r2.value, R3n: r3.value, R1Target, R2Target, ideal, pre, ...(rs > 0 ? { rs } : {}) }
+						});
+					}
+				}
+			}
+		}
+	}
+	return out;
+}
+
+/**
+ * The stage a record of mfbBandPassCandidates stands for, in the shape
+ * designMfbBandPass returns (built for the op-amp of gain-bandwidth `gbw`
+ * when the record was), with ok, manual and outOfRange when its capacitors
+ * were typed by hand.
+ */
+export function mfbBandPassFromParts(wn, q, parts, { gain = 1, resistorSeries = 'E24', manual = false, gbw = null } = {}) {
+	const size = Math.abs(gain);
+	const { C1, C2, R1n, R2n, R3n, R1Target, R2Target, ideal, pre } = parts;
+	// (rounded for a source of parts.rs in series with R1: steps.sourceR says so)
+	const rounded = { R1: R1n, R2: R2n, R3: R3n, R1Target, R2Target, sourceR: parts.rs ?? 0 };
+	// (what the parts do with the op-amp as the candidates found it: mfbBpEffectiveFast)
+	const built = pre && mfbBpCorrected(gbw) ? mfbBpCorrectedResult(wn, q, size, gbw, pre, C1, C2, ideal, rounded, resistorSeries, mfbBpEffectiveFast(R1n, R2n, R3n, C1, C2, gbw)) : mfbBpResult(wn, q, size, C1, C2, ideal, rounded, resistorSeries);
+	return manual ? { ...built, ok: true, manual: true, outOfRange: ![R1n, R2n, R3n].every(mfbBpInRange) } : built;
 }

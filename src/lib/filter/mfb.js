@@ -175,8 +175,11 @@ export function designMfbLowPassFromCaps(wn, q, C1, C2, { resistorSeries = 'E24'
  * -1, or 0 for the double root), unsorted; mfbLowPassFromParts builds one.
  * miss is the larger log miss of f0 and Q, pairs the resistors that are
  * two in series (R1 counts with R3), level how far they sit from 10 kohm.
+ * `rs`, the resistance of the source driving the stage, adds to R1 (not to
+ * R3, the same value): the misses are of R1 + rs, and R1 is rounded around
+ * its ideal value less rs / 2 too (2 / R1 becomes about 1 / (R1 + rs / 2)).
  */
-export function mfbLowPassCandidates(wn, q, { resistorSeries = 'E24', capacitors = null, pairs = false, caps = null, rMin = MFB_R_MIN, rMax = MFB_R_MAX } = {}) {
+export function mfbLowPassCandidates(wn, q, { resistorSeries = 'E24', capacitors = null, pairs = false, caps = null, rMin = MFB_R_MIN, rMax = MFB_R_MAX, rs = 0 } = {}) {
 	const a = wn / q;
 	const b = wn * wn;
 	const all = capacitorCandidates(capacitors);
@@ -202,12 +205,17 @@ export function mfbLowPassCandidates(wn, q, { resistorSeries = 'E24', capacitors
 				// an ideal root far outside the range cannot round into it
 				if (R1 < rMin / 2 || R1 > rMax * 2 || R2 < rMin / 2 || R2 > rMax * 2) continue;
 				const small = smallCapPenalty(C1, C2) > 0;
-				for (const r1 of stockNeighbours(R1, resistorSeries, pairR1).filter(inRange)) {
+				let r1s = stockNeighbours(R1, resistorSeries, pairR1).filter(inRange);
+				if (rs > 0) {
+					const seen1 = new Set(r1s.map((r) => r.value));
+					r1s = [...r1s, ...stockNeighbours(R1 - rs / 2, resistorSeries, pairR1).filter((r) => inRange(r) && !seen1.has(r.value) && seen1.add(r.value))];
+				}
+				for (const r1 of r1s) {
 					// R2 near its ideal value, and near the one that keeps f0 exact with this R1
 					const seen = new Set();
 					const r2s = [...stockNeighbours(R2, resistorSeries, pairR2), ...stockNeighbours(1 / (b * r1.value * C1 * C2), resistorSeries, pairR2)].filter((r) => inRange(r) && !seen.has(r.value) && seen.add(r.value));
 					for (const r2 of r2s) {
-						const A = (2 / r1.value + 1 / r2.value) / C1;
+						const A = rs > 0 ? (1 / (r1.value + rs) + 1 / r1.value + 1 / r2.value) / C1 : (2 / r1.value + 1 / r2.value) / C1;
 						const wnA = 1 / Math.sqrt(r1.value * r2.value * C1 * C2);
 						const qA = wnA / A;
 						const miss = Math.max(Math.abs(Math.log(wnA / wn)), Math.abs(Math.log(qA / q)));

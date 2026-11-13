@@ -523,15 +523,18 @@ function drawCombiner(sheet, E, lp, hp, mode) {
 
 /**
  * The drawn schematic of a realized design. `elements` is buildElements'
- * list (for the source and the combiner parts), the stages come from
- * realizedStages exactly as the netlist numbers them. `structure` is
- * buildElements' own: 'cascade' draws a band-stop as one chain.
+ * list (for the source, its series resistance RS when it has one, and the
+ * combiner parts), the stages come from realizedStages exactly as the
+ * netlist numbers them. `structure` is buildElements' own: 'cascade' draws
+ * a band-stop as one chain.
  */
 export function drawFilter({ elements, realizedStages, filterType, method, structure = method === 'transformed' ? 'cascade' : 'parallel', lpCount = 0, combinerMode = 'sum' }, { comments = [], directives = [], gbw = '3Meg', opamp = 'ideal' }) {
 	const E = Object.fromEntries(elements.filter((e) => e.kind !== 'LABEL').map((e) => [e.name, e]));
 	const sheet = createSheet({ gbw, opamp });
 	const RAIL = 384;
-	const vin = source(sheet, E.V1, RAIL);
+	// a source with an output resistance: RS on the line right of it, the filter's input after it
+	const vs = source(sheet, E.V1, RAIL);
+	const vin = E.RS ? run(sheet, series(sheet, E.RS, vs, 'right'), 'right', 48) : vs;
 	let vout;
 	if (filterType === 'bandstop' && structure !== 'cascade') {
 		const lpStages = realizedStages.slice(0, lpCount);

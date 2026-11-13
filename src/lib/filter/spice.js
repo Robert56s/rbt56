@@ -72,16 +72,35 @@ const correctedLine = (opts) => {
 };
 
 /**
- * Every element of the circuit, format-independent. The source V1 is
- * included so both renderers drive the input the same way. A band-stop
- * is two branches and a combiner (structure 'parallel'), or with
- * structure 'cascade' (a transformed band-stop, every stage a notch) one
- * chain like any other filter.
+ * The source's output resistance, ohms (opts.sourceR, the page's "Source
+ * resistance"), or 0 for an ideal source. A narrow band-pass keeps an
+ * ideal one: its circuits are compared as they are.
  */
-export function buildElements({ realizedStages, filterType, method, structure = method === 'transformed' ? 'cascade' : 'parallel', lpCount = 0, combinerMode = 'sum', combinerR = 10000, combinerResistors = null, f0 }) {
+const sourceROf = (opts) => (!isNarrow(opts) && Number.isFinite(opts.sourceR) && opts.sourceR > 0 ? opts.sourceR : 0);
+/** The notes' line on the source's resistance, for a file that has one. */
+const sourceLine = (opts) => `The source V1 drives the filter through RS = ${spiceValue(sourceROf(opts))} ohm, its output resistance, as the page measures it.`;
+
+/**
+ * Every element of the circuit, format-independent. The source V1 is
+ * included so both renderers drive the input the same way; with a source
+ * resistance (sourceR, ohms) it stands on node vs, behind RS from vs to
+ * the filter's input vin (both branches of a band-stop start there). A
+ * band-stop is two branches and a combiner (structure 'parallel'), or
+ * with structure 'cascade' (a transformed band-stop, every stage a notch)
+ * one chain like any other filter.
+ */
+export function buildElements(opts) {
+	const { realizedStages, filterType, method, structure = method === 'transformed' ? 'cascade' : 'parallel', lpCount = 0, combinerMode = 'sum', combinerR = 10000, combinerResistors = null, f0 } = opts;
 	// a narrow band-pass is driven at its own f0 for a time-domain run
 	const sine = filterType === 'narrowband' && Number.isFinite(f0) && f0 > 0 ? spiceValue(hz(f0)) : '1k';
-	const out = [{ kind: 'V', name: 'V1', nodes: ['vin', '0'], spice: `AC 1 SIN(0 1 ${sine})` }];
+	const rs = sourceROf(opts);
+	const out = rs
+		? [
+				{ kind: 'V', name: 'V1', nodes: ['vs', '0'], spice: `AC 1 SIN(0 1 ${sine})` },
+				{ kind: 'LABEL', text: "the source's output resistance" },
+				{ kind: 'R', name: 'RS', nodes: ['vs', 'vin'], value: rs }
+			]
+		: [{ kind: 'V', name: 'V1', nodes: ['vin', '0'], spice: `AC 1 SIN(0 1 ${sine})` }];
 	if (filterType === 'bandstop' && structure !== 'cascade') {
 		const lp = realizedStages.slice(0, lpCount);
 		const hp = realizedStages.slice(lpCount);
@@ -255,7 +274,8 @@ function headerLines(opts) {
 							'part that will be built (3meg = TL07x/TL08x, 8meg = OPA2134,',
 							'10meg = NE5532) and rerun to see whether the op-amp limits the design.'
 						]),
-			...(correctedGbw(opts) ? [correctedLine(opts)] : [])
+			...(correctedGbw(opts) ? [correctedLine(opts)] : []),
+			...(sourceROf(opts) ? [sourceLine(opts)] : [])
 		]
 	};
 }
@@ -328,9 +348,9 @@ function schematicNotes(opts) {
 	if (isTransformed(opts)) {
 		const { f0, B } = bandCentreOf(opts);
 		const at = filterType === 'bandpass' ? 'at the band edges and at f0' : 'at the band edges';
-		return [`Active ${kind} filter (rbt56.com/tools/filter-design)`, `Low-pass to ${TYPE_LABEL[filterType]} transformation, f0 = ${hz(f0)} Hz, B = ${hz(B)} Hz.`, `Run, then plot V(vout); the .meas lines give its gain ${at}.`, ...(correctedGbw(opts) ? [correctedLine(opts)] : []), ...pairLines(opts, 'the drawing shows their sum')];
+		return [`Active ${kind} filter (rbt56.com/tools/filter-design)`, `Low-pass to ${TYPE_LABEL[filterType]} transformation, f0 = ${hz(f0)} Hz, B = ${hz(B)} Hz.`, `Run, then plot V(vout); the .meas lines give its gain ${at}.`, ...(correctedGbw(opts) ? [correctedLine(opts)] : []), ...(sourceROf(opts) ? [sourceLine(opts)] : []), ...pairLines(opts, 'the drawing shows their sum')];
 	}
-	return [`Active ${kind} filter (rbt56.com/tools/filter-design)`, 'Run, then plot V(vout); the .meas lines give its gain at the band edges.', ...pairLines(opts, 'the drawing shows their sum')];
+	return [`Active ${kind} filter (rbt56.com/tools/filter-design)`, 'Run, then plot V(vout); the .meas lines give its gain at the band edges.', ...(sourceROf(opts) ? [sourceLine(opts)] : []), ...pairLines(opts, 'the drawing shows their sum')];
 }
 
 /**

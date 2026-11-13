@@ -1428,7 +1428,7 @@ export function denormTexts(ctx) {
 	const band = t === 'bandpass' || t === 'bandstop';
 	const intro = [
 		p(
-			'Denormalizing puts the filter at its real frequencies: Hd(s) = Hn(s*), with s* from the last row of the table in step 1. This method puts the design on the passband edge, where exactly Amax is lost; the automatic design above can instead centre it in its template (Place the design, panel 01), so its targets differ a little from these.'
+			'Denormalizing puts the filter at its real frequencies: Hd(s) = Hn(s*), with s* from the last row of the table in step 1. This method puts the design on the passband edge, where exactly Amax is lost; the automatic design above can instead centre it in its template (Place the design, panel 01), so its targets differ a little from these. This walk also takes an ideal source, where the automatic design includes the source resistance of panel 01.'
 		)
 	];
 	const exp = t === 'lowpass' || t === 'bandpass' ? '-1/n' : '1/n';

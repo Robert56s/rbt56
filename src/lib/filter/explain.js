@@ -1270,7 +1270,7 @@ export function explainTransformedStage(design, i) {
 }
 
 /** Multiple-feedback (Delyiannis-Friend) band-pass derivation for one realized stage. */
-export function explainMfbBp(stageDesign, targetWn, targetQ) {
+export function explainMfbBp(stageDesign, targetWn, targetQ, { searched = false } = {}) {
 	const st = stageDesign.steps;
 	const c = stageDesign.components;
 	const t = stageDesign.theoretical;
@@ -1295,24 +1295,38 @@ export function explainMfbBp(stageDesign, targetWn, targetQ) {
 			'R2 must stay positive, which caps the gain: |H0| < Q^2 (1 + C2/C1), so 2Q^2 with equal capacitors. At that ceiling R2 is open and the circuit is the plain MFB band-pass; below it R2 attenuates the input. A stage with Q under about 0.7 cannot reach gain 1 with equal capacitors, so the search then makes C2 the larger one.'
 		),
 		...(pre
-			? mfbBpOpampBlocks(stageDesign, targetWn, targetQ)
+			? mfbBpOpampBlocks(stageDesign, targetWn, targetQ, searched)
 			: [
 					p(
 						`This stage's target is f0 = ${formatHz(f0)} (ω0 = ${n2(targetWn)} rad/s), Q = ${targetQ.toFixed(4)} and a gain of ${n4(st.gainTarget)} at its centre. ${
 							stageDesign.manual
 								? 'C1 and C2 below were entered by hand.'
-								: 'C1 and C2 come from a search of the capacitor series, equal values preferred and a ratio up to 10:1 allowed, for the pair whose rounded resistors land closest to the targets with the resistors near 10 kilo-ohm.'
+								: searched
+									? `The search over the whole filter tried every capacitor pair in stock up to 10:1 apart either way, equal or not, each with its resistors rounded just below and just above; it kept these, ${SEARCH_KEPT}.`
+									: 'C1 and C2 come from a search of the capacitor series, equal values preferred and a ratio up to 10:1 allowed, for the pair whose rounded resistors land closest to the targets with the resistors near 10 kilo-ohm.'
 						} The ideal resistors:`
 					)
 				]),
 		eq(`C_1 = ${formatFarads(c.C1)},\\ \\ C_2 = ${formatFarads(c.C2)}, \\qquad |H_0| < Q^2\\left(1 + \\dfrac{C_2}{C_1}\\right) = ${n2(st.maxGain)}`),
 		eq(`R_3 = ${formatOhms(t.R3)}, \\qquad R_1 = ${formatOhms(t.R1)}, \\qquad R_2 = ${formatOhms(t.R2)}`),
 		p(
-			`A narrow band moves with every percent of f0, so the rounding goes in steps, each part solved against the ones already rounded: R3 to the nearest ${stockValue(st.resistorSeries)}${pairedTail(st.resistorSeries, [c.R1, c.R2, c.R3])}, then R1 for the gain against the rounded R3, then R2 for ω0 against both (when the nearest values leave no room for R2, R3 and R1 both take the next value up):`
+			searched
+				? `A narrow band moves with every percent of f0, so the rounding goes in steps, each part solved against the ones already rounded: R3 to the ${stockValue(st.resistorSeries)} just below or just above its ideal value${pairedTail(st.resistorSeries, [c.R1, c.R2, c.R3])}, then R1 for the gain against the rounded R3, then R2 for ω0 against both, each just below or just above; the search kept:`
+				: `A narrow band moves with every percent of f0, so the rounding goes in steps, each part solved against the ones already rounded: R3 to the nearest ${stockValue(st.resistorSeries)}${pairedTail(st.resistorSeries, [c.R1, c.R2, c.R3])}, then R1 for the gain against the rounded R3, then R2 for ω0 against both (when the nearest values leave no room for R2, R3 and R1 both take the next value up):`
 		),
-		eq(
-			`R_3 \\rightarrow ${formatOhms(c.R3)}, \\qquad R_1 = \\dfrac{R_3 C_2}{|H_0|\\,(C_1 + C_2)} = ${formatOhms(st.R1Target)} \\rightarrow ${formatOhms(c.R1)}, \\qquad R_2 = \\dfrac{1}{\\omega_0^2 R_3 C_1 C_2 - 1/R_1} = ${formatOhms(st.R2Target)} \\rightarrow ${formatOhms(c.R2)}`
-		),
+		// (a stage on the input node rounded for the source: Rs adds to R1, so R1 is aimed Rs lower and R2 solved with R1 + Rs)
+		...(st.sourceR > 0
+			? [
+					p(`The source's ${formatOhms(st.sourceR)} sits in series with R1 here: R1 is aimed that much lower, and R2 is solved against R1 + R_s.`),
+					eq(
+						`R_3 \\rightarrow ${formatOhms(c.R3)}, \\qquad R_1 = \\dfrac{R_3 C_2}{|H_0|\\,(C_1 + C_2)} - R_s = ${formatOhms(st.R1Target - st.sourceR)} \\rightarrow ${formatOhms(c.R1)}, \\qquad R_2 = \\dfrac{1}{\\omega_0^2 R_3 C_1 C_2 - 1/(R_1 + R_s)} = ${formatOhms(st.R2Target)} \\rightarrow ${formatOhms(c.R2)}`
+					)
+				]
+			: [
+					eq(
+						`R_3 \\rightarrow ${formatOhms(c.R3)}, \\qquad R_1 = \\dfrac{R_3 C_2}{|H_0|\\,(C_1 + C_2)} = ${formatOhms(st.R1Target)} \\rightarrow ${formatOhms(c.R1)}, \\qquad R_2 = \\dfrac{1}{\\omega_0^2 R_3 C_1 C_2 - 1/R_1} = ${formatOhms(st.R2Target)} \\rightarrow ${formatOhms(c.R2)}`
+					)
+				]),
 		...(paired ? [p(paired)] : []),
 		...(pre
 			? mfbBpOpampResult(stageDesign, targetWn, targetQ)
@@ -1331,7 +1345,7 @@ export function explainMfbBp(stageDesign, targetWn, targetQ) {
  * what the op-amp does to it, and the circuit-alone targets it is solved
  * for (mfbBandPassPredistorted in mfbBandPass.js).
  */
-function mfbBpOpampBlocks(stageDesign, targetWn, targetQ) {
+function mfbBpOpampBlocks(stageDesign, targetWn, targetQ, searched = false) {
 	const st = stageDesign.steps;
 	const pre = st.predistorted;
 	const f0 = targetWn / TWO_PI;
@@ -1353,7 +1367,9 @@ function mfbBpOpampBlocks(stageDesign, targetWn, targetQ) {
 			`With the op-amp, these land on the target f0 = ${formatHz(f0)}, Q = ${targetQ.toFixed(4)} and a gain of ${n4(st.gainTarget)} at its centre. The parts below are solved for the circuit's values, f_0,c, Q_c and |H_0,c|. ${
 				stageDesign.manual
 					? 'C1 and C2 below were entered by hand.'
-					: 'C1 and C2 come from a search of the capacitor series, equal values preferred and a ratio up to 10:1 allowed, among the pairs that leave the op-amp a loop gain of at least 2 at f0, for the pair whose rounded resistors, with the op-amp, land closest to the targets with the resistors near 10 kilo-ohm. An f0 miss counts 2Q times there: near its band edges the stage moves about 2Q times as much for 1 % of f0 as for 1 % of Q.'
+					: searched
+						? `The search over the whole filter tried every capacitor pair in stock up to 10:1 apart either way, equal or not, among those that leave the op-amp a loop gain of at least 2 at f0, each with its resistors rounded just below and just above; it kept these, ${SEARCH_KEPT}.`
+						: 'C1 and C2 come from a search of the capacitor series, equal values preferred and a ratio up to 10:1 allowed, among the pairs that leave the op-amp a loop gain of at least 2 at f0, for the pair whose rounded resistors, with the op-amp, land closest to the targets with the resistors near 10 kilo-ohm. An f0 miss counts 2Q times there: near its band edges the stage moves about 2Q times as much for 1 % of f0 as for 1 % of Q.'
 			} The ideal resistors:`
 		)
 	];
@@ -1381,7 +1397,7 @@ function mfbBpOpampResult(stageDesign, targetWn, targetQ) {
 }
 
 /** Tow-Thomas band-pass (the output of A1) derivation for one realized stage. */
-export function explainTowThomasBp(stageDesign, targetWn, targetQ) {
+export function explainTowThomasBp(stageDesign, targetWn, targetQ, { searched = false } = {}) {
 	const st = stageDesign.steps;
 	const c = stageDesign.components;
 	const a = stageDesign.actual;
@@ -1400,7 +1416,11 @@ export function explainTowThomasBp(stageDesign, targetWn, targetQ) {
 		eq('\\omega_0 = \\dfrac{1}{RC}, \\qquad Q = \\dfrac{R_d}{R}, \\qquad |H_0| = \\dfrac{R_d}{R_1} \\ \\Longrightarrow\\ R_1 = \\dfrac{R_d}{|H_0|}'),
 		p(
 			`This stage's target is f0 = ${formatHz(f0)} (ω0 = ${n2(targetWn)} rad/s), Q = ${targetQ.toFixed(4)} and a gain of ${n4(st.gainTarget)} at its centre. ${
-				stageDesign.manual ? 'C below was entered by hand; both capacitors take that value.' : 'C is picked from a preferred series so that R lands near 10 kilo-ohm and the rounding of R, Rd and R1 costs least.'
+				stageDesign.manual
+					? 'C below was entered by hand; both capacitors take that value.'
+					: searched
+						? `The search over the whole filter tried the capacitors in stock, and R, Rd and R1 each just below and just above their ideal values; it kept these, ${SEARCH_KEPT}.`
+						: 'C is picked from a preferred series so that R lands near 10 kilo-ohm and the rounding of R, Rd and R1 costs least.'
 			} Each resistor is then solved against the ones already rounded:`
 		),
 		eq(`C = ${formatFarads(st.C)}\\ \\ \\Rightarrow\\ \\ R = \\dfrac{1}{\\omega_0 C} = ${formatOhms(st.Rtarget)} \\rightarrow ${formatOhms(st.Rrounded)}`),

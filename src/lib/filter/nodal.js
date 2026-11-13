@@ -49,13 +49,10 @@ export function nodalSolveAll(elements, freqs, opts = {}) {
 	});
 }
 
-/** The augmented matrix of a netlist's system, real and imaginary parts, as rows over one buffer each (cleared before every solve, so one serves every frequency). */
+/** The augmented matrix of a netlist's system, real and imaginary parts, one flat buffer each of `size` rows of `size + 1` (cleared before every solve, so one serves every frequency). */
 function nodalWork(net) {
 	const size = net.n + 1 + net.opamps.length;
-	const bufRe = new Float64Array(size * (size + 1));
-	const bufIm = new Float64Array(size * (size + 1));
-	const rows = (buf) => Array.from({ length: size }, (_, r) => buf.subarray(r * (size + 1), (r + 1) * (size + 1)));
-	return { bufRe, bufIm, re: rows(bufRe), im: rows(bufIm) };
+	return { size, re: new Float64Array(size * (size + 1)), im: new Float64Array(size * (size + 1)) };
 }
 
 /** The source's current and each op-amp's output voltage and current, from the unknowns: each unknown current flows from its node into the source or the op-amp, so the circuit's side is minus that. */
@@ -90,23 +87,25 @@ function nodalAt(net, freqHz, work = nodalWork(net)) {
 	const w = 2 * Math.PI * freqHz;
 	// unknowns: the node voltages, then the source's current, then one output current per op-amp
 	const size = n + 1 + opamps.length;
-	work.bufRe.fill(0);
-	work.bufIm.fill(0);
+	// (entry (r, c) at r W + c)
+	const W = size + 1;
 	const { re, im } = work;
+	re.fill(0);
+	im.fill(0);
 	const stamp = (a, b, yr, yi) => {
 		if (a >= 0) {
-			re[a][a] += yr;
-			im[a][a] += yi;
+			re[a * W + a] += yr;
+			im[a * W + a] += yi;
 		}
 		if (b >= 0) {
-			re[b][b] += yr;
-			im[b][b] += yi;
+			re[b * W + b] += yr;
+			im[b * W + b] += yi;
 		}
 		if (a >= 0 && b >= 0) {
-			re[a][b] -= yr;
-			im[a][b] -= yi;
-			re[b][a] -= yr;
-			im[b][a] -= yi;
+			re[a * W + b] -= yr;
+			im[a * W + b] -= yi;
+			re[b * W + a] -= yr;
+			im[b * W + a] -= yi;
 		}
 	};
 	for (const e of passives) {
@@ -115,27 +114,29 @@ function nodalAt(net, freqHz, work = nodalWork(net)) {
 	}
 	// the 1 V source on the input node
 	const src = n;
-	re[vin][src] += 1;
-	re[src][vin] += 1;
-	re[src][size] = 1;
+	re[vin * W + src] += 1;
+	re[src * W + vin] += 1;
+	re[src * W + size] = 1;
 	const finite = Number.isFinite(gbw) && gbw > 0;
 	opamps.forEach((e, k) => {
 		const row = n + 1 + k;
 		const [p, m, out] = e.at;
-		if (out >= 0) re[out][row] += 1;
-		if (p >= 0) re[row][p] += 1;
-		if (m >= 0) re[row][m] -= 1;
+		if (out >= 0) re[out * W + row] += 1;
+		if (p >= 0) re[row * W + p] += 1;
+		if (m >= 0) re[row * W + m] -= 1;
 		if (finite && out >= 0) {
-			re[row][out] -= Number.isFinite(aol) ? 1 / aol : 0;
-			im[row][out] -= w / (2 * Math.PI * gbw);
+			re[row * W + out] -= Number.isFinite(aol) ? 1 / aol : 0;
+			im[row * W + out] -= w / (2 * Math.PI * gbw);
 		}
 	});
-	// Gaussian elimination with partial pivoting on the augmented matrix
+	// Gaussian elimination with partial pivoting on the augmented matrix (the pivots compared by their squared sizes)
 	for (let col = 0; col < size; col++) {
 		let piv = col;
-		let best = Math.hypot(re[col][col], im[col][col]);
+		const cc = col * W + col;
+		let best = re[cc] * re[cc] + im[cc] * im[cc];
 		for (let r = col + 1; r < size; r++) {
-			const mag = Math.hypot(re[r][col], im[r][col]);
+			const rc = r * W + col;
+			const mag = re[rc] * re[rc] + im[rc] * im[rc];
 			if (mag > best) {
 				best = mag;
 				piv = r;
@@ -143,39 +144,48 @@ function nodalAt(net, freqHz, work = nodalWork(net)) {
 		}
 		if (best === 0) continue;
 		if (piv !== col) {
-			[re[col], re[piv]] = [re[piv], re[col]];
-			[im[col], im[piv]] = [im[piv], im[col]];
+			for (let c = 0, a = col * W, b = piv * W; c < W; c++, a++, b++) {
+				let t = re[a];
+				re[a] = re[b];
+				re[b] = t;
+				t = im[a];
+				im[a] = im[b];
+				im[b] = t;
+			}
 		}
-		const pr = re[col][col];
-		const pi = im[col][col];
+		const pr = re[cc];
+		const pi = im[cc];
 		const pd = pr * pr + pi * pi;
+		const top = col * W;
 		for (let r = col + 1; r < size; r++) {
-			const ar = re[r][col];
-			const ai = im[r][col];
+			const row = r * W;
+			const ar = re[row + col];
+			const ai = im[row + col];
 			if (ar === 0 && ai === 0) continue;
 			// f = a / pivot
 			const fr = (ar * pr + ai * pi) / pd;
 			const fi = (ai * pr - ar * pi) / pd;
 			for (let c = col; c <= size; c++) {
-				const br = re[col][c];
-				const bi = im[col][c];
+				const br = re[top + c];
+				const bi = im[top + c];
 				if (br === 0 && bi === 0) continue;
-				re[r][c] -= fr * br - fi * bi;
-				im[r][c] -= fr * bi + fi * br;
+				re[row + c] -= fr * br - fi * bi;
+				im[row + c] -= fr * bi + fi * br;
 			}
 		}
 	}
 	const xr = new Float64Array(size);
 	const xi = new Float64Array(size);
 	for (let r = size - 1; r >= 0; r--) {
-		let sr = re[r][size];
-		let si = im[r][size];
+		const row = r * W;
+		let sr = re[row + size];
+		let si = im[row + size];
 		for (let c = r + 1; c < size; c++) {
-			sr -= re[r][c] * xr[c] - im[r][c] * xi[c];
-			si -= re[r][c] * xi[c] + im[r][c] * xr[c];
+			sr -= re[row + c] * xr[c] - im[row + c] * xi[c];
+			si -= re[row + c] * xi[c] + im[row + c] * xr[c];
 		}
-		const dr = re[r][r];
-		const di = im[r][r];
+		const dr = re[row + r];
+		const di = im[row + r];
 		const dd = dr * dr + di * di;
 		if (dd === 0) continue;
 		xr[r] = (sr * dr + si * di) / dd;

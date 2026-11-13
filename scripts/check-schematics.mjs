@@ -394,11 +394,13 @@ console.log();
 
 	// The parts the page shows now come from its part search on the whole
 	// filter (partSearch.js), which can land on other values than the
-	// designers above (a 150 k with 47 pF, a 220 ohm under the floor where
-	// the template needs it): every stage of the page's settings
-	// (lib-parts.mjs) and of a sweep of low-pass and high-pass designs,
-	// every response and topology, each stock, both placements, drawn as
-	// the page draws it (a stage on the full grid without pair labels)
+	// designers above (values from 1 kohm to 1 Mohm with capacitors from 47
+	// pF within the limits, a 220 ohm under the floor in a set past them the
+	// page shows on request): every stage of the page's settings
+	// (lib-parts.mjs, the set past the limits and a source resistance among
+	// them) and of a sweep of low-pass and high-pass designs, every response
+	// and topology, each stock, both placements, drawn as the page draws it
+	// (a stage on the full grid without pair labels)
 	const { PAGE_CASES, pageParts } = await import('./lib-parts.mjs');
 	const drawAny = (d, opts) => (d.topology === 'boctor' || d.topology === 'boctorHp' ? buildBoctorDiagram(d.components, { ...opts, highPass: d.topology === 'boctorHp' }) : draw(d, opts));
 	const PAGE_SWEEP = [];

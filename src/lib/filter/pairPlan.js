@@ -154,12 +154,22 @@ const filterPairLess = (a, b) => a !== b && a !== Infinity && (b === Infinity ||
  * help).
  */
 export function planFilterPairs(stages, build, option, limit) {
+	return planFilterPairsAll(stages, build, option, [limit])[0];
+}
+
+/**
+ * planFilterPairs for several limits at once, [plan for each of `limits`]:
+ * every subset of a stage's names is built and measured once for them all
+ * (the designer reruns are the plan's cost), each limit then keeps the
+ * subsets it allows, as planFilterPairs alone would.
+ */
+export function planFilterPairsAll(stages, build, option, limits) {
 	const full = stages.map((_, i) => build(i, true));
 	const groups = full.map((d) => filterPairGroups(d, option));
 	const counts = full.map((d) => filterPairCount(d, option));
 	const total = counts.reduce((n, c) => n + c, 0);
 	const measureOf = (i, d) => filterStageMeasure(stages[i], d, full[i]);
-	const result = (rows, limited) => ({
+	const result = (rows, limited, limit) => ({
 		limited,
 		limit,
 		total,
@@ -171,41 +181,54 @@ export function planFilterPairs(stages, build, option, limit) {
 			return { option: r.option, design: r.design, count: r.count, kept, dropped: groups[i].filter((g) => !kept.some((k) => k.name === g.name)), short };
 		})
 	});
-	if (limit === null || limit === undefined || total <= limit) return result(full.map((design, i) => ({ option: true, design, count: counts[i] })), false);
+	const unlimited = (limit) => result(full.map((design, i) => ({ option: true, design, count: counts[i] })), false, limit);
+	const limited = limits.filter((limit) => !(limit === null || limit === undefined || total <= limit));
+	if (!limited.length) return limits.map(unlimited);
 
 	// a stage with no group to try has one way to be built, and no say in the sharing
 	const pools = full.map((d, i) => filterPairCandidates(d, groups[i]));
 	const open = pools.map((p, i) => (p.length ? i : -1)).filter((i) => i >= 0);
-	const tables = open.map((i) => {
+	// per open stage, single parts and every subset of its names in order, each built once (and only where some limit keeps it)
+	const most = Math.max(...limited);
+	const lists = open.map((i) => {
 		const pool = pools[i];
 		const names = pool.map((g) => g.name);
 		const size = Object.fromEntries(pool.map((g) => [g.name, g.parts.length]));
 		const single = build(i, []);
-		// rows by the number of resistors that are pairs; 0 is single parts
-		const rows = [{ count: 0, option: [], design: single, measure: measureOf(i, single) }];
-		const consider = (row) => {
-			if (row.count > 0 && row.count <= limit && (!rows[row.count] || filterPairLess(row.measure, rows[row.count].measure))) rows[row.count] = row;
-		};
+		const subsets = [];
 		for (let m = 1; m <= names.length; m++) {
 			for (const allowed of pairSubsets(names, m)) {
 				if (m === names.length) {
-					consider({ count: counts[i], option: true, design: full[i], measure: measureOf(i, full[i]) });
+					subsets.push({ parts: 0, row: { count: counts[i], option: true, design: full[i], measure: measureOf(i, full[i]) } });
 					continue;
 				}
-				// a list whose parts already pass the limit cannot be kept
-				if (allowed.reduce((n, name) => n + size[name], 0) > limit) continue;
+				const parts = allowed.reduce((n, name) => n + size[name], 0);
+				if (parts > most) continue;
 				const design = build(i, allowed);
-				consider({ count: filterPairCount(design, option), option: allowed, design, measure: measureOf(i, design) });
+				subsets.push({ parts, row: { count: filterPairCount(design, option), option: allowed, design, measure: measureOf(i, design) } });
 			}
 		}
-		return rows;
+		return { single: { count: 0, option: [], design: single, measure: measureOf(i, single) }, subsets };
 	});
-	const chosen = allocatePairs(tables, limit);
-	const rows = full.map((design, i) => ({ option: true, design, count: 0, measure: measureOf(i, design) }));
-	open.forEach((i, k) => {
-		rows[i] = tables[k][chosen[k]];
-	});
-	return result(rows, true);
+	const planFor = (limit) => {
+		const tables = lists.map(({ single, subsets }) => {
+			// rows by the number of resistors that are pairs; 0 is single parts
+			const rows = [single];
+			for (const { parts, row } of subsets) {
+				// a list whose parts already pass the limit cannot be kept (every pair the stage may make is kept)
+				if (parts > limit) continue;
+				if (row.count > 0 && row.count <= limit && (!rows[row.count] || filterPairLess(row.measure, rows[row.count].measure))) rows[row.count] = row;
+			}
+			return rows;
+		});
+		const chosen = allocatePairs(tables, limit);
+		const rows = full.map((design, i) => ({ option: true, design, count: 0, measure: measureOf(i, design) }));
+		open.forEach((i, k) => {
+			rows[i] = tables[k][chosen[k]];
+		});
+		return result(rows, true, limit);
+	};
+	return limits.map((limit) => (limit === null || limit === undefined || total <= limit ? unlimited(limit) : planFor(limit)));
 }
 
 /** Names of resistors as a sentence lists them: R1, R3 and R2. */

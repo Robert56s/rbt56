@@ -115,9 +115,11 @@ export function designSallenKeyLowPassFromCaps(wn, q, Ctop, Cbottom, { resistorS
  * in [rMin, rMax).
  * Returns light records { miss, wn, q, pairs, small, level, parts }, parts
  * = { Ctop, Cbottom, Rtarget, R }, unsorted; sallenKeyLowPassFromParts
- * builds one.
+ * builds one. `rs`, the resistance of the source driving the stage, adds to
+ * the first R: the misses are of R + rs and R, and R is rounded around the
+ * value whose (R + rs) R is Rtarget^2 too.
  */
-export function sallenKeyLowPassCandidates(wn, q, { resistorSeries = 'E24', capacitors = null, pairs = false, caps = null, rMin = SK_R_MIN, rMax = SK_R_MAX } = {}) {
+export function sallenKeyLowPassCandidates(wn, q, { resistorSeries = 'E24', capacitors = null, pairs = false, caps = null, rMin = SK_R_MIN, rMax = SK_R_MAX, rs = 0 } = {}) {
 	const ratio = capRatio(q);
 	const grid = Array.isArray(capacitors) ? capacitorCandidates(capacitors) : seriesValues(SERIES.E12, -12, -3);
 	const pairR = pairAllowed(pairs, 'R1');
@@ -133,11 +135,18 @@ export function sallenKeyLowPassCandidates(wn, q, { resistorSeries = 'E24', capa
 		for (const Ctop of tops) {
 			const Rtarget = 1 / (wn * Math.sqrt(Ctop * Cbottom));
 			if (Rtarget < rMin / 2 || Rtarget > rMax * 2) continue;
-			const qA = 0.5 * Math.sqrt(Ctop / Cbottom);
+			const qA0 = 0.5 * Math.sqrt(Ctop / Cbottom);
 			const small = smallCapPenalty(Ctop, Cbottom) > 0;
-			for (const r of stockNeighbours(Rtarget, resistorSeries, pairR)) {
+			let rList = stockNeighbours(Rtarget, resistorSeries, pairR);
+			if (rs > 0) {
+				const seen = new Set(rList.map((r) => r.value));
+				rList = [...rList, ...stockNeighbours((Math.sqrt(rs * rs + 4 * Rtarget * Rtarget) - rs) / 2, resistorSeries, pairR).filter((r) => !seen.has(r.value) && seen.add(r.value))];
+			}
+			for (const r of rList) {
 				if (!(r.value >= rMin * (1 - 1e-9) && r.value < rMax)) continue;
-				const wnA = 1 / (r.value * Math.sqrt(Ctop * Cbottom));
+				// (with a source, R1 = R + rs and R2 = R: wn = 1 / sqrt(R1 R2 Ctop Cbottom), Q = sqrt(R1 R2 Ctop Cbottom) / (Cbottom (R1 + R2)))
+				const wnA = rs > 0 ? 1 / Math.sqrt((r.value + rs) * r.value * Ctop * Cbottom) : 1 / (r.value * Math.sqrt(Ctop * Cbottom));
+				const qA = rs > 0 ? 1 / (wnA * Cbottom * (2 * r.value + rs)) : qA0;
 				const miss = Math.max(Math.abs(Math.log(wnA / wn)), Math.abs(Math.log(qA / q)));
 				out.push({ miss, wn: wnA, q: qA, pairs: r.pair ? 2 : 0, small, level: Math.log(r.value / SK_R_SWEET) ** 2, parts: { Ctop, Cbottom, Rtarget, R: r.value } });
 			}

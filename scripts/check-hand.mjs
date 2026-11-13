@@ -602,9 +602,11 @@ const randomParts = (topology) => Object.fromEntries(hd.partNames(topology).map(
 		const asc = generateSchematic(opts);
 		problems.push(...ascParity(asc, buildElements(opts).filter((e) => e.kind !== 'LABEL'), net).problems, ...audit(asc).map((i) => `${i.kind} ${i.detail}`));
 		if (/undefined|NaN|null/.test(asc)) problems.push('a placeholder in the .asc');
+		// the panel keeps an ideal source, whatever the automatic design's source resistance: V1 on the input, no RS
+		if (/^RS /m.test(net) || !/^V1 vin 0 /m.test(net) || /drives the filter through RS/.test(asc)) problems.push('a source resistance in the panel\'s file');
 		files++;
 	}
-	check(`the panel's LTspice file: ${files} filters built by hand solve to their Bode model at the edges, and the .asc wires and draws clean`, problems.length === 0 && files > 5, problems.slice(0, 3).join('; '));
+	check(`the panel's LTspice file: ${files} filters built by hand solve to their Bode model at the edges, the .asc wires and draws clean, and the source is ideal (no RS)`, problems.length === 0 && files > 5, problems.slice(0, 3).join('; '));
 }
 
 /* ------------------------------------------------------ (h) sensitivities */

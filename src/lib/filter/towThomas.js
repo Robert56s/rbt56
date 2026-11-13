@@ -440,6 +440,59 @@ export function towThomasNotchCandidates(wn, q, wz, { lowSide = true, gain = nul
 	return out;
 }
 
+/**
+ * Every way the stock builds a band-pass stage of gain `gain` at its own
+ * centre (its size: the stage inverts), each judged on its rounded parts
+ * (partSearch.js): every C (or `caps.C`), R and Rd as for
+ * towThomasCandidates, and R1 the stocked values just below and above
+ * Rd / gain on that rounded Rd. Every resistor stays in [rMin, rMax). miss
+ * is the largest log miss of f0, Q and the gain.
+ * Returns light records { miss, wn, q, pairs, small, level, parts }, parts
+ * = { C, Rtarget, RdIdeal, R, Rd, R1Target, R1n }, unsorted;
+ * towThomasBandPassFromParts builds one. pairs counts R twice (Ra and Rb).
+ */
+export function towThomasBandPassCandidates(wn, q, { gain = 1, resistorSeries = 'E24', capacitors = null, pairs = false, caps = null, rMin = TT_R_MIN, rMax = TT_R_MAX } = {}) {
+	const size = Math.abs(gain);
+	if (![wn, q, size].every((v) => Number.isFinite(v) && v > 0)) return [];
+	const pairR = pairAllowed(pairs, 'Ra');
+	const pairRd = pairAllowed(pairs, 'Rd');
+	const pairR1 = pairAllowed(pairs, 'R1');
+	const out = [];
+	for (const C of caps?.C > 0 ? [caps.C] : capacitorCandidates(capacitors)) {
+		const { R: Rtarget, Rd: RdIdeal } = solveTowThomas(wn, q, C);
+		const far = (v) => v < rMin / 2 || v > rMax * 2;
+		if (far(Rtarget) || far(RdIdeal) || far(RdIdeal / size)) continue;
+		const small = smallCapPenalty(C) > 0;
+		for (const r of ttNeighbours(Rtarget, resistorSeries, pairR, rMin, rMax)) {
+			for (const d of ttNeighbours(q * r.value, resistorSeries, pairRd, rMin, rMax)) {
+				const R1Target = d.value / size;
+				for (const g of ttNeighbours(R1Target, resistorSeries, pairR1, rMin, rMax)) {
+					const actual = { wn: 1 / (r.value * C), q: d.value / r.value, gain: -d.value / g.value };
+					const level = Math.log(r.value / TT_R_SWEET) ** 2 + 0.125 * (Math.log(d.value / TT_R_SWEET) ** 2 + Math.log(g.value / TT_R_SWEET) ** 2);
+					out.push({ miss: ttBpMiss(actual, wn, q, size), wn: actual.wn, q: actual.q, pairs: (r.pair ? 2 : 0) + (d.pair ? 1 : 0) + (g.pair ? 1 : 0), small, level, parts: { C, Rtarget, RdIdeal, R: r.value, Rd: d.value, R1Target, R1n: g.value } });
+				}
+			}
+		}
+	}
+	return out;
+}
+
+/** The stage a record of towThomasBandPassCandidates stands for, in the shape designTowThomasBandPass returns (with ok, manual and outOfRange for a capacitor typed by hand). */
+export function towThomasBandPassFromParts(wn, q, parts, { gain = 1, resistorSeries = 'E24', manual = false } = {}) {
+	const size = Math.abs(gain);
+	const { C, Rtarget, RdIdeal, R, Rd, R1Target, R1n } = parts;
+	const rInv = stockResistor(TT_INVERTER_R, resistorSeries);
+	return {
+		topology: 'towThomasBp',
+		order: 2,
+		theoretical: { R1: RdIdeal / size, Ra: Rtarget, Rb: Rtarget, Rd: RdIdeal, C1: C, C2: C, r: rInv },
+		components: { R1: R1n, Ra: R, Rb: R, Rd, C1: C, C2: C, r: rInv },
+		actual: { wn: 1 / (R * C), q: Rd / R, gain: -Rd / R1n },
+		steps: { C, Rtarget, RdIdeal, Rrounded: R, RdTarget: q * R, R1Target, gainTarget: size, resistorSeries },
+		...(manual ? { ok: true, manual: true, outOfRange: ![R1n, R, Rd].every((v) => v > TT_R_MIN && v < TT_R_MAX) } : {})
+	};
+}
+
 /** The stage a record of towThomasNotchCandidates stands for, in the shape designTowThomasNotch returns (with ok, manual and outOfRange for a capacitor typed by hand). */
 export function towThomasNotchFromParts(wn, q, wz, parts, { lowSide = true, gain = null, resistorSeries = 'E24', manual = false } = {}) {
 	const { C, Cin, CinIdeal, Rtarget, RdIdeal, R, Rd, RzTarget, Rz } = parts;

@@ -85,18 +85,24 @@ export function designFirstOrderLowPassFromCap(tau, C, { resistorSeries = 'E24',
  * tau / C (stockNeighbours: two in series too where `pairs` lets them), R
  * in [rMin, rMax). Returns light records { miss, tau, pairs, small, level,
  * parts }, parts = { C, Rtarget, R }, unsorted; firstOrderFromParts builds
- * one.
+ * one. `rs`, the resistance of the source driving a low-pass stage, adds to
+ * R: tau is (R + rs) C, and R is rounded around Rtarget - rs too.
  */
-export function firstOrderCandidates(tau, { resistorSeries = 'E24', capacitors = null, pairs = false, caps = null, rMin = FO_R_MIN, rMax = FO_R_MAX } = {}) {
+export function firstOrderCandidates(tau, { resistorSeries = 'E24', capacitors = null, pairs = false, caps = null, rMin = FO_R_MIN, rMax = FO_R_MAX, rs = 0 } = {}) {
 	const pairR = pairAllowed(pairs, 'R');
 	const out = [];
 	for (const C of caps?.C > 0 ? [caps.C] : capacitorCandidates(capacitors)) {
 		const Rtarget = tau / C;
 		if (Rtarget < rMin / 2 || Rtarget > rMax * 2) continue;
 		const small = smallCapPenalty(C) > 0;
-		for (const r of stockNeighbours(Rtarget, resistorSeries, pairR)) {
+		let rList = stockNeighbours(Rtarget, resistorSeries, pairR);
+		if (rs > 0) {
+			const seen = new Set(rList.map((r) => r.value));
+			rList = [...rList, ...stockNeighbours(Rtarget - rs, resistorSeries, pairR).filter((r) => !seen.has(r.value) && seen.add(r.value))];
+		}
+		for (const r of rList) {
 			if (!(r.value >= rMin * (1 - 1e-9) && r.value < rMax)) continue;
-			const tauA = r.value * C;
+			const tauA = (r.value + rs) * C;
 			out.push({ miss: Math.abs(Math.log(tauA / tau)), tau: tauA, pairs: r.pair ? 1 : 0, small, level: Math.log(r.value / FO_R_SWEET) ** 2, parts: { C, Rtarget, R: r.value } });
 		}
 	}

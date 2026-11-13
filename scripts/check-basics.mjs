@@ -173,7 +173,7 @@ function checkText(where, text) {
 	// on the whole filter (searchFilterParts), and once more as the stage
 	// designers build them alone on the passband edge, as before the search
 	const { designBandPass, designBandStop, designHighPass, designLowPass, minimumOrder } = await import('../src/lib/filter/stages.js');
-	const { searchFilterParts } = await import('../src/lib/filter/partSearch.js');
+	const { searchFilterParts, SOURCE_R_DEFAULT } = await import('../src/lib/filter/partSearch.js');
 	const { butterworthOrder, chebyshevOrder, transitionRatio } = await import('../src/lib/filter/order.js');
 	const { combinerChoice, magnitudePhaseAt, magnitudePhaseAtParallelSum } = await import('../src/lib/filter/bode.js');
 	const { LAB_KIT } = await import('../src/lib/filter/eseries.js');
@@ -273,10 +273,12 @@ function checkText(where, text) {
 		}
 		const transformed = method === 'transformed';
 		// the page's parts: the search on the whole filter, or a stage that
-		// cannot be built (then a transformed design shows no stages at all)
+		// cannot be built (then a transformed design shows no stages at all),
+		// with the page's own 50 ohm source ahead of the input (Start here then
+		// reads those parts with an ideal source, as it always has)
 		const search =
 			design && searched
-				? searchFilterParts(design, { menus: transformed ? menus : { method: 'cascade', highpass: topology, lowpass: topology }, ...STOCK[stock], combinerR: 10000 })
+				? searchFilterParts(design, { menus: transformed ? menus : { method: 'cascade', highpass: topology, lowpass: topology }, ...STOCK[stock], combinerR: 10000, sourceR: SOURCE_R_DEFAULT })
 				: null;
 		// as the designers built them alone: a transformed design with its own E24 fallback included
 		const bandStages = design && transformed ? (search ? search.stages : design.stages.map((s) => realizeBandStage(s, menus, STOCK[stock]))) : null;
@@ -519,12 +521,26 @@ function checkText(where, text) {
 		foreign.test(allText) ? `foreign words: ${allText.match(foreign)[0]}` : text(ref.slice(1, 2)).slice(0, 300)
 	);
 
-	// the page offers the type and calls the basics with it
+	// the page offers the type and calls the basics with it (and with whether
+	// its script download shows: SCRIPT_DOWNLOAD, false while the script is
+	// reworked, the basics then name the LTspice file alone; the argument is
+	// required, since without it Start here would name the hidden script)
 	const { readFileSync } = await import('node:fs');
 	const page = readFileSync(new URL('../src/routes/(site)/tools/filter-design/+page.svelte', import.meta.url), 'utf8');
 	check(
-		'narrow band-pass basics: the page offers "Narrow band-pass" in its Filter type menu and calls filterBasics with the type, its design, the stock and the pairs',
-		/<option value="narrowband">Narrow band-pass<\/option>/.test(page) && /filterBasics\(\{ filterType: 'narrowband', design: narrowDesign, stock, pairs: componentOpts\.pairs, pairLimit: componentOpts\.pairLimit \}\)/.test(page)
+		'narrow band-pass basics: the page offers "Narrow band-pass" in its Filter type menu and calls filterBasics with the type, its design, the stock, the pairs and whether the script download shows',
+		/<option value="narrowband">Narrow band-pass<\/option>/.test(page) && /filterBasics\(\{ filterType: 'narrowband', design: narrowDesign, stock, pairs: componentOpts\.pairs, pairLimit: componentOpts\.pairLimit, script: SCRIPT_DOWNLOAD \}\)/.test(page)
+	);
+	// with the script download hidden, no paragraph of the basics points to a script; shown, panel 06's line names it
+	const words = (blocks) => blocks.map((b) => [b.p, b.h, b.intro, ...(b.terms ?? []).flat()].filter((x) => typeof x === 'string').join(' ')).join(' ');
+	const narrowDesign = designNarrowBand({ f0: 10000, q: 5, gain: 1, stages: 2 });
+	const lowPass = { filterType: 'lowpass', response: 'butterworth', topology: 'mfb', order: 4, stages: 2, fp: 10000, fs: 35000, amaxDb: 3, aminDb: 40 };
+	const hidden = [filterBasics({ filterType: 'narrowband', design: narrowDesign, script: false }), filterBasics({ ...lowPass, script: false })].map(words);
+	const shown = [filterBasics({ filterType: 'narrowband', design: narrowDesign }), filterBasics(lowPass)].map(words);
+	check(
+		'filter basics: with the script download hidden (script: false) no word of a script, shown its line in panel 06',
+		hidden.every((t) => !/\bscript\b|filter-design\.js/i.test(t)) && shown.every((t) => /standalone script/.test(t)),
+		hidden.map((t) => (/.{0,60}\bscript\b.{0,40}/i.exec(t) ?? ['none'])[0]).join(' | ')
 	);
 }
 

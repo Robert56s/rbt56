@@ -181,8 +181,8 @@ export function explainPlacement(design) {
 		),
 		pp(
 			p.mode === 'edge'
-				? 'On the passband edge the ideal design keeps no margin in the passband, so the parts are chosen for the whole filter to meet the template and, past that, to stay closest to the ideal response.'
-				: `The parts are then chosen for the whole filter to keep up to the smaller of those margins (${n2(p.idealMargin)} dB here) and, past it, to stay closest to the ideal response.`
+				? 'On the passband edge the ideal design keeps no margin in the passband. The parts are chosen for the whole filter within the limits on the parts: to meet the template, then to stay closest to the ideal response.'
+				: `The parts are chosen for the whole filter within the limits on the parts: to keep up to the smaller of those margins (${n2(p.idealMargin)} dB here), then to stay closest to the ideal response.`
 		)
 	);
 	return blocks;
