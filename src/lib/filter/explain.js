@@ -1,5 +1,5 @@
 import { pairLabel, seriesPair } from './eseries';
-import { explainModernApproximation, explainModernOrder, isClassic, modernRealPoleBlocks, modernStageBlocks } from './explainResponses';
+import { explainModernApproximation, explainModernOrder, isClassic, modernRealPoleBlocks, modernStageBlocks, searchKept } from './explainResponses';
 import { placedRipple, placedScale } from './explainPlacement';
 import { formatFarads, formatHz, formatOhms, formatSeconds } from './format';
 import { narrowStageSensitivity, narrowTextbook, NARROW_GAIN_SPEED } from './narrowBand';
@@ -39,8 +39,6 @@ function pairsSentence(parts, series) {
 	return `${paired.map(([name, v]) => `${name} = ${ohms(v, series)}`).join(' and ')} ${paired.length > 1 ? 'are each' : 'is'} two resistors in series, since no single value on hand comes within 2 %.`;
 }
 
-/** Where a stage the search over the whole filter picked says how, in place of its designer's own rule. */
-const SEARCH_KEPT = 'with which the whole filter meets the template best';
 
 /** eps = sqrt(10^(Amax/10) - 1), the one number the passband spec turns into. */
 function rippleFactor(amaxDb) {
@@ -462,10 +460,10 @@ export function explainMfb(stageDesign, targetWn, targetQ, { shownIn = 'which is
 	const xTex = root === 0 ? '\\dfrac{aC_1}{4}' : `\\dfrac{aC_1 ${root > 0 ? '+' : '-'} \\sqrt{\\Delta}}{4}`;
 	const capsText = stageDesign.manual
 		? searched
-			? `The quadratic has a real solution only when C1/C2 >= 8Q^2. C1 and C2 below were entered by hand; the search over the whole filter tried both roots with them${root === 0 ? ' (here the double root: the pair sits under that bar, within 4Q^2)' : ''}, and each resistor just below and just above its ideal value, and kept these, ${SEARCH_KEPT}:`
+			? `The quadratic has a real solution only when C1/C2 >= 8Q^2. C1 and C2 below were entered by hand; the search over the whole filter tried both roots with them${root === 0 ? ' (here the double root: the pair sits under that bar, within 4Q^2)' : ''}, and each resistor just below and just above its ideal value, and kept these, ${searchKept(searched)}:`
 			: 'The quadratic has a real solution only when C1/C2 >= 8Q^2. C1 and C2 below were entered by hand; the resistors are solved directly from them:'
 		: searched
-			? 'The quadratic has a real solution only when C1/C2 >= 8Q^2. The search over the whole filter tried every capacitor pair in stock with C1/C2 from 4Q^2 up, both roots, and each resistor just below and just above its ideal value; it kept these, with which the whole filter meets the template best:'
+			? `The quadratic has a real solution only when C1/C2 >= 8Q^2. The search over the whole filter tried every capacitor pair in stock with C1/C2 from 4Q^2 up, both roots, and each resistor just below and just above its ideal value; it kept these, ${searchKept(searched)}:`
 			: 'A quadratic only has a real solution when its discriminant is positive, which here means C1/C2 >= 8Q^2. This tool searches a preferred capacitor series for a pair that clears that bar and lands both resistors in a sane 200 ohm to 2 megohm range:';
 	const rootText =
 		root === 0
@@ -540,7 +538,7 @@ export function explainSallenKey(stageDesign, targetQ, { searched = false } = {}
 			: [
 					p(
 						searched
-							? `That leaves only one free choice: C_bottom. The search over the whole filter tried every C_bottom in stock with the two stocked C_top on each side of the ratio, and R just below and just above the value those two ask for; it kept these, ${SEARCH_KEPT}. R is solved from the ωn equation with the two capacitor values that will actually be used:`
+							? `That leaves only one free choice: C_bottom. The search over the whole filter tried every C_bottom in stock with the two stocked C_top on each side of the ratio, and R just below and just above the value those two ask for; it kept these, ${searchKept(searched)}. R is solved from the ωn equation with the two capacitor values that will actually be used:`
 							: 'That leaves only one free choice: C_bottom. Once it is picked (from a preferred series), C_top is whatever the ratio above says it has to be, rounded to the nearest E12 value. R is then solved from the ωn equation using the two capacitor values that will actually be used, so that C_top\'s rounding cannot shift f0:'
 					),
 					eq(
@@ -613,7 +611,7 @@ export function explainFirstOrder(stageDesign, { searched = false } = {}) {
 			stageDesign.manual
 				? 'C below was entered by hand instead of picked from a preferred series; R is solved from it the same way, then rounded in turn:'
 				: searched
-					? `The search over the whole filter tried the capacitors in stock, R solved from each and rounded just below and just above; it kept these, ${SEARCH_KEPT}:`
+					? `The search over the whole filter tried the capacitors in stock, R solved from each and rounded just below and just above; it kept these, ${searchKept(searched)}:`
 					: 'C is picked from a preferred capacitor series first, and R is solved from it; R then gets rounded in turn, same as every other stage in this design:'
 		),
 		eq(`C = ${formatFarads(st.C)}\\ \\ \\Rightarrow\\ \\ R = \\dfrac{\\tau}{C} = ${formatOhms(st.Rtarget)}`),
@@ -650,7 +648,7 @@ export function explainMfbHp(stageDesign, targetWn, targetQ, { searched = false 
 			stageDesign.manual
 				? `C below was entered by hand instead of searched for: ${formatFarads(st.C)}.`
 				: searched
-					? `The search over the whole filter tried the capacitors in stock and each resistor just below and just above its ideal value; it kept C = ${formatFarads(st.C)}, ${SEARCH_KEPT}.`
+					? `The search over the whole filter tried the capacitors in stock and each resistor just below and just above its ideal value; it kept C = ${formatFarads(st.C)}, ${searchKept(searched)}.`
 					: `This tool searches a preferred capacitor series for a C that lands both resistors in a sane 200 ohm to 2 megohm range: ${formatFarads(st.C)}.`
 		),
 		p(
@@ -685,7 +683,7 @@ export function explainSallenKeyHp(stageDesign, targetQ, { searched = false } = 
 			stageDesign.manual
 				? 'C below was entered by hand instead of searched for; both resistors are solved directly from it and the target:'
 				: searched
-					? `Unlike low-pass, both resistors follow directly from the one free choice, C (the two capacitors are equal by design). The search over the whole filter tried the capacitors in stock and each resistor just below and just above its ideal value; it kept these, ${SEARCH_KEPT}:`
+					? `Unlike low-pass, both resistors follow directly from the one free choice, C (the two capacitors are equal by design). The search over the whole filter tried the capacitors in stock and each resistor just below and just above its ideal value; it kept these, ${searchKept(searched)}:`
 					: 'Unlike low-pass, both resistors follow directly from the one free choice, C (the two capacitors are equal by design, so there is nothing to derive a ratio for):'
 		),
 		eq(`R_{top} = \\dfrac{1}{2Q\\,\\omega_n\\,C} = ${formatOhms(st.RtopTarget)}`),
@@ -713,7 +711,7 @@ export function explainFirstOrderHp(stageDesign, { searched = false } = {}) {
 			stageDesign.manual
 				? 'C below was entered by hand instead of picked from a preferred series; R is solved from it the same way, then rounded in turn:'
 				: searched
-					? `The search over the whole filter tried the capacitors in stock, R solved from each and rounded just below and just above; it kept these, ${SEARCH_KEPT}:`
+					? `The search over the whole filter tried the capacitors in stock, R solved from each and rounded just below and just above; it kept these, ${searchKept(searched)}:`
 					: 'C is picked from a preferred capacitor series first, and R is solved from it; R then gets rounded in turn, same as every other stage in this design:'
 		),
 		eq(`C = ${formatFarads(st.C)}\\ \\ \\Rightarrow\\ \\ R = \\dfrac{\\tau}{C} = ${formatOhms(st.Rtarget)}`),
@@ -768,7 +766,7 @@ export function explainTowThomas(stageDesign, targetWn, targetQ, { searched = fa
 		),
 		eq('\\omega_n = \\dfrac{1}{RC}, \\qquad Q = \\dfrac{R_d}{R}, \\qquad \\text{DC gain} = \\dfrac{R}{R_1} = 1'),
 		p(
-			`This stage's target is f0 = ${formatHz(f0)} (omega_n = ${n2(targetWn)} rad/s), Q = ${targetQ.toFixed(4)}. ${stageDesign.manual ? 'C below was entered by hand; both capacitors take that value.' : searched ? `The search over the whole filter tried the capacitors in stock, and R and Rd each just below and just above their ideal values; it kept these, ${SEARCH_KEPT}.` : 'C is picked from a preferred series so that R lands near 10 kilo-ohm, then'} R follows from omega_n, Rd from Q against the ROUNDED R${searched ? '' : ' (so the realized Q = Rd/R lands as close as the series allows)'}, and r is any equal pair:`
+			`This stage's target is f0 = ${formatHz(f0)} (omega_n = ${n2(targetWn)} rad/s), Q = ${targetQ.toFixed(4)}. ${stageDesign.manual ? 'C below was entered by hand; both capacitors take that value.' : searched ? `The search over the whole filter tried the capacitors in stock, and R and Rd each just below and just above their ideal values; it kept these, ${searchKept(searched)}.` : 'C is picked from a preferred series so that R lands near 10 kilo-ohm, then'} R follows from omega_n, Rd from Q against the ROUNDED R${searched ? '' : ' (so the realized Q = Rd/R lands as close as the series allows)'}, and r is any equal pair:`
 		),
 		eq(`C = ${formatFarads(st.C)}\\ \\ \\Rightarrow\\ \\ R = \\dfrac{1}{\\omega_n C} = ${formatOhms(st.Rtarget)} \\rightarrow ${formatOhms(st.Rrounded)}`),
 		eq(`R_d = Q \\times R = ${targetQ.toFixed(4)} \\times ${formatOhms(st.Rrounded)} = ${formatOhms(st.RdTarget)} \\rightarrow ${formatOhms(c.Rd)}, \\qquad R_1 = R_a = R_b = ${formatOhms(c.Ra)}, \\qquad r = ${formatOhms(c.r)}`),
@@ -804,7 +802,7 @@ export function explainTowThomasHp(stageDesign, targetWn, targetQ, { searched = 
 		p('omega_n and Q are the same expressions as the low-pass form; the high-frequency gain is Cin/C1, so Cin = C gives a unity-magnitude, inverting high-pass. With equal capacitors and equal resistors:'),
 		eq('\\omega_n = \\dfrac{1}{RC}, \\qquad Q = \\dfrac{R_d}{R}, \\qquad H(\\infty) = -\\dfrac{C_{in}}{C} = -1'),
 		p(
-			`This stage's target is f0 = ${formatHz(f0)} (omega_n = ${n2(targetWn)} rad/s), Q = ${targetQ.toFixed(4)}. ${stageDesign.manual ? 'C below was entered by hand; all three capacitors take that value.' : searched ? `The search over the whole filter tried the capacitors in stock, and R and Rd each just below and just above their ideal values; it kept these, ${SEARCH_KEPT}.` : 'C is picked from a preferred series so that R lands near 10 kilo-ohm, then'} R follows from omega_n and Rd from Q against the rounded R:`
+			`This stage's target is f0 = ${formatHz(f0)} (omega_n = ${n2(targetWn)} rad/s), Q = ${targetQ.toFixed(4)}. ${stageDesign.manual ? 'C below was entered by hand; all three capacitors take that value.' : searched ? `The search over the whole filter tried the capacitors in stock, and R and Rd each just below and just above their ideal values; it kept these, ${searchKept(searched)}.` : 'C is picked from a preferred series so that R lands near 10 kilo-ohm, then'} R follows from omega_n and Rd from Q against the rounded R:`
 		),
 		eq(`C_{in} = C_1 = C_2 = ${formatFarads(st.C)}\\ \\ \\Rightarrow\\ \\ R = \\dfrac{1}{\\omega_n C} = ${formatOhms(st.Rtarget)} \\rightarrow ${formatOhms(st.Rrounded)}`),
 		eq(`R_d = Q \\times R = ${targetQ.toFixed(4)} \\times ${formatOhms(st.Rrounded)} = ${formatOhms(st.RdTarget)} \\rightarrow ${formatOhms(c.Rd)}, \\qquad R_a = R_b = ${formatOhms(c.Ra)}, \\qquad r = ${formatOhms(c.r)}`),
@@ -1302,7 +1300,7 @@ export function explainMfbBp(stageDesign, targetWn, targetQ, { searched = false 
 							stageDesign.manual
 								? 'C1 and C2 below were entered by hand.'
 								: searched
-									? `The search over the whole filter tried every capacitor pair in stock up to 10:1 apart either way, equal or not, each with its resistors rounded just below and just above; it kept these, ${SEARCH_KEPT}.`
+									? `The search over the whole filter tried every capacitor pair in stock up to 10:1 apart either way, equal or not, each with its resistors rounded just below and just above; it kept these, ${searchKept(searched)}.`
 									: 'C1 and C2 come from a search of the capacitor series, equal values preferred and a ratio up to 10:1 allowed, for the pair whose rounded resistors land closest to the targets with the resistors near 10 kilo-ohm.'
 						} The ideal resistors:`
 					)
@@ -1368,7 +1366,7 @@ function mfbBpOpampBlocks(stageDesign, targetWn, targetQ, searched = false) {
 				stageDesign.manual
 					? 'C1 and C2 below were entered by hand.'
 					: searched
-						? `The search over the whole filter tried every capacitor pair in stock up to 10:1 apart either way, equal or not, among those that leave the op-amp a loop gain of at least 2 at f0, each with its resistors rounded just below and just above; it kept these, ${SEARCH_KEPT}.`
+						? `The search over the whole filter tried every capacitor pair in stock up to 10:1 apart either way, equal or not, among those that leave the op-amp a loop gain of at least 2 at f0, each with its resistors rounded just below and just above; it kept these, ${searchKept(searched)}.`
 						: 'C1 and C2 come from a search of the capacitor series, equal values preferred and a ratio up to 10:1 allowed, among the pairs that leave the op-amp a loop gain of at least 2 at f0, for the pair whose rounded resistors, with the op-amp, land closest to the targets with the resistors near 10 kilo-ohm. An f0 miss counts 2Q times there: near its band edges the stage moves about 2Q times as much for 1 % of f0 as for 1 % of Q.'
 			} The ideal resistors:`
 		)
@@ -1419,7 +1417,7 @@ export function explainTowThomasBp(stageDesign, targetWn, targetQ, { searched = 
 				stageDesign.manual
 					? 'C below was entered by hand; both capacitors take that value.'
 					: searched
-						? `The search over the whole filter tried the capacitors in stock, and R, Rd and R1 each just below and just above their ideal values; it kept these, ${SEARCH_KEPT}.`
+						? `The search over the whole filter tried the capacitors in stock, and R, Rd and R1 each just below and just above their ideal values; it kept these, ${searchKept(searched)}.`
 						: 'C is picked from a preferred series so that R lands near 10 kilo-ohm and the rounding of R, Rd and R1 costs least.'
 			} Each resistor is then solved against the ones already rounded:`
 		),

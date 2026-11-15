@@ -42,7 +42,18 @@
 //    of before on a pinned sample, the pair limit, the resistor floor and
 //    the op-amp loads (by the checks' own nodal solve), the capacitors typed
 //    by hand, the downloadable script against the page (lib-parts.mjs), one
-//    scope for the script, and the time a search takes.
+//    scope for the script, and the time a search takes (and the first
+//    "Next design" takes).
+// 14. The limits first, every stage of a transformed design searched,
+//    sensible values, the source resistance, the alert naming the op-amp
+//    and the script download hidden.
+// 15. The list of designs "Next design" steps through: design 1 exactly
+//    the set shown before the list existed, every design within the limits
+//    design 1 keeps and meeting the template, each set of values once, in
+//    the search's own order, each stage read against the target it was
+//    rounded around, on the page's default cases and a sample; the
+//    page opening on the passband edge, its reset and the control hidden
+//    past the limits; the script's DESIGN_INDEX against the page.
 // Exits non-zero on any failure.
 
 import { execFileSync } from 'node:child_process';
@@ -77,8 +88,8 @@ import { explainBandTransform, explainMfbBp, explainTowThomasBp, explainTransfor
 import { BAND_SPECS, BAND_SPEC_NAMES, RESPONSE_KEYS, designTransformed, hasZeros, realizeBandStage, realizeTransformed, targetStage, transformedMenus } from './lib-band.mjs';
 import { filterPairCount, filterPairGroups, filterPairLimitSentence, filterPairPlanSummary, filterStageMeasure, planFilterPairs } from '../src/lib/filter/pairPlan.js';
 import { filterBasics } from '../src/lib/filter/basics.js';
-import { PART_LOAD_MIN, PART_MARGIN_TOLERANCE_DB, PART_R_FLOOR, PART_R_MAX, PASSBAND_SLACK_DB, SOURCE_R_DEFAULT, filterSource, filterTemplate, limitAlertOpamp, limitAlertText, measureFilter, searchFilterParts } from '../src/lib/filter/partSearch.js';
-import { pageParts, pageSettings, partsProblems } from './lib-parts.mjs';
+import { PART_LOAD_MIN, PART_MARGIN_TOLERANCE_DB, PART_R_FLOOR, PART_R_MAX, PASSBAND_SLACK_DB, SOURCE_R_DEFAULT, STAGE_SPREAD_MAX, designBetter, designPlacedAs, edgeDesignOf, filterSource, filterTemplate, limitAlertOpamp, limitAlertText, measureFilter, searchFilterParts } from '../src/lib/filter/partSearch.js';
+import { PAGE_CASES, pageParts, pageSettings, partsProblems } from './lib-parts.mjs';
 
 let fails = 0;
 const check = (label, ok, detail) => {
@@ -396,7 +407,8 @@ check('combiner never leaves depth on the table', worstLoss <= 1e-9, `${worstLos
 	check(`new explanations: ${blocks.filter((b) => b.type === 'eq').length} equations render, no placeholders, no long dashes, never "you"`, texBad === 0 && wordBad === 0, `${texBad} TeX, ${wordBad} text`);
 
 	// the downloadable script runs for the new responses and finds its whole
-	// template met, placed as the page opens (centred), with the page's parts
+	// template met, placed centred (the page's other placement: it opens on
+	// the passband edge), with the page's parts
 	const dir = mkdtempSync(join(tmpdir(), 'rbt56-filter-'));
 	let scriptBad = 0;
 	const scripts = [
@@ -1281,7 +1293,8 @@ const PAIR_STOCKS = {
 	// (g) The downloadable script with BAND_METHOD = "transformed" designs
 	// the page's stages, says which method has fewer op-amps, and prints the
 	// parts, the response and the verdict the page shows (lib-parts.mjs), on
-	// the passband edge and centred. Centred, as the page opens, the narrow
+	// the passband edge and centred. Centred (the page's other placement: it
+	// opens on the edge), the narrow
 	// band-pass and the default band-stop meet their whole template; on the
 	// edge the band-pass stages a transformed design cannot search keep their
 	// designer's pick, and the narrow band-pass on MFB is reported short in
@@ -1799,9 +1812,19 @@ const PAIR_STOCKS = {
 		// stages on the input with it), PAST_LIMITS (the set past the limits
 		// the page offers) and OPAMP_PART (the op-amp the notes name), the
 		// notes on the limits written by the library (limitAlertText) and the
-		// limits line naming the 1 Mohm ceiling and the 47 pF floor. None added
-		// OPAMP_GBW to a script without an op-amp.
-		const SCRIPTS_BEFORE = '760a905194ce0d04';
+		// limits line naming the 1 Mohm ceiling and the 47 pF floor; and once
+		// more when "Next design" came in: DESIGN_INDEX (the design of the
+		// list the page shows, 0 the best), the set shown taken from the list
+		// at that index, and a line saying which design it is when it is not
+		// the first; and then when a design of the list on the passband edge
+		// could take a stage the centred design's search rounded around its
+		// own targets (fromCentred): such a stage printed against that
+		// design's stage with a line saying so, and a designer's pick in a
+		// design after the first no longer said to be the closest the search
+		// found; and once more when that design's line lost a clause that said
+		// nothing new (ranked after those before it). None added OPAMP_GBW to
+		// a script without an op-amp.
+		const SCRIPTS_BEFORE = '666027f359c177b4';
 		const print = createHash('sha256').update(texts.join('\n')).digest('hex').slice(0, 16);
 		check(`downloadable script without an op-amp: all ${texts.length} scripts as pinned around the engine, none with OPAMP_GBW`, print === SCRIPTS_BEFORE && !texts.some((t) => /OPAMP_GBW/.test(t)), `${print}, expected ${SCRIPTS_BEFORE}`);
 
@@ -3439,10 +3462,10 @@ const PAIR_STOCKS = {
 
 	// (d) the page's opening design, Butterworth 3/40 dB, 10 and 35 kHz, MFB,
 	// on the lab kit. Its designers alone miss the template by 1.1 dB (4.13
-	// dB lost at fp). The part search meets it on the passband edge (with a
-	// little margin, the ideal design there having none) and, centred as the
-	// page opens, with at least the ideal design's 0.786 dB, within the
-	// limits (no alert); so do E24, E96 and the lab resistors
+	// dB lost at fp). The part search meets it on the passband edge, where
+	// the page opens (with a little margin, the ideal design there having
+	// none) and, centred, with at least the ideal design's 0.786 dB, within
+	// the limits (no alert); so do E24, E96 and the lab resistors, centred
 	{
 		const spec = { response: 'butterworth', amaxDb: 3, aminDb: 40, fp: 10000, fs: 35000, order: null };
 		const edge = searchFilterParts(designLowPass({ ...spec, placement: 'edge' }), { menus: cascade('mfb'), ...lab });
@@ -3904,6 +3927,7 @@ const PAIR_STOCKS = {
 		];
 		const times = [];
 		let warm = 0;
+		const results = [];
 		for (const [label, d, menus, stock, sourceR = 0] of cases) {
 			const settings = { menus, ...stock, sourceR };
 			const t0 = performance.now();
@@ -3913,6 +3937,23 @@ const PAIR_STOCKS = {
 			warm = Math.max(warm, performance.now() - t1);
 			if (again !== r || r.stages.some((s) => !s)) times.push([label, Infinity]);
 			else times.push([label, t1 - t0]);
+			results.push([label, r]);
+		}
+		// The list of designs "Next design" steps through (15 below): the search builds none of it (its ms stays
+		// null until it is asked for), so the times above are the search's alone, as they were before the list
+		// existed (941274e: the same 11 cases cold in fresh processes took 3790 ms in all, now 3791). The first
+		// click builds it and design 2, timed here after every search on the cases that have a list: 15 to 85 ms
+		// (Nov 2026) for the 16-stage transformations and the Boctor low-pass, up to about 150 ms over a sweep of
+		// 1097 random specs (a 2-stage band-stop transformed that also searches its other placement)
+		const lazy = [];
+		const clicks = [];
+		for (const [label, r] of results) {
+			if (!r.designs.more) continue;
+			if (r.designs.ms !== null) lazy.push(label);
+			const t2 = performance.now();
+			const count = r.designs.count();
+			const next = r.designs.at(1);
+			clicks.push([label, performance.now() - t2, count, Boolean(next)]);
 		}
 		// (the cases from before, held to 0.4 s, then every 16-stage transformation with pairs, the earlier one with
 		// lab resistors included (396 to 406 ms from run to run), to 0.65 s on their own line)
@@ -3929,6 +3970,11 @@ const PAIR_STOCKS = {
 			'time: the transformations at the page\'s order limit (16 stages, every one searched, lab kit or lab resistors with pairs, the TL082 pre-compensation, Boctor notches, no source and 50 ohm) stay under 0.65 s',
 			atLimit.every(([, ms]) => ms < 650),
 			atLimit.map(([label, ms]) => `${label} ${ms.toFixed(0)} ms`).join(', ')
+		);
+		check(
+			'time: the search builds no list of designs, and the first "Next design" (the list and design 2) takes under 150 ms on the cases above that have one (the 16-stage transformations with pairs among them)',
+			lazy.length === 0 && clicks.length >= 4 && clicks.every(([, ms, count, next]) => ms < 150 && count >= 2 && next),
+			`${lazy.length ? `built by the search: ${lazy.join(', ')}; ` : ''}${clicks.map(([label, ms, count]) => `${label} ${ms.toFixed(0)} ms (${count} designs)`).join(', ')}`
 		);
 	}
 }
@@ -4368,6 +4414,394 @@ const PAIR_STOCKS = {
 		const basicsCalls = [...page.matchAll(/filterBasics\(\{[\s\S]*?\}\)/g)].map((m) => m[0]);
 		if (basicsCalls.length < 2 || basicsCalls.some((c) => !/\bscript: SCRIPT_DOWNLOAD\b/.test(c))) problems.push(`${basicsCalls.filter((c) => !/\bscript: SCRIPT_DOWNLOAD\b/.test(c)).length} of ${basicsCalls.length} filterBasics calls without script: SCRIPT_DOWNLOAD`);
 		check('the script download hidden (SCRIPT_DOWNLOAD = false): both buttons and the paragraphs presenting the file inside {#if SCRIPT_DOWNLOAD}, the code that writes the script kept, every filterBasics call told whether it shows, no other mention on the page or the formula sheet', problems.length === 0, problems.join('; ') || `${hidden.length} blocks, ${basicsCalls.length} filterBasics calls`);
+	}
+}
+
+// ---------------------------------- 15. the list of designs ("Next design")
+// The page's "Next design" steps through the list of designs the search's
+// result carries (partSearch.js, result.designs), built the first time it
+// is asked for. Design 1 is the set the search picks, exactly as before the
+// list existed; after it come other sets that keep every limit the first
+// one keeps (the pair limit and the page's flag on a stage's spread of parts
+// among them) and meet the template, each set of values once (the same values
+// with other pairs are the same set), in the search's own order of
+// preference (designBetter, each against the one before it), each stage
+// rounded around the target the page reads it against (on the passband edge,
+// a stage the centred design's search rounded is read against that
+// design's: fromCentred). The page opens
+// on the passband edge, goes back to design 1 whenever an input changes and
+// hides the control while the parts past the limits are shown; the script's
+// DESIGN_INDEX, like lib-parts.mjs's designIndex, prints the design the page
+// shows.
+{
+	const { designBandPassTransformed, designBandStopTransformed } = await import('../src/lib/filter/stages.js');
+	const { componentOptions } = await import('../src/lib/stock.js');
+	const cascade = (topology) => ({ method: 'cascade', highpass: topology, lowpass: topology });
+	const stockOf = (name, pairs = false, limit = null) => {
+		const o = componentOptions(name, '', '', pairs, limit);
+		return { ...o, combinerR: Array.isArray(o.resistorSeries) ? nearestResistor(10000, o.resistorSeries) : 10000 };
+	};
+	const robert = (placement) => designBandPassTransformed({ response: 'butterworth', amaxDb: 3, aminDbLow: 40, aminDbHigh: 40, fl: 1000, fh: 10000, fsl: 300, fsh: 30000, placement });
+	const transformedMenus = (gbw) => ({ method: 'transformed', bandpass: 'mfb', notch: 'boctor', ...(gbw ? { gbw } : {}) });
+	const numbersOf = (s) => Object.entries(s.components).filter(([, v]) => typeof v === 'number');
+	// a set's values, stage by stage (its pairs left out: the same values with other pairs are the same set)
+	const valuesOf = (x) => JSON.stringify(x.stages.map(numbersOf));
+	// every limit a set breaks, as "stage kind": a resistor under 1 kohm or over 1 Mohm, a capacitor under 47 pF, an output's load under 2 kohm, and its alerts
+	const brokenOf = (x) => [
+		...x.stages.flatMap((s, i) =>
+			numbersOf(s).flatMap(([k, v]) => {
+				if (/^R/.test(k) && v < PART_R_FLOOR * (1 - 1e-9)) return [`${i} floor`];
+				if (/^R/.test(k) && v > PART_R_MAX * (1 + 1e-9)) return [`${i} ceiling`];
+				if (/^C/.test(k) && v < C_FLOOR * (1 - 1e-9)) return [`${i} cap`];
+				return [];
+			})
+		),
+		...x.loads.flatMap((l, i) => (l.load < PART_LOAD_MIN * (1 - 1e-9) ? [`${i} load`] : [])),
+		...x.alerts.map((a) => `${a.stage} ${a.kind}`)
+	];
+	// the page's flag on a stage's spread of parts (stageAlerts there): capacitors of a multiple feedback or
+	// Sallen-Key stage, resistors of a multiple feedback band-pass stage, past STAGE_SPREAD_MAX:1
+	const spreadOver = (s) => {
+		const values = s.topology === 'mfbBp' ? ['R1', 'R2', 'R3'].map((k) => s.components[k]) : s.topology === 'mfb' || s.topology === 'sallenKey' ? numbersOf(s).filter(([k, v]) => /^C/.test(k) && v > 0).map(([, v]) => v) : [];
+		return values.length > 1 && Math.max(...values) / Math.min(...values) > STAGE_SPREAD_MAX;
+	};
+	// the stages of the lists read against the centred design's (fromCentred), over every list checked
+	let centredSeen = 0;
+	/** Where a result's list of designs breaks its rules, for the design d searched with these settings; [] when it keeps them. */
+	const listProblems = (r, d, settings) => {
+		const D = r.designs;
+		const out = [];
+		const n = D.count();
+		let centred = null;
+		if (D.at(0) !== r || r.designIndex !== undefined || D.at(n) !== null || D.at(-1) !== null || D.judgeAt(n) !== null || n > 30 || D.ms === null) out.push(`the list's ends (${n} designs)`);
+		if (!D.more) {
+			// no list: the set shown misses the template or breaks a limit, and so does the alternative past them
+			if (n !== 1 || (r.withinLimits === true && r.measure.meets) || (r.alternative && (r.alternative.designs.count() !== 1 || r.alternative.designs.at(0) !== r.alternative))) out.push('a single design where a list was due');
+			return out;
+		}
+		if (r.withinLimits !== true || !r.measure.meets) out.push('a list for parts that miss or break the limits');
+		const kept = new Set(brokenOf(r));
+		const shortfalls = r.stages.filter((s) => s.stockShortfall).length;
+		const seen = new Set([valuesOf(r)]);
+		for (let i = 1; i < n; i++) {
+			const x = D.at(i);
+			const j = D.judgeAt(i);
+			const name = `design ${i + 1} of ${n}`;
+			if (!x || x !== D.at(i) || x.designIndex !== i || x.designs !== D || x.withinLimits !== true || x.alternative !== null || x.stages.length !== r.stages.length) {
+				out.push(`${name}: not a whole design of the list`);
+				continue;
+			}
+			// it meets the template, and its judge is its own
+			if (!x.measure.meets || !j || !j.meets || Math.abs(j.margin - x.measure.margin) > 1e-9) out.push(`${name}: meets ${x.measure.meets}, judged ${j?.margin} against ${x.measure.margin}`);
+			// every limit design 1 keeps, kept (a part, a load, an alert design 1 has not)
+			const broken = brokenOf(x).filter((k) => !kept.has(k));
+			if (broken.length) out.push(`${name}: breaks ${[...new Set(broken)].join(', ')}, which design 1 keeps`);
+			if (x.stages.some((s, k) => s.topology !== r.stages[k].topology)) out.push(`${name}: another circuit`);
+			if (x.stages.filter((s) => s.stockShortfall).length > shortfalls) out.push(`${name}: more stages off the stock`);
+			// the capacitors typed, kept wherever design 1 keeps them
+			for (const [k, caps] of Object.entries(settings.overrides ?? {})) {
+				const typed = Object.entries(caps);
+				if (typed.every(([c, v]) => r.stages[k].components[c] === v) && typed.some(([c, v]) => x.stages[k].components[c] !== v)) out.push(`${name}: stage ${Number(k) + 1}'s capacitors typed not kept`);
+			}
+			if (settings.pairLimit !== null && settings.pairLimit !== undefined) {
+				const used = x.stages.reduce((s, st) => s + filterPairCount(st, settings.resistorSeries), 0);
+				if (used > settings.pairLimit) out.push(`${name}: ${used} resistors two in series, over ${settings.pairLimit}`);
+			}
+			const key = valuesOf(x);
+			if (seen.has(key)) out.push(`${name}: the values of a design before it`);
+			seen.add(key);
+			// the order: none ranks ahead of the one before it (against design 1 no rule: rule 4, sensible values, may pick it over a set the order prefers)
+			if (i >= 2 && designBetter(j, D.judgeAt(i - 1))) out.push(`${name} ranks ahead of design ${i}`);
+			// no stage flagged as spread past STAGE_SPREAD_MAX:1 where design 1's same stage is not
+			x.stages.forEach((s, k) => {
+				if (spreadOver(s) && !spreadOver(r.stages[k])) out.push(`${name}: stage ${k + 1}'s parts spread past ${STAGE_SPREAD_MAX}:1, which design 1's do not`);
+			});
+			// Each stage against the target it was rounded around, as the page reads it (targetOf): its own, the
+			// edge design's (fromEdge) or, a design after the first on the passband edge, the centred design's
+			// (fromCentred). A multiple feedback stage's b = wn^2 and a Sallen-Key stage's capacitor ratio 4Q^2
+			// are that target's, so the stage math the page writes holds.
+			if (!Array.isArray(x.fromCentred) || (x.fromCentred.some(Boolean) && (d.placement?.mode ?? 'edge') !== 'edge')) out.push(`${name}: fromCentred ${JSON.stringify(x.fromCentred)} on a design placed ${d.placement?.mode}`);
+			x.stages.forEach((s, k) => {
+				if (x.fromCentred?.[k]) {
+					centredSeen++;
+					centred ??= designPlacedAs(d, 'centred');
+				}
+				const t = x.fromEdge[k] ? edgeDesignOf(d)?.stages[k] : x.fromCentred?.[k] ? centred?.stages[k] : d.stages[k];
+				const mfb = (s.topology === 'mfb' || s.topology === 'mfbHp') && Number.isFinite(s.steps?.b);
+				const sk = s.topology === 'sallenKey' && Number.isFinite(s.steps?.ratio);
+				if (!t || (mfb && Math.abs(s.steps.b / (t.wn * t.wn) - 1) > 1e-9) || (sk && Math.abs(s.steps.ratio / (4 * t.q * t.q) - 1) > 1e-9)) out.push(`${name}: stage ${k + 1} not rounded around the target it is read against`);
+			});
+		}
+		// design 2 and the last, measured again as the page measures parts
+		for (const i of new Set([1, n - 1])) {
+			const x = D.at(i);
+			if (!x) continue;
+			const m = measureFilter(x.stages, d, { combinerR: settings.combinerR ?? 10000, resistorSeries: settings.resistorSeries ?? 'E24', sourceR: settings.sourceR ?? 0 });
+			if (Math.abs(m.margin - x.measure.margin) > 1e-9 || m.meets !== x.measure.meets) out.push(`design ${i + 1}: measured again ${m.margin.toFixed(4)} against ${x.measure.margin.toFixed(4)} dB`);
+		}
+		return out;
+	};
+	const lengths = (counts) => {
+		const s = [...counts].sort((a, b) => a - b);
+		return `${s.filter((c) => c >= 10).length} of ${s.length} with 10 or more, median ${s[Math.floor(s.length / 2)] ?? '-'}, fewest ${s[0] ?? '-'}`;
+	};
+
+	// (a) Every default case of the page (low-pass, high-pass, the band-pass
+	// both ways with the three op-amps, the band-stop both ways; E24, E96, the
+	// lab kit and the lab resistors; both placements; no source and 50 ohm):
+	// the search builds no list (its ms null until asked for); the set shown
+	// is exactly 941274e's, before the list existed (the fingerprint of its
+	// parts, margin, alerts, picks and limits given way, and of the set past
+	// the limits it offers, taken from that commit); design 1 is that result
+	// itself; and the list keeps its rules. There is a list wherever the set
+	// shown meets the template within the limits (124 of the 128 cases): 117
+	// of them hold 10 designs or more (Nov 2026), the high-pass on the lab
+	// resistors (3 to 6) and the band-stop transformed on E24 (3 to 5, 13
+	// centred with the source) fewer, their stock and limits leaving few
+	// sets; the band-stop transformed on
+	// the edge on the lab kit and the lab resistors misses within the limits
+	// and has none (the set past them is offered instead)
+	{
+		const SHOWN_BEFORE = 'd19a095f1d696757';
+		const LP = { response: 'butterworth', amaxDb: 3, aminDb: 40, fp: 10000, fs: 35000, order: null };
+		const BP = { response: 'butterworth', amaxDb: 3, aminDb: 40, fl: 1000, fh: 10000, fsl: 300, fsh: 30000 };
+		const BS = { response: 'butterworth', amaxDb: 3, aminDb: 40, fl: 1000, fh: 30000, fsl: 3000, fsh: 10000 };
+		const designs = [
+			['low-pass', (p) => designLowPass({ ...LP, placement: p }), cascade('mfb')],
+			['high-pass', (p) => designHighPass({ ...LP, fs: 3000, placement: p }), cascade('mfb')],
+			['band-pass cascade', (p) => designBandPass({ ...BP, placement: p }), cascade('mfb')],
+			['band-pass transformed, TL082', robert, transformedMenus(OPAMP_GBW.TL082)],
+			['band-pass transformed, LM741', robert, transformedMenus(OPAMP_GBW.LM741)],
+			['band-pass transformed, ideal', robert, transformedMenus(null)],
+			['band-stop of two branches', (p) => designBandStop({ ...BS, placement: p }), cascade('mfb')],
+			['band-stop transformed', (p) => designBandStopTransformed({ ...BS, placement: p }), transformedMenus(null)]
+		];
+		const rows = [];
+		const problems = [];
+		const counts = [];
+		const none = [];
+		const built = [];
+		for (const [label, make, menus] of designs) {
+			for (const stock of ['E24', 'E96', 'lab', 'labR']) {
+				for (const placement of ['edge', 'centred']) {
+					for (const sourceR of [0, SOURCE_R_DEFAULT]) {
+						const d = make(placement);
+						const settings = { menus, ...stockOf(stock), sourceR };
+						const r = searchFilterParts(d, settings);
+						const name = `${label} ${stock} ${placement} ${sourceR} ohm`;
+						const shown = (x) => JSON.stringify([x.stages.map((s) => s && s.components), Number(x.measure.margin.toPrecision(12)), x.alerts.map((a) => [a.stage, a.kind]), x.withinLimits, x.picks, x.relaxed]);
+						rows.push(`${shown(r)}|${r.alternative ? shown(r.alternative) : '-'}`);
+						if (r.designs.more && r.designs.ms !== null) built.push(name);
+						for (const p of listProblems(r, d, settings)) problems.push(`${name}: ${p}`);
+						if (r.designs.more) counts.push(r.designs.count());
+						else none.push(`${label} ${stock} ${placement}`);
+					}
+				}
+			}
+		}
+		const print = createHash('sha256').update(rows.join('\n')).digest('hex').slice(0, 16);
+		// (the high-pass on the lab resistors on the edge takes stages the centred design's search rounded: read against those)
+		check(
+			`the list of designs, ${rows.length} default cases of the page: the search builds none, design 1 is the set shown exactly as before the list existed, and every list keeps its rules (each design within every limit design 1 keeps, meeting the template, its values its own, no stage's parts spread past ${STAGE_SPREAD_MAX}:1 where design 1's are not, each stage rounded around the target the page reads it against, the centred design's among them, none ranked ahead of the one before it)`,
+			print === SHOWN_BEFORE && built.length === 0 && problems.length === 0 && counts.length >= 120 && counts.filter((c) => c >= 10).length >= 110 && centredSeen >= 1,
+			`${print === SHOWN_BEFORE ? 'as before' : `${print}, expected ${SHOWN_BEFORE}`}${built.length ? `; built by the search: ${built[0]}` : ''}${problems.length ? `; ${problems.slice(0, 3).join('; ')}` : ''}; lists: ${lengths(counts)}; none: ${[...new Set(none)].join(', ') || 'none'}; stages read against the centred design: ${centredSeen}`
+		);
+	}
+
+	// (b) A sample of 36 specs, each on both placements (every type, both
+	// band methods, every response, seven stocks with pairs and their limits,
+	// the three topologies and both notch circuits, no source, 50 and 600
+	// ohm), and the capacitors typed by hand (the default low-pass on the lab
+	// kit with 100 nF / 4.7 nF and 47 nF / 1 nF, which need resistors under
+	// the floor, flagged; the elliptic Tow-Thomas low-pass with 10 nF): every
+	// list keeps the same rules, the capacitors typed and the pair limit with
+	// them (the search keeps "Up to N pairs" in every set it picks, so the
+	// list does too). About 32 of the 76 have a list, the others missing the
+	// template within the limits
+	{
+		const LIMITS = { butterworth: [3, 40, 3.5], chebyshev: [1, 50, 2], legendre: [2, 40, 2.5], bessel: [3, 30, 4], inverseChebyshev: [1, 50, 1.8], elliptic: [0.5, 60, 1.4] };
+		const ZEROS = { inverseChebyshev: true, elliptic: true };
+		const STOCKS = [['E24', false, null], ['E96', false, null], ['lab', false, null], ['labR', false, null], ['lab', true, null], ['lab', true, 2], ['labR', true, 1]];
+		const runs = [];
+		let k = 0;
+		for (const type of ['lowpass', 'highpass', 'bandpass', 'bandstop', 'bandpassT', 'bandstopT']) {
+			RESPONSE_KEYS.forEach((response, j) => {
+				const [amaxDb, aminDb, ratio] = LIMITS[response];
+				const [stock, pairs, limit] = STOCKS[k % STOCKS.length];
+				const topo = ZEROS[response] ? ['towThomas', 'boctor'][k % 2] : ['mfb', 'sallenKey', 'towThomas'][k % 3];
+				const sourceR = [0, SOURCE_R_DEFAULT, 600][k % 3];
+				k++;
+				const notch = ZEROS[response] ? ['towThomas', 'boctor'][j % 2] : 'boctor';
+				const make = (placement) => {
+					if (type === 'lowpass') return designLowPass({ response, amaxDb, aminDb, fp: 10000, fs: 10000 * ratio, order: null, placement });
+					if (type === 'highpass') return designHighPass({ response, amaxDb, aminDb, fp: 10000, fs: 10000 / ratio, order: null, placement });
+					if (type === 'bandpass') return designBandPass({ response, amaxDb, aminDb, fl: 1000, fh: 10000, fsl: 1000 / ratio, fsh: 10000 * ratio, placement });
+					if (type === 'bandstop') return designBandStop({ response, amaxDb, aminDb, fl: 1000, fh: 30000, fsl: 1000 * ratio, fsh: 30000 / ratio, placement });
+					if (type === 'bandpassT') return designBandPassTransformed({ response, amaxDb, aminDbLow: aminDb, aminDbHigh: aminDb, fl: 40000, fh: 60000, fsl: 40000 / (1 + ratio / 4), fsh: 60000 * (1 + ratio / 4), placement });
+					return designBandStopTransformed({ response, amaxDb, aminDb, fl: 9000, fh: 11500, fsl: 9000 * (1 + 0.04 * ratio), fsh: 11500 / (1 + 0.04 * ratio), placement });
+				};
+				const menus = type.endsWith('T') ? { method: 'transformed', bandpass: j % 2 ? 'towThomas' : 'mfb', notch, ...(type === 'bandpassT' && j % 2 === 0 ? { gbw: OPAMP_GBW.TL082 } : {}) } : cascade(topo);
+				runs.push([`${type} ${response} ${stock}${pairs ? ` pairs${limit ? ` N=${limit}` : ''}` : ''} ${sourceR} ohm`, make, { menus, ...stockOf(stock, pairs, limit), sourceR }]);
+			});
+		}
+		const typedLp = { 0: { C1: 1e-7, C2: 4.7e-9 }, 1: { C1: 4.7e-8, C2: 1e-9 } };
+		runs.push(['low-pass, lab kit, 100 nF / 4.7 nF and 47 nF / 1 nF typed', (p) => designLowPass({ response: 'butterworth', amaxDb: 3, aminDb: 40, fp: 10000, fs: 35000, order: null, placement: p }), { menus: cascade('mfb'), ...stockOf('lab'), overrides: typedLp }]);
+		runs.push(['elliptic low-pass, Tow-Thomas, lab kit, 10 nF typed', (p) => designLowPass({ response: 'elliptic', amaxDb: 1, aminDb: 40, fp: 10000, fs: 20000, order: null, placement: p }), { menus: cascade('towThomas'), ...stockOf('lab'), overrides: { 0: { C: 1e-8 } } }]);
+		const problems = [];
+		const counts = [];
+		let typedKept = 0;
+		for (const [label, make, settings] of runs) {
+			for (const placement of ['edge', 'centred']) {
+				const d = make(placement);
+				const r = searchFilterParts(d, settings);
+				if (r.stages.some((s) => !s)) continue;
+				for (const p of listProblems(r, d, settings)) problems.push(`${label} ${placement}: ${p}`);
+				if (!r.designs.more) continue;
+				counts.push(r.designs.count());
+				if (settings.overrides && r.designs.count() > 1) typedKept++;
+			}
+		}
+		// and the page's cases the files are checked on (lib-parts.mjs), a pair limit of 2 among them
+		for (const [label, spec] of PAGE_CASES) {
+			for (const placement of ['edge', 'centred']) {
+				const page = pageParts({ ...spec, placement });
+				if (page.found.stages.some((s) => !s)) continue;
+				for (const p of listProblems(page.found, page.design, page.settings)) problems.push(`${label} ${placement}: ${p}`);
+				if (page.found.designs.more) counts.push(page.found.designs.count());
+			}
+		}
+		check(
+			`the list of designs, a sample of ${runs.length} specs and the ${PAGE_CASES.length} page cases of lib-parts.mjs, on both placements (every type and response, the stocks with pairs and their limits, sources of 0 to 600 ohm, capacitors typed): every list keeps its rules, the capacitors typed and the pair limit too`,
+			problems.length === 0 && counts.length >= 50 && typedKept >= 1,
+			`${problems.length ? `${problems.slice(0, 3).join('; ')}; ` : ''}lists: ${lengths(counts)}; with capacitors typed: ${typedKept}`
+		);
+	}
+
+	// (c) The page (its source, as (14 i) reads it): it opens on the passband
+	// edge with the "Place the design" menu kept; the parts shown are the
+	// design of the list at designIndex unless the parts past the limits are;
+	// the choice goes back to design 1 (and the parts within the limits) on
+	// any change to the inputs, in the effect that resets showPast; every
+	// "Next design" button sits in a block that the parts past the limits
+	// close; and the hidden script is handed the design index
+	{
+		const { readFileSync } = await import('node:fs');
+		const page = readFileSync(new URL('../src/routes/(site)/tools/filter-design/+page.svelte', import.meta.url), 'utf8');
+		const markup = page.slice(page.lastIndexOf('</script>'));
+		const problems = [];
+		if (!/^\tlet placement = \$state\('edge'\);/m.test(page)) problems.push('placement does not start on the edge');
+		if (!/<select id="placement" bind:value=\{placement\}>/.test(markup) || !/<option value="edge">/.test(markup) || !/<option value="centred">/.test(markup)) problems.push('the "Place the design" menu and its two choices');
+		if (!/const parts = \$derived\(showPast && found\?\.alternative \? found\.alternative : designIndex > 0 \? \(found\.designs\??\.at\(designIndex\) \?\? found\) : found\);/.test(page)) problems.push('the parts shown are not the design of the list at designIndex');
+		// (the effect that resets the choice on a new search request: both back at once)
+		const reset = [...page.matchAll(/\$effect\(\(\) => \{([\s\S]*?)\n\t\}\);/g)].map((m) => m[1]).find((body) => /void partRequestKey;/.test(body));
+		if (!reset || !/showPast = false;/.test(reset) || !/designIndex = 0;|designPick = \{[^}]*\bindex: 0\b/.test(reset)) problems.push('the reset on a change to the inputs');
+		// the stretches of markup inside an {#if} that the parts past the limits close: its condition (no "or")
+		// asks for them not shown, itself or through a $derived that does
+		const closers = [...page.matchAll(/^\tconst (\w+) = \$derived\((.*)\);$/gm)].filter(([, , body]) => /!pastShown\b|!showPast\b/.test(body) && !/\|\|/.test(body)).map(([, name]) => name);
+		const closes = (cond) => !/\|\|/.test(cond) && (/!pastShown\b|!showPast\b/.test(cond) || closers.some((name) => new RegExp(`(^|[^!\\w.])${name}\\b`).test(cond)));
+		const blocks = [];
+		const stack = [];
+		for (const m of markup.matchAll(/\{#if\b[^}]*\}|\{:else\b[^}]*\}|\{\/if\}/g)) {
+			if (m[0].startsWith('{#if')) stack.push({ closes: closes(m[0].slice(4, -1)), from: m.index });
+			else if (m[0].startsWith('{:else')) {
+				const open = stack[stack.length - 1];
+				if (open?.closes) blocks.push([open.from, m.index]);
+				if (open) open.closes = false;
+			} else {
+				const open = stack.pop();
+				if (open?.closes) blocks.push([open.from, m.index]);
+			}
+		}
+		const buttons = [...markup.matchAll(/>\s*Next design\s*</g)].map((m) => m.index);
+		if (!buttons.length) problems.push('no "Next design" button');
+		if (buttons.some((i) => !blocks.some(([a, b]) => i > a && i < b))) problems.push('a "Next design" button the parts past the limits leave shown');
+		// a stage of a design after the first on the edge that the centred design's search rounded is read against that design's stage
+		if (!/const centredTwin = \$derived\(parts\?\.fromCentred\?\.some\(Boolean\) \? designPlacedAs\(rd, 'centred'\) : null\);/.test(page) || !/const targetOf = [^\n]*parts\?\.fromCentred\?\.\[i\] && centredTwin\?\.stages\[i\] \? centredTwin\.stages\[i\]/.test(page)) problems.push('a stage rounded around the centred design not read against it');
+		// the count of the design shown is read out as it changes
+		if (!/class="design-count" aria-live=/.test(markup)) problems.push('the count of the design shown is no live region');
+		// the script follows the design shown
+		const call = /generateScript\(\{[\s\S]*?\}\);/.exec(page.slice(page.indexOf('function downloadScript()')))?.[0] ?? '';
+		if (!/\bdesignIndex\b/.test(call)) problems.push('the script is not handed the design index');
+		check('the page: it opens on the passband edge (the menu kept), shows the design of the list at designIndex unless the parts past the limits are shown, goes back to design 1 on any change to the inputs, keeps "Next design" out of sight with the parts past the limits, reads a stage rounded around the centred design against it, reads out the count, and hands the design index to the script', problems.length === 0, problems.join('; ') || `${buttons.length} "Next design" button${buttons.length === 1 ? '' : 's'}, closed by ${closers.join(', ') || 'its own condition'}`);
+	}
+
+	// (d) The script's DESIGN_INDEX: written as asked, and the script prints
+	// the parts, response, verdict and notes of the design the page shows
+	// (lib-parts.mjs with designIndex) for designs 1, 2 and the last of the
+	// list, both placements, with pairs and with a pair limit, a 50 ohm and a
+	// 600 ohm source (the band-stop's shared node), the LM741, and on the edge
+	// a design whose stages the centred design's search rounded (each printed
+	// against that design's stage, saying so); past the end of the list it
+	// prints design 1, and with the parts past the limits shown those; the
+	// script for design 2 is told apart from the page's design 1
+	{
+		const dir = mkdtempSync(join(tmpdir(), 'rbt56-designs-'));
+		const run = (name, code) => {
+			const file = join(dir, `${name.replace(/\W+/g, '-')}.js`);
+			writeFileSync(file, code);
+			try {
+				return execFileSync(process.execPath, [file], { encoding: 'utf8', stdio: 'pipe' });
+			} catch (e) {
+				return `${e.stdout ?? ''}ERROR ${e.stderr || e.message}`;
+			}
+		};
+		const base = { order: null, orderHp: null, orderLp: null, capOverrides: {} };
+		const picked = ['low-pass, Sallen-Key, lab kit, pairs', 'narrow band-pass transformed, TL082, lab kit, 2 pairs', 'the default band-pass, transformed, MFB for the LM741, lab kit, 50 ohm source', 'band-stop of two branches, Tow-Thomas, lab resistors, 600 ohm source', 'band-stop transformed, Boctor, lab kit, 50 ohm source, past the limits'];
+		const problems = [];
+		const rows = [];
+		let scripts = 0;
+		let past = 0;
+		let control = null;
+		let centredRuns = 0;
+		for (const label of picked) {
+			const spec = PAGE_CASES.find(([l]) => l === label)?.[1];
+			if (!spec) {
+				problems.push(`no page case "${label}"`);
+				continue;
+			}
+			for (const placement of ['edge', 'centred']) {
+				const args = { ...base, ...spec, placement };
+				const found = pageParts(args).found;
+				const count = found.designs.count();
+				// (on the edge, the first design with a stage the centred design's search rounded, where the list holds one)
+				const centredAt = placement === 'edge' ? Array.from({ length: count }, (_, i) => i).find((i) => found.designs.at(i)?.fromCentred?.some(Boolean)) : undefined;
+				const indices = [...new Set([0, 1, count - 1, ...(centredAt === undefined ? [] : [centredAt])])];
+				// past the end of the list, once
+				if (label === picked[0] && placement === 'edge') indices.push(count + 1);
+				for (const designIndex of indices) {
+					const a = { ...args, designIndex };
+					const code = generateScript(a);
+					if (!new RegExp(`^const DESIGN_INDEX = ${designIndex};`, 'm').test(code)) problems.push(`${label} ${placement}: DESIGN_INDEX not written as ${designIndex}`);
+					const out = run(`${label} ${placement} ${designIndex}`, code);
+					const page = pageParts(a);
+					scripts++;
+					const wrong = partsProblems(out, page);
+					if (wrong.length) problems.push(`${label} ${placement} design ${designIndex + 1}: ${wrong[0]}`);
+					const shown = page.result.designIndex ?? 0;
+					if (shown > 0 && !out.includes(`design ${shown + 1} of ${count} (DESIGN_INDEX = ${designIndex})`)) problems.push(`${label} ${placement}: no line for design ${shown + 1} of ${count}`);
+					if (designIndex > 0 && shown === 0) {
+						past++;
+						if (page.result === page.found && designIndex < count) problems.push(`${label} ${placement}: design ${designIndex + 1} of ${count} not shown`);
+						if (!/^DESIGN_INDEX = \d+: /m.test(out)) problems.push(`${label} ${placement}: no line for DESIGN_INDEX = ${designIndex} not shown`);
+					}
+					// the script for design 2 against the page's design 1: told apart
+					if (designIndex === 1 && shown === 1 && control === null) control = partsProblems(out, pageParts(args)).length > 0;
+					// a stage rounded around the centred design is printed against it, and says so
+					const centredStages = page.result.fromCentred?.filter(Boolean).length ?? 0;
+					if (centredStages) {
+						centredRuns++;
+						const said = out.split('rounded around this stage of the same design centred in its template').length - 1;
+						if (said !== centredStages) problems.push(`${label} ${placement} design ${shown + 1}: ${said} stages printed as rounded around the centred design, against ${centredStages}`);
+					}
+				}
+				rows.push(`${label.split(',')[0]} ${placement} ${count}`);
+			}
+		}
+		check(
+			`the script's DESIGN_INDEX: ${scripts} scripts print the parts, response, verdict and notes of the design the page shows (designs 1, 2 and the last, both placements, pairs and a pair limit, sources of 50 and 600 ohm, and on the edge a design with stages rounded around the centred design, printed against it), design 1 past the end of the list and the parts past the limits when they are shown, and design 2 is told apart from design 1`,
+			problems.length === 0 && control === true && past >= 2 && scripts >= 25 && centredRuns >= 1,
+			problems.length ? problems.slice(0, 3).join('; ') : `designs in the lists: ${rows.join(', ')}; with stages rounded around the centred design: ${centredRuns}`
+		);
 	}
 }
 

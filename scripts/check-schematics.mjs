@@ -400,7 +400,9 @@ console.log();
 	// (lib-parts.mjs, the set past the limits and a source resistance among
 	// them) and of a sweep of low-pass and high-pass designs, every response
 	// and topology, each stock, both placements, drawn as the page draws it
-	// (a stage on the full grid without pair labels)
+	// (a stage on the full grid without pair labels); and for the page's
+	// settings, every design of the list "Next design" steps through
+	// (designIndex), whose values can sit further from the first set's
 	const { PAGE_CASES, pageParts } = await import('./lib-parts.mjs');
 	const drawAny = (d, opts) => (d.topology === 'boctor' || d.topology === 'boctorHp' ? buildBoctorDiagram(d.components, { ...opts, highPass: d.topology === 'boctorHp' }) : draw(d, opts));
 	const PAGE_SWEEP = [];
@@ -431,7 +433,11 @@ console.log();
 		});
 	};
 	for (const placement of ['edge', 'centred']) {
-		for (const [label, spec] of PAGE_CASES) addPage(`filter/page ${label} ${placement}`, { ...spec, placement });
+		for (const [label, spec] of PAGE_CASES) {
+			addPage(`filter/page ${label} ${placement}`, { ...spec, placement });
+			const count = pageParts({ ...spec, placement }).found.designs.count();
+			for (let designIndex = 1; designIndex < count; designIndex++) addPage(`filter/page ${label} ${placement} design ${designIndex + 1}`, { ...spec, placement, designIndex });
+		}
 		for (const [sn, parts] of STOCKS) {
 			const stock = { resistorStock: parts.resistorSeries, capacitorStock: parts.capacitors, resistorPairs: parts.pairs };
 			for (const response of ['butterworth', 'chebyshev', 'legendre', 'bessel', 'inverseChebyshev', 'elliptic']) {

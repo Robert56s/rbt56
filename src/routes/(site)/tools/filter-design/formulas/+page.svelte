@@ -1669,9 +1669,10 @@
 			The order is a whole number, so it usually does more than the spec asks. Between the design
 			that loses exactly Amax at the passband edge and the one that loses exactly Amin at the
 			stopband edge there is room for one free parameter. "Place the design" picks a point in it:
-			on the passband edge (the textbook way, all the room to the stopband), or centred, the
-			geometric middle, so that the ideal design keeps a margin at both edges for rounding and part
-			tolerances. A band filter places each side, or its prototype, in its own template.
+			on the passband edge (the textbook way and the page's default, all the room to the stopband),
+			or centred, the geometric middle, so that the ideal design keeps a margin at both edges for
+			rounding and part tolerances. A band filter places each side, or its prototype, in its own
+			template.
 		</p>
 
 		<div class="formula">
@@ -1748,7 +1749,10 @@
 				signal the filter passes there: an output that swings less than the input draws less current,
 				and counts as the resistor that would draw as much at full swing. The best set within the
 				limits is kept even when it misses the template. When it misses and a set past the limits
-				meets it, that set is offered too, flagged.
+				meets it, that set is offered too, flagged. When it meets, "Next design" steps through the
+				other sets that keep the limits and meet the template, in the same order. A stage of one of
+				them may be rounded around the targets of the same design placed the other way, and its table
+				then reads it against those.
 			</p>
 			<p class="note">
 				<strong>How to use:</strong> the passband verdict reads the worst loss anywhere in the

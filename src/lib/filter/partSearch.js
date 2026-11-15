@@ -76,6 +76,16 @@ import { designTowThomasBandPass, designTowThomasBandPassFromCap, designTowThoma
  * function generator's 50 ohm): every set is then measured with it on the
  * input node, by nodal analysis of that node (the source section below),
  * and the stages on it are searched with it.
+ * The result also carries the list of designs the page's "Next design"
+ * steps through (designs, the list of designs below): the set chosen first,
+ * then the other sets the search judged or came near (the states its beams
+ * ended with, every set its moves reached, the sets one stage away from the
+ * set chosen; where those are few, two stages away and the sets of the same
+ * design placed the other way) that keep the limits, the pair limit and
+ * every flag the set chosen keeps, and meet the template, in the order of
+ * preference. It is built only when first asked for, from
+ * what the search leaves it (its sets as lists of built stages, never its
+ * pools): the search itself does next to nothing more for it.
  */
 
 /**
@@ -916,12 +926,15 @@ function psLoadFloors(stagesAhead, freqsAt, lpCount, source = null) {
 		}
 		return factors.get(freqs);
 	};
+	// (|H before| carried from one stage to the next along its branch: the same products, in the same order, as
+	// the stages ahead taken again from the branch's start for every stage)
+	let before = null;
 	for (let i = 0; i < n; i++) {
 		const freqs = freqsAt(i);
 		const first = lpCount !== null && i >= lpCount ? lpCount : 0;
-		const before = source ? Float64Array.from(sourceSize(freqs)) : new Float64Array(freqs.length).fill(1);
-		for (let j = first; j < i; j++) {
-			const size = psSizeAt(stagesAhead[j], freqs);
+		if (i === first) before = source ? Float64Array.from(sourceSize(freqs)) : new Float64Array(freqs.length).fill(1);
+		else {
+			const size = psSizeAt(stagesAhead[i - 1], freqs);
 			for (let k = 0; k < freqs.length; k++) before[k] *= size[k];
 		}
 		floors[i] = Float64Array.from(before, (h) => 1 / Math.max(h, 1e-12));
@@ -1662,6 +1675,10 @@ function psBetter(a, b) {
 	return a.pairs < b.pairs;
 }
 const psOrder = (a, b) => (psBetter(a.judge, b.judge) ? -1 : psBetter(b.judge, a.judge) ? 1 : 0);
+/** Whether design a ranks ahead of design b in the order of preference, from their judges (a list's judgeAt, see searchFilterParts). */
+export function designBetter(a, b) {
+	return psBetter(a, b);
+}
 
 /**
  * Rule 4, sensible values, against thresholds thr = { capped, dev }: a set
@@ -1914,11 +1931,13 @@ function psLoadOk(prev, c) {
  * `cross` holds, per stage, whether its pick must
  * leave the one before it PART_LOAD_MIN (false where no two candidates can):
  * a set that does not is kept, but ranks below every set that does.
- * Returns { solutions, finals }: the best solution of each pair count
+ * Returns { solutions, finals, ends }: the best solution of each pair count
  * [{ picks, judge }] after the moves, and the first PS_BEAM_FINALS states
  * of each pair count the beam ends with (judged on the grid, where sets of
  * nearly the same room can rank the wrong way round: the caller judges
- * them all on the page's measure); both [] when no set fits.
+ * them all on the page's measure); all [] when no set fits. ends holds the
+ * picks of every state the beam ends with, for the list of designs
+ * (psDesignList), which judges them only when it is asked for.
  */
 function psBeam(pools, E, ctx) {
 	const { limit, width, cross } = ctx;
@@ -1942,7 +1961,7 @@ function psBeam(pools, E, ctx) {
 				next.push({ st, k, pairs, short, viol, judge });
 			}
 		}
-		if (!next.length) return { solutions: [], finals: [] };
+		if (!next.length) return { solutions: [], finals: [], ends: [] };
 		const buckets = new Map();
 		for (const x of next) {
 			const key = Math.min(x.pairs, PS_PAIR_COUNTS + 1);
@@ -1969,7 +1988,8 @@ function psBeam(pools, E, ctx) {
 		seen.set(key, (seen.get(key) ?? 0) + 1);
 		return seen.get(key) <= PS_BEAM_FINALS;
 	});
-	return { solutions, finals };
+	// (the picks alone: the states' sums are let go)
+	return { solutions, finals, ends: states.map((st) => st.picks) };
 }
 /** How many of the states the beam ends with, per pair count, are judged on the page's measure too. */
 const PS_BEAM_FINALS = 2;
@@ -1978,11 +1998,14 @@ const PS_BEAM_FINALS = 2;
  * One- and two-stage moves from a solution while they improve it, within
  * the pair budget and the load rule, in the order of preference or, with
  * ctx.better, in that one (the judges then carry the set's level too).
+ * With ctx.trail (an array), every set a move reaches goes on it as
+ * { pools, picks }, for the list of designs (psDesignList).
  */
 function psDescend(sol, pools, E, ctx) {
 	const { budget, cross, moves } = ctx;
 	const better = ctx.better ?? psBetter;
 	const order = ctx.order ?? null;
+	const trail = ctx.trail ?? null;
 	const n = pools.length;
 	let picks = sol.picks;
 	let cur = { ...sol.judge, level: psLevelOf(picks.map((k, i) => pools[i][k].level)) };
@@ -2032,6 +2055,8 @@ function psDescend(sol, pools, E, ctx) {
 		short = judge.short;
 		viol = judge.viol;
 		st = E.prepare(picks);
+		// (picks is a new array at every move: kept as it is)
+		if (trail) trail.push({ pools, picks });
 	};
 	for (let sweep = 0; sweep < 6; sweep++) {
 		let improved = false;
@@ -2561,6 +2586,41 @@ export function placedOpampCount(design, menus) {
  *   ms         the time it took
  *   alternatives, designerPicks  every set judged and the designers' picks,
  *              for the search of the same design placed off the edge
+ *   designs    the designs a "Next design" button steps through, built the
+ *              first time they are asked for (count, at past 0, judgeAt) and
+ *              kept with the result:
+ *                count()     how many there are, this one among them: 1
+ *                            where there is no other (no search, a stage
+ *                            not built, parts that miss the template or keep
+ *                            no limit, and on the alternative)
+ *                at(i)       design i, from 0, as a whole result in this
+ *                            shape (stages, measure, baseline, ideal, picks,
+ *                            relaxed, alerts, loads, pairPlan, sourceR,
+ *                            source, fromEdge, edgeOnly, withinLimits true,
+ *                            alternative null), with fromCentred (per stage,
+ *                            on the passband edge, true for one the search of
+ *                            the same design centred in its template rounded
+ *                            around its own targets: designPlacedAs(design,
+ *                            'centred').stages[i] is its target), designs
+ *                            (this same list), designIndex i and ms the time
+ *                            it took (the list's build with it, the first
+ *                            time); at(0) is this result itself (no
+ *                            designIndex, no fromCentred), null past the end
+ *                judgeAt(i)  the figures design i is ranked by (pass, stop,
+ *                            margin, meets, capped, dev, pairs, short,
+ *                            level), for designBetter; null where there is
+ *                            no list
+ *                more        whether there can be another design at all,
+ *                            known without building the list
+ *                ms          the time the list took to build (null before)
+ *              Design 0 is the set chosen (rule 4 included); after it, the
+ *              other sets the search judged or came near that keep every
+ *              limit as it has them (and the capacitors typed, the pair
+ *              limit, and the spread of each stage's parts the page flags
+ *              wherever design 0 has no such flag) and meet the template,
+ *              each once by its values (the same values with other pairs are
+ *              the same set), in the order of preference, up to
+ *              PS_DESIGNS_MOST in all (psDesignsRanked)
  * The result is remembered for the same design and settings, and shared:
  * read it, copy it to change it.
  */
@@ -2591,7 +2651,6 @@ function psSearchFilter(design, settings) {
 	const rs = sourceR;
 	const sourceIdx = rs > 0 ? psSourceInputs(template, n) : [];
 	const realOpts = rs > 0 ? { ...measureOpts, sourceR: rs } : measureOpts;
-	const sourceOf = (list) => (rs > 0 ? { rs, inputs: sourceIdx.map((i) => list[i]) } : null);
 
 	// A design placed off the passband edge searches the parts of the same
 	// design on the edge too (its twin): the page's parts before the placement
@@ -2623,7 +2682,7 @@ function psSearchFilter(design, settings) {
 	const baselineFor = (lim) => (lim === null ? stages.map((_, i) => pick(i, pairs)) : planFilterPairs(targetStages, (i, p) => pick(i, p), resistorSeries, lim).stages.map((s) => s.design));
 	const baseline = baselineFor(limit);
 	const empty = { measure: null, baseline: { stages: baseline, measure: null }, ideal: null, picks: [], relaxed: [], alerts: [], loads: [], pairPlan: null, alternative: null, sourceR: rs, source: null };
-	if (baseline.some((s) => !s)) return { ...empty, stages: baseline, fromEdge: [], edgeOnly, withinLimits: null, ms: Date.now() - t0 };
+	if (baseline.some((s) => !s)) return psOnlyDesign({ ...empty, stages: baseline, fromEdge: [], edgeOnly, withinLimits: null, ms: Date.now() - t0 });
 	const baselineMeasure = measureFilter(baseline, design, realOpts);
 	const idealStages = stages.map((s, i) => psIdealStage(s, baseline[i]));
 	const idealMeasure = measureFilter(idealStages, design, measureOpts);
@@ -2634,25 +2693,17 @@ function psSearchFilter(design, settings) {
 	const peaksOf = (from, to) => targetStages.slice(from, to);
 	const branchFreqs = lpCount !== null ? [psLoadFrequencies(template, 0, peaksOf(0, lpCount)), psLoadFrequencies(template, 1, peaksOf(lpCount, n))] : null;
 	const freqs = branchFreqs ? null : psLoadFrequencies(template, null, peaksOf(0, n));
-	const freqsAt = (i) => (branchFreqs ? branchFreqs[i < lpCount ? 0 : 1] : freqs);
+	// What a set of parts is measured, judged and built with (psKit): light
+	// figures only, filled in as the search goes, and kept by the list of
+	// designs the result carries (psDesignList), which builds its sets later.
+	const share = { design, template, n, lpCount, branchFreqs, freqs, overrides, rs, sourceIdx, realOpts, combinerR, resistorSeries, limit, edgeOnly, baseline, baselineMeasure, ideal, t0 };
+	const kit = psKit(share);
+	const { freqsAt, terminalOf, alertsOf, finish } = kit;
 	// (the pools read every stage as an ideal source drives the filter: the source only ever lowers the input node,
 	// |F| <= 1 but for a few hundredths where an input takes a negative real current, so a pick that keeps its loads
 	// there keeps them with it too, whatever stage on the input node it ends up with)
 	const floors = psLoadFloors(idealStages, freqsAt, lpCount);
-	// what the summing amplifier of a parallel band-stop puts on each branch's end, from its resistors
-	const terminalOf = (combiner) => (i) => (lpCount !== null && combiner && (i === lpCount - 1 || i === n - 1) ? psTerminalY(combiner, i === n - 1 ? 1 : 0) : null);
-	// (a set of parts read with its own stages ahead of each)
-	const alertsOf = (list, combiner) => psAlerts(list, template, freqsAt, psLoadFloors(list, freqsAt, lpCount, sourceOf(list)), terminalOf(combiner), overrides);
-	// the source on the input node: its stages' figures with it, and its factor there (none for an ideal source)
-	const sourceInfo = (list) => filterSource(list, design, { sourceR: rs, template });
-	const finish = (chosen, picks, pairPlan) => {
-		const measure = chosen === baseline ? baselineMeasure : measureFilter(chosen, design, realOpts);
-		const { alerts, loads } = alertsOf(chosen, measure.combiner);
-		// where the limits gave way: a resistor under the floor first, then one over the ceiling, a capacitor under its floor, an output under its load
-		const relaxed = chosen.map((_, i) => PS_ALERT_KINDS.find((kind) => alerts.some((a) => a.stage === i && a.kind === kind)) ?? null);
-		return { stages: chosen, measure, baseline: { stages: baseline, measure: baselineMeasure }, ideal, picks, relaxed, alerts, loads, pairPlan, sourceR: rs, source: sourceInfo(chosen), ms: Date.now() - t0 };
-	};
-	if (!search) return { ...finish(baseline, stages.map(() => 'designer'), null), fromEdge: baseline.map((d) => d.placedFor === 'edge'), edgeOnly, withinLimits: null, alternative: null };
+	if (!search) return psOnlyDesign({ ...finish(baseline, stages.map(() => 'designer'), null), fromEdge: baseline.map((d) => d.placedFor === 'edge'), edgeOnly, withinLimits: null, alternative: null });
 
 	// The designer's picks every pool starts with: the parts of today's page
 	// for every pair limit up to the pairs where they help would use (the
@@ -2752,14 +2803,15 @@ function psSearchFilter(design, settings) {
 			}
 		});
 		// with pairs, the same width for every count, with a limit or without
-		const ctx = { limit, width: pairs ? (big ? 4 : 6) : big ? 8 : 12, cross, moves: big ? 3 : 6 };
+		// (trail: every set the moves reach, for the list of designs)
+		const ctx = { limit, width: pairs ? (big ? 4 : 6) : big ? 8 : 12, cross, moves: big ? 3 : 6, trail: [] };
 		// With a source that does more than scale the stages on the input node (stagePools0), the beam runs over
 		// the pools an ideal source has, read without the source: the search an ideal source makes, the same
 		// states and solutions (beam0, whose sets are judged with the source like the rest). Its solutions then
 		// move with the source over the whole pools, the members the source brings among them (psMovedWithSource).
 		if (!stagePools0) {
 			const beam = psBeam(pools, E, ctx);
-			return { pools, relaxed, lenient, solutions: beam.solutions, finals: beam.finals, beam0: null, G, E, ctx, widened };
+			return { pools, relaxed, lenient, solutions: beam.solutions, finals: beam.finals, ends: beam.ends, extras, beam0: null, G, E, ctx, widened };
 		}
 		const built0 = stagePools0.map((sp, i) => (sp === stagePools[i] ? built[i] : strict ? sp.strict() : sp.loose()));
 		const pools0 = built0.map((b) => b.pool);
@@ -2776,9 +2828,9 @@ function psSearchFilter(design, settings) {
 			}
 			return wide0;
 		};
-		const beam0 = { pools: pools0, solutions: b0.solutions, finals: b0.finals, ctx: ctx0, widened: widened0 };
+		const beam0 = { pools: pools0, solutions: b0.solutions, finals: b0.finals, ends: b0.ends, extras: built0.map((b) => b.extras), ctx: ctx0, widened: widened0 };
 		const solutions = b0.solutions.map((sol) => psMovedWithSource(sol, pools0, pools, E, ctx)).filter(Boolean);
-		return { pools, relaxed, lenient, solutions, finals: [], beam0, G, E, ctx, widened };
+		return { pools, relaxed, lenient, solutions, finals: [], ends: [], extras, beam0, G, E, ctx, widened };
 	};
 	// Rule 4 on a run's solution that meets the template on the grid: moves
 	// from it toward sensible values while the margin and the deviation stay
@@ -2797,41 +2849,21 @@ function psSearchFilter(design, settings) {
 	};
 
 	// the solutions judged on the page's own measure: the search's best, and today's parts for every limit up to this one
-	const X = psExactGrid(template, idealMeasure);
-	const exactMemo = new Map();
-	const ids = new Map();
-	const idOf = (d) => {
-		if (!ids.has(d)) ids.set(d, ids.size);
-		return ids.get(d);
-	};
-	const exact = (list) => {
-		const k = list.map(idOf).join(' ');
-		if (!exactMemo.has(k)) exactMemo.set(k, psExactJudge(list, X, template, mIdeal, { combinerR, resistorSeries, sourceR: rs }));
-		return exactMemo.get(k);
-	};
+	// (kit.exact: each set once, on the page's points, kit.grid())
+	const { exact, howFarPast } = kit;
+	const X = kit.grid();
 	const strictRun = run(true);
 	// each pair count's best of a run and the states its beam ended with, judged on the page's own measure
 	const listsOf = (b) => [...b.solutions, ...b.finals].map((sol) => sol.picks.map((k, i) => b.pools[i][k].design));
 	const solutionsOf = (r) => listsOf(r);
 	// the limit each stage gave way on (strictRun.relaxed), and the least load its outputs may see (PART_LOAD_MIN, or
-	// the load the set closest to the limits reaches where no set keeps it, below)
+	// the load the set closest to the limits reaches where no set keeps it, below): how far a set is past the limits
+	// reads them (kit.howFarPast)
 	const gaveWay = strictRun.relaxed.slice();
 	const loadAt = stages.map(() => PART_LOAD_MIN);
-	// how far a set is past the limits: the largest factor (as a log) by which a part leaves its range or an output's
-	// load falls short, 0 within them (on a stage that gave way on one, the limits before it only, PS_ALERT_KINDS);
-	// withLoads false: on its parts alone
-	const howFarPast = (list, withLoads = true) => {
-		const loads = withLoads ? alertsOf(list, exact(list).combiner).loads : null;
-		let far = 0;
-		list.forEach((d, i) => {
-			if (strictRun.lenient[i]) return;
-			const gave = PS_ALERT_KINDS.indexOf(gaveWay[i]);
-			const figures = [Math.log(PART_R_FLOOR / psMinResistor(d)), Math.log(psMaxResistor(d) / PART_R_MAX), Math.log(C_FLOOR / psMinCapacitor(d))];
-			if (withLoads) figures.push(Math.log(loadAt[i] / loads[i].load));
-			for (let k = 0; k < (gave < 0 ? figures.length : Math.min(gave, figures.length)); k++) far = Math.max(far, figures[k]);
-		});
-		return far > 1e-9 ? far : 0;
-	};
+	share.gaveWay = gaveWay;
+	share.loadAt = loadAt;
+	share.lenient = strictRun.lenient;
 	// every set judged ({ list, judge }), the best within the limits and the best of all
 	const judged = [];
 	let within = null;
@@ -2970,18 +3002,414 @@ function psSearchFilter(design, settings) {
 	const past1 = within && !within.judge.meets && any.judge.meets ? sensible(closest(), false) : null;
 	const alternative = past1 && past(past1) > 0 ? past1 : null;
 	const designerPicks = new Set(pickLists.flat());
-	const picksOf = (list) => list.map((d, i) => (pickLists[i].includes(d) || fromEdgeSearch.get(d) === 'designer' ? 'designer' : 'search'));
-	const planOf = (list) => (limit === null ? null : psPairPlan(list, stages.map((_, i) => pick(i, true)), resistorSeries, limit));
-	const whole = (list) => ({ ...finish(list, picksOf(list), planOf(list)), fromEdge: list.map((d) => d.placedFor === 'edge'), edgeOnly });
+	// (a whole answer, kit.whole: which stages are a designer's own pick, and with a limit what it kept, against the
+	// pairs where they help would use, each designer's own)
+	share.pickLists = pickLists;
+	share.fromEdgeSearch = fromEdgeSearch;
+	share.free = limit === null ? null : stages.map((_, i) => pick(i, true));
+	const { whole } = kit;
 	// (alternatives and designerPicks are for the search of the same design placed off the edge, which takes them)
 	const main = whole(chosen.list);
-	return {
+	const result = {
 		...main,
 		withinLimits: Boolean(within),
-		alternative: alternative && { ...whole(alternative.list), withinLimits: false, pastLimits: true, withinMargin: main.measure.margin, alternative: null },
+		alternative: alternative && psOnlyDesign({ ...whole(alternative.list), withinLimits: false, pastLimits: true, withinMargin: main.measure.margin, alternative: null }),
 		alternatives,
 		designerPicks
 	};
+	// The designs a "Next design" button steps through (psDesignList), for a
+	// set within the limits that meets the template: built when first asked
+	// for, from the sets this search judged and reached. What it starts from
+	// is taken here as lists of built stages (the beams' last states and every
+	// set the moves reached, and each stage's members for the swaps), so that
+	// the result keeps none of the pools.
+	if (!within || !chosen.judge.meets || !main.measure.meets) return psOnlyDesign(result);
+	// (no more of them than the sets the list may judge can use: psDesignSets)
+	const most = psDesignSets(n, X.w.length, lpCount !== null);
+	const fromPicks = (pools, picks) => picks.map((p, i) => pools[i][p].design);
+	const lists = [];
+	for (const r of [strictRun, looseRun]) {
+		if (!r) continue;
+		for (const picks of r.ends) lists.push(fromPicks(r.pools, picks));
+		if (r.beam0) for (const picks of r.beam0.ends) lists.push(fromPicks(r.beam0.pools, picks));
+		for (const step of r.ctx.trail) lists.push(fromPicks(step.pools, step.picks));
+	}
+	const members = stages.map((_, i) => {
+		const out = new Set();
+		for (const pool of [strictRun.pools[i], strictRun.extras[i], strictRun.beam0?.pools[i], strictRun.beam0?.extras[i]]) for (const m of pool ?? []) out.add(m.design);
+		return [...out].slice(0, Math.ceil(most / n) + 1);
+	});
+	const handed = lists.slice(0, most);
+	// (the stages handed over let go of their load readings, PS_LOADS, the bulk of what they hold: a design of the
+	// list reads them again where it needs them, the same figures, and a result never clicked keeps about what it
+	// kept before the list existed)
+	for (const list of [...members, ...handed]) for (const d of list) PS_LOADS.delete(d);
+	result.designs = psDesignList(result, { kit, chosen, within, judged, lists: handed, members, honoured, topologies, most, design, settings, fromEdgeSearch });
+	return result;
+}
+
+/**
+ * What a search measures, judges and builds a whole set of parts with,
+ * shared with the list of designs its result carries (psDesignList), which
+ * builds its sets long after the search: light figures only (the template,
+ * the stock, the load frequencies, the page's points, the designers' picks,
+ * the limits each stage gave way on), never the pools, so that a result
+ * holding its list keeps none of them. `share` is the search's: it fills in
+ * the rest as it goes (gaveWay, loadAt and lenient once its first run is
+ * done, pickLists, fromEdgeSearch and free at the end), and the functions
+ * read it when they are called.
+ */
+function psKit(share) {
+	const { design, template, n, lpCount, branchFreqs, freqs, overrides, rs, sourceIdx, realOpts } = share;
+	const freqsAt = (i) => (branchFreqs ? branchFreqs[i < lpCount ? 0 : 1] : freqs);
+	const sourceOf = (list) => (rs > 0 ? { rs, inputs: sourceIdx.map((i) => list[i]) } : null);
+	// what the summing amplifier of a parallel band-stop puts on each branch's end, from its resistors
+	const terminalOf = (combiner) => (i) => (lpCount !== null && combiner && (i === lpCount - 1 || i === n - 1) ? psTerminalY(combiner, i === n - 1 ? 1 : 0) : null);
+	// (a set of parts read with its own stages ahead of each)
+	const alertsOf = (list, combiner) => psAlerts(list, template, freqsAt, psLoadFloors(list, freqsAt, lpCount, sourceOf(list)), terminalOf(combiner), overrides);
+	// the source on the input node: its stages' figures with it, and its factor there (none for an ideal source)
+	const sourceInfo = (list) => filterSource(list, design, { sourceR: rs, template });
+	const finish = (chosen, picks, pairPlan) => {
+		const { baseline, baselineMeasure } = share;
+		const measure = chosen === baseline ? baselineMeasure : measureFilter(chosen, design, realOpts);
+		const { alerts, loads } = alertsOf(chosen, measure.combiner);
+		// where the limits gave way: a resistor under the floor first, then one over the ceiling, a capacitor under its floor, an output under its load
+		const relaxed = chosen.map((_, i) => PS_ALERT_KINDS.find((kind) => alerts.some((a) => a.stage === i && a.kind === kind)) ?? null);
+		return { stages: chosen, measure, baseline: { stages: baseline, measure: baselineMeasure }, ideal: share.ideal, picks, relaxed, alerts, loads, pairPlan, sourceR: rs, source: sourceInfo(chosen), ms: Date.now() - share.t0 };
+	};
+	// the page's own points, and every set judged on them once (by its stages)
+	let X = null;
+	const grid = () => (X ??= psExactGrid(template, share.ideal.measure));
+	const exactMemo = new Map();
+	const ids = new Map();
+	const idOf = (d) => {
+		if (!ids.has(d)) ids.set(d, ids.size);
+		return ids.get(d);
+	};
+	const exact = (list) => {
+		const k = list.map(idOf).join(' ');
+		if (!exactMemo.has(k)) exactMemo.set(k, psExactJudge(list, grid(), template, share.ideal.margin, { combinerR: share.combinerR, resistorSeries: share.resistorSeries, sourceR: rs }));
+		return exactMemo.get(k);
+	};
+	// how far a set is past the limits: the largest factor (as a log) by which a part leaves its range or an output's
+	// load falls short, 0 within them (on a stage that gave way on one, the limits before it only, PS_ALERT_KINDS);
+	// withLoads false: on its parts alone
+	const howFarPast = (list, withLoads = true) => {
+		const { gaveWay, loadAt, lenient } = share;
+		const loads = withLoads ? alertsOf(list, exact(list).combiner).loads : null;
+		let far = 0;
+		list.forEach((d, i) => {
+			if (lenient[i]) return;
+			const gave = PS_ALERT_KINDS.indexOf(gaveWay[i]);
+			const figures = [Math.log(PART_R_FLOOR / psMinResistor(d)), Math.log(psMaxResistor(d) / PART_R_MAX), Math.log(C_FLOOR / psMinCapacitor(d))];
+			if (withLoads) figures.push(Math.log(loadAt[i] / loads[i].load));
+			for (let k = 0; k < (gave < 0 ? figures.length : Math.min(gave, figures.length)); k++) far = Math.max(far, figures[k]);
+		});
+		return far > 1e-9 ? far : 0;
+	};
+	// a whole answer: its measure, alerts, loads and source, which stages are a designer's own pick, and the pairs a limit kept
+	const picksOf = (list) => list.map((d, i) => (share.pickLists[i].includes(d) || share.fromEdgeSearch.get(d) === 'designer' ? 'designer' : 'search'));
+	const planOf = (list) => (share.limit === null ? null : psPairPlan(list, share.free, share.resistorSeries, share.limit));
+	const whole = (list) => ({ ...finish(list, picksOf(list), planOf(list)), fromEdge: list.map((d) => d.placedFor === 'edge'), edgeOnly: share.edgeOnly });
+	// (the sets judged let go, once nothing is judged any more: they hold every stage judged, and its response)
+	const forget = () => {
+		ids.clear();
+		exactMemo.clear();
+		X = null;
+	};
+	return { freqsAt, terminalOf, alertsOf, finish, grid, idOf, exact, howFarPast, whole, forget };
+}
+
+/* ---------------------------------------------------------- the list of designs */
+
+/**
+ * The list of designs of a result that has no other: only the set it
+ * shows (no search, a stage not built, a set that misses the template or
+ * keeps no limit, the set past the limits). Set on the result, which it
+ * returns.
+ */
+function psOnlyDesign(result) {
+	result.designs = { more: false, count: () => 1, at: (i) => (i === 0 ? result : null), judgeAt: () => null, ms: 0 };
+	return result;
+}
+
+/**
+ * The list of designs a "Next design" button steps through, on a result
+ * whose set within the limits meets the template (see searchFilterParts):
+ * built the first time it is asked for (psDesignsRanked from `seed`, the
+ * search's sets and members), each design's whole answer the first time it
+ * is asked for, and both kept with the result.
+ */
+function psDesignList(main, seed) {
+	const { kit } = seed;
+	const first = seed.chosen.judge;
+	let ranked = null;
+	let ms = null;
+	const shown = [main];
+	const build = () => {
+		if (!ranked) {
+			const t0 = Date.now();
+			ranked = psDesignsRanked(seed);
+			// (what it was built from is let go, and the sets judged: each design builds its answer without them)
+			seed = null;
+			kit.forget();
+			ms = Date.now() - t0;
+		}
+		return ranked;
+	};
+	const designs = {
+		more: true,
+		count: () => 1 + build().length,
+		at(i) {
+			if (!Number.isInteger(i) || i < 0) return null;
+			if (i === 0) return main;
+			const t0 = Date.now();
+			const list = build();
+			if (i > list.length) return null;
+			const sets = list[i - 1].list;
+			shown[i] ??= { ...kit.whole(sets), fromCentred: sets.map((d) => d.placedFor === 'centred'), withinLimits: true, alternative: null, designs, designIndex: i, ms: Date.now() - t0 };
+			return shown[i];
+		},
+		judgeAt(i) {
+			if (!Number.isInteger(i) || i < 0) return null;
+			if (i === 0) return { ...first };
+			const list = build();
+			return i > list.length ? null : { ...list[i - 1].judge };
+		},
+		get ms() {
+			return ms;
+		}
+	};
+	return designs;
+}
+
+/**
+ * The designs after the set shown, ranked: the search's other sets of
+ * parts that keep every limit (as it has them: the parts, the loads, the
+ * limits a stage gave way on, and every limit the set shown keeps on a
+ * stage that gave way), the capacitors typed by hand and the pair limit,
+ * flag no stage's spread of parts (psSpreadOver) the set shown does not,
+ * meet the template
+ * on the page's measure and come from the stock no less than the set shown,
+ * each once by its values (psValueKey: the set shown's own values left
+ * out), in the order of preference (psBetter): of those left, the one the
+ * search would pick, again and again, up to PS_DESIGNS_MOST designs with
+ * the set shown, then each moved up before any it ranks ahead of (where
+ * margins or deviations nearly tie, psBetter is no strict order), so that
+ * no design ranks ahead of the one before it.
+ * Where they come from, in this order: every set the search judged, the
+ * sets one stage away from the set shown and from the best set within the
+ * limits (where they differ) with that stage's PS_DESIGN_NEAR first members
+ * of its pool in its place, the states the search's beams ended with and
+ * every set its moves reached (rule 4's among them), then the rest of the
+ * pools one stage away. The sets not judged yet are judged on the page's
+ * measure up to PS_DESIGN_WORK stage points in all (the stages times the
+ * measure's points, twice for the two branches of a parallel band-stop:
+ * `most` sets, psDesignSets), so that a long filter judges fewer of them
+ * and the list takes about as long whatever its size (the search hands over
+ * no more sets and members than that can use); the limits are read only on
+ * the sets that rank high enough. A list that holds fewer than
+ * PS_DESIGNS_FEW designs that way tries more, within the same work: the
+ * sets two stages away from the set shown (the members nearest the front of
+ * both pools first), then for a filter of up to PS_DESIGN_OTHER_STAGES
+ * stages every set the search of the same design placed the other way
+ * judged (a search of its own, kept as any other: on the passband edge the
+ * centred design's sets, their stages rounded around its targets marked
+ * placedFor 'centred'; centred, the edge design's, marked placedFor 'edge'
+ * as the search's own are).
+ */
+function psDesignsRanked({ kit, chosen, within, judged, lists, members, honoured, topologies, most, design, settings, fromEdgeSearch }) {
+	const n = topologies.length;
+	const { exact, idOf, howFarPast } = kit;
+	const fits = (list) => list.length === n && list.every((d, i) => d && d.topology === topologies[i] && !(honoured[i] && d.manualError));
+	// every set once, by its stages, in the order it comes; those not judged yet up to `most`
+	const byStages = new Map();
+	const order = [];
+	let fresh = 0;
+	const offer = (list, e = null) => {
+		if (!e && fresh >= most) return;
+		if (!fits(list)) return;
+		const key = list.map(idOf).join(' ');
+		if (byStages.has(key)) return;
+		byStages.set(key, true);
+		order.push(e ?? { list, judge: null, past: undefined });
+		if (!e) fresh++;
+	};
+	for (const e of judged) offer(e.list, e);
+	// one stage away, the stage's members in turn (round r: each stage's r-th member other than the one in place)
+	const froms = (within && within !== chosen ? [chosen, within] : [chosen]).map((set) => ({ set, others: members.map((list, i) => list.filter((d) => d !== set.list[i])) }));
+	const swaps = (from, to) => {
+		for (const { set, others } of froms) {
+			for (let r = from; r < to; r++) {
+				for (let i = 0; i < n; i++) {
+					if (r >= others[i].length) continue;
+					const list = set.list.slice();
+					list[i] = others[i][r];
+					offer(list);
+				}
+			}
+		}
+	};
+	swaps(0, PS_DESIGN_NEAR);
+	for (const list of lists) offer(list);
+	const deepest = Math.max(0, ...members.map((m) => m.length));
+	swaps(PS_DESIGN_NEAR, deepest);
+	// those that meet the template, from the stock no less than the set shown, ranked, each set of values once, the
+	// limits read on the next one only (the same values keep them or not alike). A stage that gave way on a limit may
+	// break those after it too (howFarPast), and the set shown may keep them all the same: a design in the list then
+	// keeps them too, so that none breaks a limit the set shown keeps (its alerts, stage by stage, among the set shown's).
+	// The page's flag on a stage whose parts span more than STAGE_SPREAD_MAX:1 (psSpreadOver) counts as these alerts
+	// do: a set that has it on a stage where the set shown has not is none of the list's either.
+	const shownKey = psValueKey(chosen.list);
+	const alertKeys = (list) => kit.alertsOf(list, exact(list).combiner).alerts.map((a) => `${a.stage} ${a.kind}`);
+	const shownAlerts = new Set(alertKeys(chosen.list));
+	const shownSpread = chosen.list.map(psSpreadOver);
+	const keeps = (e) =>
+		(e.past ??= howFarPast(e.list)) === 0 && (e.asShown ??= alertKeys(e.list).every((k) => shownAlerts.has(k)) && e.list.every((d, i) => shownSpread[i] || !psSpreadOver(d)));
+	// "Up to N pairs": the search keeps it in every set it picks, and the sets one or two stages away and the other
+	// placement's are held to it here (judge.pairs: the resistors two in series a set uses, filterPairCount)
+	const pairCap = settings.pairs && settings.pairLimit !== null && settings.pairLimit !== undefined ? settings.pairLimit : null;
+	const rank = () => {
+		let left = [];
+		for (const e of order) {
+			if (e === chosen) continue;
+			e.judge ??= exact(e.list).judge;
+			if (!e.judge.meets || e.judge.short > chosen.judge.short || (pairCap !== null && e.judge.pairs > pairCap)) continue;
+			e.key ??= psValueKey(e.list);
+			if (e.key !== shownKey) left.push(e);
+		}
+		const picked = [];
+		while (left.length && picked.length < PS_DESIGNS_MOST - 1) {
+			let top = left[0];
+			for (const e of left) if (psBetter(e.judge, top.judge)) top = e;
+			left = left.filter((e) => e.key !== top.key);
+			if (keeps(top)) picked.push(top);
+		}
+		// (the order of preference is no strict order where margins or deviations nearly tie: each set goes in after
+		// the last one it does not rank ahead of, so that no design ranks ahead of the one before it)
+		const out = [];
+		for (const e of picked) {
+			let j = out.length;
+			while (j > 0 && psBetter(e.judge, out[j - 1].judge)) j--;
+			out.splice(j, 0, e);
+		}
+		return out;
+	};
+	let out = rank();
+	if (out.length + 1 >= PS_DESIGNS_FEW) return out;
+	// two stages away from the set shown, the members nearest the front of both pools first
+	const { set, others } = froms[0];
+	for (let s = 0; s <= 2 * deepest && fresh < most; s++) {
+		for (let i = 0; i < n && fresh < most; i++) {
+			for (let j = i + 1; j < n; j++) {
+				for (let a = Math.max(0, s - others[j].length + 1); a <= s && a < others[i].length; a++) {
+					const list = set.list.slice();
+					list[i] = others[i][a];
+					list[j] = others[j][s - a];
+					offer(list);
+				}
+			}
+		}
+	}
+	out = rank();
+	if (out.length + 1 >= PS_DESIGNS_FEW || n > PS_DESIGN_OTHER_STAGES || fresh >= most) return out;
+	// the sets the search of the same design placed the other way judged (none where the placement found no room,
+	// nor for a centred design whose search took the edge design's already)
+	const edge = (design.placement?.mode ?? 'edge') === 'edge';
+	const sameStages = (d) => JSON.stringify(d.stages.map(psTargetKey)) === JSON.stringify(design.stages.map(psTargetKey));
+	const otherDesign = edge ? psPlacedAs(design, 'centred') : fromEdgeSearch.size ? null : psEdgeTwin(design);
+	if (!otherDesign || otherDesign.stages.length !== n || sameStages(otherDesign)) return out;
+	const other = searchFilterParts(otherDesign, settings);
+	if (!other.alternatives) return out;
+	// (a stage takes its place in this design's sets: on the edge, one with the very values of a stage of this
+	// design's own sets (its pairs with them) as that one, one the centred search took from the edge design as one of
+	// its own, one it rounded around its own targets marked placedFor 'centred' (a design's fromCentred, read against
+	// the centred design's stage); centred, as one of the edge design's)
+	const own = edge ? topologies.map(() => new Map()) : null;
+	if (own) {
+		const add = (d, i) => {
+			const k = d && !d.placedFor ? psValueKey([d]) : null;
+			if (k !== null && !own[i].has(k)) own[i].set(k, d);
+		};
+		for (const e of order) e.list.forEach(add);
+		members.forEach((list, i) => list.forEach((d) => add(d, i)));
+	}
+	const copies = topologies.map(() => new Map());
+	const copyOf = (d, i) => {
+		if (!d) return d;
+		if (!copies[i].has(d)) {
+			let copy = own?.[i].get(psValueKey([d]));
+			if (!copy) {
+				if (edge && d.placedFor === 'edge') {
+					copy = { ...d };
+					delete copy.placedFor;
+				} else copy = { ...d, placedFor: edge ? 'centred' : 'edge' };
+				if (other.designerPicks?.has(d)) fromEdgeSearch.set(copy, 'designer');
+			}
+			copies[i].set(d, copy);
+		}
+		return copies[i].get(d);
+	};
+	for (const list of [other.stages, ...other.alternatives]) if (list.length === n) offer(list.map(copyOf));
+	return rank();
+}
+/** The most designs a list holds, the set shown among them, and how few make it try more sets. */
+const PS_DESIGNS_MOST = 30;
+const PS_DESIGNS_FEW = 10;
+/** How many of each stage's members the sets one stage away try before the search's other sets come in. */
+const PS_DESIGN_NEAR = 2;
+/** How many stage points (stages times the page's points) the sets a list judges on top of the search's may take in all, and how many sets it judges at least. */
+const PS_DESIGN_WORK = 1e7;
+const PS_DESIGN_SETS_MIN = 60;
+/** How many sets a list of n stages judges on top of the search's, the page's measure on `points` points (twice the work for a parallel band-stop's two branches). */
+function psDesignSets(n, points, parallel) {
+	return Math.max(PS_DESIGN_SETS_MIN, Math.floor(PS_DESIGN_WORK / (n * points * (parallel ? 2 : 1))));
+}
+/**
+ * The most stages a filter may have for a short list to take the sets of the
+ * same design placed the other way: a search of its own, which a filter of
+ * two stages makes in a few tens of milliseconds (up to some 150 with
+ * Boctor sections and pairs), a longer one in up to several hundred.
+ */
+const PS_DESIGN_OTHER_STAGES = 2;
+
+/**
+ * Past this ratio between the largest and the smallest capacitor of a
+ * multiple feedback or Sallen-Key stage, or resistor of a multiple feedback
+ * band-pass stage (whose R3/R2 grows as 4Q²), the page flags the stage as no
+ * longer suited to its circuit (its C_SPREAD and R_SPREAD).
+ */
+export const STAGE_SPREAD_MAX = 1000;
+/** Whether a built stage's parts span more than STAGE_SPREAD_MAX:1 where the page flags it (stageAlerts there, the same reading). */
+function psSpreadOver(d) {
+	if (d.topology === 'mfbBp') {
+		const values = ['R1', 'R2', 'R3'].map((name) => d.components[name]);
+		return Math.max(...values) / Math.min(...values) > STAGE_SPREAD_MAX;
+	}
+	if (d.topology !== 'mfb' && d.topology !== 'sallenKey') return false;
+	const values = Object.entries(d.components)
+		.filter(([name, v]) => /^C/.test(name) && Number.isFinite(v) && v > 0)
+		.map(([, v]) => v);
+	return values.length > 1 && Math.max(...values) / Math.min(...values) > STAGE_SPREAD_MAX;
+}
+
+/** A set of parts by its values, stage by stage (the circuit and every part's value): the same values make the same key, whatever pairs they take. */
+const PS_VALUE_KEYS = new WeakMap();
+function psValueKey(list) {
+	return list
+		.map((d) => {
+			let key = PS_VALUE_KEYS.get(d);
+			if (key === undefined) {
+				key = `${d.topology} ${Object.entries(d.components ?? {})
+					.filter(([, v]) => typeof v === 'number')
+					.map(([name, v]) => `${name}=${v}`)
+					.sort()
+					.join(' ')}`;
+				PS_VALUE_KEYS.set(d, key);
+			}
+			return key;
+		})
+		.join(' | ');
 }
 
 /** Every subset of `names` with `size` members, in order. */

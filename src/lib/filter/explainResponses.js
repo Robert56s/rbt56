@@ -24,6 +24,16 @@ const ripple = (db) => Math.sqrt(10 ** (db / 10) - 1);
 /** Butterworth and Chebyshev I are derived in explain.js itself. */
 export const isClassic = (response) => response === 'butterworth' || response === 'chebyshev';
 
+/**
+ * Where a stage the search over the whole filter picked says how, in place
+ * of its designer's own rule (here and in explain.js): `searched` true for
+ * the best set, or the number of the design shown after it (2 and up, from
+ * the page's Next design), whose parts meet the template without being the
+ * best.
+ */
+export const searchKept = (searched) =>
+	Number.isInteger(searched) && searched > 1 ? `with which the whole filter meets the template in design ${searched} (Next design, panel 04)` : 'with which the whole filter meets the template best';
+
 /** A polynomial with ascending coefficients as TeX, highest power first. */
 function polyTex(c, power) {
 	const terms = [];
@@ -400,7 +410,7 @@ export function explainTowThomasNotch(stageDesign, targetWn, targetQ, targetWz, 
 		p(rule),
 		eq(ruleTex),
 		p(
-			`This stage's target: f0 = ${formatHz(f0)}, Q = ${targetQ.toFixed(4)}, zero at ${formatHz(targetWz / (2 * Math.PI))}. ${stageDesign.manual ? 'C below was entered by hand.' : context?.searched ? 'The search over the whole filter tried the capacitors in stock, and each resistor just below and just above its ideal value; it kept these, with which the whole filter meets the template best.' : `C is picked so that R lands near 10 kilo-ohm${low ? ' and a stocked Cin comes close to its ideal ratio' : ''}.`} R and Rd follow as in any Tow-Thomas stage:`
+			`This stage's target: f0 = ${formatHz(f0)}, Q = ${targetQ.toFixed(4)}, zero at ${formatHz(targetWz / (2 * Math.PI))}. ${stageDesign.manual ? 'C below was entered by hand.' : context?.searched ? `The search over the whole filter tried the capacitors in stock, and each resistor just below and just above its ideal value; it kept these, ${searchKept(context.searched)}.` : `C is picked so that R lands near 10 kilo-ohm${low ? ' and a stocked Cin comes close to its ideal ratio' : ''}.`} R and Rd follow as in any Tow-Thomas stage:`
 		),
 		eq(`C = ${formatFarads(st.C)}\\ \\Rightarrow\\ R = \\dfrac{1}{\\omega_n C} = ${formatOhms(st.Rtarget)} \\rightarrow ${formatOhms(c.Ra)}, \\qquad R_d = QR \\rightarrow ${formatOhms(c.Rd)}`),
 		...rounded,

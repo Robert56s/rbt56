@@ -537,26 +537,36 @@ for (const { only, sides, ...spec } of filterSpecs) {
 }
 
 // The parts the page shows (the part search on the whole filter,
-// lib-parts.mjs), centred as the page opens, and the default low-pass on
-// the passband edge too: every topology, the notches, a band-stop's
-// branches with the search's combiner, a transformation, the stocks, pairs
-// and capacitors typed, a source resistance (RS ahead of the input, both
-// branches of a band-stop on its node) and the set past the limits (on the
-// edge, where the band-stop transformed misses within them). LTspice
-// netlists the drawn .asc into the .cir, and the .cir with an op-amp too
-// fast to matter gives the page's response (the one its verdict reads, the
-// source included) at every .meas point. The default band-pass, its MFB
-// stages built for the LM741, runs with the single-pole op-amp at 1 MHz,
-// which the page's response includes, both placements.
+// lib-parts.mjs), on the passband edge as the page opens (centred before
+// "Next design" came in), and the default low-pass centred too: every
+// topology, the notches, a band-stop's branches with the search's combiner,
+// a transformation, the stocks, pairs and capacitors typed, a source
+// resistance (RS ahead of the input, both branches of a band-stop on its
+// node) and the set past the limits (on the edge, where the band-stop
+// transformed misses within them). LTspice netlists the drawn .asc into
+// the .cir, and the .cir with an op-amp too fast to matter gives the page's
+// response (the one its verdict reads, the source included) at every .meas
+// point. The default band-pass, its MFB stages built for the LM741, runs
+// with the single-pole op-amp at 1 MHz, which the page's response
+// includes, both placements. Designs after the first of the list "Next
+// design" steps through (designIndex) are exported as the page exports the
+// design shown: design 2 and the last, with a source and with pairs.
 {
 	const { PAGE_CASES, pageNetlistOpts, pageParts } = await import('./lib-parts.mjs');
-	const runs = PAGE_CASES.filter(([, s]) => !Number.isFinite(s.opampGbw)).map(([label, spec]) => [label, { ...spec, placement: 'centred' }]);
-	runs.push([`${PAGE_CASES[0][0]}, edge`, { ...PAGE_CASES[0][1], placement: 'edge' }]);
-	for (const [label, spec] of PAGE_CASES.filter(([, s]) => s.pastLimits)) runs.push([`${label}, edge`, { ...spec, placement: 'edge' }]);
+	// (the set past the limits among them: the band-stop transformed on the lab kit misses within them on the edge)
+	const runs = PAGE_CASES.filter(([, s]) => !Number.isFinite(s.opampGbw)).map(([label, spec]) => [label, { ...spec, placement: 'edge' }]);
+	runs.push([`${PAGE_CASES[0][0]}, centred`, { ...PAGE_CASES[0][1], placement: 'centred' }]);
 	// (the stages built for an op-amp run with it: the single pole at their GBW)
 	for (const [label, spec] of PAGE_CASES.filter(([, s]) => Number.isFinite(s.opampGbw) && s.sourceR > 0)) for (const placement of ['edge', 'centred']) runs.push([`${label}, ${placement}`, { ...spec, placement }]);
+	// designs after the first (designIndex): design 2 and the last of their lists
+	for (const [label, index] of [['low-pass, MFB, lab kit, 50 ohm source', 1], ['low-pass, Sallen-Key, lab kit, pairs', -1], ['band-stop of two branches, Tow-Thomas, lab resistors, 600 ohm source', -1], ['the default band-pass, transformed, MFB for the LM741, lab kit, 50 ohm source', 1]]) {
+		const spec = { ...PAGE_CASES.find(([l]) => l === label)[1], placement: 'edge' };
+		const designIndex = index > 0 ? index : pageParts(spec).found.designs.count() - 1;
+		runs.push([`${label}, edge, design ${designIndex + 1}`, { ...spec, designIndex }]);
+	}
 	let sourced = 0;
 	let past = 0;
+	let listed = 0;
 	for (const [label, args] of runs) {
 		const page = pageParts(args);
 		const opts = pageNetlistOpts(args, page);
@@ -571,7 +581,8 @@ for (const { only, sides, ...spec } of filterSpecs) {
 		// a source resistance: RS in LTspice's netlist too (sameCircuit holds it to our RS from vs to vin)
 		const source = opts.sourceR > 0 ? existsSync(netFile) && /^RS vs vin /m.test(readFileSync(cir, 'utf8')) && new RegExp(`^RS \\S+ \\S+ ${opts.sourceR}$`, 'mi').test(readFileSync(netFile, 'latin1').replace(/\r/g, '')) : true;
 		if (opts.sourceR > 0) sourced++;
-		if (page.result !== page.found) past++;
+		if (page.result !== page.found && page.result.pastLimits) past++;
+		if (page.result.designIndex > 0) listed++;
 		check(`${stem}: LTspice netlists the drawn .asc into our .cir${opts.sourceR > 0 ? `, RS = ${opts.sourceR} ohm from V1 to the input` : ''}`, problems.length === 0 && source, problems.slice(0, 3).join('; ') || (source ? '' : 'no RS from vs to vin in LTspice\'s netlist'));
 		const fast = `${stem}-fast`;
 		writeFileSync(join(dir, `${fast}.cir`), filterNetlist(opts.correctedGbw ? opts : { ...opts, gbw: '100g' }));
@@ -582,7 +593,7 @@ for (const { only, sides, ...spec } of filterSpecs) {
 		const worst = meas.reduce((w, m) => Math.max(w, Math.abs(m.db - page.result.measure.gainDbAt(m.f))), 0);
 		check(`${stem}: LTspice gives the page's response at the band edges${opts.correctedGbw ? ' (the single-pole op-amp at the GBW the stages are built for)' : ''}`, meas.length >= 2 && worst < 0.05, meas.length ? `${meas.map((m) => `${m.name} ${m.db.toFixed(2)} dB`).join(', ')}; worst ${worst.toFixed(3)} dB off` : 'no .meas in the log');
 	}
-	check(`the page's parts in LTspice: ${runs.length} runs, ${sourced} with a source resistance, ${past} past the limits`, sourced >= 5 && past >= 1);
+	check(`the page's parts in LTspice: ${runs.length} runs, ${sourced} with a source resistance, ${past} past the limits, ${listed} designs after the first of their list`, sourced >= 5 && past >= 1 && listed === 4);
 }
 
 /* -------------------------- MFB band-pass stages built for their op-amp */

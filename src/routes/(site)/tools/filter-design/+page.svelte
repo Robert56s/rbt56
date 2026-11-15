@@ -1,7 +1,7 @@
 <script>
 	import { boctorFeasible } from '$lib/filter/boctor';
 	import { explainBoctor } from '$lib/filter/explainBoctor';
-	import { onMount, untrack } from 'svelte';
+	import { onMount, tick, untrack } from 'svelte';
 	import BasicsPanel from '$lib/components/BasicsPanel.svelte';
 	import BuildPanel from '$lib/components/BuildPanel.svelte';
 	import { stockWords } from '$lib/filter/handDesign';
@@ -51,7 +51,7 @@
 	import { explainPlacement, placedRipple, placedScale, placementReason, placementTex } from '$lib/filter/explainPlacement';
 	import { capRatio } from '$lib/filter/sallenKey';
 	import { resistorRatioHp as capRatioHp } from '$lib/filter/sallenKeyHighPass';
-	import { designPlacedAs, edgeDesignOf, filterTemplate, limitAlertOpamp, limitAlertText, PART_LOAD_MIN, PART_R_FLOOR, PART_R_MAX, PASSBAND_SLACK_DB, placedOpampCount, searchFilterParts, SOURCE_R_DEFAULT, sourceRoundsFor } from '$lib/filter/partSearch';
+	import { designBetter, designPlacedAs, edgeDesignOf, filterTemplate, limitAlertOpamp, limitAlertText, PART_LOAD_MIN, PART_R_FLOOR, PART_R_MAX, PASSBAND_SLACK_DB, placedOpampCount, searchFilterParts, SOURCE_R_DEFAULT, sourceRoundsFor, STAGE_SPREAD_MAX } from '$lib/filter/partSearch';
 	import {
 		mfbBpSensitivity,
 		mfbSensitivity,
@@ -118,12 +118,13 @@
 	let topologyLp = $state('mfb');
 	// Where the ideal design sits in its template (placementWindow in
 	// stages.js): the whole order leaves room between Amax exactly at the
-	// passband edge and Amin exactly at the stopband edge. 'centred' takes the
-	// geometric middle of that room, so that rounding and tolerances can move
-	// the response either way; 'edge' is the textbook way, Amax exactly at the
-	// edge and all the room left to the stopband. Each side of a band filter,
-	// or its prototype, is placed in its own template.
-	let placement = $state('centred'); // 'centred' | 'edge'
+	// passband edge and Amin exactly at the stopband edge. 'edge', the page's
+	// default as the library's, is the textbook way: Amax exactly at the edge
+	// and all the room left to the stopband. 'centred' takes the geometric
+	// middle of that room, so that rounding and tolerances can move the
+	// response either way. Each side of a band filter, or its prototype, is
+	// placed in its own template.
+	let placement = $state('edge'); // 'edge' | 'centred'
 	// The resistance of the source that drives the filter, in series with its
 	// input: a function generator's 50 ohm by default, 0 for an ideal source.
 	// Only the stages on the input node see it (partSearch.js, the source):
@@ -767,16 +768,84 @@
 	const partsPending = $derived(partShown !== partRequest);
 	/** The search's whole result: the best set within the limits, and the set past them it may offer (alternative). */
 	const found = $derived(partShown ? partsOf(partShown) : null);
-	/** The parts shown: the set within the limits, or the alternative past them when asked for and there is one. Everything below follows it. */
-	const parts = $derived(showPast && found?.alternative ? found.alternative : found);
-	// (the choice is for the case it was made on: a change to the inputs shows the parts within the limits first again)
+	// "Next design" steps through the result's list of designs (designs in
+	// partSearch.js): the best set first, then the other sets that keep the
+	// limits and meet the template, in the search's own order. The list is
+	// built on the first click and kept with the result. The pick holds the
+	// result it was made on, so parts held during the pause after typing
+	// never lend their index to the next result; count is null until a
+	// click has built the list.
+	let designPick = $state.raw({ of: null, index: 0, count: null });
+	/** The design of the list shown, from 0 (the best): 0 with the parts past the limits shown. */
+	const designIndex = $derived(designPick.of === found && found && !(showPast && found.alternative) ? designPick.index : 0);
+	/** How many designs the list holds, once a click has built it, else null. */
+	const designCount = $derived(designPick.of === found ? designPick.count : null);
+	/** The parts shown: the set within the limits, the alternative past them when asked for and there is one, or the design of the list picked. Everything below follows it. */
+	const parts = $derived(showPast && found?.alternative ? found.alternative : designIndex > 0 ? (found.designs?.at(designIndex) ?? found) : found);
+	/** Design `to` of the list, held within it (the first call builds the list); `button` the one pressed, to keep the focus in the control. */
+	async function showDesign(to, button = null) {
+		if (!found?.designs) return;
+		const of = found;
+		let count = designCount;
+		if (count === null) {
+			// (the first click builds the list and the design asked for in one task, and the page draws that design in
+			// the next: on a long filter neither holds the page up as long as both would in one)
+			count = of.designs.count();
+			of.designs.at(Math.max(0, Math.min(count - 1, to)));
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			if (found !== of) return;
+		}
+		designPick = { of, index: Math.max(0, Math.min(count - 1, to)), count };
+		// (a button the step disables passes the focus to one left to press; a list that turns out to hold one design
+		// to its note, which takes the buttons' place)
+		const step = button?.closest('.design-step');
+		if (!step) return;
+		await tick();
+		if (button.isConnected && !button.disabled) return;
+		step.querySelector('button:not(:disabled), .design-none')?.focus();
+	}
+	// (the choice is for the case it was made on: a change to the inputs shows the parts within the limits, and the best of them, first again)
 	const partRequestKey = $derived(partRequest?.key ?? null);
 	$effect(() => {
 		void partRequestKey;
 		showPast = false;
+		designPick = { of: null, index: 0, count: null };
 	});
 	/** Whether the parts shown are the alternative, past the limits. */
 	const pastShown = $derived(Boolean(parts?.pastLimits));
+	/** Whether "Next design" shows: the best set keeps the limits and meets the template, so the list may hold others; never with the parts past the limits shown. */
+	const designsOffered = $derived(Boolean(found?.designs?.more) && !pastShown && Boolean(found?.stages?.length) && !found.stages.some((s) => !s));
+	/** The design shown against the best, in a line: its margin and how far off the ideal response it lands ('' on the best). */
+	const designLine = $derived.by(() => {
+		if (designIndex === 0 || !found?.designs) return '';
+		const shown = found.designs.judgeAt(designIndex);
+		const best = found.designs.judgeAt(0);
+		if (!shown || !best) return '';
+		// (two figures that read the same to two decimals take a third, so that the line still tells them apart)
+		const pair = (a, b) => {
+			const digits = a.toFixed(2) === b.toFixed(2) ? 3 : 2;
+			const dB = (x) => `${(Math.abs(x) < 0.5 * 10 ** -digits ? 0 : x).toFixed(digits)} dB`;
+			return [dB(a), dB(b)];
+		};
+		const [margin, bestMargin] = pair(shown.margin, best.margin);
+		const [dev, bestDev] = pair(shown.dev, best.dev);
+		// (a design the order alone does not put after the best says why it comes after it: rule 4 puts the best ahead
+		// of a set the order prefers or ties with when its resistors sit nearer 10 kohm; else the best stays first as
+		// the set the search picked, and the list holds sets the search came near as well as those it judged)
+		const why = designBetter(best, shown)
+			? ''
+			: best.level < shown.level
+				? ' It ranks after the best, whose resistors sit nearer 10 kΩ.'
+				: designBetter(shown, best)
+					? " The order alone ranks it ahead of the best, which stays first as the search's own pick."
+					: " The order alone ties it with the best, which stays first as the search's own pick.";
+		// (where a zero of the response falls among the points the deviation is read at, a notch's or an elliptic
+		// design's, it reads the depth of that zero, past the least attenuation the template asks for: the line then
+		// gives the margins alone)
+		const amin = Math.min(...(found.measure?.template?.stop ?? []).map((r) => r.aminDb));
+		const far = Number.isFinite(amin) && Math.max(shown.dev, best.dev) > amin;
+		return `Margin ${margin}, against ${bestMargin} for the best${far ? '' : `; at most ${dev} off the ideal response, against ${bestDev}`}.${why}`;
+	});
 	/** The design the parts shown were chosen for: panels 04 and 05 read their targets from it. */
 	const rd = $derived(partShown?.design ?? null);
 
@@ -785,8 +854,12 @@
 	// where the circuit cannot reach the centred stage at all (edgeOnly):
 	// those stages were rounded around the edge design's targets.
 	const edgeTwin = $derived(parts?.fromEdge?.some(Boolean) ? edgeDesignOf(rd) : null);
-	/** The target stage i of the parts shown was rounded around: its own, or the same stage on the passband edge. */
-	const targetOf = (i) => (parts?.fromEdge?.[i] && edgeTwin?.stages[i] ? edgeTwin.stages[i] : rd.stages[i]);
+	// On the passband edge, a design after the best (Next design) may take
+	// stages from the search of the same design centred in its template
+	// (fromCentred): those were rounded around the centred design's targets.
+	const centredTwin = $derived(parts?.fromCentred?.some(Boolean) ? designPlacedAs(rd, 'centred') : null);
+	/** The target stage i of the parts shown was rounded around: its own, or the same stage on the passband edge, or centred. */
+	const targetOf = (i) => (parts?.fromEdge?.[i] && edgeTwin?.stages[i] ? edgeTwin.stages[i] : parts?.fromCentred?.[i] && centredTwin?.stages[i] ? centredTwin.stages[i] : rd.stages[i]);
 
 	const stageResults = $derived(parts ? parts.stages : []);
 	const realizationFailures = $derived(stageResults.flatMap((s, i) => (s ? [] : [i + 1])));
@@ -907,7 +980,7 @@
 		const alone = plan.total ? ` With pairs where they help, the stages' own designers would make ${resistors(plan.total)} two in series.` : '';
 		if (!plan.count) {
 			return plan.total
-				? `Up to ${resistors(plan.limit)} may be two in series.${alone} The parts that meet the template best within the limit are all single parts.${shortText}`
+				? `Up to ${resistors(plan.limit)} may be two in series.${alone} ${designIndex > 0 ? 'The parts of the design shown' : 'The parts that meet the template best within the limit'} are all single parts.${shortText}`
 				: `No resistor here needs two in series, so the limit of ${plan.limit} changes nothing.`;
 		}
 		return `Up to ${resistors(plan.limit)} may be two in series, and the parts chosen use ${plan.count}: ${kept.join(', ')}.${alone}${shortText} Every other resistor is a single part.`;
@@ -1404,7 +1477,8 @@
 	// stock of capacitors covers well, and a sign the topology is strained.
 	const Q_SHARP = 20;
 	const C_TINY = C_FLOOR;
-	const C_SPREAD = 1000;
+	// (the list of designs Next design steps through flags none of these where the best has none: STAGE_SPREAD_MAX in partSearch.js)
+	const C_SPREAD = STAGE_SPREAD_MAX;
 	// R_SPREAD: the same limit for the resistors of a multiple feedback
 	// band-pass, whose R3/R2 grows as 4Q². GBW_TYPICAL: a TL082's gain-
 	// bandwidth as its model measures it (OPAMP_GBW, the figure the op-amp
@@ -1414,7 +1488,7 @@
 	// width f0/Q, so the alert weighs shift * Q: DETUNE_WARN and DETUNE_BAD.
 	// LOOP_FRAGILE: a stage built for its op-amp whose loop gain at f0 is
 	// under this leans on that op-amp's exact gain-bandwidth.
-	const R_SPREAD = 1000;
+	const R_SPREAD = STAGE_SPREAD_MAX;
 	const GBW_TYPICAL = OPAMP_GBW.TL082;
 	const LOOP_FRAGILE = 3;
 	const DETUNE_WARN = 0.05;
@@ -1499,17 +1573,24 @@
 	function choiceText(i) {
 		if (!parts?.picks?.length) return '';
 		const stageDesign = realizedStages[i];
-		const how =
-			parts.picks[i] === 'search'
+		// (a design after the best, from Next design: these parts meet the template with its other stages, not best)
+		const next = designIndex > 0 ? `design ${designIndex + 1} of ${designCount}` : '';
+		const how = next
+			? parts.picks[i] === 'search'
+				? `These are the parts of ${next} (Next design): with the other stages' parts of that design, they meet the template.`
+				: `These are the parts this stage's designer picks alone, kept in ${next} (Next design) with the other stages' parts of that design.`
+			: parts.picks[i] === 'search'
 				? stageDesign?.manual
 					? 'The search over the whole filter picked these parts: of the ways the stock builds this stage with the capacitors typed for it (each resistor just below or just above its ideal value), this one meets the template best with the other stages.'
 					: 'The search over the whole filter picked these parts: of the ways the stock builds this stage (every capacitor choice it allows, each resistor just below or just above its ideal value), this one meets the template best with the other stages.'
 				: "These are the parts this stage's designer picks alone: with the other stages, no other way the stock builds it meets the template better.";
-		if (!parts.fromEdge[i]) return how;
+		if (!parts.fromEdge[i] && !parts.fromCentred?.[i]) return how;
 		const t = targetOf(i);
 		const own = rd.stages[i];
 		const figures = (s) => (s.order === 1 ? `a corner at ${formatHz(cornerHz(s))}` : `f0 = ${formatHz(cornerHz(s))}, Q = ${s.q.toFixed(4)}`);
-		return `${how} They are rounded around the same stage of the design on the passband edge, ${figures(t)}, where this design asks for ${figures(own)}: that set meets the template better than any rounded around this design's own targets.`;
+		// (fromCentred: a design after the best on the passband edge, its stage from the search of the same design centred)
+		const twin = parts.fromCentred?.[i] ? 'centred in its template' : 'on the passband edge';
+		return `${how} They are rounded around the same stage of the design ${twin}, ${figures(t)}, where this design asks for ${figures(own)}${next ? '.' : ': that set meets the template better than any rounded around this design\'s own targets.'}`;
 	}
 
 	/** The figures of stage i with the source ahead of it, for a stage on the input node (filterSource in partSearch.js), else null. */
@@ -1573,7 +1654,7 @@
 			if (Math.abs(e0) >= DETUNE_PCT) off.push(`f0 ${word(e0)}`);
 			if (Math.abs(eq) >= DETUNE_PCT) off.push(`Q ${word(eq)}`);
 		}
-		return off.length ? `This stage lands with ${listText(off)} on purpose: the search judges the whole filter, and with the other stages these parts meet the template best.` : '';
+		return off.length ? `This stage lands with ${listText(off)} on purpose: the search judges the whole filter, and with the other stages these parts meet the template${designIndex > 0 ? '' : ' best'}.` : '';
 	}
 
 	/** A stage's math, with how its parts were chosen and a sentence on the pairs the cap took away from it. */
@@ -1587,7 +1668,8 @@
 	function explainComponents(stageDesign, i) {
 		const t = targetOf(i);
 		// a stage the search picked says so instead of its designer's own rule
-		const opts = { searched: parts?.picks?.[i] === 'search' };
+		// (in a design after the best, from Next design, its number: the math then says the parts serve that design)
+		const opts = { searched: parts?.picks?.[i] === 'search' ? (designIndex > 0 ? designIndex + 1 : true) : false };
 		if (stageDesign.topology === 'boctor' || stageDesign.topology === 'boctorHp') return explainBoctor(stageDesign, notchContext);
 		if (stageDesign.topology === 'mfbBp') return explainMfbBp(stageDesign, t.wn, t.q, opts);
 		if (stageDesign.topology === 'towThomasBp') return explainTowThomasBp(stageDesign, t.wn, t.q, opts);
@@ -1661,6 +1743,8 @@
 			sourceR: sourceOhms,
 			// the parts past the limits in place of those within them, when asked for here (the script falls back the same way)
 			pastLimits: showPast,
+			// the design of the list Next design shows (0: the best), as DESIGN_INDEX: the script builds the same list
+			designIndex,
 			// the op-amps the load alerts name, as the page picks the name (limitAlertOpamp): the LTspice file's, and the one the MFB stages are built for
 			spiceOpamp,
 			mfbOpamp
@@ -1948,8 +2032,8 @@
 			<div class="field">
 				<label for="placement">Place the design</label>
 				<select id="placement" bind:value={placement}>
-					<option value="centred">Centred in the template</option>
 					<option value="edge">On the passband edge</option>
+					<option value="centred">Centred in the template</option>
 				</select>
 			</div>
 			<div class="field">
@@ -2941,6 +3025,29 @@
 				</div>
 			{/if}
 		{/snippet}
+		<!-- Next design: the list of designs that keep the limits and meet the template, the best first, stepped through
+		     one at a time; built on the first click. Under the verdict the buttons alone, the line on the design shown in panel 04.
+		     The count in panel 04 is read out as it changes (one live region for both controls), and a list that turns
+		     out to hold one design says so in both places. -->
+		{#snippet designControl(underVerdict)}
+			{#if designsOffered}
+				<div class="design-step">
+					{#if designCount === 1}
+						<p class="note design-none" tabindex="-1">No other set of parts keeps the limits and meets the template.</p>
+					{:else}
+						<div class="design-buttons">
+							<button type="button" class="ghost small" disabled={designCount !== null && designIndex >= designCount - 1} onclick={(e) => showDesign(designIndex + 1, e.currentTarget)}>Next design</button>
+							{#if designCount !== null}
+								<button type="button" class="ghost small" disabled={designIndex === 0} onclick={(e) => showDesign(designIndex - 1, e.currentTarget)}>Previous</button>
+								<button type="button" class="ghost small" disabled={designIndex === 0} onclick={(e) => showDesign(0, e.currentTarget)}>Back to the best</button>
+							{/if}
+							<span class="design-count" aria-live={underVerdict ? undefined : 'polite'}>{designCount !== null ? `Design ${designIndex + 1} of ${designCount}` : ''}</span>
+						</div>
+						{#if !underVerdict && designLine}<p class="note">{designLine}</p>{/if}
+					{/if}
+				</div>
+			{/if}
+		{/snippet}
 		{#snippet methodTable()}
 			<h3 class="subhead">Two ways to build it</h3>
 			<div class="tableScroll">
@@ -3430,7 +3537,7 @@
 					<span class="num">04</span>
 					<h2>Components</h2>
 					<span class="hint">
-						{partsPending ? 'choosing the parts, ' : ''}{pastShown ? 'parts past the limits, ' : ''}{transformed
+						{partsPending ? 'choosing the parts, ' : ''}{pastShown ? 'parts past the limits, ' : ''}{designIndex > 0 ? `design ${designIndex + 1} of ${designCount}, ` : ''}{transformed
 							? transformedHint
 							: isBandType && topologyHp !== topologyLp
 							? `${TOPOLOGY_WORD[topologyHp]} high-pass, ${TOPOLOGY_WORD[topologyLp]} low-pass`
@@ -3456,10 +3563,14 @@
 					then lands closest to the ideal response. Of the sets that do about as well, it takes the one
 					whose resistors sit nearest 10 kΩ and whose capacitors are not tiny. The best set within the
 					limits is kept even when it misses the template; a set past them that meets it is then offered.
+					{#if designsOffered}
+						Next design steps through the other sets that keep the limits and meet the template, in that same order.
+					{/if}
 					{#if restrictedStock}
 						With {stock === 'labR' ? 'the lab resistors and the usual capacitor series' : 'those values only'} the f0 and Q error columns below grow{componentOpts.pairs ? ', less so with two in series' : ''}; the Bode plot and the spec check at the end show whether the result still meets the spec.
 					{/if}
 				</p>
+				{@render designControl(false)}
 				{#if parts?.source}
 					<p class="note">
 						The source drives the input through {roundValue(formatOhms(parts.source.r))}: the response and the figures of {parts.source.inputs.length > 1 ? `stages ${listText(parts.source.inputs.map((k) => String(k + 1)))}, on the input node,` : `stage ${parts.source.inputs[0] + 1}`} include it.
@@ -3688,7 +3799,12 @@
 										<p class="note">
 											{parts.edgeOnly?.[i]
 												? 'Centred in the template, this stage is out of reach of its circuit, so it is built as the same stage of the design on the passband edge'
-												: 'Rounded around the same stage of the design on the passband edge'}, {t.order === 1 ? `a corner at ${formatHz(cornerHz(t))}` : `f0 = ${formatHz(cornerHz(t))} and Q = ${t.q.toFixed(4)}`}: the errors above are against it.{parts.edgeOnly?.[i] ? '' : ' With the other stages, these parts meet the template best.'}
+												: 'Rounded around the same stage of the design on the passband edge'}, {t.order === 1 ? `a corner at ${formatHz(cornerHz(t))}` : `f0 = ${formatHz(cornerHz(t))} and Q = ${t.q.toFixed(4)}`}: the errors above are against it.{parts.edgeOnly?.[i] ? '' : ` With the other stages, these parts meet the template${designIndex > 0 ? '' : ' best'}.`}
+										</p>
+									{:else if parts?.fromCentred?.[i]}
+										{@const t = targetOf(i)}
+										<p class="note">
+											Rounded around the same stage of the design centred in its template, {t.order === 1 ? `a corner at ${formatHz(cornerHz(t))}` : `f0 = ${formatHz(cornerHz(t))} and Q = ${t.q.toFixed(4)}`}: the errors above are against it. With the other stages, these parts meet the template.
 										</p>
 									{/if}
 									{#if detuneText(stageDesign, targetOf(i), i)}
@@ -4036,6 +4152,7 @@
 					{/if}
 				{/if}
 				{@render pastControl(true)}
+				{@render designControl(true)}
 			</section>
 
 			<section class="panel">
@@ -4413,6 +4530,40 @@
 
 	.past-offer button {
 		margin-top: 0.5rem;
+	}
+
+	/* Next design: the buttons in a row that wraps on a phone, the count after them; the Next button stays where it is */
+	.design-step {
+		margin-top: 0.8rem;
+	}
+
+	/* (its last paragraph loses its margin as a last child: the notes after it keep their distance) */
+	.design-step:not(:last-child) {
+		margin-bottom: 0.9rem;
+	}
+
+	.design-buttons {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.design-count {
+		font-size: 0.82rem;
+		color: var(--textDim);
+		font-variant-numeric: tabular-nums;
+	}
+
+	.design-step .note {
+		margin-top: 0.5rem;
+	}
+
+	/* the site's ghost buttons keep their look when disabled: these must not */
+	.design-buttons button.ghost:disabled {
+		background: var(--surfaceHover);
+		color: var(--textFaint);
+		border-color: var(--line);
 	}
 
 	/* the parts of the inputs before the last change, kept on screen while the next ones are chosen */

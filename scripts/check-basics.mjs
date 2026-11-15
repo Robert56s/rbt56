@@ -169,9 +169,10 @@ function checkText(where, text) {
 	// real designs, built with the tool's own library the way the page
 	// builds them, so that the figures' props (the realized stages, the
 	// band-stop branches and signs, the flags of panel 05) are exercised:
-	// placed in the template as the page opens (centred), the parts picked
-	// on the whole filter (searchFilterParts), and once more as the stage
-	// designers build them alone on the passband edge, as before the search
+	// placed in the template as the page opens (on the passband edge), the
+	// parts picked on the whole filter (searchFilterParts), and once more
+	// centred (the page's other placement) and as the stage designers build
+	// them alone on the passband edge, as before the search
 	const { designBandPass, designBandStop, designHighPass, designLowPass, minimumOrder } = await import('../src/lib/filter/stages.js');
 	const { searchFilterParts, SOURCE_R_DEFAULT } = await import('../src/lib/filter/partSearch.js');
 	const { butterworthOrder, chebyshevOrder, transitionRatio } = await import('../src/lib/filter/order.js');
@@ -217,7 +218,7 @@ function checkText(where, text) {
 	// the page sets them: Tow-Thomas stays Tow-Thomas, anything else takes
 	// MFB band-pass stages and Boctor notches, the MFB band-pass stages of a
 	// band-pass built for the page's default op-amp, the TL082.
-	function pageValues(spec, response, topology, stock, orderOverride = null, bandMethod = 'cascade', placement = 'centred', designers = false) {
+	function pageValues(spec, response, topology, stock, orderOverride = null, bandMethod = 'cascade', placement = 'edge', designers = false) {
 		const { filterType, amaxDb, aminDb } = spec;
 		// designers: the parts as each stage's designer builds them alone, as before the search
 		const searched = !designers;
@@ -376,17 +377,20 @@ function checkText(where, text) {
 			}
 		}
 	}
-	// placed on the passband edge, the page's other placement, and the
-	// stages as their designers alone build them (the parts before the search)
+	// centred in the template, the page's other placement (it opens on the
+	// passband edge since "Next design" came in: before, it opened centred and
+	// this block placed them on the edge), and the stages as their designers
+	// alone build them on the passband edge (the parts before the search)
 	for (const spec of SPECS) {
 		const band = spec.filterType === 'bandpass' || spec.filterType === 'bandstop';
 		for (const response of ['butterworth', 'chebyshev', 'elliptic']) {
 			for (const topology of ['mfb', 'towThomas']) {
 				for (const designersAlone of [false, true]) {
-					const values = pageValues(spec, response, topology, 'lab', null, band ? 'auto' : 'cascade', 'edge', designersAlone);
+					const placement = designersAlone ? 'edge' : 'centred';
+					const values = pageValues(spec, response, topology, 'lab', null, band ? 'auto' : 'cascade', placement, designersAlone);
 					configs++;
 					if (values.design) designs++;
-					for (const w of inspectFilter(`filter ${spec.label}/${response}/${topology}/lab/edge${designersAlone ? '/designers' : ''}`, filterBasics(values))) widgets.add(w);
+					for (const w of inspectFilter(`filter ${spec.label}/${response}/${topology}/lab/${placement}${designersAlone ? '/designers' : ''}`, filterBasics(values))) widgets.add(w);
 				}
 			}
 		}

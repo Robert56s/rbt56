@@ -107,10 +107,12 @@ const opampPartName = (id) => (id === 'TL082' || id === 'LM741' ? id : null);
 /**
  * The source, the limits and the op-amp of a script for a low-pass,
  * high-pass or band filter: SOURCE_R (ohms, 0 an ideal source),
- * PAST_LIMITS (the set past the limits, when the page offers one) and
- * OPAMP_PART (the op-amp of the page's LTspice file, for the notes).
+ * PAST_LIMITS (the set past the limits, when the page offers one),
+ * DESIGN_INDEX (the design of the list the page's "Next design" steps
+ * through, 0 the best) and OPAMP_PART (the op-amp of the page's LTspice
+ * file, for the notes).
  */
-function sourceParams({ sourceR, pastLimits, opampPart }) {
+function sourceParams({ sourceR, pastLimits, designIndex, opampPart }) {
 	return `// The source that drives the filter: its output resistance, in ohms, in
 // series with the filter's input (50 for a function generator, 0 for an
 // ideal source). The part search, the figures of the stage on the input
@@ -123,6 +125,13 @@ const SOURCE_R = ${Number.isFinite(sourceR) && sourceR > 0 ? sourceR : 0};
 // them, met or not; true: when that set misses the template and a set past
 // the limits meets it, that set instead, as the page shows it when asked.
 const PAST_LIMITS = ${pastLimits ? 'true' : 'false'};
+// The design shown, from the list the page's "Next design" steps through:
+// 0 for the best set, 1 for the next one, and so on. Every design of the
+// list keeps the limits and meets the template, ranked as the search ranks
+// them for PLACEMENT. Past the end of the list the best set is shown; when
+// PAST_LIMITS shows the set past the limits, that set is shown whatever
+// DESIGN_INDEX says.
+const DESIGN_INDEX = ${designIndex};
 // The op-amp the circuit is built with, named in the notes on the loads (a
 // TL082 or an LM741 swings +-10 V only into 2 kohm or more): 'TL082',
 // 'LM741', or null for a general-purpose op-amp.
@@ -139,7 +148,7 @@ function pairLimitParam(limit) {
 `;
 }
 
-function paramsBlock({ amaxDb, aminDb, amaxDbHp, aminDbHp, amaxDbLp, aminDbLp, fp, fs, fl, fh, fsl, fsh, filterType, response, responseHp, responseLp, topology, topologyHp, topologyLp, order, orderHp, orderLp, capOverrides, resistorStock, resistorPairs, capacitorStock, transformed = false, topologyBand, topologyNotch, orderBand, opampGbw, mfbOpamp = null, pairLimit = null, placement = 'edge', sourceR = 0, pastLimits = false, opampPart = null }) {
+function paramsBlock({ amaxDb, aminDb, amaxDbHp, aminDbHp, amaxDbLp, aminDbLp, fp, fs, fl, fh, fsl, fsh, filterType, response, responseHp, responseLp, topology, topologyHp, topologyLp, order, orderHp, orderLp, capOverrides, resistorStock, resistorPairs, capacitorStock, transformed = false, topologyBand, topologyNotch, orderBand, opampGbw, mfbOpamp = null, pairLimit = null, placement = 'edge', sourceR = 0, pastLimits = false, designIndex = 0, opampPart = null }) {
 	const hasOverrides = capOverrides && Object.keys(capOverrides).length > 0;
 	return `// =====================================================================
 // PARAMETERS - the only block meant to be edited
@@ -182,7 +191,7 @@ const RESISTOR_PAIRS = ${resistorPairs ? 'true' : 'false'};   // with an array a
 ${pairLimit !== null ? pairLimitParam(pairLimit) : ''}const CAPACITORS = ${JSON.stringify(capacitorStock ?? null)};
 // null for the usual E6/E12 capacitor grids, or an array of farad values.
 const SUMMING_R = 10000;          // ohms, band-stop's summing amplifier (any equal value works)
-${sourceParams({ sourceR, pastLimits, opampPart })}
+${sourceParams({ sourceR, pastLimits, designIndex, opampPart })}
 // Used when FILTER_TYPE is 'lowpass' or 'highpass':
 const fp   = ${fp};           // Hz, passband edge (the higher edge for a high-pass)
 const fs   = ${fs};           // Hz, stopband edge (the lower edge for a high-pass)
@@ -507,8 +516,10 @@ ${
 `
 		: ''
 }const FOUND = searchFilterParts(design, { menus: MENUS, ...OPTS, pairLimit: PAIR_LIMIT, overrides: CAP_OVERRIDES, combinerR: COMBINER_R, sourceR: SOURCE_R });
-// the set shown: the best within the limits, or with PAST_LIMITS the one past them that meets the template, when there is one
-const SEARCH = PAST_LIMITS && FOUND.alternative ? FOUND.alternative : FOUND;
+if (!Number.isInteger(DESIGN_INDEX) || DESIGN_INDEX < 0) throw new Error('DESIGN_INDEX must be a whole number: 0 for the best set, 1 for the next one, and so on.');
+// the set shown: with PAST_LIMITS the one past the limits that meets the template, when there is one; else design
+// DESIGN_INDEX of the list (FOUND.designs, built the first time it is asked for), the best set past its end
+const SEARCH = PAST_LIMITS && FOUND.alternative ? FOUND.alternative : DESIGN_INDEX > 0 ? (FOUND.designs.at(DESIGN_INDEX) ?? FOUND) : FOUND;
 const failed = SEARCH.stages.findIndex((r) => !r);
 if (failed >= 0) {
 	const stage = design.stages[failed];
@@ -518,6 +529,9 @@ const realized = SEARCH.stages;
 const searched = SEARCH.picks.filter((p) => p === 'search').length;
 console.log(\`parts chosen on the whole filter's response: \${searched} of \${realized.length} stage\${realized.length === 1 ? '' : 's'} from the search\${searched < realized.length ? ', the others as their designer picks them alone' : ''}\`);
 if (SEARCH.pairPlan) console.log(filterPairPlanSummary(SEARCH.pairPlan));
+// which design of the list these parts are (DESIGN_INDEX), against the best set
+if (SEARCH.designIndex) console.log(\`design \${SEARCH.designIndex + 1} of \${FOUND.designs.count()} (DESIGN_INDEX = \${DESIGN_INDEX}): another set within the limits that meets the template; margin \${SEARCH.measure.margin.toFixed(3)} dB, the best set's \${FOUND.measure.margin.toFixed(3)} dB\`);
+else if (DESIGN_INDEX > 0) console.log(SEARCH === FOUND.alternative ? \`DESIGN_INDEX = \${DESIGN_INDEX}: the parts past the limits are shown (PAST_LIMITS), and they have no next design.\` : \`DESIGN_INDEX = \${DESIGN_INDEX}: the list holds \${FOUND.designs.count()} design\${FOUND.designs.count() === 1 ? '' : 's'}, so these are the best set's parts (design 1).\`);
 // the notes on the limits, in the page's words (limitAlertText), the op-amp
 // named as the page names it (limitAlertOpamp): the part the MFB band-pass
 // stages are built for, else OPAMP_PART, else a general-purpose one
@@ -534,10 +548,13 @@ const withSource = (a, stage) => {
 	const gain = Number.isFinite(a.dcGain) ? \`, DC gain = \${a.dcGain.toFixed(4)}\` : Number.isFinite(a.gain) ? \`, gain = \${a.gain.toFixed(4)}\` : '';
 	return \`f0 = \${f0.toFixed(1)} Hz (\${pct(a.wn, stage.wn)}%), Q = \${a.q.toFixed(4)} (\${pct(a.q, stage.q)}%)\${gain}\`;
 };
-// a stage whose parts were rounded around the same design on the passband edge is printed against that stage
+// a stage whose parts were rounded around the same design on the passband edge is printed against that stage, and
+// on the edge one of a design after the first (DESIGN_INDEX) rounded around the same design centred (fromCentred)
+// against that one
 const EDGE_DESIGN = SEARCH.fromEdge.some(Boolean) ? edgeDesignOf(design) : null;
+const CENTRED_DESIGN = SEARCH.fromCentred && SEARCH.fromCentred.some(Boolean) ? designPlacedAs(design, 'centred') : null;
 realized.forEach((r, i) => {
-	const stage = SEARCH.fromEdge[i] && EDGE_DESIGN ? EDGE_DESIGN.stages[i] : design.stages[i];
+	const stage = SEARCH.fromEdge[i] && EDGE_DESIGN ? EDGE_DESIGN.stages[i] : SEARCH.fromCentred && SEARCH.fromCentred[i] && CENTRED_DESIGN ? CENTRED_DESIGN.stages[i] : design.stages[i];
 	${t ? 'if (BAND_TRANSFORMED) printBandStage(stage, i, r);\n\telse ' : ''}printStage(stage, i, r);
 	const fig = SOURCE ? SOURCE.figures.find((x) => x.stage === i) : null;
 	if (fig) console.log(\`  with the source (\${SOURCE_R} ohm\${fig.adds ? \` in series with \${fig.adds}\` : ''}): \${withSource(fig.with, stage)}\${fig.extraPoles.length ? \`; the source adds a pole at \${fig.extraPoles.map((f) => formatHz(f)).join(' and ')}\` : ''}\`);
@@ -545,7 +562,8 @@ realized.forEach((r, i) => {
 	const edgeNote = SEARCH.edgeOnly[i]
 		? ', built as this stage of the same design on the passband edge (the figures above): centred, it is out of reach of its circuit'
 		: ', rounded around this stage of the same design on the passband edge (the figures above): they land the whole filter closer to its template';
-	console.log(\`\${how}\${SEARCH.fromEdge[i] ? edgeNote : SEARCH.picks[i] === 'search' ? '' : ': the search found nothing closer'}\`);
+	const centredNote = ', rounded around this stage of the same design centred in its template (the figures above): with the other stages of this design they meet the template';
+	console.log(\`\${how}\${SEARCH.fromEdge[i] ? edgeNote : SEARCH.fromCentred && SEARCH.fromCentred[i] ? centredNote : SEARCH.picks[i] === 'search' || SEARCH.designIndex ? '' : ': the search found nothing closer'}\`);
 	const cut = SEARCH.pairPlan && SEARCH.pairPlan.limited ? filterPairLimitSentence(SEARCH.pairPlan.stages[i], PAIR_LIMIT) : '';
 	if (cut) console.log(\`  \${cut}\`);
 	const note = NOTES.stages.find((s) => s.stage === i);
@@ -1105,13 +1123,17 @@ function narrowScript({ f0, narrowBy, q, bandwidth, gain = 1, stages = 1, circui
  * picker's "Up to N pairs"): the script carries it as RESISTOR_PAIR_LIMIT
  * and the part search keeps to it, as the page does. `placement` is the
  * page's "Place the design" menu, 'centred' or 'edge' (left out: 'edge',
- * the library's default): the script carries it as PLACEMENT. The parts
- * are the page's: searchFilterParts (partSearch.js) on the whole filter,
- * with its notes on the limits (limitAlertText). `sourceR` is the source
- * resistance of panel 01, ohms (left out: 0, an ideal source, the
- * library's default), carried as SOURCE_R; `pastLimits` true shows the set
- * past the limits the page offers when the one within them misses
- * (PAST_LIMITS); `spiceOpamp` is the op-amp of the page's LTspice file and
+ * the default of the page and of the library): the script carries it as
+ * PLACEMENT. The parts are the page's: searchFilterParts (partSearch.js)
+ * on the whole filter, with its notes on the limits (limitAlertText).
+ * `sourceR` is the source resistance of panel 01, ohms (left out: 0, an
+ * ideal source, the library's default), carried as SOURCE_R; `pastLimits`
+ * true shows the set past the limits the page offers when the one within
+ * them misses (PAST_LIMITS); `designIndex` is the design of the list the
+ * page's "Next design" steps through (left out: 0, the best set;
+ * result.designs of partSearch.js), carried as DESIGN_INDEX, so that the
+ * script prints the design the page shows; `spiceOpamp` is the op-amp of
+ * the page's LTspice file and
  * `mfbOpamp` its "Design the MFB stages for" choice ('TL082', 'LM741',
  * 'ideal' or 'other'), carried as OPAMP_PART and, with opampGbw,
  * OPAMP_GBW_PART: the notes on the loads name the op-amp as the page does
@@ -1156,6 +1178,7 @@ export function generateScript({
 	placement = 'edge',
 	sourceR = 0,
 	pastLimits = false,
+	designIndex = 0,
 	spiceOpamp = null,
 	mfbOpamp = null,
 	f0,
@@ -1217,6 +1240,7 @@ export function generateScript({
 			placement: placement === 'centred' ? 'centred' : 'edge',
 			sourceR,
 			pastLimits: Boolean(pastLimits),
+			designIndex: Number.isInteger(designIndex) && designIndex > 0 ? designIndex : 0,
 			opampPart: spiceOpamp
 		}),
 		'// ===================================================================== \n// ENGINE - same code the web tool runs\n// =====================================================================\n',

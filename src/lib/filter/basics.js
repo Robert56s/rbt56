@@ -23,7 +23,8 @@
  *   realizedStages  the stages built from rounded parts (panel 04)
  *   partTargets     the target stage each realized stage was rounded around, when it is not
  *                   design.stages[i] (a centred design may take a stage's parts from the same
- *                   design on the passband edge); null reads design.stages
+ *                   design on the passband edge, and a design after the first on the edge, Next
+ *                   design, from the same design centred); null reads design.stages
  *   bandStopBranches, combineSigns   band-stop only: the two branches and the combiner's signs
  *   attenuationAtFs, attenuationAtFp                  the flags under panel 05, low-pass and high-pass
  *   attenuationAtFsl, attenuationAtFsh, attenuationAtFl, attenuationAtFh   the same for the band types

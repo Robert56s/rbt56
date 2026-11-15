@@ -12,8 +12,11 @@
 //   pageParts(args)    { design, settings, found, result, opamp }: the
 //                      search's result (found), the set the page shows
 //                      (result: found's alternative with args.pastLimits
-//                      when it has one, else found), and the op-amp its
-//                      alerts name (limitAlertOpamp of args.mfbOpamp and
+//                      when it has one, else design args.designIndex of
+//                      found's list of designs, the one "Next design"
+//                      steps to, found itself for 0, left out or past
+//                      the list's end), and the op-amp its alerts name
+//                      (limitAlertOpamp of args.mfbOpamp and
 //                      args.spiceOpamp)
 //   pageNetlistOpts(args, page)  what the page hands spice.js for them
 //   scriptParts(out)   the parts a script printed, [[name, value]] in order
@@ -135,14 +138,17 @@ export function pageSettings(args) {
 /**
  * The design and the parts the page shows for generateScript's arguments:
  * the search's result, the set shown (past the limits when asked and
- * offered) and the op-amp the alerts name.
+ * offered, else the design of the list at args.designIndex, as the page's
+ * "Next design" and the script's DESIGN_INDEX pick it) and the op-amp the
+ * alerts name.
  */
 export function pageParts(args) {
 	const a = filled(args);
 	const design = pageDesign(args);
 	const settings = pageSettings(args);
 	const found = searchFilterParts(design, settings);
-	const result = a.pastLimits && found.alternative ? found.alternative : found;
+	const index = Number.isInteger(a.designIndex) && a.designIndex > 0 ? a.designIndex : 0;
+	const result = a.pastLimits && found.alternative ? found.alternative : index > 0 ? (found.designs.at(index) ?? found) : found;
 	// (the MFB stages' op-amp counts for a transformed band-pass only, as generateScript writes OPAMP_GBW_PART)
 	const builtFor = isTransformed(a) && a.filterType === 'bandpass' && a.opampGbw !== undefined ? (a.mfbOpamp ?? null) : null;
 	return { design, settings, found, result, opamp: limitAlertOpamp(result, builtFor, a.spiceOpamp ?? null) };
