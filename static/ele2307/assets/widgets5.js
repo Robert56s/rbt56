@@ -167,7 +167,7 @@
       ['Ge', 'Si', 'GaAs'].forEach(k => rows.push(['n<sub>i</sub> ' + k, dens(nIntr(MAT[k].gap, t)) + ' ; σ = ' + sci(Q * nIntr(MAT[k].gap, t) * (MAT[k].mue + MAT[k].muh), 2) + ' S/m']));
       rows.push(['n<sub>i</sub> pour Δε = ' + fr(g4, 2) + ' eV', dens(nIntr(g4, t))]);
       out.appendChild(readout(rows));
-      out.appendChild(el('p', { class: 'w-note' }, 'Valeurs du modèle du manuel (m* = m) : à 300 K, 6,7 × 10⁹ cm⁻³ pour Si, 5,9 × 10¹³ pour Ge, 2,4 × 10⁷ pour GaAs. La diapo 18 donne les valeurs mesurées (1,5 × 10¹⁰, 2,5 × 10¹³ et 2 × 10⁶ cm⁻³), qui tiennent compte des masses effectives réelles. Un doublement de n_i demande environ 11 K pour le silicium.'));
+      out.appendChild(el('p', { class: 'w-note' }, 'Valeurs du modèle du manuel (m* = m) : à 300 K, 6,7 × 10⁹ cm⁻³ pour Si, 5,9 × 10¹³ pour Ge, 2,4 × 10⁷ pour GaAs. La diapo 18 donne les valeurs mesurées (1,5 × 10¹⁰, 2,5 × 10¹³ et 2 × 10⁶ cm⁻³), qui tiennent compte des masses effectives réelles. Un doublement de n_i demande environ 9 K pour le silicium.'));
     }
     [T.input, gap.input].forEach(i => i.addEventListener('input', update));
     update(); window.addEventListener('resize', update); document.addEventListener('themechange', update);

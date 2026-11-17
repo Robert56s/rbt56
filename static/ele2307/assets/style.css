@@ -319,6 +319,23 @@ details.sol { border-color: color-mix(in srgb, var(--ok) 45%, var(--border)); }
 .fig svg .atom-h { fill: var(--bad); fill-opacity: .18; stroke: var(--bad); stroke-width: 2; }
 .fig svg .hole { fill: var(--surface); stroke: var(--bad); stroke-width: 2; }
 .fig svg .hole-fill { fill: var(--surface); stroke: var(--bad); stroke-width: 1.2; }
+/* Figures du cours 10 (jonction PN) : zones N et P, ions, niveau de Fermi, couches de fabrication */
+.fig svg .sub { font-size: .76em; }
+.fig svg .bedge { stroke: var(--text); stroke-width: 2; fill: none; }
+.fig svg .cf { stroke: var(--warn); stroke-width: 1.8; stroke-dasharray: 10 4 2 4; fill: none; }
+.fig svg .reg-n { fill: var(--accent); fill-opacity: .13; stroke: var(--accent); stroke-width: 1.2; }
+.fig svg .reg-p { fill: var(--bad); fill-opacity: .11; stroke: var(--bad); stroke-width: 1.2; }
+.fig svg .ion-d { fill: var(--accent-2); fill-opacity: .18; stroke: var(--accent-2); stroke-width: 1.4; }
+.fig svg .ion-a { fill: var(--warn); fill-opacity: .18; stroke: var(--warn); stroke-width: 1.4; }
+.fig svg .fd-soft { fill: var(--accent-2); fill-opacity: .26; stroke: var(--accent-2); stroke-width: 1.2; }
+.fig svg .fw-soft { fill: var(--warn); fill-opacity: .24; stroke: var(--warn); stroke-width: 1.2; }
+.fig svg .metal { fill: var(--muted); fill-opacity: .55; stroke: var(--text); stroke-width: 1; }
+.fig svg .solid { fill: var(--text); stroke: none; }
+.fig svg .pt { fill: var(--surface); stroke: var(--text); stroke-width: 1.5; }
+.fig svg .hole-e { fill: var(--surface); stroke: var(--accent); stroke-width: 1.6; }
+.fig svg .thin { stroke-width: 1.5; }
+.fig svg .thick { stroke-width: 4; }
+.fig svg .dsh { stroke-dasharray: 7 4; }
 @media print { .fig { break-inside: avoid; page-break-inside: avoid; box-shadow: none; } }
 .sr-only { position: absolute; left: -9999px; }
 .footer { color: var(--muted); font-size: .85em; text-align: center; padding: 2rem 1rem; border-top: 1px solid var(--border); margin-top: 2rem; }

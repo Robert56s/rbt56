@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Formulaire | ELE2307</title>
 <link rel="stylesheet" href="assets/katex/katex.min.css">
-<link rel="stylesheet" href="assets/style.css?v=12">
+<link rel="stylesheet" href="assets/style.css?v=13">
 </head>
 <body>
 <header class="site-header">
@@ -21,6 +21,7 @@
     <a href="cours7.html">Cours 7</a>
     <a href="cours8.html">Cours 8</a>
     <a href="cours9.html">Cours 9</a>
+    <a href="cours10.html">Cours 10</a>
     <a href="formulaire.html">Formulaire</a>
     <a href="intra.html">Intra</a>
     <a href="errata.html">Errata</a>
@@ -35,7 +36,7 @@
 <div class="course-hero">
   <div class="kicker">Formulaire ELE2307 - version commentée</div>
   <h1>Formulaire par cours</h1>
-  <p class="meta">Même structure que le formulaire officiel distribué avec le cours (Notion → Formule → Condition d’emploi), enrichi des formules intermédiaires utiles en examen. Une section par cours, du cours 1 au cours 6.</p>
+  <p class="meta">Même structure que le formulaire officiel distribué avec le cours (Notion → Formule → Condition d’emploi), enrichi des formules intermédiaires utiles en examen. Une section par cours, du cours 1 au cours 10.</p>
   <p class="small">Astuce : <strong>Ctrl+P</strong> imprime cette page sans l’entête ni le sommaire. Pensez à vérifier que le formulaire officiel autorisé à l’examen contient bien ce que vous utilisez.</p>
 </div>
 
@@ -411,6 +412,44 @@
   <tr><th class="notion">Relation d'Einstein</th>
     <td class="f">\(\displaystyle \frac{D_n}{\mu_n} = \frac{D_p}{\mu_p} = \frac{kT}{e}\)</td>
     <td class="rem">25,9 mV à 300 K ; Si : \(D_n = 35\), \(D_p = 12{,}5\) cm²/s</td></tr>
+</table>
+</section>
+
+<section class="form-section">
+<h2>Cours 10 - La jonction PN</h2>
+<table class="formulaire">
+  <tr><th class="notion">Relation de Poisson</th>
+    <td class="f">\(\displaystyle \frac{d^2V(x)}{dx^2} = -\frac{Q(x)}{\epsilon}\) ; \(\displaystyle E(x) = -\frac{dV}{dx} = \int\frac{Q(x)}{\epsilon}\,dx\)</td>
+    <td class="rem">\(Q\) : charge par unité de volume, \(+qN_D\) de \(-w_n\) à 0 (côté N), \(-qN_A\) de 0 à \(w_p\) (côté P) ; silicium : \(\epsilon_s = 1{,}04\times10^{-12}\) F/cm</td></tr>
+  <tr><th class="notion">Jonction PN : potentiel de barrière</th>
+    <td class="f"><p>\(\displaystyle V_B = \frac{qN_D}{2\epsilon}w_n^2 + \frac{qN_A}{2\epsilon}w_p^2\)</p><p>\(\displaystyle V_B = \frac{1}{q\beta}\ln\frac{N_AN_D}{n_i^2} = \frac{kT}{q}\ln\frac{N_AN_D}{n_i^2}\)</p></td>
+    <td class="rem">jonction abrupte à l'équilibre ; \(kT/q = 25{,}85\) mV à 300 K ; Si : \(n_i = 1{,}5\times10^{10}\) cm⁻³ ; +59,5 mV par décade de dopage</td></tr>
+  <tr><th class="notion">Jonction PN : égalité des charges</th>
+    <td class="f">\(N_Dw_n = N_Aw_p\)</td>
+    <td class="rem">la zone désertée s'étend du côté le moins dopé ; \(W = w_n + w_p\)</td></tr>
+  <tr><th class="notion">Largeurs de la zone désertée (complément)</th>
+    <td class="f"><p>\(\displaystyle w_n = \sqrt{\frac{2\epsilon V_B}{qN_D\,[1 + N_D/N_A]}}\) ; \(\displaystyle w_p = \sqrt{\frac{2\epsilon V_B}{qN_A\,[1 + N_A/N_D]}}\)</p><p>\(\displaystyle W = \sqrt{\frac{2\epsilon V_B}{q}\left(\frac{1}{N_A} + \frac{1}{N_D}\right)}\)</p></td>
+    <td class="rem">pas sur le formulaire officiel : se tirent des deux lignes précédentes ; sous tension, remplacer \(V_B\) par \(V_B - V_D\)</td></tr>
+  <tr><th class="notion">Champ dans la zone désertée (complément)</th>
+    <td class="f">\(\displaystyle E_{max} = \frac{qN_Dw_n}{\epsilon} = \frac{qN_Aw_p}{\epsilon} = \frac{2V_B}{W}\)</td>
+    <td class="rem">champ triangulaire, maximal à la frontière PN, dirigé de N vers P ; \(1\ \text{V/cm} = 100\ \text{V/m}\)</td></tr>
+  <tr><th class="notion">Capacité de la zone désertée</th>
+    <td class="f" colspan="2"><p>\(\displaystyle C_d = A\sqrt{\frac{\epsilon\,q}{2V_B}}\left(\sqrt{\frac{N_A}{N_AN_D + N_D^2}} + \sqrt{\frac{N_D}{N_AN_D + N_A^2}}\right)^{-1}\)</p><p>\(\displaystyle C_d = \frac{\epsilon A}{W}\) ; \(\displaystyle C_d(V_D) = \frac{C_d(0)}{\sqrt{1 - V_D/V_B}}\)</p><p class="note">\(A\) : aire de la jonction. Première ligne : forme du formulaire officiel. Seconde ligne : formes équivalentes plus commodes (calculer \(V_B\), puis \(W\), puis \(C_d\)). \(C_d\) diminue en polarisation inverse.</p></td></tr>
+  <tr><th class="notion">Concentrations de porteurs minoritaires à la frontière de la zone désertée</th>
+    <td class="f"><p>\(\displaystyle n_p(w_p) = N_D\,e^{q(V_D - V_B)/kT} = n_{pe}\,e^{qV_D/kT}\) (électrons)</p><p>\(\displaystyle p_n(-w_n) = N_A\,e^{q(V_D - V_B)/kT} = p_{ne}\,e^{qV_D/kT}\) (trous)</p></td>
+    <td class="rem">\(n_{pe} = n_i^2/N_A\) et \(p_{ne} = n_i^2/N_D\) : concentrations à l'équilibre ; \(V_D\) : tension externe, positive en polarisation avant (+ côté P)</td></tr>
+  <tr><th class="notion">Courants de diffusion (complément)</th>
+    <td class="f">\(\displaystyle J_n = qD_n\frac{n_{pe} - n_p(w_p)}{L_n}\) ; \(\displaystyle J_p = -qD_p\frac{p_n(-w_n) - p_{ne}}{L_p}\)</td>
+    <td class="rem">\(L_n\), \(L_p\) : longueurs de diffusion des minoritaires ; Si : \(D_n = 35\), \(D_p = 12{,}5\) cm²/s</td></tr>
+  <tr><th class="notion">Courant de diode</th>
+    <td class="f"><p>\(I_D = J_DA = I_S\left(e^{\beta qV_D} - 1\right)\)</p><p>\(\displaystyle I_S = A\,q\,n_i^2\left(\frac{D_p}{L_pN_D} + \frac{D_n}{L_nN_A}\right)\)</p></td>
+    <td class="rem">\(I_S\) : courant de saturation (seconde ligne : complément), proportionnel à \(n_i^2\) donc très sensible à \(T\) ; avant : \(\times10\) tous les 59,5 mV ; inverse : \(I_D \to -I_S\)</td></tr>
+  <tr><th class="notion">Modèle dynamique de la diode (complément)</th>
+    <td class="f"><p>\(I_D = I_S\left(e^{qV_D/nkT} - 1\right)\), \(1 \le n \le 2\)</p><p>\(\displaystyle C_s = \tau_T\frac{dI_D}{dV_D}\) ; \(C_D = C_d + C_s\) ; \(V = V_{jonction} + r_SI_D\)</p></td>
+    <td class="rem">pente de \(\ln I_D\) : \(q/nkT\) ; \(C_d\) domine en inverse et jusqu'à \(0{,}5\,V_B\), \(C_s\) au-delà ; \(r_S\) : résistance des zones neutres, de l'ordre de 10 Ω</td></tr>
+  <tr><th class="notion">Jonction selon le manuel (complément)</th>
+    <td class="f">\(j_{net} = j_{diffusion} - j_{dérive} = j_0\left(e^{\beta eU} - 1\right)\) ; \(\displaystyle \frac{n_{e,p}}{n_{e,n}} = e^{-\beta\Delta\varepsilon_c}\)</td>
+    <td class="rem">Stowe 23.20 : \(j_0\) courant de dérive (constant), \(U\) tension appliquée ; \(\Delta\varepsilon_c = qV_B\) : décalage des bandes</td></tr>
 </table>
 </section>
 

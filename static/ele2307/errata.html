@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Errata | ELE2307</title>
 <link rel="stylesheet" href="assets/katex/katex.min.css">
-<link rel="stylesheet" href="assets/style.css?v=12">
+<link rel="stylesheet" href="assets/style.css?v=13">
 </head>
 <body>
 <header class="site-header">
@@ -21,6 +21,7 @@
     <a href="cours7.html">Cours 7</a>
     <a href="cours8.html">Cours 8</a>
     <a href="cours9.html">Cours 9</a>
+    <a href="cours10.html">Cours 10</a>
     <a href="formulaire.html">Formulaire</a>
     <a href="intra.html">Intra</a>
     <a href="errata.html">Errata</a>
@@ -33,9 +34,9 @@
 <article class="content">
 
 <div class="course-hero">
-  <div class="kicker">Errata - documents des cours 1 à 6</div>
+  <div class="kicker">Errata - documents des cours 1 à 10</div>
   <h1>Erreurs et points à vérifier dans les documents du cours</h1>
-  <p class="meta">Diapos, corrigés du professeur (texte et manuscrits), liste d'exercices suggérés, formulaire, manuel de Stowe | État au 13 octobre 2026</p>
+  <p class="meta">Diapos, notes et corrigés du professeur (texte et manuscrits), liste d'exercices suggérés, formulaire, manuel de Stowe | État au 17 novembre 2026</p>
   <p>Chaque entrée indique ce qui est écrit dans le document, ce que le calcul donne, l'impact sur le résultat final et un niveau de confiance. Tout a été recalculé à partir des énoncés du manuel et des formules du cours ; les valeurs sont reprises dans les corrigés du site.</p>
   <p><span class="tag conf-certain">Certain</span> recalculé sans ambiguïté &nbsp; <span class="tag conf-probable">Probable</span> très vraisemblable, mais l'intention du corrigé peut différer &nbsp; <span class="tag conf-verif">À vérifier</span> lecture du manuscrit incertaine ou désaccord mineur &nbsp; <span class="tag theme">Remarque</span> pas une erreur, mais un point à connaître</p>
   <p class="small">Conseil : avant l'intra, faites confirmer les entrées « Certain » et « Probable » au professeur ou au chargé de TD, surtout celles qui touchent la méthode (ex. 6 du chap. 5, ex. 38 du chap. 12, ex. 10 du chap. 5).</p>
@@ -54,8 +55,9 @@
   <tr><td>Corrigés cours 7 (chap. 15 et 19)</td><td class="num">7</td><td>Chap. 19 ex. 2 (formule des fermions pour des bosons), chap. 15 ex. 50 (masse), chap. 19 ex. 28 (b)</td></tr>
   <tr><td>Corrigés cours 8 (chap. 20 et 21)</td><td class="num">3</td><td>Chap. 21 ex. 10 (énergie des protons, conclusion inversée)</td></tr>
   <tr><td>Corrigés cours 9 (chap. 23)</td><td class="num">4</td><td>Ex. 26 (a) : bande interdite de 1,0 eV et non 0,41 eV ; ex. 22 (b) et (c)</td></tr>
+  <tr><td>Notes et corrigé du cours 10 (jonction PN)</td><td class="num">7</td><td>Notes : l'isolant du condensateur est la zone désertée (p. 2), sens du courant de dérive (p. 6), numéros d'équation décalés</td></tr>
   <tr><td>Liste d'exercices suggérés</td><td class="num">1</td><td>Exercice 13 du chap. 5 listé deux fois</td></tr>
-  <tr><td>Manuel (Stowe)</td><td class="num">10</td><td>Formule de la gaussienne et dérivation de σ (corrigées par le prof)</td></tr>
+  <tr><td>Manuel (Stowe)</td><td class="num">11</td><td>Formule de la gaussienne et dérivation de σ (corrigées par le prof)</td></tr>
   <tr><td>Sujet d'intra 2021 (pratique)</td><td class="num">1</td><td>QCM 9 : deux réponses défendables</td></tr>
 </table>
 
@@ -355,7 +357,53 @@
   <p><strong>Impact :</strong> un ordre de grandeur sur chaque concentration et un régime mal identifié.</p>
 </article>
 
-<h2>11. Liste d'exercices suggérés</h2>
+<h2>11. Notes et corrigé du cours 10 (la jonction PN)</h2>
+<p class="small">Le cours 10 s'appuie sur le PDF de notes « La jonction PN » (15 pages) et sur un corrigé manuscrit de ses cinq exercices. Les réponses numériques du corrigé ont toutes été retrouvées ; les entrées ci-dessous portent surtout sur le texte des notes.</p>
+
+<article class="err">
+  <header><span class="tag">Notes « La jonction PN », p. 2</span><span class="tag conf-certain">Certain</span><h4>L'isolant du condensateur est la zone désertée</h4></header>
+  <p><strong>Écrit :</strong> « La zone neutre joue le rôle de l'isolant dans le cas de la capacité de la zone désertée. »</p>
+  <p><strong>À lire :</strong> c'est la zone désertée, vidée de ses porteurs, qui joue le rôle de l'isolant ; les zones neutres N et P, conductrices, jouent le rôle des plaques. La diapo 10 le dit correctement, et la suite des notes (\(W\) = longueur de la zone désertée dans \(C = \epsilon A/W\)) aussi.</p>
+  <p><strong>Impact :</strong> aucun sur les calculs ; à ne pas recopier dans une réponse rédigée.</p>
+</article>
+
+<article class="err">
+  <header><span class="tag">Notes « La jonction PN », p. 6</span><span class="tag conf-probable">Probable</span><h4>Sens du courant de dérive des électrons</h4></header>
+  <p><strong>Écrit :</strong> après \(J_{dér} = qN\mu E\) : « Le sens du courant est ici donné par rapport à la polarité de la charge. Il est opposé au champ dans le cas d'une charge négative. »</p>
+  <p><strong>À lire :</strong> ce qui est opposé au champ, c'est le <em>déplacement</em> des électrons (leur vitesse de dérive, comme sur la figure 10.4 des notes). Le courant électrique, charge fois vitesse, est dans le sens du champ pour les électrons comme pour les trous : c'est la loi d'Ohm \(J = \sigma E\) du cours 9, avec \(\sigma = q(n\mu_n + p\mu_p)\) positif.</p>
+  <p><strong>Impact :</strong> un signe sur le courant de dérive des électrons si on prend la phrase au pied de la lettre. Le raisonnement des notes sur la jonction (flèches de la figure 10.5) est correct.</p>
+</article>
+
+<article class="err">
+  <header><span class="tag">Notes « La jonction PN », p. 5 à 13</span><span class="tag conf-certain">Certain</span><h4>Numérotation des équations décalée d'une unité</h4></header>
+  <p><strong>Écrit :</strong> deux équations portent le numéro (10.11) (diffusion p. 5, dérive p. 6). À partir de là, le texte cite chaque équation avec un numéro de plus que son étiquette.</p>
+  <p><strong>À lire :</strong> le potentiel de barrière est étiqueté (10.14) mais cité « (10.15) » ; la densité de courant \(J_D\) est étiquetée (10.19) mais citée « (10.20) » ; la relation de la diode \(I_D = I_S(e^{qV_D/kT} - 1)\) est étiquetée (10.20) mais citée « (10.21) » ; la relation avec le facteur \(n\) est étiquetée (10.21) mais citée « (10.22) » ; \(C_D = C_d + C_s\) est étiquetée (10.23) mais citée « (10.24) ». Les paires sont aussi étiquetées de travers : (10.15a) avec (10.16b), (10.16a) avec (10.17b), (10.18a) avec (10.19b). Enfin \(C_j\), p. 4, désigne \(C_d\).</p>
+  <p><strong>Impact :</strong> aucun sur le fond. Le site utilise les étiquettes imprimées à côté des équations. Le corrigé du professeur cite « 10.18 et 10.19 » pour les concentrations aux frontières : ce sont (10.18a) et (10.19b).</p>
+</article>
+
+<article class="err">
+  <header><span class="tag">Corrigé du cours 10, ex. 3 (b)</span><span class="tag conf-verif">À vérifier</span><h4>Largeur du côté P</h4></header>
+  <p><strong>Écrit :</strong> « \(w_p = \dfrac{N_D}{N_A}w_n = 9{,}47\times10^{-7}\) m » puis « \(W = w_n + w_p = 9{,}51\times10^{-7}\) m » (lecture du manuscrit : le chiffre peut être un 2).</p>
+  <p><strong>À lire :</strong> avec \(w_n = 9{,}42\times10^{-9}\) m et \(N_D/N_A = 100\), \(w_p = 9{,}42\times10^{-7}\) m, ce qui redonne bien \(W = 9{,}51\times10^{-7}\) m. Avec 9,47 on trouverait 9,56.</p>
+  <p><strong>Impact :</strong> nul, les réponses finales (\(W\), \(E_{max} = 1{,}45\times10^{6}\) V/m, 11 nF/cm²) sont justes.</p>
+</article>
+
+<article class="err">
+  <header><span class="tag">Corrigé du cours 10, ex. 5</span><span class="tag theme">Remarque</span><h4>La pente mesurée n'est pas \(q/kT\)</h4></header>
+  <p>Le corrigé écrit \(\ln I_D = \ln I_S + \dfrac{q}{kT}V_D\) puis tire la pente du tableau : 33,6 V⁻¹. Or \(q/kT = 38{,}7\) V⁻¹ à 300 K. La pente du tableau est en réalité \(q/nkT\) avec un facteur \(n = 1{,}15\) (ou, si on tient à \(n = 1\), une température de 345 K). Les réponses (1,17 mA et 4,7 Ω) n'en dépendent pas, puisqu'on n'utilise que la pente mesurée ; en revanche on trouverait 1,30 mA et 5,5 Ω en imposant \(q/kT = 38{,}7\) V⁻¹ à partir du seul point (0,70 V ; 0,60 mA), ce qui contredirait le troisième point du tableau.</p>
+</article>
+
+<article class="err">
+  <header><span class="tag">Notes « La jonction PN », p. 10</span><span class="tag theme">Remarque</span><h4>« \(I_S\) double environ à tous les 10 °C »</h4></header>
+  <p>C'est la règle pratique à retenir pour l'examen, et elle décrit bien le courant inverse mesuré sur les diodes au silicium. Elle ne découle pas exactement de la formule (10.20) : \(I_S \propto n_i^2 \propto T^3e^{-\varepsilon_{gap}/kT}\) est multiplié par 4,4 quand on passe de 300 à 310 K (avec 1,1 eV), soit un doublement tous les 4,5 K. C'est \(n_i\), et non \(n_i^2\), qui double tous les 9 K environ ; le courant inverse des diodes réelles est dominé par la génération dans la zone désertée, proportionnelle à \(n_i\).</p>
+</article>
+
+<article class="err">
+  <header><span class="tag">Notes « La jonction PN », p. 8 à 10</span><span class="tag theme">Remarque</span><h4>Renvois à d'autres chapitres</h4></header>
+  <p>Les relations « (23.6) » et « (23.12) » citées dans les notes sont celles du manuel de Stowe : \(n_e = N_ce^{-\beta(\varepsilon_c - \mu)}\) et \(n_en_h = n_i^2\) (cours 9). Les renvois au « chapitre 1 » (p. 8) et à l'« équation 1.6 » (p. 10) viennent d'une ancienne numérotation : il faut lire le chapitre 9 du cours et l'expression de \(n_i\), équation (23.13) du manuel.</p>
+</article>
+
+<h2>12. Liste d'exercices suggérés</h2>
 
 <article class="err">
   <header><span class="tag">Liste d'exercices suggérés, cours 2, chapitre 5</span><span class="tag conf-probable">Probable</span><h4>Exercice 13 listé deux fois</h4></header>
@@ -363,7 +411,7 @@
   <p><strong>À lire :</strong> le second est vraisemblablement l'exercice 16 (combustion du carbone, p. 94-95), seul exercice de la section C qui traite d'une réaction. C'est celui qui est corrigé dans le cours 2 du site.</p>
 </article>
 
-<h2>12. Manuel de Stowe : erreurs signalées par le professeur ou constatées</h2>
+<h2>13. Manuel de Stowe : erreurs signalées par le professeur ou constatées</h2>
 
 <article class="err">
   <header><span class="tag">Manuel, p. 42 (chap. 3)</span><span class="tag conf-certain">Certain, corrigé par le prof</span><h4>Dérivation de l'écart type du critère unique</h4></header>
@@ -419,7 +467,12 @@
   <p><strong>À lire :</strong> les réponses (a) et (b), à 290 K, tiennent compte de \(N_c \propto T^{3/2}\) (sans ce facteur on trouverait \(5{,}1\times10^{16}\)). La réponse (c), à 580 K, vaut \(2{,}51\times10^{25}\,e^{-10{,}0} = 1{,}1\times10^{21}\) seulement si on l'oublie ; avec \(N_c(580\ \text{K}) = 6{,}75\times10^{25}\) m⁻³, comme le demande la consigne de la section, on obtient \(3{,}1\times10^{21}\) m⁻³.</p>
 </article>
 
-<h2>13. Remarques diverses</h2>
+<article class="err">
+  <header><span class="tag">Stowe, chap. 23, ex. 31 (d), réponse p. 549</span><span class="tag theme">Remarque</span><h4>Une réponse qui garde le niveau de Fermi fixe</h4></header>
+  <p>La question demande les densités de porteurs du côté P « à 320 K ». La réponse du manuel (\(2{,}0\times10^{22}\) et \(1{,}9\times10^{11}\) m⁻³) suppose que le niveau de Fermi reste à 0,2 eV du bord de la bande de valence. Dans un matériau dont le nombre de dopants est fixe, ce sont les majoritaires qui resteraient à \(8{,}0\times10^{21}\) m⁻³ et le niveau de Fermi qui se déplacerait ; les minoritaires vaudraient alors \(n_i^2/n_h = 4{,}5\times10^{11}\) m⁻³. Les deux lectures sont données dans le corrigé du cours 10 (D11).</p>
+</article>
+
+<h2>14. Remarques diverses</h2>
 
 <article class="err">
   <header><span class="tag">TD1, énoncé PDF</span><span class="tag theme">Remarque</span><h4>Phrase cachée destinée aux outils d'IA</h4></header>
