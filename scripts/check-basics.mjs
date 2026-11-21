@@ -525,26 +525,28 @@ function checkText(where, text) {
 		foreign.test(allText) ? `foreign words: ${allText.match(foreign)[0]}` : text(ref.slice(1, 2)).slice(0, 300)
 	);
 
-	// the page offers the type and calls the basics with it (and with whether
-	// its script download shows: SCRIPT_DOWNLOAD, false while the script is
-	// reworked, the basics then name the LTspice file alone; the argument is
-	// required, since without it Start here would name the hidden script)
+	// the page offers the type and calls the basics with it (no `script`
+	// argument any more: the JavaScript download it hid is gone, and Start
+	// here names filter-design.py, which panel 06 always offers)
 	const { readFileSync } = await import('node:fs');
 	const page = readFileSync(new URL('../src/routes/(site)/tools/filter-design/+page.svelte', import.meta.url), 'utf8');
 	check(
-		'narrow band-pass basics: the page offers "Narrow band-pass" in its Filter type menu and calls filterBasics with the type, its design, the stock, the pairs and whether the script download shows',
-		/<option value="narrowband">Narrow band-pass<\/option>/.test(page) && /filterBasics\(\{ filterType: 'narrowband', design: narrowDesign, stock, pairs: componentOpts\.pairs, pairLimit: componentOpts\.pairLimit, script: SCRIPT_DOWNLOAD \}\)/.test(page)
+		'narrow band-pass basics: the page offers "Narrow band-pass" in its Filter type menu and calls filterBasics with the type, its design, the stock and the pairs',
+		/<option value="narrowband">Narrow band-pass<\/option>/.test(page) && /filterBasics\(\{ filterType: 'narrowband', design: narrowDesign, stock, pairs: componentOpts\.pairs, pairLimit: componentOpts\.pairLimit \}\)/.test(page)
 	);
-	// with the script download hidden, no paragraph of the basics points to a script; shown, panel 06's line names it
+	// panel 06's line names both downloads, the LTspice file and filter-design.py, the Python file that
+	// checks its parts (against the template, or a narrow band's f0, Q and K), and no word of the
+	// JavaScript script it replaced (filter-design.js, "a standalone script"), a `script: false` left
+	// over from it changing nothing
 	const words = (blocks) => blocks.map((b) => [b.p, b.h, b.intro, ...(b.terms ?? []).flat()].filter((x) => typeof x === 'string').join(' ')).join(' ');
 	const narrowDesign = designNarrowBand({ f0: 10000, q: 5, gain: 1, stages: 2 });
 	const lowPass = { filterType: 'lowpass', response: 'butterworth', topology: 'mfb', order: 4, stages: 2, fp: 10000, fs: 35000, amaxDb: 3, aminDb: 40 };
-	const hidden = [filterBasics({ filterType: 'narrowband', design: narrowDesign, script: false }), filterBasics({ ...lowPass, script: false })].map(words);
-	const shown = [filterBasics({ filterType: 'narrowband', design: narrowDesign }), filterBasics(lowPass)].map(words);
+	const texts = [filterBasics({ filterType: 'narrowband', design: narrowDesign }), filterBasics(lowPass)].map(words);
+	const named = (t, against) => /06 Download exports the circuit as an LTspice file/.test(t) && new RegExp(`filter-design\\.py, a Python file that works through the same design step by step and checks its own parts and the page's against ${against}`).test(t);
 	check(
-		'filter basics: with the script download hidden (script: false) no word of a script, shown its line in panel 06',
-		hidden.every((t) => !/\bscript\b|filter-design\.js/i.test(t)) && shown.every((t) => /standalone script/.test(t)),
-		hidden.map((t) => (/.{0,60}\bscript\b.{0,40}/i.exec(t) ?? ['none'])[0]).join(' | ')
+		"filter basics: panel 06's line names the LTspice file and filter-design.py, the Python file that checks its own parts and the page's against the template (f0, Q and K for a narrow band-pass), and no word of the JavaScript script",
+		named(texts[0], 'f0, Q and K') && named(texts[1], 'the template') && texts.every((t) => !/\bscript\b|filter-design\.js/i.test(t)) && words(filterBasics({ ...lowPass, script: false })) === texts[1] && words(filterBasics({ filterType: 'narrowband', design: narrowDesign, script: false })) === texts[0],
+		texts.map((t) => (/.{0,60}(\bscript\b|filter-design\.(js|py)).{0,40}/i.exec(t) ?? ['none'])[0]).join(' | ')
 	);
 }
 

@@ -3,7 +3,7 @@
 // designBandPassTransformed / designBandStopTransformed). The specs they
 // are checked on, the design from either way of writing a spec, and the
 // realization rules every consumer of such a design follows (the page,
-// the downloaded script, the LTspice export):
+// filter-design.py, the LTspice export):
 //   - plannedTopology (bandMethod.js) picks each stage's circuit under the
 //     page's two menus, Boctor's fallbacks to Tow-Thomas included;
 //   - a band-pass stage is built at its own centre gain (an MFB one for

@@ -1434,7 +1434,7 @@ function psSourceFigures(list, t, rs) {
 
 /**
  * The source on the input node of a set of parts (realized stages of
- * `design`), for the page and the script: null for an ideal source
+ * `design`), for the page's measure: null for an ideal source
  * (sourceR 0 or none), else
  *   r         the source's resistance, ohms
  *   inputs    the stages on the input node (from 0): the first one, or both
@@ -2478,7 +2478,7 @@ function psPick(stage, { menus, transformed, resistorSeries, capacitors, pairs, 
  * circuit cannot reach there (an MFB band-pass stage whose Q or gain the
  * placement moves past what it gives) is built as the same stage of the
  * design on the edge, and counted so. edgeOnly lists those stages (from 1).
- * The page and the script choose a band filter's method on this count.
+ * The page chooses a band filter's method on this count.
  */
 export function placedOpampCount(design, menus) {
 	const count = opampCount(design, menus);
@@ -2557,8 +2557,8 @@ export function placedOpampCount(design, menus) {
  *              (stages, measure, picks, fromEdge, edgeOnly, relaxed, alerts,
  *              loads, pairPlan, baseline, ideal, ms) with withinLimits false,
  *              pastLimits true, withinMargin the margin of the parts within
- *              the limits, and alternative null; the page and the script show
- *              it whole in place of this one when asked to. Else null
+ *              the limits, and alternative null; the page shows it whole in
+ *              place of this one when asked to. Else null
  *   alerts     [{ stage, kind: 'floor' | 'ceiling', resistor, value } |
  *              { stage, kind: 'cap', capacitor, value } | { stage, kind:
  *              'load', opamp, output, load, freq, atInput, on }]: every
@@ -3655,9 +3655,9 @@ export function limitAlertOpamp(result, builtFor = null, spice = null) {
 
 /**
  * The alerts of a result of searchFilterParts (or of its alternative) in
- * plain sentences, the same words on the page and in the downloaded
- * script. `opamp` names the op-amp the 2 kohm load is for (limitAlertOpamp:
- * 'TL082', 'LM741', or any name), null for the general phrase.
+ * plain sentences, as the page shows them. `opamp` names the op-amp the
+ * 2 kohm load is for (limitAlertOpamp: 'TL082', 'LM741', or any name),
+ * null for the general phrase.
  * Returns
  *   stages   [{ stage, manual, text }]: per stage with an alert (stage from
  *            0), one sentence for its load ("Stage 1's output drives about

@@ -1,14 +1,14 @@
 // Shared by the filter checks: the parts the page shows for a design, as
 // it picks them (searchFilterParts of partSearch.js, on the whole filter
-// against its template), from the same arguments the page hands
-// generateScript (codegen.js). The downloaded script must print exactly
-// these parts, so the checks build both from one set of arguments:
+// against its template), from the same arguments the page's downloads take
+// (downloadScript's for filter-design.py, python/index.js
+// generateFilterPython; the LTspice files', spice.js), so that the checks
+// build the page and each file from one set of arguments:
 //   pageDesign(args)   the design, placed as args.placement says
 //   pageSettings(args) the search's settings: the menus, the stock, the
 //                      pairs and their limit, the capacitors typed (farads),
 //                      the band-stop's summing resistor and the source
-//                      resistance (args.sourceR, ohms; left out 0, as
-//                      generateScript takes it)
+//                      resistance (args.sourceR, ohms; left out 0)
 //   pageParts(args)    { design, settings, found, result, opamp }: the
 //                      search's result (found), the set the page shows
 //                      (result: found's alternative with args.pastLimits
@@ -19,13 +19,9 @@
 //                      (limitAlertOpamp of args.mfbOpamp and
 //                      args.spiceOpamp)
 //   pageNetlistOpts(args, page)  what the page hands spice.js for them
-//   scriptParts(out)   the parts a script printed, [[name, value]] in order
-//   partsProblems(out, page)  where a script's parts, response points,
-//                      verdict and notes on the limits differ from the
-//                      page's (page: pageParts's), [] when they agree
 
 import { LAB_KIT, nearestResistor } from '../src/lib/filter/eseries.js';
-import { limitAlertOpamp, limitAlertText, searchFilterParts } from '../src/lib/filter/partSearch.js';
+import { limitAlertOpamp, searchFilterParts } from '../src/lib/filter/partSearch.js';
 import { designBandPass, designBandPassTransformed, designBandStop, designBandStopTransformed, designHighPass, designLowPass } from '../src/lib/filter/stages.js';
 
 const KIT = { resistorStock: LAB_KIT.resistors, capacitorStock: LAB_KIT.capacitors };
@@ -35,8 +31,8 @@ const BS = { filterType: 'bandstop', response: 'butterworth', amaxDb: 3, aminDb:
 const NARROW = { filterType: 'bandpass', response: 'butterworth', amaxDb: 3, aminDb: 40, aminDbHp: 50, aminDbLp: 30, fl: 40000, fh: 60000, fsl: 10000, fsh: 100000, bandMethod: 'transformed', orderBand: null };
 
 /**
- * The page's settings the files are checked on, as generateScript's
- * arguments (each run on both placements): every topology the search
+ * The page's settings the files are checked on, as the page's downloads
+ * take them (each run on both placements): every topology the search
  * covers, the notches of both circuits, a band-stop's two branches and its
  * combiner, both transformations (the MFB band-pass stages built for the
  * TL082 and the LM741), the stocks, pairs under a limit, capacitors typed
@@ -65,7 +61,7 @@ export const PAGE_CASES = [
 	['band-stop transformed, Boctor, lab kit, 50 ohm source, past the limits', { ...BS, bandMethod: 'transformed', topology: 'mfb', topologyBand: 'mfb', topologyNotch: 'boctor', ...KIT, sourceR: 50, pastLimits: true }]
 ];
 
-/** generateScript's arguments with its own defaults filled in. */
+/** The downloads' arguments with the page's defaults filled in. */
 function filled(args) {
 	const a = Object.fromEntries(Object.entries(args).filter(([, v]) => v !== undefined));
 	return {
@@ -91,7 +87,7 @@ function filled(args) {
 const isBand = (a) => a.filterType === 'bandpass' || a.filterType === 'bandstop';
 const isTransformed = (a) => isBand(a) && a.bandMethod === 'transformed';
 
-/** The design the page shows (and the script's ORDER section builds) for generateScript's arguments. */
+/** The design the page shows (the ideal design its parts are chosen for) for the downloads' arguments. */
 export function pageDesign(args) {
 	const a = filled(args);
 	const placement = a.placement === 'centred' ? 'centred' : 'edge';
@@ -136,11 +132,10 @@ export function pageSettings(args) {
 }
 
 /**
- * The design and the parts the page shows for generateScript's arguments:
+ * The design and the parts the page shows for the downloads' arguments:
  * the search's result, the set shown (past the limits when asked and
  * offered, else the design of the list at args.designIndex, as the page's
- * "Next design" and the script's DESIGN_INDEX pick it) and the op-amp the
- * alerts name.
+ * "Next design" picks it) and the op-amp the alerts name.
  */
 export function pageParts(args) {
 	const a = filled(args);
@@ -149,7 +144,7 @@ export function pageParts(args) {
 	const found = searchFilterParts(design, settings);
 	const index = Number.isInteger(a.designIndex) && a.designIndex > 0 ? a.designIndex : 0;
 	const result = a.pastLimits && found.alternative ? found.alternative : index > 0 ? (found.designs.at(index) ?? found) : found;
-	// (the MFB stages' op-amp counts for a transformed band-pass only, as generateScript writes OPAMP_GBW_PART)
+	// (the MFB stages' op-amp counts for a transformed band-pass only, as the page's menus take it)
 	const builtFor = isTransformed(a) && a.filterType === 'bandpass' && a.opampGbw !== undefined ? (a.mfbOpamp ?? null) : null;
 	return { design, settings, found, result, opamp: limitAlertOpamp(result, builtFor, a.spiceOpamp ?? null) };
 }
@@ -203,79 +198,4 @@ export function pageNetlistOpts(args, { design, settings, result }) {
 		// the source's resistance ahead of the input (RS), as the page's measure has it
 		sourceR: settings.sourceR
 	};
-}
-
-/** The parts a script printed under STAGES (the combiner's resistors included), [[name, value]] in order. */
-export function scriptParts(out) {
-	const from = out.indexOf('\nSTAGES\n');
-	const to = out.indexOf('\nFREQUENCY RESPONSE');
-	const text = out.slice(from < 0 ? 0 : from, to < 0 ? out.length : to);
-	const parts = [];
-	for (const line of text.split('\n')) {
-		const first = /^ {2}R = ([\d.e+-]+) ohm.*, C = ([\d.e+-]+) F$/.exec(line);
-		if (first) {
-			parts.push(['R', Number(first[1])], ['C', Number(first[2])]);
-			continue;
-		}
-		const m = /^ {2}(\w+) = ([\d.e+-]+) (ohm|F)\b/.exec(line);
-		if (m) parts.push([m[1], Number(m[2])]);
-	}
-	return parts;
-}
-
-/** The parts the page shows, as a script prints them: resistors to the ohm, capacitors to five figures. */
-export function pageLines(result) {
-	const rows = result.stages.flatMap((s) => Object.entries(s.components));
-	const combiner = result.measure?.combiner;
-	if (combiner) rows.push(...Object.entries(combiner.parts.resistors));
-	return rows.map(([name, v]) => [name, /^[Rr]/.test(name) ? v : Number(v.toExponential(4))]);
-}
-
-/**
- * Where a script's output differs from the page's result: its parts, the
- * response at the points it prints, the figures of its verdict (the worst
- * passband loss, the least stopband attenuation, the margin and the whole
- * template's OK or NOT MET), and with `opamp` given (pageParts's) its notes
- * on the limits, word for word the page's (limitAlertText: one per stage,
- * the summary on the limits line, the offer of parts past them). [] when
- * they agree.
- */
-export function partsProblems(out, { design, result, opamp }) {
-	const problems = [];
-	if (/^ERROR/m.test(out)) return [out.slice(out.indexOf('ERROR'), out.indexOf('ERROR') + 200)];
-	const got = scriptParts(out);
-	const want = pageLines(result);
-	const same = (g, w) => g[0] === w[0] && (/^[Rr]/.test(w[0]) ? Math.abs(g[1] - w[1]) <= 0.5 + 1e-9 * w[1] : Math.abs(g[1] / w[1] - 1) < 1e-9);
-	if (got.length !== want.length || got.some((g, k) => !same(g, want[k]))) {
-		const k = want.findIndex((w, j) => !got[j] || !same(got[j], w));
-		problems.push(`parts: ${got.length} printed against ${want.length}${k >= 0 ? `, first ${got[k] ? got[k].join(' = ') : 'none'} against ${want[k].join(' = ')}` : ''}`);
-	}
-	const m = result.measure;
-	// the points the script prints the response at, in its order
-	const { fp, fs, fl, fh, fsl, fsh } = design;
-	const type = design.method === 'cascade' ? 'bandpass' : design.method === 'parallel' ? 'bandstop' : design.filterType;
-	const points = {
-		lowpass: () => [fp / 10, fp, Math.sqrt(fp * fs), fs, fs * 10],
-		highpass: () => [fs / 10, fs, Math.sqrt(fp * fs), fp, fp * 10],
-		bandpass: () => [fsl / 10, fsl, fl, Math.sqrt(fl * fh), fh, fsh, fsh * 10],
-		bandstop: () => [fl / 10, fl, fsl, Math.sqrt(fsl * fsh), fsh, fh, fh * 10]
-	}[type]();
-	const printed = [...out.matchAll(/^ +(\d+) Hz : +(-?[\d.]+) dB$/gm)].map((x) => Number(x[2]));
-	if (printed.length !== points.length || points.some((f, k) => Math.abs(printed[k] - m.gainDbAt(f)) > 0.0051)) problems.push(`response points: ${printed.join(' ')} against ${points.map((f) => m.gainDbAt(f).toFixed(2)).join(' ')}`);
-	const pass = /worst loss in the passband (-?[\d.]+) dB at (\d+) Hz/.exec(out);
-	const stop = /least attenuation in the stopband (-?[\d.]+) dB/.exec(out);
-	const margin = /^margin (-?[\d.]+) dB.*the whole template: (OK|NOT MET)$/m.exec(out);
-	if (!pass || Math.abs(Number(pass[1]) - m.pass.loss) > 5.1e-4) problems.push(`worst passband loss ${pass?.[1]} against ${m.pass.loss.toFixed(3)}`);
-	if (!stop || Math.abs(Number(stop[1]) - m.stop.db) > 0.051) problems.push(`stopband ${stop?.[1]} against ${m.stop.db.toFixed(1)}`);
-	if (!margin || Math.abs(Number(margin[1]) - m.margin) > 5.1e-4 || (margin[2] === 'OK') !== m.meets) problems.push(`margin ${margin?.[1]} ${margin?.[2]} against ${m.margin.toFixed(3)} ${m.meets ? 'OK' : 'NOT MET'}`);
-	if (opamp !== undefined) {
-		const text = limitAlertText(result, opamp);
-		const notes = [...out.matchAll(/^ {2}note: (.*)$/gm)].map((x) => x[1]).filter((x) => !/^CAP_OVERRIDES/.test(x));
-		const want = text.stages.map((s) => s.text);
-		if (notes.length !== want.length || notes.some((x, k) => x !== want[k])) problems.push(`notes: ${notes.length} printed against ${want.length}${notes.length || want.length ? `, first "${notes[0] ?? ''}" against "${want[0] ?? ''}"` : ''}`);
-		const line = /^limits of the search \([^)]*\): (.*)$/m.exec(out);
-		if (!line || line[1] !== (text.summary || 'kept')) problems.push(`limits line "${line?.[1]}" against "${text.summary || 'kept'}"`);
-		if (out.includes(text.offer || '\u0000') !== Boolean(text.offer)) problems.push(`offer "${text.offer}" not printed`);
-	}
-	return problems;
 }

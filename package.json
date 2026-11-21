@@ -17,6 +17,7 @@
     "check:ltspice": "node --import ./scripts/resolve-ext.mjs scripts/check-ltspice.mjs",
     "check:basics": "node --import ./scripts/resolve-ext.mjs scripts/check-basics.mjs",
     "check:hand": "node --import ./scripts/resolve-ext.mjs scripts/check-hand.mjs",
+    "check:python": "node --import ./scripts/resolve-ext.mjs scripts/check-python.mjs",
     "prepare": "svelte-kit sync || echo ''",
     "check:guides": "node --import ./scripts/resolve-ext.mjs scripts/check-guides.mjs"
   },

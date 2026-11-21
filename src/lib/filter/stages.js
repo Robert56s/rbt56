@@ -82,7 +82,6 @@ export function cutoffScale(response, amaxDb, n, filterType = 'lowpass') {
  * A window with nothing in it (an order forced under the minimum) keeps
  * the edge.
  */
-export const PLACEMENTS = ['edge', 'centred'];
 
 /** The responses placed by their ripple; the others by their frequency scale. */
 const PLACE_BY_RIPPLE = { chebyshev: true, elliptic: true };

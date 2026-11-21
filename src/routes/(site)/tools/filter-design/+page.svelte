@@ -16,7 +16,8 @@
 	import MathPanel from '$lib/components/MathPanel.svelte';
 	import OpampPicker from '$lib/components/OpampPicker.svelte';
 	import StockPicker from '$lib/components/StockPicker.svelte';
-	import { generateScript, narrowNextSteps as narrowNextStepsOf, nextSteps } from '$lib/filter/codegen';
+	import { narrowNextSteps as narrowNextStepsOf, nextSteps } from '$lib/filter/nextSteps';
+	import { generateFilterPython } from '$lib/filter/python/index';
 	import { generateSchematic } from '$lib/filter/spice';
 	import { DEFAULT_OPAMP, OPAMP_GBW, OPAMP_MODELS } from '$lib/spice/opamps';
 	import {
@@ -86,9 +87,6 @@
 	const SUMMING_R = 10_000; // ohms, the summing amplifier's three equal resistors
 
 	const MAX_ORDER = 16;
-
-	// the script download is hidden until the script is reworked; true brings its buttons and paragraphs back
-	const SCRIPT_DOWNLOAD = false;
 
 	let amaxDb = $state(3);
 	let aminDb = $state(40);
@@ -902,8 +900,8 @@
 	// at a load of PART_LOAD_MIN or more over the passband, the next stage's
 	// input included: a TL082 or an LM741 swings its full +-10 V only into
 	// 2 kohm or more. The library puts the alerts in words (limitAlertText),
-	// the same as the script's, naming the op-amp the MFB band-pass stages are
-	// built for, else the one of the LTspice file (limitAlertOpamp).
+	// naming the op-amp the MFB band-pass stages are built for, else the one
+	// of the LTspice file (limitAlertOpamp).
 	const alertOpamp = $derived(parts ? limitAlertOpamp(parts, mfbOpamp, spiceOpamp) : null);
 	const alertWords = $derived(parts && realizedStages.length ? limitAlertText(parts, alertOpamp) : { stages: [], summary: '', offer: '' });
 	/** The alert of stage i, { stage, manual, text }, or null. */
@@ -1697,10 +1695,17 @@
 		return fullDesign.stages[i].filterType === 'highpass' ? explainHpStage(fullDesign, i) : explainStage(fullDesign, i);
 	}
 
+	/**
+	 * filter-design.py (python/index.js) for the design shown: the page's
+	 * settings, the ideal design the parts shown were chosen for, and those
+	 * parts (the best set, a design of the Next design list or the set past
+	 * the limits), which the file checks against the template beside its own.
+	 */
 	function downloadScript() {
-		if (!design) return;
-		const capOverridesFarads = capOverridesInFarads();
-		const code = generateScript({
+		// within the pause after typing, the parts of the inputs as they now stand, not the ones still shown
+		if (partsPending) partHeld = partRequest;
+		if (!design || !rd || !parts) return;
+		const args = {
 			// where the design sits in its template, as panel 01 places it
 			placement,
 			// a transformed design takes one Amax, the smaller side's
@@ -1726,30 +1731,30 @@
 			order,
 			orderHp,
 			orderLp,
-			// the method the page shows, so the script rebuilds the same design
+			// the method the page shows
 			bandMethod: isBandType ? method : undefined,
 			topologyBand,
 			topologyNotch,
 			orderBand: transformed ? orderBand : null,
 			// the op-amp a transformed band-pass's MFB band-pass stages are built for
 			...(transformed && filterType === 'bandpass' ? { opampGbw: mfbGbwChosen } : {}),
-			capOverrides: capOverridesFarads,
+			capOverrides: capOverridesInFarads(),
 			resistorStock: componentOpts.resistorSeries,
 			resistorPairs: componentOpts.pairs,
-			// the cap on pairs, when one is set: the script shares them out as the page does
+			// the cap on pairs, when one is set
 			...(componentOpts.pairs && componentOpts.pairLimit !== null ? { resistorPairLimit: componentOpts.pairLimit } : {}),
 			capacitorStock: componentOpts.capacitors,
 			// the source in series with the input, ohms (0: an ideal source), as panel 01 has it
 			sourceR: sourceOhms,
-			// the parts past the limits in place of those within them, when asked for here (the script falls back the same way)
+			// the parts past the limits shown in place of those within them
 			pastLimits: showPast,
-			// the design of the list Next design shows (0: the best), as DESIGN_INDEX: the script builds the same list
+			// the design of the list Next design shows (0: the best)
 			designIndex,
 			// the op-amps the load alerts name, as the page picks the name (limitAlertOpamp): the LTspice file's, and the one the MFB stages are built for
 			spiceOpamp,
 			mfbOpamp
-		});
-		saveFile(code, 'filter-design.js', 'text/javascript');
+		};
+		saveFile(generateFilterPython({ args, design: rd, shown: parts }), 'filter-design.py', 'text/x-python');
 	}
 
 	// MFB band-pass stages built for an op-amp: the single-pole model in the
@@ -1809,10 +1814,10 @@
 		saveFile(schematic, 'filter-design.asc', 'text/plain');
 	}
 
-	// the narrow band-pass as the page shows it: the script rebuilds the same circuit
+	// filter-design.py for the narrow band-pass as the page shows it: its design and the chain of panel 04
 	function downloadNarrowScript() {
 		if (!narrowDesign) return;
-		const code = generateScript({
+		const args = {
 			filterType: 'narrowband',
 			f0: narrowF0,
 			narrowBy,
@@ -1829,8 +1834,8 @@
 			resistorPairs: componentOpts.pairs,
 			...(componentOpts.pairs && componentOpts.pairLimit !== null ? { resistorPairLimit: componentOpts.pairLimit } : {}),
 			capacitorStock: componentOpts.capacitors
-		});
-		saveFile(code, 'filter-design.js', 'text/javascript');
+		};
+		saveFile(generateFilterPython({ args, design: narrowDesign, shown: narrowBuild?.realized ?? null }), 'filter-design.py', 'text/x-python');
 	}
 
 	function downloadNarrowSchematic() {
@@ -2408,7 +2413,7 @@
 		minutes={5}
 		blocks={isNarrow
 			? // a narrow band-pass gets a line of its own, then the basics told on a low-pass
-				filterBasics({ filterType: 'narrowband', design: narrowDesign, stock, pairs: componentOpts.pairs, pairLimit: componentOpts.pairLimit, script: SCRIPT_DOWNLOAD })
+				filterBasics({ filterType: 'narrowband', design: narrowDesign, stock, pairs: componentOpts.pairs, pairLimit: componentOpts.pairLimit })
 			: filterBasics({
 			filterType,
 			// the transformation's figures: one response and Amax, order 2n,
@@ -2449,9 +2454,7 @@
 			// the stage each part set was rounded around: its own, or the same stage on the passband edge
 			partTargets: rd && realizedStages.length ? realizedStages.map((_, i) => targetOf(i)) : null,
 			// stage 1 there takes an ideal source, and says so when panel 04 reads it with this one
-			sourceR: sourceOhms,
-			// 06 Download names the script only while its download shows
-			script: SCRIPT_DOWNLOAD
+			sourceR: sourceOhms
 		})}
 		widgets={{ 'two-tones': TwoTonesDemo, 'rc-on-spec': RcOnSpecDemo, 'order-on-spec': OrderOnSpecDemo, 'stages-multiply': StagesMultiplyDemo }}
 	/>
@@ -2942,21 +2945,18 @@
 						<h2>Download</h2>
 					</div>
 
-					{#if SCRIPT_DOWNLOAD}
-						<p class="note">
-							A standalone JavaScript file with this exact design: the same stage calculation and
-							component search as this page, parameterized at the top so it can be edited and rerun with
-							<code>node filter-design.js</code>. It also prints the same report shown above, plus notes on
-							simulating, building and testing the result.
-						</p>
-					{/if}
+					<p class="note">
+						A Python file that works this design through step by step, printing as it goes: the band and
+						its edges, the Q and gain of each stage, then the parts of the circuit by a simple rule of its
+						own. It checks those parts and the page's against f0, Q and K. Python 3.8 or newer, nothing
+						to install: <code class="command">python filter-design.py</code>. The settings at its top can be edited and
+						the file run again.
+					</p>
 
 					<OpampPicker id="spiceOpamp" label="Op-amp in the LTspice file" bind:value={spiceOpamp} />
 
 					<div class="row downloads">
-						{#if SCRIPT_DOWNLOAD}
-							<button type="button" onclick={downloadNarrowScript}>Download filter-design.js</button>
-						{/if}
+						<button type="button" onclick={downloadNarrowScript}>Download filter-design.py</button>
 						<button type="button" onclick={downloadNarrowSchematic}>Download filter-design.asc (LTspice)</button>
 					</div>
 
@@ -4161,21 +4161,18 @@
 					<h2>Download</h2>
 				</div>
 
-				{#if SCRIPT_DOWNLOAD}
-					<p class="note">
-						A standalone JavaScript file with this exact design: the same order, pole-placement,
-						denormalization and component-search code as this page, parameterized at the top so it
-						can be edited and rerun with <code>node filter-design.js</code>. It also prints the same
-						report shown above, plus notes on simulating, building and testing the result.
-					</p>
-				{/if}
+				<p class="note">
+					A Python file that works this design through step by step, printing as it goes: the
+					template, the order, the poles, each stage's f0 and Q, then the parts of every stage by a
+					simple rule of its own. It checks those parts and the page's against the template. Python
+					3.8 or newer, nothing to install: <code class="command">python filter-design.py</code>. The settings at its
+					top can be edited and the file run again.
+				</p>
 
 				<OpampPicker id="spiceOpamp" label="Op-amp in the LTspice file" bind:value={spiceOpamp} />
 
 				<div class="row downloads">
-					{#if SCRIPT_DOWNLOAD}
-						<button type="button" onclick={downloadScript}>Download filter-design.js</button>
-					{/if}
+					<button type="button" onclick={downloadScript}>Download filter-design.py</button>
 					<button type="button" onclick={downloadSchematic}>Download filter-design.asc (LTspice)</button>
 				</div>
 
@@ -4202,7 +4199,7 @@
 				</p>
 				{#if spiceOpampDiffers}
 					<p class="note">
-						The MFB band-pass stages are built for {mfbOpampLabel}, not the {spiceOpamp} in this file: the run shows the difference.
+						The MFB band-pass stages are built for {mfbOpampLabel}, not the {spiceOpamp} in the LTspice file: its run shows the difference.
 					</p>
 				{/if}
 
@@ -4231,6 +4228,11 @@
 </article>
 
 <style>
+	/* a command to type, kept on one line (python filter-design.py breaks at its hyphen otherwise) */
+	code.command {
+		white-space: nowrap;
+	}
+
 	h1 {
 		font-size: clamp(1.9rem, 5vw, 2.5rem);
 		margin-bottom: 0.5rem;

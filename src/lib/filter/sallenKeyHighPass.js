@@ -24,8 +24,7 @@ const SK_HP_R_SWEET = 10_000;
 
 export function resistorRatioHp(q) {
 	// R_bottom / R_top, fixed by Q the same way the low-pass capacitor
-	// ratio (capRatio in sallenKey.js) is - named differently here so the
-	// two functions never collide once both get inlined into one script.
+	// ratio (capRatio in sallenKey.js) is, named apart from it.
 	return 4 * q * q;
 }
 

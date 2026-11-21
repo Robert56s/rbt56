@@ -1,8 +1,7 @@
 /**
  * The elements of every realized stage, format-independent: the netlist
  * (spice.js), the drawn schematic (sheet.js) and the nodal solver
- * (nodal.js) all read them. No imports, so the downloadable script can
- * carry it as it is.
+ * (nodal.js) all read them.
  */
 
 /**
