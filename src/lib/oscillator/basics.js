@@ -699,8 +699,8 @@ const READING = [
 	],
 	[
 		'05 Which one to build: all five circuits at the same frequency, size and op-amp, and a verdict, the Wien bridge unless a sine and cosine pair or a very steady frequency is needed.',
-		'06 Download: a schematic for LTspice, a free circuit simulator.',
-		'Its run starts at the design size and its log reports the frequency and size the circuit holds.',
+		'06 Download: a schematic for LTspice, a free circuit simulator, and a Python file that works the same design through step by step.',
+		'The schematic starts its run at the design size, and its log reports the frequency and size the circuit holds.',
 		'A flag under a table means a figure is stretched or has to change, and each Show the math block derives the numbers.'
 	]
 ];

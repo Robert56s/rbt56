@@ -70,7 +70,7 @@ const TOL = 1e-9;
  * tabulated once per design so the cycle-by-cycle work is a lookup. Past
  * the table the current is the resistive straight line it tends to.
  */
-function currentTable(r, d, vMin, vMax, N = 8192) {
+export function currentTable(r, d, vMin, vMax, N = 8192) {
 	const step = (vMax - vMin) / (N - 1);
 	const tab = new Float64Array(N);
 	for (let k = 0; k < N; k++) tab[k] = diodeCurrent(vMin + k * step, r, d);
@@ -111,7 +111,7 @@ function trig(S) {
 }
 
 /** The carrier component of the diode current, and its peak, for a given tank voltage. */
-function fundamentalWith(current, a, u, v1, S) {
+export function fundamentalWith(current, a, u, v1, S) {
 	const { cos, sin } = trig(S);
 	let re = 0;
 	let im = 0;
@@ -134,7 +134,7 @@ function fundamentalWith(current, a, u, v1, S) {
  * relaxation cancels that, so a few passes converge. Returns I1 and V1
  * (complex, cosine-referenced) and the largest current. `v1` starts it.
  */
-function carrierCycle(current, a, u, z, S, relax, v1 = { re: 0, im: 0 }) {
+export function carrierCycle(current, a, u, z, S, relax, v1 = { re: 0, im: 0 }) {
 	let v = v1;
 	let f = fundamentalWith(current, a, u, v, S);
 	for (let it = 0; it < 100; it++) {
@@ -155,7 +155,7 @@ function carrierCycle(current, a, u, z, S, relax, v1 = { re: 0, im: 0 }) {
  * distortion (harmonics 2 to 5 over the fundamental), the extremes and
  * the largest diode current.
  */
-function envelopeOf(current, { a, um, vb, z, relax }, P, S) {
+export function envelopeOf(current, { a, um, vb, z, relax }, P, S) {
 	const e = [];
 	let peak = 0;
 	let v1;
@@ -187,7 +187,7 @@ function envelopeOf(current, { a, um, vb, z, relax }, P, S) {
  * rises steadily with u_m, so a bracketed secant (regula falsi, Illinois
  * variant) finds it in a few evaluations.
  */
-function driveForIndex(current, base, vb, target, P, S) {
+export function driveForIndex(current, base, vb, target, P, S) {
 	const f = (um) => envelopeOf(current, { ...base, um, vb }, P, S).n - target;
 	let a = 0;
 	let fa = -target;
@@ -244,7 +244,7 @@ export function designDiodeMixerModulator({
 	diode = '1N4148',
 	resistorSeries = 'E24', // a series name, or a list of the resistors on hand (ohms)
 	capacitors = null, // null for E12 capacitors, or a list of the capacitors on hand (farads)
-	capacitorStock = capacitors, // the same, under the name the downloaded script uses
+	capacitorStock = capacitors, // the same, under the name the page passes
 	pairs = false // with a list: R_p and R_m may each be two resistors in series (pairedResistor); or a whitelist of the ones that may: 'Rp', 'Rm'
 } = {}) {
 	if (!(fp > 0) || !(fmMax > 0) || !(inductance > 0) || !(sidebandMargin > 0)) return null;

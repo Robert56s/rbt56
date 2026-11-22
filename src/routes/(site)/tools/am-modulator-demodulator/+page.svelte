@@ -29,7 +29,7 @@
 		buildOutputCouplingDiagram,
 		buildPrecisionRectifierDiagram
 	} from '$lib/modulation/circuits';
-	import { generateDemodScript, generateDiodeScript, generateJfetScript } from '$lib/modulation/codegen';
+	import { generateDemodPython, generateDiodePython, generateJfetPython } from '$lib/modulation/python/index';
 	import {
 		explainAmBasics,
 		explainCarrierPath,
@@ -328,21 +328,6 @@
 	// an oscillator on E24 and E6 that the list builds with more pairs than the limit leaves it
 	const carrierShortByLimit = $derived(pairCap !== null && Boolean(jfetSection?.oscillator?.stockShortfall) && carrierFrom === 'wien' && !carrierFor(parts.pairs)?.stockShortfall);
 
-	// the comment above the script's RESISTOR_PAIR_LIMIT: how the page's limit
-	// became the modulator's share, what the oscillator holds taken out, and
-	// fewer still where the modulator does best with fewer than all its pairs
-	const jfetBudgetNote = $derived.by(() => {
-		const sec = jfetSection;
-		if (pairCap === null || carrierFrom !== 'wien' || !sec) return null;
-		const left = pairCap - sec.carrierCount;
-		const holds = sec.carrierCount > 0 ? `the page's Wien bridge holds ${sec.carrierCount} of the ${pairCap} pairs allowed` : null;
-		// a whitelist no limit of the modulator's own gives: the script gets it as RESISTOR_PAIRS
-		if (sec.scriptPairs) return `${holds ? `${holds}; with the ${left} left` : `with the ${pairCap} pairs allowed`}, the modulator below comes closest to its targets when only the resistors RESISTOR_PAIRS names may pair`;
-		if (sec.budget === null || sec.budget === undefined) return null;
-		if (sec.budget >= left) return holds ? `${holds}, so the modulator below may have ${sec.budget}` : null;
-		return `${holds ? `${holds}; of the ${left} left` : `of the ${pairCap} pairs allowed`}, the modulator below comes closest to its targets with at most ${sec.budget}`;
-	});
-
 	const carrierOscillator = $derived(jfetSection?.oscillator ?? null);
 	// the oscillator the files and the divider really get: one that starts and holds its amplitude
 	const workingOscillator = $derived(oscillatorWorks(carrierOscillator) ? carrierOscillator : null);
@@ -401,8 +386,8 @@
 		return amSignal(fp, fmPreview, amplitude, jfetDesign.opamp.effectiveModulationIndex, duration);
 	});
 
-	function saveFile(text, filename) {
-		const blob = new Blob([text], { type: 'text/plain' });
+	function saveFile(text, filename, mime = 'text/plain') {
+		const blob = new Blob([text], { type: mime });
 		const url = URL.createObjectURL(blob);
 		const a = document.createElement('a');
 		a.href = url;
@@ -413,46 +398,53 @@
 		setTimeout(() => URL.revokeObjectURL(url), 10000);
 	}
 
+	// the stock as the Python files take it: the picker's choice, its lists, the pairs and their limit
+	const stockArgs = $derived({ kind: stock, resistors: parts.resistorSeries, capacitors: parts.capacitors, pairs: parts.pairs, pairLimit: pairCap });
+
+	/**
+	 * jfet-am-modulator.py (python/jfet.js) for the design shown: the page's
+	 * inputs (the rows as typed, the window the fit took), the carrier the
+	 * divider gets (the Wien bridge's, when it gives it), the stock and the
+	 * page's parts, which the file checks beside its own, with the note on a
+	 * limit of pairs.
+	 */
 	function downloadJfet() {
 		if (!jfetDesign) return;
-		download(
-			generateJfetScript({
-				// the fixed-V_DS rows export as measured points: they are already rDS
-				mode: fitted ? 'measured' : jfetMode,
-				vp: jfetModel.vp,
-				idss: jfetModel.idss,
-				rdsOn: jfetModel.rdsOn,
-				measurements: fitted ? measuredPoints.map((pt) => [pt.vgs, pt.rds]) : null,
-				windowLow,
-				windowHigh,
-				topology,
-				targetOutputAmplitude,
-				outputStage,
-				carrierBuffer,
-				swingFraction,
-				targetModulationIndex: targetN,
-				rb: null,
-				sourceAmplitude,
-				fmMin,
-				vcc,
-				fp,
-				carrierSourceAmplitude: carrierIn,
-				carrierMargin,
-				opampSwing,
-				gbw: gbwMhz * 1e6,
-				slewRate: slewRateVus * 1e6,
-				...parts,
-				// under a limit, the modulator's share of it: what the oscillator leaves,
-				// or the whitelist itself where no share gives the modulator kept
-				...(jfetSection.scriptPairs ? { pairs: jfetSection.scriptPairs } : {}),
-				pairLimit: jfetSection.scriptPairs ? null : jfetSection.budget,
-				pairLimitNote: jfetBudgetNote,
-				carrierNote: workingOscillator
-					? `the carrier comes from the page's Wien bridge (R ${oscOhms(workingOscillator.r)}, C ${formatFarads(workingOscillator.c)}, Rf1 ${oscOhms(workingOscillator.parts.rf1)}, Rf2 ${oscOhms(workingOscillator.parts.rf2)}, Rg ${oscOhms(workingOscillator.rg)}), which settles at the CARRIER_SOURCE_AMPLITUDE below`
-					: null
-			}),
-			'jfet-am-modulator.js'
-		);
+		const d = jfetDesign;
+		const s = d.conditioning.summer;
+		const w = workingOscillator;
+		const page = { Rf: s.rf, Rac: s.rac, Rbias: s.rbias, C: s.c, ...(d.topology === 'inverting' ? { R2: d.r2 } : { Rb: d.rb }), Rdt: d.carrier.divider.top, Rdb: d.carrier.divider.bottom, ...(d.postGain?.needed ? { Rtop: d.postGain.rtop, Rbottom: d.postGain.rbottom } : {}) };
+		const args = {
+			mode: jfetMode,
+			vp,
+			idssMa,
+			rdsOn,
+			text: jfetMode === 'fixedvds' ? fixedText : measurementText,
+			vds: fixedVds,
+			rs: seriesR,
+			window: jfetModel.fit ? [jfetModel.fit.low, jfetModel.fit.high] : null,
+			topology,
+			targetOutputAmplitude,
+			outputStage,
+			carrierBuffer,
+			swingFraction,
+			targetModulationIndex: targetN,
+			sourceAmplitude,
+			fmMin,
+			vcc,
+			fp,
+			carrierAmplitude: carrierIn,
+			wien: w ? { r: w.r, c: w.c, rf1: w.parts.rf1, rf2: w.parts.rf2, rg: w.rg } : null,
+			carrierMargin,
+			opampSwing,
+			gbw: gbwMhz * 1e6,
+			slewRate: slewRateVus * 1e6,
+			fmPreview,
+			stock: stockArgs,
+			page,
+			limitNote: jfetLimitNote
+		};
+		saveFile(generateJfetPython(args), 'jfet-am-modulator.py', 'text/x-python');
 	}
 
 	// ------------------------------------------------------------------
@@ -510,10 +502,32 @@
 	const diodePairs = $derived(parts.pairs && !diodeDesign?.stockShortfall);
 	const diodeLimitNote = $derived(diodeOwn?.limited && diodeDesign && !diodeDesign.stockShortfall ? pairLimitNote({ limit: pairCap, kept: diodeOwn.kept, dropped: diodeOwn.dropped, added: diodeOwn.added }) : null);
 
+	/**
+	 * diode-tank-am-modulator.py (python/diode.js) for the design shown: the
+	 * inputs, the stock its parts come from (E24 and E12 when the parts on
+	 * hand reach no design) and the page's parts, with the note on a limit of
+	 * pairs.
+	 */
 	function downloadDiode() {
 		if (!diodeDesign) return;
-		const stockUsed = diodeDesign.stockShortfall ? { resistorSeries: 'E24', capacitorStock: null, capacitors: null, pairs: false, pairLimit: null } : { capacitors: parts.capacitors, pairLimit: pairCap };
-		download(generateDiodeScript({ ...diodeParams, ...stockUsed }), 'diode-tank-am-modulator.js');
+		const d = diodeDesign;
+		const args = {
+			fp: fpDiode,
+			fmMax: fmMaxDiode,
+			sidebandMargin,
+			inductance,
+			carrierAmplitude: carrierAmp,
+			modAmplitude: modAmp,
+			targetModulationIndex: targetNDiode,
+			carrierDrive,
+			vcc: vccDiode,
+			diode: diodePart,
+			stock: d.stockShortfall ? { kind: 'E24', resistors: 'E24', capacitors: null, pairs: false, pairLimit: null } : stockArgs,
+			shortfall: Boolean(d.stockShortfall),
+			page: { Rf: d.summer.rf, Rp: d.summer.rp, Rm: d.summer.rm, Rb: d.summer.rb, Rs: d.rs, Rt: d.rt, C: d.capacitors },
+			limitNote: diodeLimitNote
+		};
+		saveFile(generateDiodePython(args), 'diode-tank-am-modulator.py', 'text/x-python');
 	}
 
 	// ------------------------------------------------------------------
@@ -616,40 +630,38 @@
 		return { source, rectified, env };
 	});
 
+	/**
+	 * am-demodulator.py (python/demod.js) for the design shown: the inputs,
+	 * the stock and the page's parts, the rectifier's resistor, each stage's
+	 * (with whether the page built it from E24 and E6) and C_out when the
+	 * output goes through one, with the note on a limit of pairs.
+	 */
 	function downloadDemod() {
 		if (!envelopeDesign) return;
-		download(
-			generateDemodScript({
-				rectifierType,
-				fpCarrier: fpCarrierDemod,
-				fmMax: fmMaxDemod,
-				amaxDb,
-				aminDb,
-				order: orderOverride,
-				response,
-				topology: envelopeTopology,
-				index: demoModIndex,
-				amplitude: demodAmplitude,
-				opampSwing: demodOpampSwing,
-				outputCoupling,
-				loadOhms,
-				fmMin: fmMinDemod,
-				...parts
-			}),
-			'am-demodulator.js'
-		);
-	}
-
-	function download(code, filename) {
-		const blob = new Blob([code], { type: 'text/javascript' });
-		const url = URL.createObjectURL(blob);
-		const anchor = document.createElement('a');
-		anchor.href = url;
-		anchor.download = filename;
-		document.body.appendChild(anchor);
-		anchor.click();
-		anchor.remove();
-		setTimeout(() => URL.revokeObjectURL(url), 10000);
+		const stages = envelopeDesign.realized.map((st) => {
+			const c = st.components;
+			return { parts: st.topology === 'mfb' ? { R1: c.R1, R2: c.R2, R3: c.R3, C1: c.C1, C2: c.C2 } : { R1: c.R1, R2: c.R2, Ctop: c.Ctop, Cbottom: c.Cbottom }, shortfall: Boolean(st.stockShortfall) };
+		});
+		const args = {
+			rectifierType,
+			fpCarrier: fpCarrierDemod,
+			fmMax: fmMaxDemod,
+			amaxDb,
+			aminDb,
+			order: orderOverride,
+			response,
+			topology: envelopeTopology,
+			index: demoModIndex,
+			amplitude: demodAmplitude,
+			opampSwing: demodOpampSwing,
+			outputCoupling: Boolean(coupling),
+			loadOhms,
+			fmMin: fmMinDemod,
+			stock: stockArgs,
+			page: { R: rectifierType === 'full' ? rectifierInfo.r1 : rectifierInfo.rl, stages, Cout: coupling ? coupling.c : null },
+			limitNote: envelopeLimitNote
+		};
+		saveFile(generateDemodPython(args), 'am-demodulator.py', 'text/x-python');
 	}
 </script>
 
@@ -1342,10 +1354,17 @@
 					<span class="num">08</span>
 					<h2>Download</h2>
 				</div>
-				<p class="note">A standalone script with this exact design, parameterized at the top, runnable with <code>node jfet-am-modulator.js</code>.</p>
+				<p class="note">
+					A Python file that works this design through step by step, printing as it goes: the JFET's line,
+					the window, the gate drive, the gain cell, the carrier path{topology === 'inverting' || outputStage ? ', the output stage' : ''}
+					and the op-amp at the carrier, proposing its own parts by a simple rule. It checks those parts and
+					the page's the same way, side by side.
+					Python 3.8 or newer, nothing to install: <code class="command">python jfet-am-modulator.py</code>. The
+					settings at its top can be edited and the file run again.
+				</p>
 				<OpampPicker id="spiceOpampJfet" bind:value={spiceOpamp} />
 				<div class="row downloads">
-					<button type="button" onclick={downloadJfet}>Download jfet-am-modulator.js</button>
+					<button type="button" onclick={downloadJfet}>Download jfet-am-modulator.py</button>
 					<button type="button" onclick={() => saveFile(generateModSchematic({ design: jfetDesign, fmPreview, oscillator: workingOscillator, opamp: spiceOpamp, resistorSeries: parts.resistorSeries, pairs: parts.pairs }), 'jfet-am-modulator.asc')}>Download .asc (LTspice)</button>
 					<button type="button" onclick={() => saveFile(generateModNetlist({ design: jfetDesign, fmPreview, oscillator: workingOscillator, opamp: spiceOpamp, resistorSeries: parts.resistorSeries, pairs: parts.pairs }), 'jfet-am-modulator.cir')}>Download .cir (netlist)</button>
 				</div>
@@ -1586,10 +1605,16 @@
 					<span class="num">05</span>
 					<h2>Download</h2>
 				</div>
-				<p class="note">A standalone script with this exact design, runnable with <code>node diode-tank-am-modulator.js</code>.</p>
+				<p class="note">
+					A Python file that works this design through step by step, printing as it goes: the tank and its
+					band, the diode worked out cycle by cycle, the bias and the summer, proposing its own R_p and R_m
+					by a simple rule. It checks those parts and the page's the same way, side by side. Python 3.8 or
+					newer, nothing to install: <code class="command">python diode-tank-am-modulator.py</code>. The settings
+					at its top can be edited and the file run again.
+				</p>
 				<OpampPicker id="spiceOpampDiode" bind:value={spiceOpamp} />
 				<div class="row downloads">
-					<button type="button" onclick={downloadDiode}>Download diode-tank-am-modulator.js</button>
+					<button type="button" onclick={downloadDiode}>Download diode-tank-am-modulator.py</button>
 					<button type="button" onclick={() => saveFile(generateDiodeSchematic({ design: diodeDesign, opamp: spiceOpamp, resistorSeries: parts.resistorSeries, pairs: diodePairs }), 'diode-tank-am-modulator.asc')}>Download .asc (LTspice)</button>
 					<button type="button" onclick={() => saveFile(generateDiodeNetlist({ design: diodeDesign, opamp: spiceOpamp, resistorSeries: parts.resistorSeries, pairs: diodePairs }), 'diode-tank-am-modulator.cir')}>Download .cir (netlist)</button>
 				</div>
@@ -1926,10 +1951,17 @@
 					<span class="num">{coupling ? '06' : '05'}</span>
 					<h2>Download</h2>
 				</div>
-				<p class="note">A standalone script with this exact design, runnable with <code>node am-demodulator.js</code>.</p>
+				<p class="note">
+					A Python file that works this design through step by step, printing as it goes: the ripple and the
+					template, the rectifier, the order and the stages of the low-pass{coupling ? ' and C_out' : ''}, proposing
+					its own parts for each stage by a simple rule. It checks those parts and the page's the same way, side by
+					side, against the template and for what comes out{coupling ? ' and what the load takes' : ''}. Python 3.8 or newer, nothing to install:
+					<code class="command">python am-demodulator.py</code>. The settings at its top can be edited and the
+					file run again.
+				</p>
 				<OpampPicker id="spiceOpampDemod" bind:value={spiceOpamp} />
 				<div class="row downloads">
-					<button type="button" onclick={downloadDemod}>Download am-demodulator.js</button>
+					<button type="button" onclick={downloadDemod}>Download am-demodulator.py</button>
 					<button type="button" onclick={() => saveFile(generateDemodSchematic({ ...demodFiles, opamp: spiceOpamp, resistorSeries: parts.resistorSeries, pairs: parts.pairs }), 'am-demodulator.asc')}>Download .asc (LTspice)</button>
 					<button type="button" onclick={() => saveFile(generateDemodNetlist({ ...demodFiles, opamp: spiceOpamp, resistorSeries: parts.resistorSeries, pairs: parts.pairs }), 'am-demodulator.cir')}>Download .cir (netlist)</button>
 				</div>
@@ -2007,6 +2039,10 @@
 		gap: 0.7rem;
 		flex-wrap: wrap;
 		margin-bottom: 0.9rem;
+	}
+
+	code.command {
+		white-space: nowrap;
 	}
 
 	/* a heading for a group of buttons, styled as the labels around it */

@@ -442,7 +442,7 @@ function jfetRest({ design, topology, carrierFrom }) {
 		p(
 			`The panels below follow the circuit from the part to the output. JFET characteristics sets the straight line, from datasheet numbers or from measured points. Sources and op-amp holds the message, the carrier, the supply and the op-amp. Then come the gain cell${post}, the carrier path, the op-amp limits with both cells side by side${osc}, the gate drive and a preview of the output.`
 		),
-		p('Each result panel has a Show the math section, and the formula sheet collects every formula. The download gives a script, an LTspice schematic and a netlist of the whole modulator.')
+		p('Each result panel has a Show the math section, and the formula sheet collects every formula. The download gives a Python file that works the design through and checks its own parts and the page\'s, an LTspice schematic and a netlist of the whole modulator.')
 	];
 }
 
@@ -553,7 +553,7 @@ function diodeRest() {
 	return [
 		h('Reading the rest of the page'),
 		p(
-			'The first panel holds the carrier, the message band, the sideband margin, the coil, the two source amplitudes, the index wanted, the carrier level at the diode, the supply and the diode. The next panels draw the summer and the diode with its tank, list the parts and give what comes out, with a Show the math section that derives each number. The download hands back a script, an LTspice schematic and a netlist of the whole modulator, and the formula sheet collects every formula.'
+			'The first panel holds the carrier, the message band, the sideband margin, the coil, the two source amplitudes, the index wanted, the carrier level at the diode, the supply and the diode. The next panels draw the summer and the diode with its tank, list the parts and give what comes out, with a Show the math section that derives each number. The download hands back a Python file that works the design through and checks its own parts and the page\'s, an LTspice schematic and a netlist of the whole modulator, and the formula sheet collects every formula.'
 		)
 	];
 }
@@ -691,7 +691,7 @@ function demodRest({ rectifierType }) {
 	return [
 		h('Reading the rest of the page'),
 		p(
-			`The first panel holds the rectifier choice, the carrier, the highest message frequency, Amax, Amin, the response, the filter topology, the test wave's carrier and index, the op-amps' swing, and the output, a capacitor into a load such as earphones, which keeps the DC level off them. The rectifier panel ${full ? 'draws the precision rectifier and its parts' : 'names the single diode'}; the envelope low-pass panel lists each stage with its parts; the preview shows the wave before and after the rectifier. The rectifier and filter panels each have a Show the math section, the download gives a script that holds the whole design, and the formula sheet collects every formula.`
+			`The first panel holds the rectifier choice, the carrier, the highest message frequency, Amax, Amin, the response, the filter topology, the test wave's carrier and index, the op-amps' swing, and the output, a capacitor into a load such as earphones, which keeps the DC level off them. The rectifier panel ${full ? 'draws the precision rectifier and its parts' : 'names the single diode'}; the envelope low-pass panel lists each stage with its parts; the preview shows the wave before and after the rectifier. The rectifier and filter panels each have a Show the math section, the download gives a Python file that works the whole design through and checks its own parts and the page's, and the formula sheet collects every formula.`
 		)
 	];
 }

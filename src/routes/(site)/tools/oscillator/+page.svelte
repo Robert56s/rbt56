@@ -15,6 +15,7 @@
 	import { buildAgcDiagram, buildClampDiagram, buildLimiterDiagram, buildOscillatorDiagram, hasLimiterDiagram } from '$lib/oscillator/circuits';
 	import { amplitudeRemark, explainBarkhausen, explainOpampLimit, explainStabilizer, explainTopology, pairLimitNote } from '$lib/oscillator/explain';
 	import { DIODES, JFETS } from '$lib/oscillator/limiter';
+	import { generateOscillatorPython } from '$lib/oscillator/python/index';
 	import { generateNetlist, generateSchematic } from '$lib/oscillator/spice';
 	import { DEFAULT_OPAMP, OPAMP_MODELS } from '$lib/spice/opamps';
 	import { compareOscillators, designOscillator, oscillatorIsMemoized, STABILIZERS, TOPOLOGIES } from '$lib/oscillator/topologies';
@@ -150,8 +151,8 @@
 	// prints single values even when the list could add up to one of them.
 	const ohms = (v) => pairLabel(v, design.resistorSeries, formatOhms, design.pairs);
 
-	function save(text, filename) {
-		const blob = new Blob([text], { type: 'text/plain' });
+	function save(text, filename, type = 'text/plain') {
+		const blob = new Blob([text], { type });
 		const url = URL.createObjectURL(blob);
 		const a = document.createElement('a');
 		a.href = url;
@@ -162,13 +163,17 @@
 		setTimeout(() => URL.revokeObjectURL(url), 10000);
 	}
 	const stem = $derived(`${at.topology}-oscillator`);
+	// {stem}.py (python/index.js) for the design shown: what it was designed from, and the design
+	function downloadPython() {
+		save(generateOscillatorPython({ args: { ...shown.params, topology: shown.topology }, design }), `${stem}.py`, 'text/x-python');
+	}
 </script>
 
 <svelte:head>
 	<title>Sine Oscillator Design · rbt56</title>
 	<meta
 		name="description"
-		content="Design an op-amp sine-wave oscillator: Wien bridge, phase shift, buffered phase shift, Bubba and quadrature, with the op-amp's own lag in the loop, amplitude control sized from the real diode curve, distortion, and an LTspice schematic that runs."
+		content="Design an op-amp sine-wave oscillator: Wien bridge, phase shift, buffered phase shift, Bubba and quadrature, with the op-amp's own lag in the loop, amplitude control sized from the real diode curve, distortion, an LTspice schematic that runs, and a Python file that works the design through."
 	/>
 </svelte:head>
 
@@ -180,7 +185,8 @@
 		values, the amplitude control each one needs, the distortion to expect and what the op-amp's
 		own speed does to the frequency. The loop is solved with the op-amp in it, so the RC values are
 		retuned for its lag and the frequency lands where it says; the comparison says which to build
-		and why, and the download is a drawn LTspice schematic that starts and settles on its own.
+		and why, and the downloads are a drawn LTspice schematic that starts and settles on its own and a
+		Python file that works the design through.
 	</p>
 
 	<section class="panel">
@@ -572,11 +578,12 @@
 			<div class="row downloads">
 				<button type="button" disabled={!!exportError} onclick={() => save(generateSchematic(design, { opamp: spiceOpamp }), `${stem}.asc`)}>Download {stem}.asc (LTspice)</button>
 				<button type="button" disabled={!!exportError} onclick={() => save(generateNetlist(design, { opamp: spiceOpamp }), `${stem}.cir`)}>Download {stem}.cir (netlist)</button>
+				<button type="button" disabled={!!exportError} onclick={downloadPython}>Download {stem}.py</button>
 			</div>
 			{#if exportError}
 				<p class="flag bad">
 					Nothing to export: {design.limiter.kind === 'jfet' && !design.limiter.regulates
-						? `the JFET control cannot be sized at ${formatVolts(at.amplitude)} peak, so its parts do not exist yet. From ${formatVolts(design.limiter.minAmplitude)} the download is available.`
+						? `the JFET control cannot be sized at ${formatVolts(at.amplitude)} peak, so its parts do not exist yet. From ${formatVolts(design.limiter.minAmplitude)} the downloads are available.`
 						: `the amplitude control could not be sized for this design (${exportError.replace(/^no export: /, '')}).`}
 				</p>
 			{/if}
@@ -595,6 +602,15 @@
 					the frequency it reports is the one predicted above, and lowering the gain-bandwidth on the sheet
 					shows the lag doing its work.
 				{/if}
+			</p>
+			<p class="note">
+				The .py works the same design through in Python, step by step: the loop, the op-amp's lag in it
+				and the retune of R C, then R and C from the stock by a simple rule of its own and the amplitude
+				control sized for them. It checks those parts and the page's the same way, side by side: the
+				frequency, the start, the amplitude and what the op-amp is asked. It takes the op-amp's
+				gain-bandwidth, slew rate and swing from the specification above, not the LTspice op-amp chosen
+				here. Python 3.8 or newer, nothing to install: <code class="command">python {stem}.py</code>.
+				The settings at its top can be edited and the file run again.
 			</p>
 			<p class="note formula-link">
 				Every formula this design used: <a href="/tools/oscillator/formulas/">Formula sheet</a>.
@@ -619,6 +635,11 @@
 	   same distance under it however full the last row is */
 	.grid > .field:last-child {
 		margin-bottom: 0.9rem;
+	}
+
+	/* a command to type, kept on one line (python wien-oscillator.py breaks at its hyphen otherwise) */
+	code.command {
+		white-space: nowrap;
 	}
 
 	.downloads {

@@ -26,6 +26,11 @@
 //    The whitelists tried are every subset of the resistors that may pair,
 //    not only of the pairs where they help: the result is the one an
 //    exhaustive search over them finds.
+// 9. The Python download ({stem}.py, src/lib/oscillator/python) on a matrix
+//    of designs: its text and its run, its results against the page's, its
+//    own parts against its rule written again here, its check of both sets
+//    against the library's evaluation, its guards (needs Python 3.8 or
+//    newer as `python`; about 80 s of the whole).
 // Exits non-zero on any failure. LTspice itself is run by check-ltspice.mjs.
 
 import { readFileSync } from 'node:fs';
@@ -980,6 +985,517 @@ const WT = 2 * Math.PI * 3e6;
 		check('pair limit: on a sweep of three lists, every limit below the count gives the design an exhaustive search over every whitelist of the resistors that may pair finds', off.length === 0 && searched > 200, off.length ? off.slice(0, 3).join('; ') : `${searched} limits, ${gained} with a pair that pairs where they help leave single`);
 		check('pair limit: on that sweep the measure never gets worse as N grows from 0 to one below the count', rising.length === 0, rising.slice(0, 3).join('; '));
 	}
+}
+
+/* ---------------------------------------- 9. the Python download ({stem}.py) */
+// The page's "Download {stem}.py" (src/lib/oscillator/python, the harness
+// scripts/lib-python.mjs) over a matrix of designs: every topology and
+// control, frequencies from 10 Hz to 100 kHz, amplitudes, op-amps, both
+// diodes and both JFETs, the excess and the growth, every stock (E24, E96,
+// the lab kit, the lab resistors, a short list), pairs and a pair limit,
+// the E24 fallback, and the designs the page refuses to export. Each file:
+// its text (ASCII, Python 3.8, math only, no function twice, the line and
+// word rules), its run (python -W error on a cp1252 console, printout
+// lines of 92 characters), its results through runpy against the page (the
+// settings and the stock, the derived figures, the page's parts and the
+// page's figures and op-amp tests of them, to a relative 1e-9), its own
+// parts against the rules written again here in JavaScript (the flow of
+// topologies.js designWith with R and C by rules a to c, a diode limiter's
+// Rf1 and Rf2 by rules d and e, single parts; the same flow with a copy of
+// pickRC, the page's limiter sizing and the page's pairs gives
+// designOscillator's design exactly), its check of both sets against the
+// library's evaluation of the same parts (loop.js, limiter.js), and its
+// guards (the topology and control, the inputs above 0, the models, and a
+// run at other settings, which says they are no longer the page's). One
+// known difference: the page finds a diode limiter's balance gain in its
+// second pass at the split of its first parts; where that pass moves Rf1 or
+// Rf2, the gain, the amplitude, whether it holds and the slew differ from
+// the page's, the file says so with what the page shows (page_gain,
+// page_amplitude, page_verdict), and the count is printed.
+{
+	const { capacitorCandidates, nearestResistor, pairAllowed, pairedResistor } = await import('../src/lib/filter/eseries.js');
+	const { pyPart } = await import('../src/lib/filter/python/emit.js');
+	const { agcAmplitude, dividerClampAmplitude, JFETS, lampModel, pairConductance, sizeAgc, sizeDividerClamp, sizeFeedbackLimiter } = await import('../src/lib/oscillator/limiter.js');
+	const { retuneQuadrature, stageLagDeg, TWO_PI } = await import('../src/lib/oscillator/loop.js');
+	const { generateOscillatorPython } = await import('../src/lib/oscillator/python/index.js');
+	const { componentOptions, defaultStock, isRestricted } = await import('../src/lib/stock.js');
+	const { cleanup, editSetting, inspect, readResults, runFile } = await import('./lib-python.mjs');
+	const started = Date.now();
+
+	/* ---- the page: its inputs, designFor and its refusal (oscillator/+page.svelte) */
+	const PAGE = { frequency: 1000, amplitude: 3, stabilizer: 'diodes', diode: '1N4148', jfet: 'generic', excessGain: 0.05, quadGrowth: 0.1, gbw: 3e6, slewRate: 13e6, opampSwing: 10.5 };
+	const works = (d) => d && d.starts && d.limiter.regulates !== false && d.opamp.swingOk;
+	const designFor = ({ params, topology, restricted }) => {
+		const own = designOscillator({ ...params, topology });
+		if (!restricted || works(own)) return own;
+		const fallback = designOscillator({ ...params, topology, resistorSeries: 'E24', capacitors: null, pairs: false });
+		if (!fallback) return own;
+		if (own && !works(fallback)) return own;
+		return { ...fallback, stockShortfall: true };
+	};
+	const texts = defaultStock();
+	const pageOf = ({ topology, stock = 'E24', pairs = false, pairLimit = null, resistorText, capacitorText, ...spec }) => {
+		const parts = componentOptions(stock, resistorText ?? texts.resistorText, capacitorText ?? texts.capacitorText, pairs, pairLimit);
+		const params = { ...PAGE, ...spec, ...parts };
+		const design = designFor({ params, topology, restricted: isRestricted(stock) });
+		let refused = null;
+		try {
+			if (design) generateNetlist(design);
+		} catch (e) {
+			refused = e.message;
+		}
+		return { args: { ...params, topology }, design, refused };
+	};
+
+	/* ---- the stock the file must hold, and the file's rule for R and C, from its description */
+	const E24 = [1.0, 1.1, 1.2, 1.3, 1.5, 1.6, 1.8, 2.0, 2.2, 2.4, 2.7, 3.0, 3.3, 3.6, 3.9, 4.3, 4.7, 5.1, 5.6, 6.2, 6.8, 7.5, 8.2, 9.1];
+	const E96 = Array.from({ length: 96 }, (_, i) => Math.round(10 ** (i / 96) * 100) / 100);
+	const decades = (base) => [0, 1, 2, 3, 4, 5, 6, 7, 8].flatMap((d) => base.map((m) => m * 10 ** d));
+	const stockOf = (args, design) => {
+		if (design.stockShortfall) return { series: 'E24', resistors: decades(E24), capacitors: capacitorCandidates(null), list: null };
+		const list = Array.isArray(args.resistorSeries) ? [...new Set(args.resistorSeries)].sort((a, b) => a - b) : null;
+		const series = list ? args.resistorSeries : args.resistorSeries === 'E96' ? 'E96' : 'E24';
+		return { series, resistors: list ?? decades(series === 'E96' ? E96 : E24), capacitors: capacitorCandidates(args.capacitors), list };
+	};
+	const nearestOf = (x, stock) => {
+		let best = stock[0];
+		let miss = Infinity;
+		for (const v of stock) {
+			const m = Math.abs(Math.log(v / x));
+			if (m < miss) [best, miss] = [v, m];
+		}
+		return best;
+	};
+	// rule a to c: every capacitor, R = R C / C rounded to the stock; the closest within the
+	// page's limits (else of all), the R nearest 10 kohm on a tie to 1e-9
+	const ruleRc = (rc, stock) => {
+		const choices = stock.capacitors.map((c) => {
+			const exact = rc / c;
+			const r = nearestOf(exact, stock.resistors);
+			return { r, c, miss: Math.abs(Math.log(r / exact)), level: Math.log(exact / 10e3) ** 2, within: c >= 100e-12 && c <= 1e-6 && exact > 1e3 && exact < 1e6 };
+		});
+		const kept = choices.filter((x) => x.within);
+		const pool = kept.length ? kept : choices;
+		const least = Math.min(...pool.map((x) => x.miss));
+		let best = null;
+		for (const x of pool) if (x.miss <= least + 1e-9 && (best === null || x.level < best.level)) best = x;
+		return best;
+	};
+	// the page's pickRC (topologies.js), for the flow's own check against designOscillator
+	const pagePick = (rc, stock, pairs) => {
+		let best = null;
+		for (const c of stock.capacitors) {
+			if (c < 100e-12 || c > 1e-6) continue;
+			const rTarget = rc / c;
+			if (!(rTarget > 1e3 && rTarget < 1e6)) continue;
+			const r = nearestResistor(rTarget, stock.series);
+			const score = 100 * Math.log(r / rTarget) ** 2 + 0.05 * Math.log(r / 10e3) ** 2;
+			if (best === null || score < best.score) best = { c, r, rTarget, score };
+		}
+		if (best && pairAllowed(pairs, 'R')) best = { ...best, r: pairedResistor(best.rTarget, stock.series, true) };
+		return best;
+	};
+	// the file's own Rf1 and Rf2 (control.js size_limiter, rules d and e): the exact pair as the
+	// page finds it, then of each part's stocked neighbours below and above the pair whose
+	// amplitude lands closest, the first of a tie, else the nearest of each; the page's 1 to 9
+	// split where the diodes cannot conduct enough
+	const neighboursOf = (value, list) => {
+		const below = list.filter((v) => v <= value);
+		const above = list.filter((v) => v >= value);
+		return [...new Set([...(below.length ? [Math.max(...below)] : []), ...(above.length ? [Math.min(...above)] : [])])];
+	};
+	const ruleLimiter = ({ rt, rs, amplitude, fraction, diode, stock }) => {
+		const delta = rs - rt;
+		const shortfall = (x) => pairConductance((amplitude * fraction * x) / rt, diode) - (1 / x - 1 / (x + delta));
+		let lo = 1e-3 * rt;
+		let hi = 0.999 * rt;
+		if (shortfall(hi) < 0) return { Rf1: nearestOf(0.1 * rs, stock.resistors), Rf2: nearestOf(0.9 * rs, stock.resistors) };
+		for (let k = 0; k < 100; k++) {
+			const mid = 0.5 * (lo + hi);
+			if (shortfall(mid) < 0) lo = mid;
+			else hi = mid;
+		}
+		const x = 0.5 * (lo + hi);
+		const rf1Stock = stock.series === 'E24' ? decades(E96) : stock.resistors;
+		let out = { Rf1: nearestOf(rt - x, rf1Stock), Rf2: nearestOf(x + delta, stock.resistors) };
+		let closest = Infinity;
+		for (const rf1 of neighboursOf(rt - x, rf1Stock)) {
+			for (const rf2 of neighboursOf(x + delta, stock.resistors)) {
+				const held = feedbackLimiterAmplitude({ rf1, rf2, rt, fraction, diode });
+				if (held !== null && Math.abs(Math.log(held / amplitude)) < closest) {
+					closest = Math.abs(Math.log(held / amplitude));
+					out = { Rf1: rf1, Rf2: rf2 };
+				}
+			}
+		}
+		return out;
+	};
+
+	/**
+	 * topologies.js designWith's flow, from the library's loop and limiter
+	 * functions, with `pick` for R and C and `pairs` for the rest: the
+	 * retune at the start gain in three rounds, the stabilizer sized as
+	 * sizeStabilizer does it (a diode limiter's Rf1 and Rf2 by the file's
+	 * rules d and e when `own`), a diode limiter's second pass with its
+	 * capacitance. Returns { rcTarget, requiredGain, first, parts } with the
+	 * file's names, or null where the flow stops.
+	 */
+	const flow = (args, design, stock, pick, pairs, own = false) => {
+		const topo = TOPOLOGIES.find((t) => t.id === design.topology);
+		const kind = design.kind;
+		const control = design.limiter.kind;
+		const diode = DIODES[design.diode];
+		const jfet = JFETS[design.jfet];
+		const series = stock.series;
+		const { frequency, amplitude, excessGain, quadGrowth, gbw } = args;
+		const base = { wt: TWO_PI * gbw, n: topo.ladder?.sections, buffered: topo.ladder?.buffered };
+		if (kind === 'quadrature') {
+			const rho0 = Math.log(1 + quadGrowth) / Math.PI;
+			const rt = retuneQuadrature({ ...base, rho: rho0 }, { fTarget: frequency });
+			const p = rt.converged && pick(rt.rc, stock, pairs);
+			if (!p) return null;
+			const rg = nearestResistor(10_000, series);
+			const rn = pairedResistor(p.r / rho0, series, pairAllowed(pairs, 'Rn'));
+			const rc = p.r * p.c;
+			const pole0 = solvePole('quadrature', { ...base, rc, rho: 0 }, { omega0: 1 / rc });
+			const clamp = sizeDividerClamp({ gTarget: 1 / rn + 2 * Math.max(0, pole0.sigma) * p.c, amplitude, diode, resistorSeries: series, pairs });
+			return { rcTarget: rt.rc, parts: { R: p.r, C: p.c, Ra: rg, Rb: rg, Rn: rn, Rd1: clamp?.rd1 ?? null, Rd2: clamp?.rd2 ?? null } };
+		}
+		let loop = { ...base };
+		let out = null;
+		let first = null;
+		for (let pass = 0; pass < 2; pass++) {
+			let gStart = topo.gain * (1 + excessGain);
+			let rt = null;
+			for (let round = 0; round < 3; round++) {
+				rt = retune(kind, { ...loop, gain: gStart }, { fTarget: frequency, k: topo.k });
+				const bal = rt.converged ? solveBalance(kind, { ...loop, rc: rt.rc }, { omega0: TWO_PI * frequency, gain0: topo.gain }) : null;
+				if (!bal?.converged) return null;
+				gStart = bal.gain * (1 + excessGain);
+			}
+			const p = pick(rt.rc, stock, pairs);
+			if (!p) return null;
+			const rg = topo.ladder ? p.r : nearestResistor(10_000, series);
+			const bal = solveBalance(kind, { ...loop, rc: p.r * p.c }, { omega0: TWO_PI * frequency, gain0: topo.gain });
+			if (!bal.converged) return null;
+			const g = bal.gain;
+			let sized;
+			if (control === 'diodes') {
+				const wien = kind === 'wien';
+				const rtg = wien ? (g - 1) * rg : g * rg;
+				const rs = wien ? (g * (1 + excessGain) - 1) * rg : g * (1 + excessGain) * rg;
+				const fraction = wien ? (g - 1) / g : 1;
+				if (own) sized = ruleLimiter({ rt: rtg, rs, amplitude, fraction, diode, stock });
+				else {
+					const sz = sizeFeedbackLimiter({ rt: rtg, rs, amplitude, fraction, diode, resistorSeries: series, pairs });
+					sized = { Rf1: sz ? sz.rf1 : pairedResistor(0.1 * rs, series, pairAllowed(pairs, 'Rf1')), Rf2: sz ? sz.rf2 : pairedResistor(0.9 * rs, series, pairAllowed(pairs, 'Rf2')) };
+				}
+			} else if (control === 'lamp') sized = { Rf: nearestResistor((g - 1) * rg, series) };
+			else {
+				const rf = nearestResistor((g - 1) * rg, series);
+				const agc = sizeAgc({ rf, gBalance: g, amplitude, jfet, diode, resistorSeries: series, pairs });
+				if (!agc.ok) return null;
+				sized = { Rf: rf, Rser: agc.rSeries, Ra: agc.ra, Rb: agc.rb, Rx: agc.rx, Cdet: nearestOf(50 / frequency / (agc.ra + agc.rb), stock.capacitors) };
+			}
+			const parts = { R: p.r, C: p.c, ...(kind === 'wien' && control === 'diodes' ? { Rg: rg } : {}), ...sized };
+			out = { rcTarget: rt.rc, requiredGain: g, parts };
+			if (control !== 'diodes') break;
+			if (pass === 0) first = parts;
+			loop = { ...base, rAbs: rg, f2: sized.Rf2 / (sized.Rf1 + sized.Rf2), cd: 2 * diode.cjo };
+		}
+		return { ...out, first };
+	};
+
+	/** The page's parts with the file's names (python/check.js pagePartsOf). */
+	const pageParts = (design) => {
+		const p = design.parts;
+		if (design.limiter.kind === 'diodes') return { R: design.r, C: design.c, ...(design.kind === 'wien' ? { Rg: design.rg } : {}), Rf1: p.rf1, Rf2: p.rf2 };
+		if (design.limiter.kind === 'lamp') return { R: design.r, C: design.c, Rf: p.rf };
+		if (design.limiter.kind === 'jfet') return { R: design.r, C: design.c, Rf: p.rf, Rser: p.rSeries, Ra: p.ra, Rb: p.rb, Rx: p.rx, Cdet: p.cDet };
+		return { R: design.r, C: design.c, Ra: p.ra, Rb: p.rb, Rn: p.rn, Rd1: p.rd1, Rd2: p.rd2 };
+	};
+
+	/** The library's figures of a set of parts, the names of the file's evaluate(), with the page's op-amp tests (topologies.js opampOk, slewOk). */
+	const libEvaluate = (args, design, p) => {
+		const textbookOk = Number.isFinite(design.uncompensatedError) && design.uncompensatedError > -0.2;
+		const figures = libFigures(args, design, p);
+		return { ...figures, opamp_ok: textbookOk && figures.starts && figures.lag <= 25, slew_ok: figures.slew <= args.slewRate / 2 };
+	};
+	const libFigures = (args, design, p) => {
+		const topo = TOPOLOGIES.find((t) => t.id === design.topology);
+		const kind = design.kind;
+		const control = design.limiter.kind;
+		const diode = DIODES[design.diode];
+		const { frequency, amplitude, gbw, opampSwing } = args;
+		const base = { wt: TWO_PI * gbw, n: topo.ladder?.sections, buffered: topo.ladder?.buffered };
+		const rc = p.R * p.C;
+		const w0 = TWO_PI * frequency;
+		if (control === 'clamp') {
+			const pole = solvePole('quadrature', { ...base, rc, rho: p.R / p.Rn }, { omega0: 1 / rc });
+			const pole0 = solvePole('quadrature', { ...base, rc, rho: 0 }, { omega0: 1 / rc });
+			const f0 = pole.omega / TWO_PI;
+			const gTarget = 1 / p.Rn + 2 * Math.max(0, pole0.sigma) * p.C;
+			const held = dividerClampAmplitude({ rd1: p.Rd1, rd2: p.Rd2, gTarget, diode });
+			const starts = pole.converged && pole.sigma > 0;
+			return { f0, growth: Number.isFinite(pole.growthPerCycle) ? pole.growthPerCycle : null, g_target: gTarget, amplitude: held, lag: stageLagDeg(f0, 2, gbw), slew: TWO_PI * f0 * (held || amplitude), starts, holds: held !== null && starts && held <= opampSwing };
+		}
+		if (control === 'diodes') {
+			const wien = kind === 'wien';
+			const ref = wien ? p.Rg : p.R;
+			const loop = { ...base, rAbs: ref, f2: p.Rf2 / (p.Rf1 + p.Rf2), cd: 2 * diode.cjo, rc };
+			const bal = solveBalance(kind, loop, { omega0: w0, gain0: topo.gain });
+			const g = bal.converged ? bal.gain : null;
+			const start = wien ? 1 + (p.Rf1 + p.Rf2) / p.Rg : (p.Rf1 + p.Rf2) / p.R;
+			const zp = zeroPhase(kind, { ...loop, gain: start }, { omega0: w0 });
+			const f0 = zp.converged ? zp.omega / TWO_PI : topo.k / (TWO_PI * rc);
+			const pole = solvePole(kind, { ...loop, gain: start }, { omega0: w0 });
+			const growth = pole.converged && Number.isFinite(pole.growthPerCycle) ? pole.growthPerCycle : null;
+			const held = g ? feedbackLimiterAmplitude({ rf1: p.Rf1, rf2: p.Rf2, rt: wien ? (g - 1) * ref : g * ref, fraction: wien ? (g - 1) / g : 1, diode }) : null;
+			return { f0, gain: g, start, loop: zp.converged ? zp.magnitude : null, growth, amplitude: held, lag: stageLagDeg(f0, wien ? start : 1 + start, gbw), slew: TWO_PI * f0 * (held || amplitude), starts: growth !== null && growth > 0, holds: held !== null && start > g && held <= opampSwing };
+		}
+		const g = solveBalance(kind, { ...base, rc }, { omega0: w0, gain0: topo.gain }).gain;
+		const zp = zeroPhase(kind, { ...base, rc, gain: g }, { omega0: w0 });
+		const f0 = zp.converged ? zp.omega / TWO_PI : topo.k / (TWO_PI * rc);
+		if (control === 'lamp') {
+			const lamp = lampModel({ rHot: p.Rf / (g - 1), vLampPeak: amplitude / g, f0: frequency });
+			const start = 1 + p.Rf / lamp.rCold;
+			const at = zeroPhase(kind, { ...base, rc, gain: start }, { omega0: w0 });
+			return { f0, gain: g, start, loop: at.converged ? at.magnitude : null, hot: lamp.rHot, cold: lamp.rCold, amplitude, lag: stageLagDeg(f0, g, gbw), slew: TWO_PI * f0 * amplitude, starts: start > g, holds: amplitude <= opampSwing };
+		}
+		const settle = agcAmplitude({ rf: p.Rf, rSeries: p.Rser, ra: p.Ra, rb: p.Rb, rx: p.Rx, gBalance: g, jfet: JFETS[design.jfet], diode });
+		const start = settle ? settle.gainStart : null;
+		const at = settle ? zeroPhase(kind, { ...base, rc, gain: start }, { omega0: w0 }) : null;
+		const held = settle ? settle.amplitude : null;
+		return { f0, gain: g, start, loop: at?.converged ? at.magnitude : null, amplitude: held, cycles: p.Cdet * (p.Ra + p.Rb) * frequency, lag: stageLagDeg(f0, g, gbw), slew: TWO_PI * f0 * (held || amplitude), starts: !!settle && start > g, holds: !!settle && start > g && held <= opampSwing };
+	};
+
+	/** The page's figures of its own parts, with the names of the file's evaluate() (those the page has). */
+	const pageFigures = (design) => {
+		const l = design.limiter;
+		const out = { f0: design.f0, amplitude: l.amplitudeActual, starts: design.starts, holds: l.regulates !== false && design.opamp.swingOk, lag: design.opamp.lagDeg, slew: design.opamp.slewNeeded, opamp_ok: design.opamp.opampOk, slew_ok: design.opamp.slewOk };
+		if (l.kind === 'clamp') return { ...out, growth: design.growthPerCycle, g_target: l.gTarget };
+		Object.assign(out, { gain: design.requiredGain, start: Number.isFinite(design.startGain) ? design.startGain : null, loop: Number.isFinite(design.loopExcess) ? 1 + design.loopExcess : null });
+		if (l.kind === 'diodes') out.growth = Number.isFinite(design.growthPerCycle) ? design.growthPerCycle : null;
+		if (l.kind === 'lamp') Object.assign(out, { hot: l.rHot, cold: l.rCold });
+		if (l.kind === 'jfet') out.cycles = l.cyclesPerTau;
+		return out;
+	};
+
+	const TOL = 1e-9;
+	const same = (a, b, tol = TOL) => {
+		if (a === null || a === undefined || b === null || b === undefined) return a == b;
+		if (typeof a !== 'number' || typeof b !== 'number') return a === b;
+		return a === b || Math.abs(a - b) <= tol * Math.max(Math.abs(a), Math.abs(b));
+	};
+	const figuresOff = (got, want, keys = Object.keys(want)) => keys.filter((k) => !same(got?.[k], want[k])).map((k) => `${k} ${got?.[k]} against ${want[k]}`);
+	const partsOff = (got, want, tol = 1e-12) => {
+		const out = JSON.stringify(Object.keys(got ?? {})) === JSON.stringify(Object.keys(want)) ? [] : [`names ${Object.keys(got ?? {})}`];
+		for (const [name, v] of Object.entries(want)) if (!same(got?.[name], v, tol)) out.push(`${name} ${got?.[name]} against ${v}`);
+		return out;
+	};
+	const YOU = /\b(you|your|yours|yourself)\b/i;
+	const PLACEHOLDER = /\bundefined\b|\bNaN\b|\bnull\b|\bInfinity\b|\[object/;
+	const COURSE = /\b(course|courses|cours|school|professors?|prof|slides?|diapos?|labs?|lectures?|ELE\s?2003|polytechnique|experiments?|moodle|homework|assignments?|teachers?|instructors?)\b/i;
+	const textOff = (code) => {
+		const out = [];
+		code.split('\n').forEach((line, i) => {
+			if (line.length > 100 || /\t|\s$|[–—]/.test(line)) out.push(`line ${i + 1}`);
+		});
+		const prose = code.replace(/\blab kit\b|\blab resistors\b/gi, '');
+		for (const re of [YOU, PLACEHOLDER, COURSE]) {
+			const m = re.exec(prose);
+			if (m) out.push(`"${prose.slice(Math.max(0, m.index - 25), m.index + 25).replace(/\n/g, ' ')}"`);
+		}
+		return out;
+	};
+
+	/* ---- the matrix */
+	const SHORT = { stock: 'custom', resistorText: '1k, 2.2k, 4.7k, 10k, 22k, 47k, 100k', capacitorText: '1n, 10n, 100n' };
+	const cases = [];
+	const add = (label, input, opts = {}) => cases.push({ label, input, opts });
+	add('wien/diodes as the page opens', { topology: 'wien' }, { lines: [250, 450], guards: true });
+	add('wien/lamp', { topology: 'wien', stabilizer: 'lamp' }, { guards: true });
+	add('wien/jfet 4 V', { topology: 'wien', stabilizer: 'jfet', amplitude: 4 }, { guards: true });
+	for (const t of ['phaseShift', 'bufferedPhaseShift', 'bubba', 'quadrature']) add(`${t} as the page opens`, { topology: t }, { guards: true });
+	for (const t of TOPOLOGIES) {
+		for (const stabilizer of t.id === 'wien' ? ['diodes', 'lamp', 'jfet'] : ['diodes']) {
+			for (const [frequency, amplitude, gbw] of [[10, 5, 1e6], [200, 1, 3e6], [7300, 4, 3e6], [20000, 3, 10e6], [55000, 1, 3e6], [100000, 0.5, 10e6]]) {
+				add(`${t.id}/${stabilizer} ${frequency} Hz ${amplitude} V ${gbw / 1e6} MHz`, { topology: t.id, stabilizer, frequency, amplitude: stabilizer === 'jfet' ? Math.max(amplitude, 4) : amplitude, gbw });
+			}
+			const a = stabilizer === 'jfet' ? 5 : 3;
+			add(`${t.id}/${stabilizer} on E96`, { topology: t.id, stabilizer, amplitude: a, stock: 'E96', frequency: 2000 });
+			add(`${t.id}/${stabilizer} on the lab kit`, { topology: t.id, stabilizer, amplitude: a, stock: 'lab' });
+			add(`${t.id}/${stabilizer} on the lab kit, pairs`, { topology: t.id, stabilizer, amplitude: a, stock: 'lab', pairs: true, frequency: 5000 });
+			add(`${t.id}/${stabilizer} on the lab resistors, up to 1 pair`, { topology: t.id, stabilizer, amplitude: a, stock: 'labR', pairs: true, pairLimit: 1, frequency: 1500 });
+			add(`${t.id}/${stabilizer} on a short list`, { topology: t.id, stabilizer, amplitude: a, ...SHORT, frequency: 800 });
+		}
+	}
+	add('wien/diodes, BAT54', { topology: 'wien', diode: 'BAT54', amplitude: 2 });
+	add('bubba, BAT54, 12 % excess', { topology: 'bubba', diode: 'BAT54', excessGain: 0.12 });
+	add('wien/jfet J111 13 V on a 15 V swing', { topology: 'wien', stabilizer: 'jfet', jfet: 'J111', amplitude: 13, opampSwing: 15 });
+	add('wien/jfet, BAT54 detector', { topology: 'wien', stabilizer: 'jfet', diode: 'BAT54', amplitude: 5 });
+	add('quadrature, 25 % growth, BAT54 clamp', { topology: 'quadrature', quadGrowth: 0.25, diode: 'BAT54' });
+	add('phaseShift 20 kHz on 1 MHz, lag past 25 degrees', { topology: 'phaseShift', frequency: 20000, gbw: 1e6 });
+	add('wien 12 V, past the swing', { topology: 'wien', amplitude: 12 });
+	add('wien 50 kHz 0.2 V, the lab kit and 10 uF, pairs', { topology: 'wien', frequency: 50000, amplitude: 0.2, gbw: 4e6, slewRate: 16e6, opampSwing: 13.5, stock: 'custom', resistorText: texts.resistorText, capacitorText: `${texts.capacitorText}, 10u`, pairs: true });
+	add('phaseShift 0.4 V on the lab kit, its E24 fallback', { topology: 'phaseShift', amplitude: 0.4, stock: 'lab' }, { shortfall: true });
+	add('wien/jfet generic 3 V, refused', { topology: 'wien', stabilizer: 'jfet', amplitude: 3 }, { refused: true });
+	add('wien/jfet J111 3 V, refused', { topology: 'wien', stabilizer: 'jfet', jfet: 'J111', amplitude: 3 }, { refused: true });
+	add('quadrature 0.1 V, refused', { topology: 'quadrature', amplitude: 0.1 }, { refused: true });
+	add('phaseShift 200 kHz, no design', { topology: 'phaseShift', frequency: 200000 }, { none: true });
+
+	const bad = {};
+	const note = (key, text) => (bad[key] ??= []).push(text);
+	const tally = { files: 0, shortfall: 0, refused: 0, none: 0, picksPage: 0, pageFigures: 0, kept: 0, moved: 0, worstMoved: 0, guards: 0, lines: null };
+	const extra = ['page_gain', 'frequency', 'amplitude', 'excess', 'growth', 'gbw', 'slew_rate', 'swing', 'diode', 'jfet', 'topology', 'stabilizer', 'resistors', 'resistors_e96', 'capacitors'];
+	for (const { label, input, opts } of cases) {
+		const { args, design, refused } = pageOf(input);
+		let code = null;
+		let thrown = null;
+		try {
+			code = generateOscillatorPython({ args, design });
+		} catch (e) {
+			thrown = e.message;
+		}
+		if (!design || refused) {
+			// the page shows no design (no panel), or refuses the export (its buttons disabled): no file either
+			if (!design) tally.none++;
+			else tally.refused++;
+			if ((!design) !== !!opts.none || !!refused !== !!opts.refused) note('refusals', `${label}: the page ${design ? `refuses with ${refused}` : 'shows no design'}`);
+			if (code !== null || (refused && thrown !== refused)) note('refusals', `${label}: the generator ${code !== null ? 'wrote a file' : `says ${thrown}`}`);
+			continue;
+		}
+		if (opts.none || opts.refused || thrown !== null) {
+			note('writes', `${label}: ${thrown ?? 'the page builds and exports it'}`);
+			continue;
+		}
+		if (opts.shortfall && !design.stockShortfall) note('writes', `${label}: the page does not fall back to E24`);
+		tally.files++;
+		if (design.stockShortfall) tally.shortfall++;
+		const shape = inspect(code);
+		if (!(shape.ascii && shape.parse38 === null && shape.newer.length === 0 && shape.imports.every((m) => m === 'math') && shape.twice.length === 0)) note('shape', `${label}: ${JSON.stringify(shape)}`);
+		const text = textOff(code);
+		if (text.length) note('text', `${label}: ${text.slice(0, 2).join(', ')}`);
+		if (opts.lines) {
+			tally.lines = code.split('\n').length - 1;
+			if (tally.lines < opts.lines[0] || tally.lines > opts.lines[1]) note('lines', `${label}: ${tally.lines} lines`);
+		}
+		const run = runFile(code);
+		if (run.status !== 0 || run.stderr !== '') note('run', `${label}: ${run.stderr.slice(-300)}`);
+		const wide = run.stdout.split(/\r?\n/).find((l) => l.length > 92);
+		if (wide) note('printout', `${label}: ${wide}`);
+		const read = readResults(code, extra);
+		const r = read.results;
+		if (read.stop !== null || read.missing.length) {
+			note('results', `${label}: ${read.stop ?? read.missing.join(', ')}`);
+			continue;
+		}
+		// the settings and the stock, the figures derived before any part
+		const want = { frequency: args.frequency, amplitude: args.amplitude, gbw: args.gbw, slew_rate: args.slewRate, swing: args.opampSwing, topology: design.topology, stabilizer: design.stabilizer };
+		if (design.limiter.kind === 'clamp') want.growth = args.quadGrowth;
+		else want.excess = args.excessGain;
+		if (design.limiter.kind !== 'lamp') want.diode = design.diode;
+		if (design.limiter.kind === 'jfet') want.jfet = design.jfet;
+		const stock = stockOf(args, design);
+		const settings = Object.entries(want).filter(([k, v]) => r[k] !== v).map(([k]) => k);
+		if (JSON.stringify(r.resistors) !== JSON.stringify(stock.resistors)) settings.push('resistors');
+		if (JSON.stringify(r.capacitors) !== JSON.stringify(stock.capacitors)) settings.push('capacitors');
+		if (stock.series === 'E24' && (design.limiter.kind === 'diodes' || design.limiter.kind === 'jfet') && JSON.stringify(r.resistors_e96) !== JSON.stringify(decades(E96))) settings.push('resistors_e96');
+		if (settings.length) note('settings', `${label}: ${settings.join(', ')}`);
+		const topo = TOPOLOGIES.find((t) => t.id === design.topology);
+		const textbookOk = Number.isFinite(design.uncompensatedError) && design.uncompensatedError > -0.2;
+		const derived = figuresOff({ k: r.k, gain: r.gain_textbook, rc: r.rc_textbook, f: r.f_textbook, ok: r.textbook_ok, asPage: r.as_page }, { k: topo.k, gain: topo.gain, rc: design.rcIdeal, f: Number.isFinite(design.fUncompensated) ? design.fUncompensated : null, ok: textbookOk, asPage: true });
+		if (derived.length) note('derived', `${label}: ${derived.join('; ')}`);
+		// the flow with the page's pick and pairs is the page's design; with the file's rule, the file's
+		const pairs = design.pairLimit ? design.pairLimit.allowed : design.pairs;
+		const page = flow(args, design, stock, pagePick, pairs);
+		const pageOff = page ? [...partsOff(page.parts, pageParts(design), 0), ...figuresOff({ rc: page.rcTarget, g: page.requiredGain ?? null }, { rc: design.rcTarget, g: design.kind === 'quadrature' ? null : design.requiredGain })] : ['no design'];
+		if (pageOff.length) note('flow', `${label}: ${pageOff.slice(0, 2).join('; ')}`);
+		const own = flow(args, design, stock, ruleRc, false, true);
+		if (!own) {
+			note('own', `${label}: the JavaScript rule finds no design`);
+			continue;
+		}
+		const ownOff = [...figuresOff({ rc: r.rc_target, g: r.required_gain ?? null }, { rc: own.rcTarget, g: own.requiredGain ?? null }), ...partsOff(r.own_parts, own.parts), ...(own.first ? partsOff(r.first_parts, own.first) : [])];
+		if (ownOff.length) note('own', `${label}: ${ownOff.slice(0, 2).join('; ')}`);
+		const e96 = stock.series === 'E24' ? decades(E96) : [];
+		const stray = Object.entries(r.own_parts).filter(([name, v]) => v !== 0 && !(name[0] === 'C' ? stock.capacitors : ['Rf1', 'Rser', 'Ra'].includes(name) ? [...stock.resistors, ...e96] : stock.resistors).includes(v));
+		if (stray.length) note('stock', `${label}: ${stray.map(([n, v]) => `${n} ${v}`).join(', ')}`);
+		// where the file's rule picks the page's parts in both passes, its figures are the page's own
+		if (page && partsOff(own.parts, page.parts, 0).length === 0 && (!own.first || partsOff(own.first, page.first, 0).length === 0)) {
+			tally.picksPage++;
+			const off = figuresOff({ rc: r.rc_target, g: r.required_gain ?? null }, { rc: design.rcTarget, g: design.kind === 'quadrature' ? null : design.requiredGain });
+			if (off.length || !run.stdout.includes("The file's rule picks the page's parts.")) note('picks', `${label}: ${off.join('; ') || 'no sentence'}`);
+		}
+		// the page's parts as data: values, and a pair as the sum of the stock's two
+		const pp = partsOff(r.page_parts, pageParts(design));
+		for (const [name, v] of Object.entries(pageParts(design))) {
+			const pair = design.pairs ? seriesPair(v, design.resistorSeries) : null;
+			if (pair && !code.includes(`"${name}": ${pyPart(pair[0])} + ${pyPart(pair[1])}`)) pp.push(`${name} not written as ${pair.join(' + ')}`);
+		}
+		if (pp.length) note('page parts', `${label}: ${pp.slice(0, 2).join('; ')}`);
+		// both sets through the library's evaluation, and the page's parts against the page's figures
+		const oc = figuresOff(r.own_check, libEvaluate(args, design, r.own_parts));
+		if (oc.length) note('own check', `${label}: ${oc.slice(0, 2).join('; ')}`);
+		const pc = figuresOff(r.page_check, libEvaluate(args, design, r.page_parts));
+		if (pc.length) note('page check', `${label}: ${pc.slice(0, 2).join('; ')}`);
+		const figures = pageFigures(design);
+		const split = design.limiter.kind === 'diodes' ? ['gain', 'amplitude', 'holds', 'slew', 'slew_ok'] : [];
+		const moved = split.length > 0 && !same(r.page_check.gain, design.requiredGain);
+		const pf = figuresOff(r.page_check, figures, Object.keys(figures).filter((k) => !moved || !split.includes(k)));
+		if (pf.length) note('page figures', `${label}: ${pf.slice(0, 2).join('; ')}`);
+		else tally.pageFigures++;
+		if (split.length) {
+			const says = run.stdout.includes("it finds them at its first parts' split");
+			if (r.page_gain !== design.requiredGain || says !== moved || (moved && !(Math.abs(r.page_check.gain / design.requiredGain - 1) > 1e-6))) note('page gain', `${label}: page_gain ${r.page_gain}, moved ${moved}, says ${says}`);
+			// what the page shows for its parts beside its gain: the amplitude held and its verdict (+page.svelte panel 04)
+			const shown = Number.isFinite(design.limiter.amplitudeActual) ? design.limiter.amplitudeActual : null;
+			const verdict = !design.starts ? 'do not start' : !(design.limiter.regulates !== false && design.opamp.swingOk) ? 'start, then clip' : !(design.opamp.opampOk && design.opamp.slewOk) ? 'start, op-amp too slow' : 'start and hold';
+			if (r.page_amplitude !== shown || r.page_verdict !== verdict) note('page gain', `${label}: page_amplitude ${r.page_amplitude} against ${shown}, page_verdict ${r.page_verdict} against ${verdict}`);
+			if (moved) {
+				tally.moved++;
+				tally.worstMoved = Math.max(tally.worstMoved, Math.abs(r.page_check.gain / design.requiredGain - 1));
+			} else tally.kept++;
+		}
+		if (opts.guards) {
+			const guards = [['topology', '"none"', /This file holds the/], ['stabilizer', '"none"', /This file holds the/], ['amplitude', '0.0', /must all be above 0/], ['gbw', '-1.0', /must all be above 0/]];
+			if (design.limiter.kind !== 'lamp') guards.push(['diode', '"1N914"', /No model for this diode/]);
+			if (design.limiter.kind === 'jfet') guards.push(['jfet', '"2N5457"', /No model for this JFET/]);
+			for (const [name, value, message] of guards) {
+				tally.guards++;
+				const edited = readResults(editSetting(code, name, value));
+				if (!(edited.stop !== null && message.test(edited.stop))) note('guards', `${label}: ${name} = ${value}: ${edited.stop ?? 'it ran on'}`);
+			}
+			const twice = readResults(editSetting(code, 'frequency', `${2 * args.frequency}.0`));
+			if (twice.stop !== null || Math.abs(twice.results.rc_target / r.rc_target - 0.5) > 0.05) note('again', `${label}: ${twice.stop ?? twice.results.rc_target / r.rc_target}`);
+			// (and it says the settings are no longer the page's, instead of comparing the rules)
+			else if (twice.results.as_page !== false || !twice.stdout.includes("The settings are no longer the page's") || twice.stdout.includes("The file's rule picks")) note('again', `${label}: as_page ${twice.results.as_page}`);
+		}
+	}
+	cleanup();
+	const show = (key, ok) => check(`python: ${ok}`, !bad[key], bad[key]?.slice(0, 2).join(' | '));
+	show('writes', `the generator writes a file for every design the page exports (${tally.files} files, ${tally.shortfall} of them the page's E24 fallback)`);
+	show('refusals', `it writes none where the page shows no design or refuses the export, with the page's reason (${tally.none} without a design, ${tally.refused} refused)`);
+	show('shape', 'every file is ASCII, parses for Python 3.8, uses no library API newer, imports math only and defines no function twice');
+	show('text', 'its lines hold 100 characters, no tab, no trailing space, no dash, no second person, no course word, no placeholder');
+	show('lines', `the default file holds ${tally.lines} lines, 250 to 450`);
+	show('run', 'every file runs to its end with python -W error on a cp1252 console, matplotlib hidden');
+	show('printout', 'its printout keeps to lines of 92 characters');
+	show('results', 'every result its comment lists reads back through runpy');
+	show('settings', "its settings and stock are the page's (the E24 series and E96 by their rules, a list as it is)");
+	show('derived', "w0 R C, the gain the network asks, the textbook R C, its frequency on the op-amp and the page's 20 % test on it are the page's (1e-9), and as_page holds");
+	show('flow', "the JavaScript flow below, with a copy of pickRC and the page's pairs, gives designOscillator's parts, R C target and gain exactly");
+	show('own', "the file's own parts follow its rules: that flow with rules a to c for R and C, d and e for a diode limiter's Rf1 and Rf2, single parts (R C target, gain, both passes)");
+	show('stock', "the file's own parts are values of its stock (Rf1, Rser and Ra of E96 beside an E24 stock)");
+	show('picks', `where its rule picks the page's parts (${tally.picksPage} designs), its R C target and gain are the page's and it says so`);
+	show('page parts', "the page's parts are written as the page has them, a pair as the stock's two parts");
+	show('own check', "its check of its own parts equals the library's evaluation of them, the page's op-amp tests with it (loop.js, limiter.js, 1e-9)");
+	show('page check', "its check of the page's parts equals the library's evaluation of them (1e-9)");
+	show('page figures', `its check of the page's parts gives the page's own figures and tests (${tally.pageFigures} designs; a diode limiter whose second pass moved the split, all but its gain, amplitude, hold and slew)`);
+	show('page gain', `page_gain, page_amplitude and page_verdict are the page's, and the file says why exactly where the parts' own split moves the gain (${tally.moved} of ${tally.kept + tally.moved} diode limiters, the balance gain up to ${(100 * tally.worstMoved).toFixed(1)} % apart)`);
+	show('guards', `editing the topology, the control, an input to 0 or below, the diode or the JFET stops it with its message (${tally.guards} edits)`);
+	show('again', "run again at twice the frequency, it retunes R C to about half and says the settings are no longer the page's");
+	console.log(`     (the Python download: ${cases.length} cases in ${((Date.now() - started) / 1000).toFixed(0)} s)`);
 }
 
 console.log(fails === 0 ? 'oscillator checks clean' : `${fails} failure(s)`);

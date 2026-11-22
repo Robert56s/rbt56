@@ -4,11 +4,11 @@
 	import KarnaughMap from '$lib/components/KarnaughMap.svelte';
 	import MathPanel from '$lib/components/MathPanel.svelte';
 	import { buildTwoLevelDiagram, gateCount } from '$lib/karnaugh/circuit';
-	import { generateScript } from '$lib/karnaugh/codegen';
 	import { explainSolution } from '$lib/karnaugh/explain';
 	import { literals, posTex, posText, productText, sopTex, sopText, sumText } from '$lib/karnaugh/expression';
 	import { implicantPieces, layout } from '$lib/karnaugh/kmap';
 	import { literalCount, minimizeBoth } from '$lib/karnaugh/minimize';
+	import { generateKarnaughPython } from '$lib/karnaugh/python';
 
 	const DEFAULT_NAMES = ['A', 'B', 'C', 'D'];
 	const PALETTE = ['#2f6fed', '#d97706', '#16a34a', '#dc2626', '#7c3aed', '#0891b2', '#db2777', '#65a30d'];
@@ -104,13 +104,14 @@
 		syncText();
 	}
 
+	// karnaugh-solver.py (python.js) for the function on the map: its names, its cells, the page's forms
 	function downloadScript() {
-		const code = generateScript({ names: cleanNames, ones, dcs });
-		const blob = new Blob([code], { type: 'text/javascript' });
+		const code = generateKarnaughPython({ names: cleanNames, ones, dcs, result });
+		const blob = new Blob([code], { type: 'text/x-python' });
 		const url = URL.createObjectURL(blob);
 		const anchor = document.createElement('a');
 		anchor.href = url;
-		anchor.download = 'karnaugh-solver.js';
+		anchor.download = 'karnaugh-solver.py';
 		document.body.appendChild(anchor);
 		anchor.click();
 		anchor.remove();
@@ -254,8 +255,14 @@
 			<span class="num">05</span>
 			<h2>Download</h2>
 		</div>
-		<p class="note">A standalone script with this exact function, runnable with <code>node karnaugh-solver.js</code>: prime implicants, essentials, cover, both forms.</p>
-		<button type="button" onclick={downloadScript}>Download karnaugh-solver.js</button>
+		<p class="note">
+			A Python file that works the method through for this function, printing each step: the prime
+			implicants, the essential primes, Petrick's method, both minimal forms and their gates. It
+			checks its forms and the page's against the truth table. Python 3.8 or newer, nothing to
+			install: <code class="command">python karnaugh-solver.py</code>. The settings at its top can
+			be edited and the file run again.
+		</p>
+		<button type="button" onclick={downloadScript}>Download karnaugh-solver.py</button>
 		<p class="note formula-link">
 			The method in full, with the identities it rests on: <a href="/tools/karnaugh/method/">Method sheet</a>.
 		</p>
@@ -388,5 +395,10 @@
 
 	.formula-link {
 		margin-top: 0.6rem;
+	}
+
+	/* a command to type, kept on one line (python karnaugh-solver.py breaks at its hyphen otherwise) */
+	code.command {
+		white-space: nowrap;
 	}
 </style>

@@ -8,6 +8,10 @@
 // added with them: carrier amplitude from the triode and op-amp limits,
 // gain-bandwidth and slew checks with the numbers the review quoted, and a
 // brute-force confirmation that the VDS^2 term leaves the envelope alone.
+//
+// The last section checks the page's three Python downloads
+// (src/lib/modulation/python/) through scripts/lib-python.mjs, which runs
+// them with `python` (3.8 or newer) on the PATH.
 // Exits non-zero on any failure.
 
 import katex from 'katex';
@@ -688,12 +692,7 @@ const sameAsNetlist = (wanted, asc) => {
 	const { componentOptions } = await import('../src/lib/stock.js');
 	const { nearestResistor, pairLabel, resistorNotBelow, seriesPair } = await import('../src/lib/modulation/eseries.js');
 	const { formatOhms } = await import('../src/lib/modulation/format.js');
-	const { generateDemodScript, generateDiodeScript, generateJfetScript } = await import('../src/lib/modulation/codegen.js');
 	const { generateDemodNetlist } = await import('../src/lib/modulation/spice.js');
-	const { execFileSync } = await import('node:child_process');
-	const { mkdtempSync, writeFileSync } = await import('node:fs');
-	const { tmpdir } = await import('node:os');
-	const { join } = await import('node:path');
 	const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 	const inList = (v, list) => list.some((x) => Math.abs(x / v - 1) < 1e-9);
 	const kit = [...LAB_KIT.capacitors, 10e-6];
@@ -906,36 +905,9 @@ const sameAsNetlist = (wanted, asc) => {
 		check('pairs: the demodulator files note both R of a stage built as a pair, and the drawing stays clean', rPair !== null && eCir.includes(`* R11 = ${spiceValue(rPair[0])} + ${spiceValue(rPair[1])} in series`) && eCir.includes('* R21 = ') && eAsc.includes('R21 = ') && audit(eAsc).length === 0, rPair ? `R ${envelope.realized[0].components.R1} = ${rPair.join(' + ')}` : 'no pair');
 	}
 
-	// (d) the downloaded scripts run with RESISTOR_PAIRS = true, and print the pairs
-	{
-		const dir = mkdtempSync(join(tmpdir(), 'rbt56-am-pairs-'));
-		const jfetScript = (pairs) =>
-			generateJfetScript({ mode: 'measured', vp: measured.vp, idss: measured.idss, rdsOn: measured.rdsOn, measurements: measured.points.map((pt) => [pt.vgs, pt.rds]), windowLow: -7, windowHigh: 0, topology: 'noninverting', targetOutputAmplitude: 1, carrierBuffer: true, swingFraction: 0.9, targetModulationIndex: 0.7, rb: null, sourceAmplitude: 1, fmMin: 100, vcc: 15, fp: 50000, carrierSourceAmplitude: 0.6, carrierMargin: 0.15, opampSwing: 13.5, gbw: 4e6, slewRate: 16e6, resistorSeries: LAB_KIT.resistors, capacitors: kit, pairs, carrierNote: null });
-		const diodeScript = (pairs) => generateDiodeScript({ fp: 40000, fmMax: 1000, sidebandMargin: 3, inductance: 1e-3, carrierAmplitude: 1, modAmplitude: 1, targetModulationIndex: 0.8, carrierDrive: 2, vcc: 12, opampSwing: 10.5, diode: '1N4148', resistorSeries: LAB_KIT.resistors, capacitorStock: LAB_KIT.capacitors, capacitors: LAB_KIT.capacitors, pairs });
-		const demodScript = (pairs) => generateDemodScript({ rectifierType: 'full', fpCarrier: 40000, fmMax: 1000, amaxDb: 1, aminDb: 40, order: null, response: 'chebyshev', index: 0.9, resistorSeries: LAB_KIT.resistors, capacitors: LAB_KIT.capacitors, pairs });
-		const run = (name, code) => {
-			const file = join(dir, name);
-			writeFileSync(file, code);
-			try {
-				return execFileSync(process.execPath, [file], { encoding: 'utf8', stdio: 'pipe' });
-			} catch (e) {
-				return `CRASH ${String(e.stderr || e.message).split(String.fromCharCode(10)).slice(0, 3).join(' / ')}`;
-			}
-		};
-		const outs = {
-			jfet: [run('jfet-off.js', jfetScript(false)), run('jfet-on.js', jfetScript(true))],
-			diode: [run('diode-off.js', diodeScript(false)), run('diode-on.js', diodeScript(true))],
-			demod: [run('demod-off.js', demodScript(false)), run('demod-on.js', demodScript(true))]
-		};
-		const constOk = /\nconst RESISTOR_PAIRS = true; /.test(jfetScript(true)) && /\nconst RESISTOR_PAIRS = false; /.test(diodeScript(false));
-		const crashed = Object.entries(outs).filter(([, o]) => o.some((x) => x.startsWith('CRASH')));
-		const offClean = Object.values(outs).every(([off]) => !off.includes('in series'));
-		const jfetOk = outs.jfet[1].includes('Rbias = 64200 ohm (56000 + 8200 in series): bias -3.505 V (target -3.500 V)') && outs.jfet[1].includes(`modulation index n = ${designJfetModulator({ ...bench, pairs: true }).modulationIndex.toFixed(3)}`);
-		const dd = designDiodeMixerModulator({ fp: 40000, fmMax: 1000, resistorSeries: LAB_KIT.resistors, capacitorStock: LAB_KIT.capacitors, pairs: true });
-		const diodeOk = outs.diode[1].includes(`index ${dd.modulationIndex.toFixed(4)} for a slow message`) && / in series\)/.test(outs.diode[1]);
-		const demodOk = /R1 = R2 = \d+ ohm \(\d+ \+ \d+ in series\)/.test(outs.demod[1]);
-		check('pairs: the downloaded scripts run with RESISTOR_PAIRS = true and print each pair, and print none with it false', constOk && crashed.length === 0 && offClean && jfetOk && diodeOk && demodOk, crashed.length ? crashed.map(([k, o]) => `${k}: ${o.find((x) => x.startsWith('CRASH'))}`).join('; ') : `jfet ${jfetOk}, diode ${diodeOk}, demod ${demodOk}, off clean ${offClean}`);
-	}
+	// (d) the downloaded scripts ran with RESISTOR_PAIRS = true and printed the pairs: the Python
+	// files write the page's pairs as two parts and check them; that is checked at the end of
+	// this file ("python: the bench JFET with pairs writes R_bias = 56 k + 8.2 k")
 	// (e) the carrier divider is rounded to the safe side: the carrier on the
 	// channel lands at or under the limit k sets, never a rounding step above
 	{
@@ -1037,26 +1009,12 @@ const sameAsNetlist = (wanted, asc) => {
 		}
 		check('output stage: the drawn .asc carries the stage, wired as the netlist, drawn clean, with its pair notes', problems.length === 0, problems.slice(0, 3).join('; '));
 
-		// the comparison table and the script follow
+		// the comparison table follows
 		const rowsOn = compareTopologies({ ...bench, pairs: true, outputStage: true, targetOutputAmplitude: 2 });
 		check('output stage: the comparison row gives the final output and the op-amp count', near(rowsOn[0].carrierOut, pg.outputAmplitude, 1e-12) && rowsOn[0].opampCount === 3);
-		const dir = mkdtempSync(join(tmpdir(), 'rbt56-am-stage-'));
-		const file = join(dir, 'jfet-stage.js');
-		writeFileSync(
-			file,
-			generateJfetScript({ mode: 'measured', vp: measured.vp, idss: measured.idss, rdsOn: measured.rdsOn, measurements: measured.points.map((pt) => [pt.vgs, pt.rds]), windowLow: -7, windowHigh: 0, topology: 'noninverting', targetOutputAmplitude: 2, outputStage: true, carrierBuffer: true, swingFraction: 0.9, targetModulationIndex: 0.7, rb: null, sourceAmplitude: 1, fmMin: 100, vcc: 15, fp: 50000, carrierSourceAmplitude: 0.6, carrierMargin: 0.15, opampSwing: 13.5, gbw: 4e6, slewRate: 16e6, resistorSeries: LAB_KIT.resistors, capacitors: kit, pairs: true })
-		);
-		let out;
-		try {
-			out = execFileSync(process.execPath, [file], { encoding: 'utf8', stdio: 'pipe' });
-		} catch (e) {
-			out = `CRASH ${String(e.stderr || e.message).split(String.fromCharCode(10)).slice(0, 3).join(' / ')}`;
-		}
-		check(
-			'output stage: the downloaded script designs it with OUTPUT_STAGE = true and prints the stage and the divider with their pairs',
-			out.includes(`post-gain stage: K = ${pg.kActual.toFixed(2)} (Rtop ${pg.rtop} ohm (${topPair[0]} + ${topPair[1]} in series), Rbottom 1000 ohm)`) && out.includes(`carrier divider: ${on.carrier.divider.top} ohm (`) && out.includes('at or under the limit') && out.includes('op-amps in the modulator: 3'),
-			out.startsWith('CRASH') ? out : out.split(String.fromCharCode(10)).find((l) => l.startsWith('post-gain stage')) ?? 'no post-gain line'
-		);
+		// the downloaded script designed the stage and printed it with the divider and their
+		// pairs: the Python file's are checked at the end of this file ("python: the output stage
+		// after the bench cell")
 
 		// the explanation says what the stage is for, and the equations render
 		const blocks = explainJfetGainCell(on);
@@ -1084,11 +1042,6 @@ const sameAsNetlist = (wanted, asc) => {
 	const { envelopeGainAt, envelopeGainDb, envelopeSign } = await import('../src/lib/modulation/envelopeFilter.js');
 	const { explainEnvelopeFilter } = await import('../src/lib/modulation/explain.js');
 	const { generateDemodNetlist } = await import('../src/lib/modulation/spice.js');
-	const { generateDemodScript } = await import('../src/lib/modulation/codegen.js');
-	const { execFileSync } = await import('node:child_process');
-	const { mkdtempSync, writeFileSync } = await import('node:fs');
-	const { tmpdir } = await import('node:os');
-	const { join } = await import('node:path');
 	const inList = (v, list) => list.some((x) => Math.abs(x / v - 1) < 1e-9);
 	const stageMiss = (r, t) => Math.max(Math.abs(Math.log(r.actual.wn / t.wn)), Math.abs(Math.log(r.actual.q / t.q)));
 
@@ -1252,36 +1205,9 @@ const sameAsNetlist = (wanted, asc) => {
 		);
 	}
 
-	// (g) the downloaded script builds the MFB filter and says the output is inverted
-	{
-		const dir = mkdtempSync(join(tmpdir(), 'rbt56-am-mfb-'));
-		const run = (name, code) => {
-			const file = join(dir, name);
-			writeFileSync(file, code);
-			try {
-				return execFileSync(process.execPath, [file], { encoding: 'utf8', stdio: 'pipe' });
-			} catch (e) {
-				return `CRASH ${String(e.stderr || e.message).split(String.fromCharCode(10)).slice(0, 3).join(' / ')}`;
-			}
-		};
-		const script = (pairs) => generateDemodScript({ rectifierType: 'full', fpCarrier: 50000, fmMax: 1000, amaxDb: 1, aminDb: 40, order: null, response: 'butterworth', topology: 'mfb', index: 0.75, resistorSeries: LAB_KIT.resistors, capacitors: null, pairs });
-		const off = run('mfb-off.js', script(false));
-		const on = run('mfb-on.js', script(true));
-		const sk = run('sk.js', generateDemodScript({ rectifierType: 'full', fpCarrier: 50000, fmMax: 1000, amaxDb: 1, aminDb: 40, order: null, response: 'butterworth', index: 0.75 }));
-		check(
-			'mfb: the downloaded script runs with FILTER_TOPOLOGY = mfb, prints R1 = R3, R2, C1, C2, the pairs, and the negative mean',
-			script(false).includes('const FILTER_TOPOLOGY = "mfb";') &&
-				off.includes('stage 1 (MFB, DC gain -1)') &&
-				/R1 = R3 = 10000 ohm, R2 = 10000 ohm, C1 = 2\.2000e-8 F, C2 = 4\.7000e-9 F/.test(off) &&
-				off.includes('output mean -0.6366 V') &&
-				off.includes('upside down') &&
-				/R1 = R3 = \d+ ohm \(\d+ \+ \d+ in series\)/.test(on) &&
-				sk.includes('stage 1 (Sallen-Key, unity gain)') &&
-				sk.includes('output mean 0.6366 V') &&
-				!sk.includes('upside down'),
-			[off, on, sk].find((o) => o.startsWith('CRASH')) ?? off.split(String.fromCharCode(10)).find((l) => l.includes('R1 = R3')) ?? 'no R1 = R3 line'
-		);
-	}
+	// (g) the downloaded script built the MFB filter and said the output is inverted: the Python
+	// file's are checked at the end of this file ("python: the MFB demodulator on the lab
+	// resistors")
 
 	// (h) the formula sheet: every equation renders under strict KaTeX, the MFB stage among them
 	{
@@ -1307,11 +1233,6 @@ const sameAsNetlist = (wanted, asc) => {
 	const { capacitorNotBelow } = await import('../src/lib/modulation/eseries.js');
 	const { explainOutputCoupling } = await import('../src/lib/modulation/explain.js');
 	const { generateDemodNetlist } = await import('../src/lib/modulation/spice.js');
-	const { generateDemodScript } = await import('../src/lib/modulation/codegen.js');
-	const { execFileSync } = await import('node:child_process');
-	const { mkdtempSync, writeFileSync } = await import('node:fs');
-	const { tmpdir } = await import('node:os');
-	const { join } = await import('node:path');
 	const spec = { response: 'butterworth', amaxDb: 1, aminDb: 40, fp: 1000, fs: 99000, order: null };
 	const full = (envelope) => recoveredEnvelope({ rectifierType: 'full', rectifier: designPrecisionRectifier(), envelope, fm: 1000, index: 0.75 });
 	const couple = (ex, extra = {}) => designOutputCoupling({ rLoad: 32, fmMin: 100, fm: 1000, amaxDb: 1, level: ex.mean, tone: ex.tone, ...extra });
@@ -1420,27 +1341,8 @@ const sameAsNetlist = (wanted, asc) => {
 		check('output: the files carry COUT with its + plate first and drawn as a polcap, the load, its measurements and time to charge, every drawing clean', messy.length === 0, messy.length ? messy.slice(0, 3).join('; ') : 'four demodulators, ideal and real op-amps');
 	}
 
-	// (g) the downloaded script prints the output, and nothing of it when it is off
-	{
-		const dir = mkdtempSync(join(tmpdir(), 'rbt56-am-output-'));
-		const run = (name, code) => {
-			const file = join(dir, name);
-			writeFileSync(file, code);
-			try {
-				return execFileSync(process.execPath, [file], { encoding: 'utf8', stdio: 'pipe' });
-			} catch (e) {
-				return `CRASH ${String(e.stderr || e.message).split(String.fromCharCode(10)).slice(0, 3).join(' / ')}`;
-			}
-		};
-		const params = { rectifierType: 'full', fpCarrier: 50000, fmMax: 1000, amaxDb: 1, aminDb: 40, order: null, response: 'butterworth', topology: 'mfb', index: 0.75, loadOhms: 32, fmMin: 100 };
-		const on = run('on.js', generateDemodScript({ ...params, outputCoupling: true }));
-		const off = run('off.js', generateDemodScript({ ...params, outputCoupling: false }));
-		check(
-			'output: the downloaded script sizes C_out with OUTPUT_COUPLING = true, says which way round it goes and what the load draws',
-			on.includes('C_out = 1.000e-4 F, an electrolytic') && on.includes('its + plate toward the load') && on.includes('corner 49.74 Hz') && on.includes('past the 10 mA') && !off.includes('C_out') && !off.startsWith('CRASH'),
-			[on, off].find((o) => o.startsWith('CRASH')) ?? on.split(String.fromCharCode(10)).find((l) => l.startsWith('C_out')) ?? 'no C_out line'
-		);
-	}
+	// (g) the downloaded script printed the output, and nothing of it when it was off: the Python
+	// file's are checked at the end of this file ("python: with the output on, C_out = 100 uF")
 
 	// (h) the explanation: plain text, every equation under strict KaTeX
 	{
@@ -1473,11 +1375,6 @@ const sameAsNetlist = (wanted, asc) => {
 	const { demodSwing } = await import('../src/lib/modulation/rectifier.js');
 	const { designOutputCoupling } = await import('../src/lib/modulation/outputCoupling.js');
 	const { explainOutputCoupling, explainRectifier } = await import('../src/lib/modulation/explain.js');
-	const { generateDemodScript } = await import('../src/lib/modulation/codegen.js');
-	const { execFileSync } = await import('node:child_process');
-	const { mkdtempSync, writeFileSync } = await import('node:fs');
-	const { tmpdir } = await import('node:os');
-	const { join } = await import('node:path');
 	const spec = { response: 'butterworth', amaxDb: 1, aminDb: 40, fp: 1000, fs: 99000, order: null };
 	const mfb = designEnvelopeLowPass({ ...spec, topology: 'mfb' });
 	const fullOpts = (amplitude) => ({ rectifierType: 'full', rectifier: designPrecisionRectifier(), envelope: mfb, fp: 50000, fm: 1000, index: 0.75, amplitude });
@@ -1562,23 +1459,8 @@ const sameAsNetlist = (wanted, asc) => {
 		check('carrier: the output explanation names the 4 V carrier and gives the power in the earphones', broken === 0 && words.includes('4.00 V carrier') && tex.includes('P = ') && !explainOutputCoupling(input4).some((b) => b.type === 'eq' && b.tex.includes('P = ')), `${broken} broken`);
 	}
 
-	// (f) the downloaded script takes the carrier and the swing
-	{
-		const dir = mkdtempSync(join(tmpdir(), 'rbt56-am-carrier-'));
-		const file = join(dir, 'demod.js');
-		writeFileSync(file, generateDemodScript({ rectifierType: 'full', fpCarrier: 50000, fmMax: 1000, amaxDb: 1, aminDb: 40, order: null, response: 'butterworth', topology: 'mfb', index: 0.75, amplitude: 4, opampSwing: 13.5, outputCoupling: true, loadOhms: 32, fmMin: 100 }));
-		let out;
-		try {
-			out = execFileSync(process.execPath, [file], { encoding: 'utf8', stdio: 'pipe' });
-		} catch (e) {
-			out = `CRASH ${String(e.stderr || e.message).split(String.fromCharCode(10)).slice(0, 3).join(' / ')}`;
-		}
-		check(
-			'carrier: the script runs with CARRIER_AMPLITUDE = 4, prints the mean, the swing it needs and the power in the earphones',
-			out.includes('WHAT COMES OUT (a 4 V carrier') && out.includes('output mean -2.5465 V') && out.includes('op-amp swing needed 7.700 V') && out.includes('fits') && out.includes('power in the earphones') && !out.startsWith('CRASH'),
-			out.startsWith('CRASH') ? out : out.split(String.fromCharCode(10)).find((l) => l.startsWith('op-amp swing')) ?? 'no swing line'
-		);
-	}
+	// (f) the downloaded script took the carrier and the swing: the Python file's are checked at
+	// the end of this file ("python: a 4 V carrier")
 }
 
 /* --------------------- a limit on the pairs (the stock picker's "up to N pairs") */
@@ -1587,11 +1469,6 @@ const sameAsNetlist = (wanted, asc) => {
 	const { componentOptions } = await import('../src/lib/stock.js');
 	const { pairedNames, pairSubsets, seriesPair } = await import('../src/lib/modulation/eseries.js');
 	const L = await import('../src/lib/modulation/pairLimit.js');
-	const { generateDemodScript, generateDiodeScript, generateJfetScript } = await import('../src/lib/modulation/codegen.js');
-	const { execFileSync } = await import('node:child_process');
-	const { mkdtempSync, writeFileSync } = await import('node:fs');
-	const { tmpdir } = await import('node:os');
-	const { join } = await import('node:path');
 	const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 	const inList = (v, list) => list.some((x) => Math.abs(x / v - 1) < 1e-9);
 	const kit = [...LAB_KIT.capacitors, 10e-6];
@@ -1811,7 +1688,7 @@ const sameAsNetlist = (wanted, asc) => {
 					prev = r.measure;
 				}
 				// the modulator alone under its share, on that carrier, or with the
-				// whitelist the section hands the script: what the downloaded script makes
+				// whitelist the section returns: the same modulator
 				if (r.scriptPairs ? !same(designJfetModulator({ ...params, carrierSourceAmplitude: r.carrier, pairs: r.scriptPairs }), r.design) : r.budget !== null && !same(L.limitJfetPairs({ ...params, carrierSourceAmplitude: r.carrier }, r.budget).design, r.design)) bad.push(`${tag} N=${n}: the modulator under its share is another design`);
 				if (r.scriptPairs) scriptLists++;
 				// every whitelist of the oscillator's R, Rf1 and Rf2 whose resistors fit
@@ -1992,81 +1869,1206 @@ const sameAsNetlist = (wanted, asc) => {
 		);
 	}
 
-	// the downloaded scripts make the page's choice
-	{
-		const dir = mkdtempSync(join(tmpdir(), 'rbt56-am-limit-'));
-		const run = (name, code) => {
-			const file = join(dir, name);
-			writeFileSync(file, code);
-			try {
-				return execFileSync(process.execPath, [file], { encoding: 'utf8', stdio: 'pipe' });
-			} catch (e) {
-				return `CRASH ${String(e.stderr || e.message).split(String.fromCharCode(10)).slice(0, 3).join(' / ')}`;
-			}
-		};
-		const r6 = (x) => Number(x.toPrecision(6));
-		const label = (v, list) => {
-			const pair = seriesPair(v, list);
-			return pair ? `${r6(v)} ohm (${r6(pair[0])} + ${r6(pair[1])} in series)` : `${r6(v)} ohm`;
-		};
-		const problems = [];
-		// the JFET modulator with its carrier: the script gets the modulator's share and the carrier the oscillator settles at
-		const { carrierOf, options } = carrierCase(bench, LAB_KIT.resistors, LAB_KIT.capacitors, 1);
-		const jfetScript = (limit, carrier, extra = {}) =>
-			generateJfetScript({ mode: 'measured', vp: measured.vp, idss: measured.idss, rdsOn: measured.rdsOn, measurements: measured.points.map((pt) => [pt.vgs, pt.rds]), windowLow: -7, windowHigh: 0, topology: 'noninverting', targetOutputAmplitude: 1, carrierBuffer: true, swingFraction: 0.9, targetModulationIndex: 0.75, rb: null, sourceAmplitude: 1, fmMin: 100, vcc: 15, fp: 50000, carrierSourceAmplitude: carrier, carrierMargin: 0.15, opampSwing: 13.5, gbw: 4e6, slewRate: 16e6, resistorSeries: LAB_KIT.resistors, capacitors: LAB_KIT.capacitors, pairs: true, pairLimit: limit, carrierNote: null, ...extra });
-		const shown = [];
-		for (const n of [1, 2, 3]) {
-			const r = L.limitJfetWithCarrier(bench, n, options, carrierOf);
-			const out = run(`jfet-${n}.js`, jfetScript(r.budget, r.carrier));
-			const s = r.design.conditioning.summer;
-			const want = [`Rac = ${label(s.rac, LAB_KIT.resistors)}:`, `Rbias = ${label(s.rbias, LAB_KIT.resistors)}:`, `Rb = ${label(r.design.rb, LAB_KIT.resistors)}`, `carrier divider: ${label(r.design.carrier.divider.top, LAB_KIT.resistors)} /`, `modulation index n = ${r.design.modulationIndex.toFixed(3)},`];
-			if (r.cellCount < pairedNames(L.jfetPairParts(designJfetModulator({ ...bench, carrierSourceAmplitude: r.carrier })), LAB_KIT.resistors).length) want.push(`at most ${r.budget} ${r.budget === 1 ? 'pair' : 'pairs'}: ${r.kept.length ? 'kept ' + r.kept.join(', ') : 'none kept'}; single, though two in series would help: `);
-			for (const w of want) if (!out.includes(w)) problems.push(`jfet N=${n}: no "${w}" (${out.startsWith('CRASH') ? out : 'printed'})`);
-			shown.push(`N=${n}: modulator ${r.kept.join('+') || 'none'} of ${r.budget}, oscillator ${r.carrierKept.join('+') || 'none'}`);
+	// the downloaded scripts made the page's choice again from RESISTOR_PAIR_LIMIT (and
+	// RESISTOR_PAIRS, a whitelist of the resistors that may pair): the downloads are Python files
+	// now, which take the page's parts as data, so that is gone; what they write under a limit,
+	// the pairs the page kept and its note, is checked with them at the end of this file
+	// ("python: under a limit on the pairs")
+}
+
+/* ------------------------------------------ the Python downloads (python/index.js) */
+// jfet-am-modulator.py, diode-tank-am-modulator.py and am-demodulator.py, the
+// page's downloads in place of the JavaScript scripts it gave before (the
+// engine inlined, codegen.js, gone), each checked through the harness
+// scripts/lib-python.mjs on a matrix of the page's designs that covers its
+// every option, one line below per property of each file:
+//   the text     ASCII, parses for Python 3.8, no library API newer, the
+//                standard library only (matplotlib.pyplot in its try), no
+//                function defined twice; lines of 100 characters, no tab,
+//                no trailing space, no dash but the hyphen, the word rules
+//   the run      python -W error, matplotlib hidden (and on the Agg backend
+//                for one file of each circuit), its printout in lines of 92
+//                characters, every result read back through runpy
+//   the design   the figures the file computes before any part are the
+//                page's: the JFET's line, the window and the gate drive's
+//                targets; the tank, its band, the best bias and R_b; the
+//                template, the order and the stage targets (to 1e-12, the
+//                bias 1e-9); its stock the page's, value for value
+//   page parts   as the page shows them (within the 1e-12 the file writes
+//                them to), each resistor the page builds of two in series
+//                written as the stock's two parts, no other, named in the
+//                comment above, no more of them than the page's limit, its
+//                note on that limit above them; and their check equal to
+//                the page's own design: 1e-10, the diode's cycle solve
+//                1e-7, the bare diode's rectifier 1e-9
+//   own parts    the file's rule written again in JavaScript, from its own
+//                stock; their check equal to the same steps in JavaScript
+//                (the JFET, the steps shown equal to the library's design on
+//                the page's parts) or to the library's own solvers (the
+//                diode's envelope, the envelope low-pass, the rectifier, the
+//                coupling) on the same parts
+//   the guards   editing a setting stops the file with its message, each
+//                of the four the Wien bridge's carrier (a number written
+//                in) rests on among them
+// Then the properties the JavaScript scripts' checks held, now on the .py
+// files; a random sweep; a control; the matrix covered.
+{
+	const { cleanup, editSetting, inspect, readResults, runFile } = await import('./lib-python.mjs');
+	const { generateDemodPython, generateDiodePython, generateJfetPython } = await import('../src/lib/modulation/python/index.js');
+	const { USUAL_CAPACITORS } = await import('../src/lib/modulation/python/shared.js');
+	const { parseFixedVds } = await import('../src/lib/modulation/jfetModel.js');
+	const { carrierCycle, currentTable, driveForIndex, envelopeOf, fundamentalWith, tankImpedance } = await import('../src/lib/modulation/diodeMixerModulator.js');
+	const { envelopeGainDb } = await import('../src/lib/modulation/envelopeFilter.js');
+	const L = await import('../src/lib/modulation/pairLimit.js');
+	const { couplingGainAt, designOutputCoupling, HEADPHONE_MAX_OHMS, LOAD_CURRENT_LIMIT, LOAD_POWER_LIMIT } = await import('../src/lib/modulation/outputCoupling.js');
+	const { demodSwing } = await import('../src/lib/modulation/rectifier.js');
+	const { demodExpectation } = await import('../src/lib/modulation/spice.js');
+	const { capacitorCandidates, resistorValues, seriesPair, seriesValues, SERIES } = await import('../src/lib/modulation/eseries.js');
+	const { componentOptions, isRestricted } = await import('../src/lib/stock.js');
+	const { LAB_KIT } = await import('../src/lib/filter/eseries.js');
+	const started = performance.now();
+
+	/* the page: its derived state for its inputs, and what its download functions pass */
+	const JFET_INPUTS = {
+		jfetMode: 'measured',
+		vp: -4,
+		idssMa: 5,
+		rdsOn: 400,
+		measurementText: ['-0.5  0.2  0.0026  1000', '-1.0  0.2  0.0029  1000', '-1.5  0.2  0.0031  1000', '-2.0  0.2  0.0034  1000', '-2.5  0.2  0.0037  1000', '-3.0  0.2  0.0041  1000'].join('\n'),
+		fixedVds: 0.2,
+		seriesR: 0,
+		fixedText: [' 0.0   2.60', '-0.5   2.53', '-1.0   2.46', '-1.5   2.39', '-2.0   2.32', '-2.5   2.25', '-3.0   2.16', '-3.5   2.07', '-4.0   1.95', '-4.5   1.83', '-5.0   1.68', '-5.5   1.50', '-6.0   1.24', '-6.5   0.85', '-7.0   0.19', '-7.5   0.00'].join('\n'),
+		windowLow: -7.2,
+		windowHigh: 0,
+		swingFraction: 0.9,
+		targetN: 0.75,
+		sourceAmplitude: 1,
+		fmMin: 100,
+		vcc: 15,
+		fp: 50000,
+		topology: 'noninverting',
+		targetOutputAmplitude: 1,
+		outputStage: false,
+		carrierBuffer: true,
+		carrierFrom: 'wien',
+		carrierSourceAmplitude: 1,
+		carrierMargin: 0.15,
+		opampSwing: 13.5,
+		gbwMhz: 4,
+		slewRateVus: 16,
+		fmPreview: 1000
+	};
+	const STOCK_INPUTS = { stock: 'E24', resistorText: '', capacitorText: '', pairs: false, pairLimit: null };
+	const works = (o) => Boolean(o && o.starts && o.limiter.regulates && o.opamp.swingOk);
+	const stockArgsOf = (s, parts, pairCap) => ({ kind: s.stock, resistors: parts.resistorSeries, capacitors: parts.capacitors, pairs: parts.pairs, pairLimit: pairCap });
+
+	/** The JFET panels (jfetModel, jfetSection: the Wien carrier and the pairs limit shared with it) and downloadJfet's arguments. */
+	function jfetPage(inputs) {
+		const s = { ...JFET_INPUTS, ...STOCK_INPUTS, ...inputs };
+		const parts = componentOptions(s.stock, s.resistorText, s.capacitorText, s.pairs, s.pairLimit);
+		const restricted = isRestricted(s.stock);
+		const pairCap = parts.pairs ? parts.pairLimit : null;
+		const points = s.jfetMode === 'measured' ? parseMeasurements(s.measurementText) : s.jfetMode === 'fixedvds' ? parseFixedVds(s.fixedText, { vds: s.fixedVds, rs: s.seriesR }).rows : [];
+		let model;
+		if (s.jfetMode === 'idss') model = modelFromIdss(s.vp, s.idssMa / 1000);
+		else if (s.jfetMode === 'rdson') model = modelFromRdsOn(s.vp, s.rdsOn);
+		else {
+			const m = fitModel(points, { low: s.windowLow, high: s.windowHigh });
+			model = m && s.jfetMode === 'fixedvds' ? { ...m, source: 'fixedvds', vds: s.fixedVds, rs: s.seriesR > 0 ? s.seriesR : 0 } : m;
 		}
-		// a limit at or past the count prints what no limit prints, and the line is there either way
-		const fullOut = run('jfet-null.js', jfetScript(null, 1));
-		if (run('jfet-9.js', jfetScript(9, 1)) !== fullOut) problems.push('jfet: a limit past the count prints something else than no limit');
-		if (!/\nconst RESISTOR_PAIR_LIMIT = null; /.test(jfetScript(null, 1)) || !/\nconst RESISTOR_PAIR_LIMIT = 2; /.test(jfetScript(2, 1)) || !/\nconst RESISTOR_PAIR_LIMIT = null; /.test(jfetScript(2, 1, { pairs: false }))) problems.push('jfet: the RESISTOR_PAIR_LIMIT line');
-		const noted = jfetScript(1, 1, { pairLimitNote: "the page's Wien bridge holds 2 of the 3 pairs allowed, so the modulator below may have 1" });
-		if (!noted.includes("\n// the page's Wien bridge holds 2 of the 3 pairs allowed, so the modulator below may have 1\nconst RESISTOR_PAIR_LIMIT = 1; ")) problems.push('jfet: the note above the limit');
-
-		// the sparse list at 80 kHz under 4 pairs: the oscillator holds Rf1 and
-		// Rf2, and the modulator does best with R_bias and R_b, more names than
-		// its own pairs where they help (R_b alone), which no limit of its own
-		// gives: the script gets that whitelist as RESISTOR_PAIRS
-		{
-			const sparse = { ...bench, fp: 80000, targetModulationIndex: 0.5, resistorSeries: lists.sparse, capacitors: kit };
-			const sc = carrierCase(sparse, lists.sparse, kit, 2);
-			const r = L.limitJfetWithCarrier(sparse, 4, sc.options, sc.carrierOf);
-			const code = jfetScript(null, r.carrier, { fp: 80000, targetModulationIndex: 0.5, resistorSeries: lists.sparse, capacitors: kit, pairs: r.scriptPairs ?? true });
-			const out = run('jfet-sparse-4.js', code);
-			const s = r.design?.conditioning.summer;
-			const want = s ? [`Rac = ${label(s.rac, lists.sparse)}:`, `Rbias = ${label(s.rbias, lists.sparse)}:`, `Rb = ${label(r.design.rb, lists.sparse)}`, `modulation index n = ${r.design.modulationIndex.toFixed(3)},`] : ['a design'];
-			if (!same(r.scriptPairs, ['Rbias', 'Rb']) || r.budget !== null || !code.includes('\nconst RESISTOR_PAIRS = ["Rbias","Rb"]; ') || !code.includes('\nconst RESISTOR_PAIR_LIMIT = null; ')) problems.push(`jfet sparse N=4: the script's whitelist ${JSON.stringify(r.scriptPairs)}, limit ${r.budget}`);
-			for (const w of want) if (!out.includes(w)) problems.push(`jfet sparse N=4: no "${w}" (${out.startsWith('CRASH') ? out : 'printed'})`);
-			shown.push(`sparse N=4: modulator ${r.kept.join('+')} as RESISTOR_PAIRS, oscillator ${r.carrierKept.join('+')}`);
+		const ceiling = model ? conductanceDepth(model, s.swingFraction) : null;
+		const gbw = s.gbwMhz * 1e6;
+		const slewRate = s.slewRateVus * 1e6;
+		const valid = model !== null && ceiling !== null && s.swingFraction > 0 && s.swingFraction <= 1 && s.targetN > 0 && s.targetN < ceiling && s.fp > 0 && gbw > 0 && slewRate > 0 && s.opampSwing > 0;
+		const inputsOf = { model, topology: s.topology, targetOutputAmplitude: s.targetOutputAmplitude, outputStage: s.outputStage, carrierBuffer: s.carrierBuffer, swingFraction: s.swingFraction, targetModulationIndex: s.targetN, sourceAmplitude: s.sourceAmplitude, fmMin: s.fmMin, vcc: s.vcc, fp: s.fp, carrierMargin: s.carrierMargin, opampSwing: s.opampSwing, gbw, slewRate, ...parts };
+		const carrierFor = (pairs) => {
+			const osc = (p) => designOscillator({ topology: 'wien', stabilizer: 'diodes', frequency: s.fp, amplitude: s.carrierSourceAmplitude, gbw, slewRate, opampSwing: s.opampSwing, ...p });
+			const mine = osc({ resistorSeries: parts.resistorSeries, capacitors: parts.capacitors, pairs });
+			if (!restricted || works(mine)) return mine;
+			const fallback = osc({ resistorSeries: 'E24', capacitors: null, pairs: false });
+			return works(fallback) || !mine ? fallback && { ...fallback, stockShortfall: true } : mine;
+		};
+		const carrierOf = (o) => (s.carrierFrom === 'wien' && works(o) && o.limiter.amplitudeActual ? o.limiter.amplitudeActual : s.carrierSourceAmplitude);
+		let section = null;
+		if (valid) {
+			if (pairCap === null) {
+				const oscillator = s.carrierFrom === 'wien' ? carrierFor(parts.pairs) : null;
+				const carrier = carrierOf(oscillator);
+				section = { design: designJfetModulator({ ...inputsOf, carrierSourceAmplitude: carrier }), oscillator, carrier };
+			} else if (s.carrierFrom !== 'wien') section = { ...L.limitJfetPairs({ ...inputsOf, carrierSourceAmplitude: s.carrierSourceAmplitude }, pairCap), oscillator: null, carrier: s.carrierSourceAmplitude, carrierKept: [], carrierDropped: [], carrierAdded: [], carrierCount: 0, budget: pairCap };
+			else section = L.limitJfetWithCarrier(inputsOf, pairCap, L.carrierPairOptions(carrierFor, parts.resistorSeries), carrierOf);
 		}
-
-		// the diode modulator where R_p and R_m both pair, held to one
-		const dset = { fp: 40000, fmMax: 1000, sidebandMargin: 3, inductance: 1e-3, carrierAmplitude: 1, modAmplitude: 1, targetModulationIndex: 0.93, carrierDrive: 1.7, vcc: 12, opampSwing: 10.5, diode: '1N4148', resistorSeries: LAB_KIT.resistors, capacitorStock: LAB_KIT.capacitors, pairs: true };
-		const dr = L.limitDiodePairs(dset, 1);
-		const dOut = run('diode-1.js', generateDiodeScript({ ...dset, capacitors: LAB_KIT.capacitors, pairLimit: 1 }));
-		for (const w of [`Rp = ${label(dr.design.summer.rp, LAB_KIT.resistors)}:`, `Rm = ${label(dr.design.summer.rm, LAB_KIT.resistors)}:`, `index ${dr.design.modulationIndex.toFixed(4)} for a slow message`, `at most 1 pair: kept ${dr.kept.join(', ')}; single, though two in series would help: ${dr.dropped.join(', ')}`])
-			if (!dOut.includes(w)) problems.push(`diode: no "${w}" (${dOut.startsWith('CRASH') ? dOut : 'printed'})`);
-		if (!dr.limited) problems.push('diode: the case is not limited');
-
-		// an order-6 MFB envelope held to four pairs
-		const espec = { rectifierType: 'full', fpCarrier: 50000, fmMax: 1000, amaxDb: 1, aminDb: 60, order: 6, response: 'butterworth', topology: 'mfb', index: 0.75, resistorSeries: LAB_KIT.resistors, capacitors: LAB_KIT.capacitors, pairs: true };
-		const er = L.limitEnvelopePairs({ response: 'butterworth', amaxDb: 1, aminDb: 60, fp: 1000, fs: 99000, order: 6, topology: 'mfb', resistorSeries: LAB_KIT.resistors, capacitors: LAB_KIT.capacitors, pairs: true, maxOrder: 8 }, 4);
-		const eOut = run('demod-4.js', generateDemodScript({ ...espec, pairLimit: 4 }));
-		const rText = (st, v) => (st.stockShortfall ? `${v} ohm (E24: the list cannot build this stage)` : label(v, LAB_KIT.resistors));
-		const eWant = er.design.realized.map((st) => `  R1 = R3 = ${rText(st, st.components.R1)}, R2 = ${rText(st, st.components.R2)},`);
-		if (er.limited) eWant.push(`at most 4 pairs: kept ${er.kept.join(', ')} (R1k, R2k, R3k: stage k); single, though two in series would help: ${er.dropped.join(', ')}`);
-		for (const w of eWant) if (!eOut.includes(w)) problems.push(`demod: no "${w}" (${eOut.startsWith('CRASH') ? eOut : 'printed'})`);
-		if (!er.limited || er.count > 4) problems.push(`demod: the case keeps ${er.count} pairs`);
-		check('pair limit: the downloaded scripts take RESISTOR_PAIR_LIMIT and print the parts the page chose (the JFET modulator with the share its oscillator leaves), and a limit past the count prints what no limit does', problems.length === 0, problems.length ? problems.slice(0, 3).join('; ') : shown.join('; '));
+		const design = section?.design ?? null;
+		if (!design) return { s, model, design: null };
+		const w = works(section.oscillator) ? section.oscillator : null;
+		const sm = design.conditioning.summer;
+		let limitNote = null;
+		if (section.limited) {
+			const carrierName = (slot) => `carrier ${slot}`;
+			const together = pairCap - section.count === 1 && section.carrierDropped.includes('R');
+			const carrierDropped = section.oscillator?.stockShortfall ? [] : section.carrierDropped;
+			limitNote = L.pairLimitNote({ limit: pairCap, kept: [...section.kept, ...section.carrierKept.map(carrierName)], dropped: [...section.dropped, ...carrierDropped.map(carrierName)], added: [...(section.added ?? []), ...(section.carrierAdded ?? []).map(carrierName)], together });
+		}
+		const page = { Rf: sm.rf, Rac: sm.rac, Rbias: sm.rbias, C: sm.c, ...(design.topology === 'inverting' ? { R2: design.r2 } : { Rb: design.rb }), Rdt: design.carrier.divider.top, Rdb: design.carrier.divider.bottom, ...(design.postGain?.needed ? { Rtop: design.postGain.rtop, Rbottom: design.postGain.rbottom } : {}) };
+		const args = {
+			mode: s.jfetMode,
+			vp: s.vp,
+			idssMa: s.idssMa,
+			rdsOn: s.rdsOn,
+			text: s.jfetMode === 'fixedvds' ? s.fixedText : s.measurementText,
+			vds: s.fixedVds,
+			rs: s.seriesR,
+			window: model.fit ? [model.fit.low, model.fit.high] : null,
+			topology: s.topology,
+			targetOutputAmplitude: s.targetOutputAmplitude,
+			outputStage: s.outputStage,
+			carrierBuffer: s.carrierBuffer,
+			swingFraction: s.swingFraction,
+			targetModulationIndex: s.targetN,
+			sourceAmplitude: s.sourceAmplitude,
+			fmMin: s.fmMin,
+			vcc: s.vcc,
+			fp: s.fp,
+			carrierAmplitude: section.carrier,
+			wien: w ? { r: w.r, c: w.c, rf1: w.parts.rf1, rf2: w.parts.rf2, rg: w.rg } : null,
+			carrierMargin: s.carrierMargin,
+			opampSwing: s.opampSwing,
+			gbw,
+			slewRate,
+			fmPreview: s.fmPreview,
+			stock: stockArgsOf(s, parts, pairCap),
+			page,
+			limitNote
+		};
+		return { s, model, design, oscillator: section.oscillator, section, args };
 	}
+
+	const DIODE_INPUTS = { fpDiode: 40000, fmMaxDiode: 1000, sidebandMargin: 3, carrierAmp: 1, modAmp: 1, targetNDiode: 0.8, carrierDrive: 2, vccDiode: 12, diodePart: '1N4148', inductanceMh: 1 };
+
+	/** The diode panels (the design shown, the E24 fallback where the stock reaches no index) and downloadDiode's arguments. */
+	function diodePage(inputs) {
+		const s = { ...DIODE_INPUTS, ...STOCK_INPUTS, ...inputs };
+		const parts = componentOptions(s.stock, s.resistorText, s.capacitorText, s.pairs, s.pairLimit);
+		const pairCap = parts.pairs ? parts.pairLimit : null;
+		const inductance = s.inductanceMh / 1000;
+		const valid = s.fpDiode > 0 && s.fmMaxDiode > 0 && s.fpDiode - s.sidebandMargin * s.fmMaxDiode > s.fmMaxDiode && inductance > 0 && s.sidebandMargin > 0 && s.carrierAmp > 0 && s.modAmp > 0 && s.targetNDiode > 0 && s.targetNDiode <= 1 && s.carrierDrive > 0 && s.vccDiode > 0;
+		if (!valid) return { s, design: null };
+		const params = { fp: s.fpDiode, fmMax: s.fmMaxDiode, sidebandMargin: s.sidebandMargin, inductance, carrierAmplitude: s.carrierAmp, modAmplitude: s.modAmp, targetModulationIndex: s.targetNDiode, carrierDrive: s.carrierDrive, vcc: s.vccDiode, opampSwing: Math.max(0.5, s.vccDiode - 1.5), diode: s.diodePart, resistorSeries: parts.resistorSeries, capacitorStock: parts.capacitors, pairs: parts.pairs };
+		const limited = pairCap === null ? null : L.limitDiodePairs(params, pairCap);
+		const own = limited ? limited.design : designDiodeMixerModulator(params);
+		let design = own;
+		if (isRestricted(s.stock) && !(own && own.indexOk)) {
+			const fallback = designDiodeMixerModulator({ ...params, resistorSeries: 'E24', capacitorStock: null, pairs: false });
+			if (fallback && (!own || (fallback.indexOk && !own.indexOk))) design = { ...fallback, stockShortfall: true };
+		}
+		if (!design) return { s, design: null };
+		const args = {
+			fp: s.fpDiode,
+			fmMax: s.fmMaxDiode,
+			sidebandMargin: s.sidebandMargin,
+			inductance,
+			carrierAmplitude: s.carrierAmp,
+			modAmplitude: s.modAmp,
+			targetModulationIndex: s.targetNDiode,
+			carrierDrive: s.carrierDrive,
+			vcc: s.vccDiode,
+			diode: s.diodePart,
+			stock: design.stockShortfall ? { kind: 'E24', resistors: 'E24', capacitors: null, pairs: false, pairLimit: null } : stockArgsOf(s, parts, pairCap),
+			shortfall: Boolean(design.stockShortfall),
+			page: { Rf: design.summer.rf, Rp: design.summer.rp, Rm: design.summer.rm, Rb: design.summer.rb, Rs: design.rs, Rt: design.rt, C: design.capacitors },
+			limitNote: limited?.limited && !design.stockShortfall ? L.pairLimitNote({ limit: pairCap, kept: limited.kept, dropped: limited.dropped, added: limited.added }) : null
+		};
+		return { s, design, limited, args };
+	}
+
+	const DEMOD_INPUTS = { rectifierType: 'full', fpCarrierDemod: 50000, fmMaxDemod: 1000, amaxDb: 1, aminDb: 40, response: 'butterworth', envelopeTopology: 'sallenKey', orderOverride: null, demoModIndex: 0.75, demodAmplitude: 1, demodOpampSwing: 13.5, outputCoupling: true, loadOhms: 32, fmMinDemod: 100 };
+
+	/** The demodulator panels (the low-pass and its check, what comes out, the coupling and the band through it) and downloadDemod's arguments. */
+	function demodPage(inputs) {
+		const s = { ...DEMOD_INPUTS, ...STOCK_INPUTS, ...inputs };
+		const parts = componentOptions(s.stock, s.resistorText, s.capacitorText, s.pairs, s.pairLimit);
+		const pairCap = parts.pairs ? parts.pairLimit : null;
+		const ripple = s.rectifierType === 'full' ? 2 * s.fpCarrierDemod : s.fpCarrierDemod;
+		const valid = s.fmMaxDemod > 0 && s.fmMaxDemod < s.fpCarrierDemod && ripple - s.fmMaxDemod > s.fmMaxDemod && s.amaxDb > 0 && s.aminDb > s.amaxDb && s.demoModIndex > 0 && s.demoModIndex <= 1 && s.demodAmplitude > 0 && s.demodOpampSwing > 0;
+		if (!valid) return { s, envelope: null };
+		const spec = { response: s.response, amaxDb: s.amaxDb, aminDb: s.aminDb, fp: s.fmMaxDemod, fs: ripple - s.fmMaxDemod, order: s.orderOverride, topology: s.envelopeTopology, maxOrder: 8, ...parts };
+		const limited = pairCap === null ? null : L.limitEnvelopePairs(spec, pairCap);
+		const raw = limited ? limited.design : designEnvelopeLowPass(spec);
+		const envelope = raw && !raw.tooHigh ? raw : null;
+		if (!envelope) return { s, envelope: null };
+		let top = -Infinity;
+		let bottom = Infinity;
+		for (let i = 0; i <= 200; i++) {
+			const db = envelopeGainDb(envelope, (s.fmMaxDemod * i) / 200 || s.fmMaxDemod / 1000);
+			top = Math.max(top, db);
+			bottom = Math.min(bottom, db);
+		}
+		const atSideband = envelopeGainDb(envelope, ripple - s.fmMaxDemod);
+		const verdict = { span: top - bottom, atSideband, maxQ: Math.max(...envelope.realized.map((st) => st.actual.q)), spanOk: top - bottom <= s.amaxDb + 0.1, stopOk: -atSideband >= s.aminDb - 0.1 };
+		const rectifier = s.rectifierType === 'full' ? designPrecisionRectifier({ resistorSeries: parts.resistorSeries }) : designHalfWaveRectifier({ resistorSeries: parts.resistorSeries });
+		const out = demodExpectation({ rectifierType: s.rectifierType, rectifier, envelope, fp: s.fpCarrierDemod, fm: s.fmMaxDemod, index: s.demoModIndex, amplitude: s.demodAmplitude });
+		const swing = demodSwing({ rectifierType: s.rectifierType, amplitude: s.demodAmplitude, index: s.demoModIndex, out, swing: s.demodOpampSwing });
+		const couplingValid = s.loadOhms > 0 && s.fmMinDemod > 0 && s.fmMinDemod < s.fmMaxDemod;
+		const coupling = s.outputCoupling && couplingValid ? designOutputCoupling({ rLoad: s.loadOhms, fmMin: s.fmMinDemod, fm: s.fmMaxDemod, amaxDb: s.amaxDb, level: out.mean, tone: out.tone, amplitude: s.demodAmplitude, capacitors: parts.capacitors }) : null;
+		let band = null;
+		if (coupling) {
+			let hi = -Infinity;
+			let lo = Infinity;
+			for (let i = 0; i <= 200; i++) {
+				const f = s.fmMinDemod * (s.fmMaxDemod / s.fmMinDemod) ** (i / 200);
+				const db = envelopeGainDb(envelope, f) + 20 * Math.log10(couplingGainAt(coupling, f));
+				hi = Math.max(hi, db);
+				lo = Math.min(lo, db);
+			}
+			band = { span: hi - lo, ok: hi - lo <= s.amaxDb + 0.1 };
+		}
+		const stages = envelope.realized.map((st) => {
+			const c = st.components;
+			return { parts: st.topology === 'mfb' ? { R1: c.R1, R2: c.R2, R3: c.R3, C1: c.C1, C2: c.C2 } : { R1: c.R1, R2: c.R2, Ctop: c.Ctop, Cbottom: c.Cbottom }, shortfall: Boolean(st.stockShortfall) };
+		});
+		const args = {
+			rectifierType: s.rectifierType,
+			fpCarrier: s.fpCarrierDemod,
+			fmMax: s.fmMaxDemod,
+			amaxDb: s.amaxDb,
+			aminDb: s.aminDb,
+			order: s.orderOverride,
+			response: s.response,
+			topology: s.envelopeTopology,
+			index: s.demoModIndex,
+			amplitude: s.demodAmplitude,
+			opampSwing: s.demodOpampSwing,
+			outputCoupling: Boolean(coupling),
+			loadOhms: s.loadOhms,
+			fmMin: s.fmMinDemod,
+			stock: stockArgsOf(s, parts, pairCap),
+			page: { R: s.rectifierType === 'full' ? rectifier.r1 : rectifier.rl, stages, Cout: coupling ? coupling.c : null },
+			limitNote: limited?.limited ? L.pairLimitNote({ limit: pairCap, kept: limited.kept, dropped: limited.dropped, added: limited.added, together: pairCap - limited.count === 1 && limited.dropped.some((name) => name.startsWith('R1')) }) : null
+		};
+		return { s, envelope, limited, verdict, out, swing, coupling, band, args };
+	}
+
+	/* the files' rules in JavaScript, written again from their comments, the arithmetic the files' own */
+	const lnMiss = (got, want) => Math.abs(Math.log(got / want));
+	const neighbours = (r, list) => {
+		let below = null;
+		let above = null;
+		for (const v of list) {
+			if (v <= r && (below === null || v > below)) below = v;
+			if (v >= r && (above === null || v < above)) above = v;
+		}
+		return [...new Set([below, above].filter((v) => v !== null))].sort((x, y) => x - y);
+	};
+	const closer = (r, figure, target, list) => neighbours(r, list).reduce((b, v) => (b === null || lnMiss(figure(v), target) < lnMiss(figure(b), target) ? v : b), null);
+	const nearestOf = (target, list) => list.reduce((b, v) => (Math.abs(Math.log(v / target)) < Math.abs(Math.log(b / target)) ? v : b), list[0]);
+
+	/** The JFET file's steps 3 to 6 in JavaScript: gate(), cell(), carrier(), stage(), opamp(). */
+	function jfetSteps(a, m) {
+		const inverting = a.topology === 'inverting';
+		const { vp, beta } = m;
+		const gate = (p) => {
+			const gain = p.Rf / p.Rac;
+			const bias = -(p.Rf * a.vcc) / p.Rbias;
+			const swing = gain * a.sourceAmplitude;
+			return { gain, bias, vgs_min: bias - swing, vgs_max: bias + swing, depth: swing / (bias - vp), r_vc: 1 / (beta * (bias - vp)) };
+		};
+		const cell = (p, g) => {
+			if (inverting) {
+				const x = p.R2 / g.r_vc;
+				return { x, n: g.depth, k0: x, r_min: 1 / (beta * (g.vgs_max - vp)), k_min: x * (1 - g.depth), k_max: x * (1 + g.depth) };
+			}
+			const x = p.Rb / g.r_vc;
+			const rMin = 1 / (beta * (g.vgs_max - vp));
+			return { x, n: (g.depth * x) / (1 + x), k0: 1 + x, r_min: rMin, k_min: 1 + p.Rb / (1 / (beta * (g.vgs_min - vp))), k_max: 1 + p.Rb / rMin };
+		};
+		const limitOf = (g, k) => Math.min(a.carrierMargin * (g.vgs_min - vp), a.opampSwing / k.k_max);
+		const carrier = (p, g, k) => {
+			const ac = (a.carrierAmplitude * p.Rdb) / (p.Rdt + p.Rdb);
+			return { limit: limitOf(g, k), ac, out: k.k0 * ac, env_max: k.k_max * ac, env_min: k.k_min * ac, current: ac / k.r_min, tone_2fp: ((inverting ? p.R2 : p.Rb) * beta * ac * ac) / 4 };
+		};
+		const loss = (gain) => {
+			const r = (a.fp * gain) / a.gbw;
+			return 1 / Math.sqrt(1 + r * r);
+		};
+		const stage = (p, car) => {
+			if (!('Rtop' in p)) return { k: 1, kept: 1, out: car.out, peak: car.env_max };
+			const k = 1 + p.Rtop / p.Rbottom;
+			return { k, kept: loss(k), out: k * car.out * loss(k), peak: k * car.env_max };
+		};
+		const stats = (envelope) => {
+			const e = Array.from({ length: 512 }, (_, i) => envelope(Math.cos((2 * Math.PI * i) / 512)));
+			const harmonic = (h) => {
+				let re = 0;
+				let im = 0;
+				e.forEach((v, i) => {
+					re += v * Math.cos((2 * Math.PI * h * i) / 512);
+					im -= v * Math.sin((2 * Math.PI * h * i) / 512);
+				});
+				return Math.hypot(re, im) / 512;
+			};
+			let rest = 0;
+			for (let h = 2; h <= 10; h++) rest += harmonic(h) ** 2;
+			const crest = envelope(1);
+			const trough = envelope(-1);
+			return { n: (crest - trough) / (crest + trough), crest, trough, thd: Math.sqrt(rest) / harmonic(1) };
+		};
+		const sourceZ = (p, follower) => (follower ? 5 : p.Rdt > 0 ? (p.Rdt * p.Rdb) / (p.Rdt + p.Rdb) : 0);
+		const opamp = (p, g, k, car) => {
+			const s = g.depth;
+			const x = k.x;
+			const zG = inverting ? sourceZ(p, a.carrierBuffer !== false) * beta * (g.bias - vp) : 0;
+			const st = inverting ? stats((mm) => ((x * (1 + s * mm)) / (1 + zG * (1 + s * mm))) * loss(1 + x * (1 + s * mm))) : stats((mm) => (1 + x * (1 + s * mm)) * loss(1 + x * (1 + s * mm)));
+			const noise = [-1, 0, 1].map((mm) => 1 + x * (1 + s * mm));
+			const lifted = (4 * car.tone_2fp) / car.ac;
+			const opamps = 2 + (inverting && a.carrierBuffer !== false ? 1 : 0) + ('Rtop' in p ? 1 : 0);
+			return { noise, kept: noise.map(loss), n_eff: st.n, n_peaks: (st.crest - st.trough) / (st.crest + st.trough + lifted), thd: st.thd, gbw_ratio: (a.fp * noise[2]) / a.gbw, slew: 2 * Math.PI * a.fp * car.env_max, opamps };
+		};
+		const evaluate = (p) => {
+			const g = gate(p);
+			const k = cell(p, g);
+			const car = carrier(p, g, k);
+			return { gain: g.gain, bias: g.bias, depth: g.depth, fc: 1 / (2 * Math.PI * p.Rac * p.C), ...k, ...car, ...opamp(p, g, k, car), stage: stage(p, car) };
+		};
+		return { gate, cell, carrier, limitOf, evaluate };
+	}
+
+	/** The JFET file's own parts, its rule a to e, from its own stock (R, C). */
+	function jfetRule(a, m, R, C) {
+		const f = jfetSteps(a, m);
+		const inverting = a.topology === 'inverting';
+		const gainT = (a.swingFraction * m.halfRange) / a.sourceAmplitude;
+		const biasT = Math.abs(m.vc);
+		const tried = R.filter((v) => v >= 4.7e3 && v <= 47e3);
+		const choices = [];
+		for (const rf of tried.length ? tried : [nearestOf(10e3, R)]) {
+			const rac = closer(rf / gainT, (r) => rf / r, gainT, R);
+			const rbias = closer((rf * a.vcc) / biasT, (r) => (rf * a.vcc) / r, biasT, R);
+			const g = f.gate({ Rf: rf, Rac: rac, Rbias: rbias });
+			if (g.vgs_min > m.vp && (inverting || g.depth > a.targetModulationIndex)) choices.push([Math.max(lnMiss(g.gain, gainT), lnMiss(-g.bias, biasT)), rf, rac, rbias]);
+		}
+		if (!choices.length) return null;
+		const least = Math.min(...choices.map((c) => c[0]));
+		const [, rf, rac, rbias] = choices.filter((c) => c[0] <= least + 1e-9).reduce((b, c) => (Math.abs(Math.log(c[1] / 10e3)) < Math.abs(Math.log(b[1] / 10e3)) ? c : b));
+		const cExact = 1 / (2 * Math.PI * rac * (a.fmMin / 10));
+		const up = C.filter((v) => v >= cExact * (1 - 1e-9));
+		const p = { Rf: rf, Rac: rac, Rbias: rbias, C: up.length ? Math.min(...up) : Math.max(...C) };
+		const g = f.gate(p);
+		if (inverting) {
+			const xRule = ((0.2 * a.gbw) / a.fp - 1) / (1 + g.depth);
+			const r2Max = Math.min(10, xRule > 0.5 ? xRule : 0.5) * g.r_vc;
+			const below = R.filter((v) => v <= r2Max * (1 + 1e-9));
+			p.R2 = below.length ? Math.max(...below) : nearestOf(r2Max, R);
+		} else {
+			const t = a.targetModulationIndex;
+			p.Rb = closer((t / (g.depth - t)) * g.r_vc, (r) => f.cell({ Rb: r }, g).n, t, R);
+		}
+		const k = f.cell(p, g);
+		const ratio = Math.min(1, f.limitOf(g, k) / a.carrierAmplitude);
+		let foot = nearestOf(1e3, R);
+		let top = 0;
+		if (ratio < 1) {
+			const topExact = foot * (1 / ratio - 1);
+			const above = R.filter((v) => v >= topExact * (1 - 1e-9));
+			top = above.length ? Math.min(...above) : Math.max(...R);
+			if (top < topExact * (1 - 1e-9)) {
+				const down = R.filter((v) => v <= (top / (1 / ratio - 1)) * (1 + 1e-9));
+				if (down.length) foot = Math.max(...down);
+			}
+		}
+		p.Rdt = top;
+		p.Rdb = foot;
+		if (inverting || a.outputStage) {
+			const kT = a.targetOutputAmplitude / f.carrier(p, g, k).out;
+			if (kT > 1.05) {
+				const rbottom = nearestOf(1e3, R);
+				p.Rtop = closer((kT - 1) * rbottom, (r) => 1 + r / rbottom, kT, R);
+				p.Rbottom = rbottom;
+			}
+		}
+		return p;
+	}
+
+	/** The diode file's message drive and own R_p, R_m (the four roundings), from the library's own solvers. */
+	function diodeRule(a, py, R) {
+		const d = DIODE_MODELS[a.diode] ?? DIODE_MODELS['1N4148'];
+		const rf = nearestOf(10e3, R);
+		const c = py.tank_c.reduce((x, y) => x + y, 0);
+		const reach = 3 * a.carrierDrive + 2;
+		const current = currentTable(py.rs, d, -reach, reach);
+		const base = { a: a.carrierDrive, z: tankImpedance(a.fp, { r: py.rt, l: a.inductance, c }), relax: 1 / (1 + py.rt / (2 * py.rs)) };
+		const vb = py.rb ? (rf * a.vcc) / py.rb : 0;
+		const umWanted = driveForIndex(current, base, vb, a.targetModulationIndex, 12, 64);
+		let best = null;
+		for (const rp of neighbours((rf * a.carrierAmplitude) / a.carrierDrive, R)) {
+			const drive = (rf / rp) * a.carrierAmplitude;
+			for (const rm of neighbours((rf * a.modAmplitude) / ((umWanted ?? py.um_wanted) * (drive / a.carrierDrive)), R)) {
+				const off = lnMiss(envelopeOf(current, { ...base, a: drive, um: (rf / rm) * a.modAmplitude, vb }, 12, 64).n, a.targetModulationIndex);
+				if (!best || off < best.off) best = { off, rp, rm };
+			}
+		}
+		return { umWanted, parts: { Rf: rf, Rp: best.rp, Rm: best.rm, Rb: py.rb, Rs: py.rs, Rt: py.rt, C: py.tank_c } };
+	}
+
+	/** A set of diode modulator parts through the page's evaluation (its design's build), from the library's own solvers. */
+	function diodeEval(a, p) {
+		const d = DIODE_MODELS[a.diode] ?? DIODE_MODELS['1N4148'];
+		const c = p.C.reduce((x, y) => x + y, 0);
+		const reach = 3 * a.carrierDrive + 2;
+		const current = currentTable(p.Rs, d, -reach, reach);
+		const z = tankImpedance(a.fp, { r: p.Rt, l: a.inductance, c });
+		const relax = 1 / (1 + p.Rt / (2 * p.Rs));
+		const drive = (p.Rf / p.Rp) * a.carrierAmplitude;
+		const um = (p.Rf / p.Rm) * a.modAmplitude;
+		const vb = p.Rb ? (p.Rf * a.vcc) / p.Rb : 0;
+		const env = envelopeOf(current, { a: drive, um, vb, z, relax }, 32, 128);
+		const at = carrierCycle(current, drive, vb, z, 128, relax);
+		const dv = 1e-3 * Math.max(1e-3, Math.hypot(at.v1.re, at.v1.im));
+		const di = fundamentalWith(current, drive, vb, at.v1, 128).re - fundamentalWith(current, drive, vb, { re: at.v1.re + dv, im: at.v1.im }, 128).re;
+		const rSource = di > 0 ? dv / di : 2 * p.Rs;
+		const rEff = 1 / (1 / p.Rt + 1 / rSource);
+		const f0 = 1 / (2 * Math.PI * Math.sqrt(a.inductance * c));
+		const bw = 1 / (2 * Math.PI * rEff * c);
+		const mag = (q) => Math.hypot(q.re, q.im);
+		const loaded = { r: rEff, l: a.inductance, c };
+		const zc = mag(tankImpedance(a.fp, loaded));
+		const sideband = (mag(tankImpedance(a.fp - a.fmMax, loaded)) / zc + mag(tankImpedance(a.fp + a.fmMax, loaded)) / zc) / 2;
+		const hOut = env.harmonics.map((x, k) => x * ((mag(tankImpedance(a.fp - (k + 1) * a.fmMax, loaded)) + mag(tankImpedance(a.fp + (k + 1) * a.fmMax, loaded))) / (2 * zc)));
+		const peak = drive + um + vb;
+		return {
+			n: env.n,
+			mean: env.mean,
+			thd: env.thd,
+			max: env.max,
+			min: env.min,
+			peak: env.peak,
+			r_source: rSource,
+			r_loaded: rEff,
+			bw,
+			q: f0 / bw,
+			sideband,
+			index_fm: env.n * sideband,
+			thd_fm: hOut[0] > 0 ? Math.sqrt(hOut.slice(1).reduce((s, x) => s + x * x, 0)) / hOut[0] : 0,
+			peak_out: peak,
+			current: env.peak + peak / p.Rf,
+			leak: (mag(tankImpedance(a.fmMax, loaded)) * (um / (2 * p.Rs))) / Math.max(1e-12, env.mean),
+			noise: 1 + p.Rf * (1 / p.Rp + 1 / p.Rm + (p.Rb ? 1 / p.Rb : 0)),
+			ideal_n: (4 * um) / (Math.PI * drive),
+			ideal_out: (drive * rEff) / (2 * p.Rs)
+		};
+	}
+
+	const skFigures = (p) => {
+		const w0 = 1 / Math.sqrt(p.R1 * p.R2 * p.Ctop * p.Cbottom);
+		return { w0, q: 1 / (w0 * (p.R1 + p.R2) * p.Cbottom) };
+	};
+	const mfbFigures = (p) => {
+		const w0 = 1 / Math.sqrt(p.R2 * p.R3 * p.C1 * p.C2);
+		return { w0, q: w0 / ((1 / p.R1 + 1 / p.R2 + 1 / p.R3) / p.C1) };
+	};
+
+	/** The demodulator file's own parts of each stage, its rule a to c (lowpass.js); null where a stage has no choice. */
+	function demodRule(a, stages, R, C, fallback) {
+		const mfb = a.topology === 'mfb';
+		const figures = mfb ? mfbFigures : skFigures;
+		const within = (p) => Object.entries(p).every(([name, v]) => name[0] !== 'R' || (v > 200 && v < 2e6));
+		const level = (p) => {
+			const values = Object.entries(p).filter(([name]) => name[0] === 'R').map(([, v]) => v);
+			return values.reduce((s, v) => s + Math.log(v / 10e3) ** 2, 0) / values.length;
+		};
+		const miss = (got, want) => Math.max(lnMiss(got.w0, want.w0), lnMiss(got.q, want.q));
+		const rounded = (p) => {
+			const target = figures(p);
+			const names = Object.keys(p).filter((name) => name[0] === 'R' && name !== 'R3');
+			let best = null;
+			let bestMiss = Infinity;
+			const walk = (i, trial) => {
+				if (i === names.length) {
+					const t = mfb ? { ...trial, R3: trial.R1 } : trial;
+					const off = miss(figures(t), target);
+					if (off < bestMiss) {
+						best = t;
+						bestMiss = off;
+					}
+					return;
+				}
+				for (const v of neighbours(p[names[i]], R)) walk(i + 1, { ...trial, [names[i]]: v });
+			};
+			walk(0, { ...p });
+			return best;
+		};
+		const out = [];
+		for (const st of stages) {
+			const tried = [];
+			if (mfb) {
+				const k = st.w0 / st.q;
+				for (const c1 of C) {
+					for (const c2 of C) {
+						const disc = (k * c1) ** 2 - 8 * st.w0 * st.w0 * c1 * c2;
+						if (disc < 0) continue;
+						for (const x of [(k * c1 + Math.sqrt(disc)) / 4, (k * c1 - Math.sqrt(disc)) / 4]) tried.push({ R1: 1 / x, R2: 1 / (k * c1 - 2 * x), R3: 1 / x, C1: c1, C2: c2 });
+					}
+				}
+			} else {
+				for (const ctop of C) {
+					for (const cbottom of C) {
+						const total = 1 / (st.w0 * st.q * cbottom);
+						const disc = total * total - 4 / (st.w0 * st.w0 * ctop * cbottom);
+						if (disc < 0) continue;
+						const r1 = (total + Math.sqrt(disc)) / 2;
+						tried.push({ R1: r1, R2: total - r1, Ctop: ctop, Cbottom: cbottom });
+					}
+				}
+				if (!tried.length && fallback) {
+					const topRatio = Math.max(...C.flatMap((ctop) => C.map((cbottom) => ctop / cbottom)));
+					for (const ctop of C) {
+						for (const cbottom of C) {
+							if (ctop / cbottom !== topRatio) continue;
+							const r = 1 / (st.w0 * Math.sqrt(ctop * cbottom));
+							tried.push({ R1: r, R2: r, Ctop: ctop, Cbottom: cbottom });
+						}
+					}
+				}
+			}
+			if (!tried.length) return null;
+			const kept = tried.filter(within);
+			const pairs = (kept.length ? kept : tried).map((p) => [p, rounded(p)]);
+			const misses = pairs.map(([p, r]) => miss(figures(r), figures(p)));
+			const least = Math.min(...misses);
+			out.push(pairs.filter((_, i) => misses[i] <= least + 1e-9).reduce((b, pair) => (level(pair[0]) < level(b[0]) ? pair : b))[1]);
+		}
+		return out;
+	}
+
+	/** A set of demodulator parts through the library's own evaluation: its stages built as the library's, its gain, rectifier and coupling. */
+	function demodEval(a, p) {
+		const mfb = a.topology === 'mfb';
+		const realized = p.stages.map((st) => {
+			const f = mfb ? mfbFigures(st) : skFigures(st);
+			return { topology: mfb ? 'mfb' : 'sallenKey', components: st, actual: { wn: f.w0, q: f.q, gain: mfb ? -1 : 1 } };
+		});
+		const envelope = { realized };
+		let top = -Infinity;
+		let bottom = Infinity;
+		for (let i = 0; i <= 200; i++) {
+			const db = envelopeGainDb(envelope, (a.fmMax * i) / 200 || a.fmMax / 1000);
+			top = Math.max(top, db);
+			bottom = Math.min(bottom, db);
+		}
+		const ripple = a.rectifierType === 'full' ? 2 * a.fpCarrier : a.fpCarrier;
+		const rectifier = a.rectifierType === 'full' ? { diode: '1N4148', r1: p.R } : { diode: '1N4148', rl: p.R };
+		const out = recoveredEnvelope({ rectifierType: a.rectifierType, rectifier, envelope, fm: a.fmMax, index: a.index, amplitude: a.amplitude });
+		const swing = demodSwing({ rectifierType: a.rectifierType, amplitude: a.amplitude, index: a.index, out, swing: a.opampSwing });
+		const result = { span: top - bottom, at_fs: envelopeGainDb(envelope, ripple - a.fmMax), mean: out.mean, tone: out.tone, needed: swing.needed, ...(a.rectifierType === 'half' ? { ideal: out.ideal.tone } : {}), figures: realized.map((st) => ({ w0: st.actual.wn, q: st.actual.q })) };
+		// judged the page's way: its template's slack, its flag past a Q of 4, demodSwing, the coupling's limits
+		const maxQ = Math.max(...realized.map((st) => st.actual.q));
+		result.checks = { passband: result.span <= a.amaxDb + 0.1, stopband: -result.at_fs >= a.aminDb - 0.1, 'sharpest Q': maxQ <= 4, swing: swing.ok };
+		if (a.outputCoupling) {
+			const fc = 1 / (2 * Math.PI * a.loadOhms * p.Cout);
+			let hi = -Infinity;
+			let lo = Infinity;
+			for (let i = 0; i <= 200; i++) {
+				const f = a.fmMin * (a.fmMax / a.fmMin) ** (i / 200);
+				const db = envelopeGainDb(envelope, f) + 20 * Math.log10(couplingGainAt({ fc }, f));
+				hi = Math.max(hi, db);
+				lo = Math.min(lo, db);
+			}
+			const toneLoad = out.tone * couplingGainAt({ fc }, a.fmMax);
+			const power = toneLoad ** 2 / (2 * a.loadOhms);
+			Object.assign(result, { fc, band_span: hi - lo, tone_load: toneLoad, current: toneLoad / a.loadOhms, power });
+			Object.assign(result.checks, { band: hi - lo <= a.amaxDb + 0.1, current: toneLoad / a.loadOhms <= LOAD_CURRENT_LIMIT, power: a.loadOhms > HEADPHONE_MAX_OHMS || power <= LOAD_POWER_LIMIT });
+		}
+		return result;
+	}
+
+	/* the comparisons */
+	const rel = (x, y, tol) => x === y || Math.abs(x - y) <= tol * Math.max(Math.abs(x), Math.abs(y));
+	/** [name, got, want] rows that differ: numbers past tol relative, anything else not the same. */
+	const differ = (rows, tol) => rows.filter(([, got, want]) => !(typeof got === 'number' && typeof want === 'number' ? rel(got, want, tol) : JSON.stringify(got) === JSON.stringify(want))).map(([k, got, want]) => `${k} ${JSON.stringify(got)} against ${JSON.stringify(want)}`);
+	/** Two part sets value for value, exactly or within tol (the page's parts as the file writes them). */
+	const partsDiffer = (got, want, tol = 0) => {
+		if (!got || !want) return [`parts ${JSON.stringify(got)} against ${JSON.stringify(want)}`];
+		const same = (x, y) => (x === null || y === null ? x === y : tol ? Math.abs(x - y) <= tol * Math.abs(y) : x === y);
+		const out = JSON.stringify(Object.keys(got)) === JSON.stringify(Object.keys(want)) ? [] : [`names ${Object.keys(got)} against ${Object.keys(want)}`];
+		for (const [k, v] of Object.entries(want)) {
+			const g = got[k];
+			if (Array.isArray(v) ? !(Array.isArray(g) && g.length === v.length && v.every((x, i) => same(g[i], x))) : !same(g, v)) out.push(`${k} ${JSON.stringify(g)} against ${JSON.stringify(v)}`);
+		}
+		return out;
+	};
+	/** The pairs of a parts block of the file ("Rbias": 56e3 + 8.2e3), by name. */
+	const pairsWritten = (text) => Object.fromEntries([...text.matchAll(/"(\w+)": ([\d.e+-]+) \+ ([\d.e+-]+)/g)].map((m) => [m[1], [Number(m[2]), Number(m[3])]]));
+	/** The pairs the page builds among parts, by name, as the stock's two parts. */
+	const pairsOf = (parts, stock) => Object.fromEntries(stock.pairs ? Object.entries(parts).flatMap(([k, v]) => (/^R/.test(k) && typeof v === 'number' && seriesPair(v, stock.resistors) ? [[k, seriesPair(v, stock.resistors)]] : [])) : []);
+	const samePairs = (got, want) => JSON.stringify(Object.keys(got).sort()) === JSON.stringify(Object.keys(want).sort()) && Object.keys(want).every((k) => want[k].every((v, i) => Math.abs(got[k][i] - v) <= 1e-12 * v));
+	/** A file's page_parts block, and the comment above it. */
+	const pageBlock = (code) => {
+		const at = code.indexOf('\npage_parts = {');
+		return { block: code.slice(at, code.indexOf('\n\n', at + 1)), said: code.slice(code.lastIndexOf('\n\n', at) + 2, at) };
+	};
+
+	/** The page's note on its limit above its parts, its words as the page has them (the comment joined), or none at all. */
+	const noteProblems = (code, limitNote) => {
+		const { said } = pageBlock(code);
+		const flat = said.replace(/\n# /g, ' ');
+		if (!limitNote) return /What the page says of its limit/.test(code) ? ['a note with no limit'] : [];
+		return flat.startsWith(`# What the page says of its limit: ${limitNote}`) ? [] : [`no note "${limitNote.slice(0, 60)}"`];
+	};
+
+	/* the text and the run */
+	const YOU = /\b(you|your|yours|yourself)\b/i;
+	const PLACEHOLDER = /\bundefined\b|\bNaN\b|\bnull\b|\bInfinity\b|\[object/;
+	const COURSE = /\b(course|courses|cours|school|professors?|prof|slides?|diapos?|labs?|lectures?|ELE\s?2003|polytechnique|experiments?|moodle|homework|assignments?|teachers?|instructors?)\b/i;
+	const IMPORTS = new Set(['math', 'cmath', 'itertools', 'matplotlib.pyplot']);
+	const textProblems = (code) => {
+		const out = [];
+		code.split('\n').forEach((line, i) => {
+			if (line.length > 100) out.push(`line ${i + 1} has ${line.length} characters`);
+			if (/\t/.test(line)) out.push(`line ${i + 1} has a tab`);
+			if (/\s$/.test(line)) out.push(`line ${i + 1} ends in a space`);
+		});
+		if (/[–—]/.test(code)) out.push('an en or em dash');
+		// (the stock named "Lab kit" may be named, and the lab kit's resistors)
+		const prose = code.replace(/\blab kit('s)?\b|\blab resistors\b/gi, '');
+		for (const [name, re] of [['you/your', YOU], ['a placeholder', PLACEHOLDER], ['a course word', COURSE]]) {
+			const m = re.exec(prose);
+			if (m) out.push(`${name}: "${prose.slice(Math.max(0, m.index - 30), m.index + 30).replace(/\n/g, ' ')}"`);
+		}
+		return out;
+	};
+
+	// one tally per file and property: the designs it was checked on, and what broke it
+	const tally = new Map();
+	const note = (file, property, problems) => {
+		const key = `${file}: ${property}`;
+		const t = tally.get(key) ?? tally.set(key, { designs: 0, problems: [] }).get(key);
+		t.designs++;
+		for (const p of problems) t.problems.push(p);
+	};
+	const covered = new Map();
+	const cover = (dimension, value) => (covered.get(dimension) ?? covered.set(dimension, new Set()).get(dimension)).add(value);
+	const lengths = {};
+
+	/** What every file goes through: the text, the run (with matplotlib on Agg where asked), the results read back. */
+	function common(file, label, code, { plot = false } = {}) {
+		const shape = inspect(code);
+		note(file, 'ASCII, parses for Python 3.8, no library API newer, the standard library only, no function defined twice', shape.ascii && shape.parse38 === null && shape.newer.length === 0 && shape.imports.every((mod) => IMPORTS.has(mod)) && shape.twice.length === 0 ? [] : [`${label}: ${[shape.parse38, shape.newer.join(' '), shape.imports.join(' '), shape.twice.join(' ')].filter(Boolean).join('; ')}`]);
+		note(file, 'lines of 100 characters, no tab, no dash but the hyphen, no "you", no placeholder, no course word', textProblems(code).map((p) => `${label}: ${p}`));
+		const run = runFile(code);
+		const wide = run.stdout.split(/\r?\n/).filter((l) => l.length > 92);
+		note(file, 'runs with python -W error, matplotlib hidden, its printout in lines of 92 characters', run.status === 0 && run.stderr === '' && wide.length === 0 ? [] : [`${label}: ${run.stderr.slice(-300) || wide[0]}`]);
+		if (plot) {
+			const drawn = runFile(code, { matplotlib: true });
+			note(file, 'runs with matplotlib on the Agg backend', drawn.status === 0 && drawn.stderr === '' ? [] : [`${label}: ${drawn.stderr.slice(-300)}`]);
+		}
+		const read = readResults(code, ['resistors', 'capacitors']);
+		note(file, 'every result read back through runpy', read.stop === null && read.missing.length === 0 ? [] : [`${label}: ${read.stop ?? read.missing.join(', ')}`]);
+		return { read, r: read.results, stdout: run.stdout, lines: code.split('\n').length - 1 };
+	}
+
+	/** The file's advice (what the page says of each check missed): an entry for every check, the text of each one missed printed once. */
+	const adviceProblems = (code, stdout, r) => {
+		const at = code.indexOf('\nadvice = {');
+		if (at < 0) return ['no advice'];
+		const entries = Object.fromEntries([...code.slice(at, code.indexOf('\n}', at)).matchAll(/\n {4}"([^"]+)": "([^"]+)",/g)].map((m) => [m[1], m[2]]));
+		const sets = [r.own_check, r.page_check].filter(Boolean);
+		const out = Object.keys(sets[0].checks).filter((key) => !entries[key]).map((key) => `no advice on ${key}`);
+		for (const [key, text] of Object.entries(entries)) {
+			const times = stdout.split(`  ${text}`).length - 1;
+			if (times !== (sets.some((chk) => chk.misses.includes(key)) ? 1 : 0)) out.push(`${key} printed ${times} times`);
+		}
+		return out;
+	};
+
+	/** Each edit of a setting stops the file with its message. */
+	function guards(file, label, code, list) {
+		const problems = [];
+		for (const [setting, value, message] of list) {
+			const edited = readResults(editSetting(code, setting, value));
+			if (!(edited.stop !== null && message.test(edited.stop))) problems.push(`${label}: ${setting} = ${value}: ${edited.stop ?? 'it ran on'}`);
+		}
+		note(file, 'editing a setting it rests on stops it with its message', problems);
+	}
+
+	/** The file's stock against the page's, value for value. */
+	const stockProblems = (r, stock, kind) => {
+		const out = [];
+		if (JSON.stringify(r.resistors) !== JSON.stringify(Array.isArray(stock.resistors) ? stock.resistors : resistorValues(stock.resistors, 0, 7))) out.push('resistors');
+		const caps = stock.capacitors ?? (kind === 'usual' ? USUAL_CAPACITORS : kind === 'e12' ? seriesValues(SERIES.E12, -12, -6) : capacitorCandidates(null));
+		if (JSON.stringify(r.capacitors) !== JSON.stringify(caps)) out.push('capacitors');
+		return out;
+	};
+
+	const JFET = 'jfet-am-modulator.py';
+	const DIODE = 'diode-tank-am-modulator.py';
+	const DEMOD = 'am-demodulator.py';
+
+	/** One JFET design of the page: its file, every check of it; returns what the later checks read. */
+	function jfetCase(label, inputs, opts = {}) {
+		const pg = jfetPage(inputs);
+		if (!opts.sweep) note(JFET, 'the page designs every case of the matrix', pg.design ? [] : [label]);
+		if (!pg.design) return null;
+		const a = pg.args;
+		const code = generateJfetPython(a);
+		const run = common(JFET, label, code, opts);
+		if (opts.default) lengths.jfet = run.lines;
+		if (run.read.stop !== null) return null;
+		const { r } = run;
+		const m = pg.model;
+		const d = pg.design;
+		const sm = d.conditioning.summer;
+		const rows = [['vp', r.vp, m.vp], ['beta', r.beta, m.beta], ['vc', r.vc, m.vc], ['half_range', r.half_range, m.halfRange], ['swing', r.swing, d.swingTarget], ['depth', r.depth, conductanceDepth(m, a.swingFraction)], ['gain_target', r.gain_target, sm.gainTarget], ['bias_target', r.bias_target, sm.biasTarget]];
+		if (m.fit) for (const [k, key] of [['a', 'a'], ['b', 'b'], ['r2', 'r2'], ['max_dev', 'maxDev'], ['max_dev_at', 'maxDevAt'], ['count', 'count'], ['low', 'low'], ['high', 'high']]) rows.push([`fit ${k}`, r.fit?.[k], m.fit[key]]);
+		note(JFET, "the JFET's line, the window and the gate drive's targets are the page's (1e-12)", differ(rows, 1e-12).map((x) => `${label}: ${x}`));
+		note(JFET, "its stock is the page's, value for value", stockProblems(r, a.stock, 'usual').map((x) => `${label}: ${x}`));
+		note(JFET, "the page's parts, as the page shows them", partsDiffer(r.page_parts, a.page, 1e-12).map((x) => `${label}: ${x}`));
+		note(JFET, "the page's note on its limit of pairs, when it has one, above its parts", noteProblems(code, a.limitNote).map((x) => `${label}: ${x}`));
+		const { block, said } = pageBlock(code);
+		const written = pairsWritten(block);
+		const want = pairsOf(a.page, a.stock);
+		note(JFET, "each resistor the page builds of two in series written as the stock's two parts and named, no other, within the page's limit", [...(samePairs(written, want) ? [] : [`${label}: ${JSON.stringify(written)} against ${JSON.stringify(want)}`]), ...Object.keys(want).filter((k) => !said.includes(k)).map((k) => `${label}: ${k} not named`), ...(a.stock.pairLimit !== null && Object.keys(written).length > a.stock.pairLimit ? [`${label}: ${Object.keys(written).length} pairs`] : [])]);
+		// the page's parts through the file's steps, against the page's own design
+		const pc = r.page_check;
+		const c = d.carrier;
+		const o = d.opamp;
+		const pageRows = [
+			['gain', pc.gain, sm.gainActual], ['bias', pc.bias, sm.biasActual], ['depth', pc.depth, d.gDepth], ['fc', pc.fc, sm.fcActual], ['x', pc.x, d.x], ['n', pc.n, d.modulationIndex], ['k0', pc.k0, d.nominalGain], ['k_min', pc.k_min, d.gainMin], ['k_max', pc.k_max, d.gainMax], ['r_min', pc.r_min, d.r1Min],
+			['limit', pc.limit, c.acMax], ['ac', pc.ac, c.ac], ['out', pc.out, c.carrierOut], ['env_max', pc.env_max, c.envelopeMax], ['env_min', pc.env_min, c.envelopeMin], ['current', pc.current, c.jfetPeakCurrent], ['tone_2fp', pc.tone_2fp, c.tone2fp],
+			...['kTrough', 'kNominal', 'kCrest'].map((k, i) => [k, pc.noise[i], o[k]]), ...['factorTrough', 'factorNominal', 'factorCrest'].map((k, i) => [k, pc.kept[i], o[k]]),
+			['n_eff', pc.n_eff, o.effectiveModulationIndex], ['n_peaks', pc.n_peaks, o.peakModulationIndex], ['thd', pc.thd, o.thd], ['gbw_ratio', pc.gbw_ratio, o.gbwRatio], ['slew', pc.slew, o.slewNeeded], ['opamps', pc.opamps, o.opampCount],
+			['gate swing', pc.checks['gate swing'], sm.headroomOk], ['corner', pc.checks.corner, sm.fcOk], ['gbw rule', pc.checks['gbw rule'], o.gbwOk], ['slew ok', pc.checks.slew, o.slewOk], ['current ok', pc.checks.current, c.jfetPeakCurrent <= 0.01], ['carrier ok', pc.checks.carrier, c.ac <= c.acMax * (1 + 1e-9)]
+		];
+		if (a.topology === 'inverting' || a.outputStage) {
+			const pgn = d.postGain;
+			pageRows.push(['stage k', pc.stage.k, pgn.kActual], ['stage kept', pc.stage.kept, pgn.factor], ['stage out', pc.stage.out, pgn.outputAmplitude], ['stage peak', pc.stage.peak, pgn.envelopeMax]);
+			if (pgn.needed) pageRows.push(['stage swing ok', pc.checks['stage swing'], pgn.swingOk], ['stage slew ok', pc.checks['stage slew'], pgn.slewOk]);
+		}
+		note(JFET, "the page's parts' check equals the page's own design (1e-10)", differ(pageRows, 1e-10).map((x) => `${label}: ${x}`));
+		// the file's own parts: its rule in JavaScript from its stock, and their check against the same steps in JavaScript,
+		// those steps first shown equal to the library's design on the page's parts
+		const steps = jfetSteps(a, m);
+		const onPage = steps.evaluate(a.page);
+		note(JFET, "the file's steps in JavaScript, on the page's parts, equal the library's design (1e-12)", differ([['n', onPage.n, d.modulationIndex], ['out', onPage.out, c.carrierOut], ['n_eff', onPage.n_eff, o.effectiveModulationIndex], ['thd', onPage.thd, o.thd], ['gbw_ratio', onPage.gbw_ratio, o.gbwRatio], ['opamps', onPage.opamps, o.opampCount], ['stage out', onPage.stage.out, d.postGain?.outputAmplitude ?? c.carrierOut]], 1e-12).map((x) => `${label}: ${x}`));
+		const own = jfetRule(a, m, r.resistors, r.capacitors);
+		note(JFET, "the file's own parts follow its rule (the rule written again in JavaScript)", partsDiffer(r.own_parts, own).map((x) => `${label}: ${x}`));
+		note(JFET, "the file's own parts are from its stock", Object.entries(r.own_parts).every(([k, v]) => (k === 'C' ? r.capacitors.includes(v) : (k === 'Rdt' && v === 0) || r.resistors.includes(v))) ? [] : [`${label}: ${JSON.stringify(r.own_parts)}`]);
+		const js = steps.evaluate(r.own_parts);
+		const oc = r.own_check;
+		const ownRows = ['gain', 'bias', 'depth', 'fc', 'x', 'n', 'k0', 'k_min', 'k_max', 'r_min', 'limit', 'ac', 'out', 'env_max', 'env_min', 'current', 'tone_2fp', 'n_eff', 'n_peaks', 'thd', 'gbw_ratio', 'slew', 'opamps'].map((k) => [k, oc[k], js[k]]);
+		ownRows.push(...[0, 1, 2].map((i) => [`noise ${i}`, oc.noise[i], js.noise[i]]));
+		if (oc.stage) ownRows.push(...['k', 'kept', 'out', 'peak'].map((k) => [`stage ${k}`, oc.stage[k], js.stage[k]]));
+		note(JFET, "the file's own parts' check equals the same steps in JavaScript (1e-12)", differ(ownRows, 1e-12).map((x) => `${label}: ${x}`));
+		{
+			// (the page shows its own design's count, the oscillator in it when its Wien bridge gives the carrier)
+			const want = `${r.own_check.opamps + (a.wien ? 1 : 0)} op-amps in the modulator (the gate-drive summer${a.wien ? ' and the Wien oscillator' : ''} included)`;
+			const page = o.opampCount + (pg.oscillator && works(pg.oscillator) ? 1 : 0);
+			note(JFET, "the op-amps it counts are the page's, the gate-drive summer and the Wien oscillator in them", run.stdout.includes(want) && (r.own_check.opamps !== r.page_check.opamps || run.stdout.includes(`${page} op-amps`)) ? [] : [`${label}: ${want} against the page's ${page}`]);
+		}
+		note(JFET, 'each check a set misses is followed by what the page says of it, once', adviceProblems(code, run.stdout, r).map((x) => `${label}: ${x}`));
+		if (opts.guards) guards(JFET, label, code, opts.guards);
+		const rows4 = a.mode === 'measured' ? a.text.split('\n').map((l) => l.trim().split(/[\s,;]+/).length) : [];
+		cover('jfet mode', a.mode === 'measured' ? `measured ${rows4.every((k) => k >= 4) ? 'divider' : rows4.every((k) => k === 2) ? 'direct' : 'mixed'}` : a.mode);
+		cover('jfet topology', a.topology);
+		cover('jfet output stage', a.topology === 'inverting' || a.outputStage ? (a.page.Rtop ? 'a stage' : 'no stage needed') : 'none');
+		if (a.topology === 'inverting') cover('jfet follower', a.carrierBuffer === false ? 'without' : 'with');
+		cover('jfet carrier', a.wien ? (pg.oscillator?.stockShortfall ? 'Wien on E24' : 'Wien') : 'generator');
+		cover('jfet stock', a.stock.kind);
+		if (a.stock.pairs) cover('jfet pairs', `${a.stock.pairLimit === null ? 'pairs' : 'a pair limit'} on ${a.stock.kind}`);
+		if (a.page.Rdt === 0) cover('jfet divider', 'none');
+		return { pg, a, code, r, stdout: run.stdout };
+	}
+
+	/** One diode design of the page. */
+	function diodeCase(label, inputs, opts = {}) {
+		const pg = diodePage(inputs);
+		if (!opts.sweep) note(DIODE, 'the page designs every case of the matrix', pg.design ? [] : [label]);
+		if (!pg.design) return null;
+		const a = pg.args;
+		const code = generateDiodePython(a);
+		const run = common(DIODE, label, code, opts);
+		if (opts.default) lengths.diode = run.lines;
+		if (run.read.stop !== null) return null;
+		const { r } = run;
+		const d = pg.design;
+		note(DIODE, "the tank, its band and R_b are the page's (1e-12), the bias with the least distortion too (1e-9)", [...differ([['c_target', r.c_target, d.cTarget], ['tank_c', r.tank_c, d.capacitors], ['f0', r.f0, d.f0Actual], ['band_needed', r.band_needed, d.bandwidthNeeded], ['r_eff', r.r_eff, d.rEffTarget], ['rs', r.rs, d.rs], ['rt', r.rt, d.rt], ['rb', r.rb, d.summer.rb]], 1e-12), ...differ([['vb_best', r.vb_best, d.summer.vbBest]], 1e-9)].map((x) => `${label}: ${x}`));
+		note(DIODE, "its stock is the page's, value for value", stockProblems(r, a.stock, 'e12').map((x) => `${label}: ${x}`));
+		note(DIODE, "the page's parts, as the page shows them", partsDiffer(r.page_parts, a.page, 1e-12).map((x) => `${label}: ${x}`));
+		note(DIODE, "the page's note on its limit of pairs, when it has one, above its parts", noteProblems(code, a.limitNote).map((x) => `${label}: ${x}`));
+		const { block, said } = pageBlock(code);
+		const written = pairsWritten(block);
+		const want = a.shortfall ? {} : pairsOf(a.page, a.stock);
+		note(DIODE, "each resistor the page builds of two in series written as the stock's two parts and named, no other, within the page's limit", [...(samePairs(written, want) ? [] : [`${label}: ${JSON.stringify(written)} against ${JSON.stringify(want)}`]), ...Object.keys(want).filter((k) => !said.includes(k)).map((k) => `${label}: ${k} not named`), ...(a.stock.pairLimit !== null && Object.keys(written).length > a.stock.pairLimit ? [`${label}: ${Object.keys(written).length} pairs`] : [])]);
+		const pc = r.page_check;
+		const pageRows = [
+			['n', pc.n, d.modulationIndex], ['mean', pc.mean, d.carrierOut], ['thd', pc.thd, d.thd], ['max', pc.max, d.envelopeMax], ['min', pc.min, d.envelopeMin], ['peak', pc.peak, d.peakCurrent], ['r_source', pc.r_source, d.rSource], ['r_loaded', pc.r_loaded, d.rEff], ['bw', pc.bw, d.bwLoaded], ['q', pc.q, d.qLoaded],
+			['sideband', pc.sideband, d.sidebandGain], ['index_fm', pc.index_fm, d.indexAtFmMax], ['thd_fm', pc.thd_fm, d.thdAtFmMax], ['peak_out', pc.peak_out, d.summer.peak], ['current', pc.current, d.summerCurrent], ['leak', pc.leak, d.messageLeak], ['noise', pc.noise, d.summer.noiseGain], ['ideal_n', pc.ideal_n, d.idealIndex], ['ideal_out', pc.ideal_out, d.idealCarrier],
+			['index ok', pc.checks.index, d.indexOk], ['tune', pc.checks.tune, d.tuneOk], ['range', pc.checks.range, d.rangeOk], ['diode C', pc.checks['diode C'], d.cjOk], ['sidebands', pc.checks.sidebands, d.sidebandsInBand], ['current ok', pc.checks.current, d.currentOk], ['leak ok', pc.checks.leak, d.leakOk], ['summer swing', pc.checks['summer swing'], d.summer.swingOk], ['gbw rule', pc.checks['gbw rule'], d.summer.gbwOk], ['slope', pc.checks.slope, d.sidebandGain >= 0.9]
+		];
+		note(DIODE, "the page's parts' check equals the page's own design (1e-7, the cycle solve's)", differ(pageRows, 1e-7).map((x) => `${label}: ${x}`));
+		const onPage = diodeEval(a, a.page);
+		note(DIODE, "the evaluation in JavaScript (the library's solvers), on the page's parts, is the library's design (1e-12)", differ([['n', onPage.n, d.modulationIndex], ['mean', onPage.mean, d.carrierOut], ['thd', onPage.thd, d.thd], ['r_source', onPage.r_source, d.rSource], ['thd_fm', onPage.thd_fm, d.thdAtFmMax], ['leak', onPage.leak, d.messageLeak]], 1e-12).map((x) => `${label}: ${x}`));
+		const rule = diodeRule(a, r, r.resistors);
+		note(DIODE, "the message drive for the index is the library's (1e-9)", rule.umWanted !== null && rel(r.um_wanted, rule.umWanted, 1e-9) ? [] : [`${label}: ${r.um_wanted} against ${rule.umWanted}`]);
+		note(DIODE, "the file's own parts follow its rule (the rule written again in JavaScript)", partsDiffer(r.own_parts, rule.parts).map((x) => `${label}: ${x}`));
+		note(DIODE, "the file's own parts are from its stock", Object.entries(r.own_parts).every(([k, v]) => (k === 'C' ? v.every((x) => r.capacitors.includes(x)) : v === null || r.resistors.includes(v))) ? [] : [`${label}: ${JSON.stringify(r.own_parts)}`]);
+		const js = diodeEval(a, r.own_parts);
+		note(DIODE, "the file's own parts' check equals the library's evaluation of them (1e-7)", differ(Object.keys(js).map((k) => [k, r.own_check[k], js[k]]), 1e-7).map((x) => `${label}: ${x}`));
+		note(DIODE, 'each check a set misses is followed by what the page says of it, once', adviceProblems(code, run.stdout, r).map((x) => `${label}: ${x}`));
+		if (opts.guards) guards(DIODE, label, code, opts.guards);
+		cover('diode', a.diode);
+		cover('diode stock', a.shortfall ? 'E24 fallback' : a.stock.kind);
+		if (a.stock.pairs) cover('diode pairs', `${a.stock.pairLimit === null ? 'pairs' : 'a pair limit'} on ${a.stock.kind}`);
+		cover('diode bias', a.page.Rb ? 'R_b' : 'no R_b');
+		return { pg, a, code, r, stdout: run.stdout };
+	}
+
+	/** One demodulator design of the page. */
+	function demodCase(label, inputs, opts = {}) {
+		const pg = demodPage(inputs);
+		if (!opts.sweep) note(DEMOD, 'the page designs every case of the matrix', pg.envelope ? [] : [label]);
+		if (!pg.envelope) return null;
+		const a = pg.args;
+		const code = generateDemodPython(a);
+		const run = common(DEMOD, label, code, opts);
+		if (opts.default) lengths.demod = run.lines;
+		if (run.read.stop !== null) return null;
+		const { r } = run;
+		const e = pg.envelope;
+		const rows = [['k', r.k, e.k], ['fs', r.fs, e.fs], ['n_exact', r.n_exact, e.minOrder], ['n', r.n, e.n], ['stage count', r.stages.length, e.stages.length], ...e.stages.flatMap((st, i) => [[`stage ${i + 1} w0`, r.stages[i]?.w0, st.wn], [`stage ${i + 1} q`, r.stages[i]?.q, st.q]])];
+		note(DEMOD, "the template, the order and the stage targets are the page's (1e-12)", differ(rows, 1e-12).map((x) => `${label}: ${x}`));
+		note(DEMOD, "its stock is the page's, value for value", stockProblems(r, a.stock, 'e6').map((x) => `${label}: ${x}`));
+		note(DEMOD, "the page's parts, as the page shows them", [...partsDiffer({ R: r.page_parts.R, Cout: r.page_parts.Cout ?? null }, { R: a.page.R, Cout: a.page.Cout }, 1e-12), ...(r.page_parts.stages.length === a.page.stages.length ? [] : ['the stages']), ...a.page.stages.flatMap((st, i) => partsDiffer(r.page_parts.stages[i], st.parts, 1e-12).map((x) => `stage ${i + 1} ${x}`))].map((x) => `${label}: ${x}`));
+		note(DEMOD, "the page's note on its limit of pairs, when it has one, above its parts", noteProblems(code, a.limitNote).map((x) => `${label}: ${x}`));
+		{
+			// stage by stage: the page's pairs written as two parts and said above the stage, none on a stage it builds from E24
+			const { block } = pageBlock(code);
+			const parts = block.split(/\n {4}(?=\{)/).slice(1);
+			const problems = [];
+			let count = 0;
+			a.page.stages.forEach((st, i) => {
+				const written = pairsWritten(parts[i] ?? '');
+				const want = st.shortfall ? {} : pairsOf(st.parts, a.stock);
+				count += Object.keys(written).length;
+				if (!samePairs(written, want)) problems.push(`stage ${i + 1}: ${JSON.stringify(written)} against ${JSON.stringify(want)}`);
+				if (Object.keys(want).length && !block.includes(`# stage ${i + 1}: ${Object.keys(want).length > 1 ? '' : Object.keys(want)[0]}`)) problems.push(`stage ${i + 1}: its pairs not said`);
+				if (st.shortfall && !block.includes(`# stage ${i + 1}: the parts on hand cannot build it`)) problems.push(`stage ${i + 1}: its fallback not said`);
+			});
+			if (a.stock.pairLimit !== null && count > a.stock.pairLimit) problems.push(`${count} pairs`);
+			note(DEMOD, "each resistor the page builds of two in series written as the stock's two parts and said, stage by stage, no other, within the page's limit", problems.map((x) => `${label}: ${x}`));
+		}
+		const pc = r.page_check;
+		const tol = a.rectifierType === 'half' ? 1e-9 : 1e-10;
+		const pageRows = [['span', pc.span, pg.verdict.span], ['at_fs', pc.at_fs, pg.verdict.atSideband], ['sharpest q', Math.max(...pc.figures.map((f) => f.q)), pg.verdict.maxQ], ['mean', pc.mean, pg.out.mean], ['tone', pc.tone, pg.out.tone], ['needed', pc.needed, pg.swing.needed], ['passband ok', pc.checks.passband, pg.verdict.spanOk], ['stopband ok', pc.checks.stopband, pg.verdict.stopOk], ['sharpest Q ok', pc.checks['sharpest Q'], pg.verdict.maxQ <= 4], ['swing ok', pc.checks.swing, pg.swing.ok]];
+		if (a.rectifierType === 'half') pageRows.push(['ideal', pc.ideal, pg.out.ideal.tone]);
+		if (pg.coupling) pageRows.push(['fc', pc.fc, pg.coupling.fc], ['band_span', pc.band_span, pg.band.span], ['tone_load', pc.tone_load, pg.coupling.toneAtLoad], ['current', pc.current, pg.coupling.peakCurrent], ['power', pc.power, pg.coupling.power], ['band ok', pc.checks.band, pg.band.ok], ['current ok', pc.checks.current, pg.coupling.currentOk], ['power ok', pc.checks.power, pg.coupling.powerOk]);
+		note(DEMOD, "the page's parts' check equals the page's own (1e-10, the bare diode's 1e-9)", differ(pageRows, tol).map((x) => `${label}: ${x}`));
+		const own = demodRule(a, r.stages, r.resistors, r.capacitors, code.includes('Q falls short'));
+		if (own === null) {
+			note(DEMOD, "a stage no pair of the stock builds leaves no parts of its own, the page's checked alone", r.own_parts === null && r.own_check === null && /no pair of the stock builds it/.test(run.stdout) ? [] : [`${label}: ${JSON.stringify(r.own_parts)}`]);
+			cover('demod own', 'none');
+		} else {
+			note(DEMOD, "the file's own parts follow its rule (the rule written again in JavaScript)", own.flatMap((st, i) => partsDiffer(r.own_parts?.stages?.[i], st).map((x) => `${label}: stage ${i + 1} ${x}`)));
+			note(DEMOD, "the file's own parts are from its stock (the rectifier's and C_out the page's way)", r.own_parts.stages.every((st) => Object.entries(st).every(([k, v]) => (k[0] === 'R' ? r.resistors.includes(v) : r.capacitors.includes(v)))) && r.own_parts.R === a.page.R && (r.own_parts.Cout ?? null) === a.page.Cout ? [] : [`${label}: ${JSON.stringify(r.own_parts)}`]);
+			const js = demodEval(a, r.own_parts);
+			const ownRows = ['span', 'at_fs', 'mean', 'tone', 'needed', ...(a.rectifierType === 'half' ? ['ideal'] : []), ...(a.outputCoupling ? ['fc', 'band_span', 'tone_load', 'current', 'power'] : [])].map((k) => [k, r.own_check[k], js[k]]);
+			ownRows.push(['checks', r.own_check.checks, js.checks]);
+			ownRows.push(...js.figures.flatMap((f, i) => [[`stage ${i + 1} w0`, r.own_check.figures[i].w0, f.w0], [`stage ${i + 1} q`, r.own_check.figures[i].q, f.q]]));
+			note(DEMOD, "the file's own parts' check equals the library's evaluation of them (1e-10, the bare diode's 1e-9)", differ(ownRows, tol).map((x) => `${label}: ${x}`));
+			cover('demod own', 'parts');
+		}
+		note(DEMOD, 'each check a set misses is followed by what the page says of it, once', adviceProblems(code, run.stdout, r).map((x) => `${label}: ${x}`));
+		if (opts.guards) guards(DEMOD, label, code, opts.guards);
+		cover('demod rectifier', a.rectifierType);
+		cover('demod response', a.response);
+		cover('demod topology', a.topology);
+		cover('demod order', a.order === null ? 'minimum' : 'set');
+		cover('demod coupling', a.outputCoupling ? 'on' : 'off');
+		cover('demod stock', a.stock.kind);
+		if (a.stock.pairs) cover('demod pairs', `${a.stock.pairLimit === null ? 'pairs' : 'a pair limit'} on ${a.stock.kind}`);
+		if (a.page.stages.some((st) => st.shortfall)) cover('demod fallback', 'a stage from E24 and E6');
+		if (code.includes('Q falls short')) cover('demod fallback', 'Sallen-Key pairs short of 4 Q^2');
+		if (a.outputCoupling && a.stock.capacitors && !a.stock.capacitors.some((v) => v >= pg.coupling.cTarget * (1 - 1e-9))) cover('demod fallback', 'C_out from E6');
+		return { pg, a, code, r, stdout: run.stdout };
+	}
+
+	/* the matrix */
+	const custom = (r, c) => ({ stock: 'custom', resistorText: r, capacitorText: c });
+	const labList = LAB_KIT.resistors.join(' ');
+	const kitCaps = '10p 20p 30p 47p 56p 68p 100p 220p 330p 680p 1n 4.7n 10n 47n 100n 10u';
+	// a list on hand that builds every circuit, some of its resistors only as pairs
+	const onHand = '1k 2.2k 3.3k 4.7k 5.6k 6.8k 8.2k 10k 15k 22k 33k 47k 68k 100k 220k 470k 1M';
+	const onHandCaps = '470p 820p 1n 2.2n 4.7n 10n 15n 22n 47n 100n';
+	// the bench: the measured line, the window -7 V to 0 V, the lab kit with a 10 uF capacitor, a 0.6 V generator
+	const BENCH = { windowLow: -7, targetN: 0.7, carrierFrom: 'source', carrierSourceAmplitude: 0.6, ...custom(labList, kitCaps) };
+	const files = {};
+	files.jfet = jfetCase("the page's default", {}, { plot: true, default: true, guards: [['fp', '60000.0', /Wien bridge gives for wien_built_for/], ['gbw', '3e6', /Wien bridge gives for wien_built_for/], ['slew_rate', '13e6', /Wien bridge gives for wien_built_for/], ['opamp_swing', '12.0', /Wien bridge gives for wien_built_for/], ['target_n', '0.95', /target_n has to stay under the depth/], ['window', '(-0.6, -0.4)', /Fewer than two gate voltages/]] });
+	jfetCase('inverting, the follower', { topology: 'inverting' });
+	jfetCase('inverting, no follower', { topology: 'inverting', carrierBuffer: false });
+	jfetCase('inverting, the cell reaches the level', { topology: 'inverting', targetOutputAmplitude: 0.3 });
+	jfetCase('an output stage to 2 V', { outputStage: true, targetOutputAmplitude: 2 });
+	jfetCase('V_P and I_DSS, a generator, E96', { jfetMode: 'idss', carrierFrom: 'source', stock: 'E96' }, { guards: [['vp', '1.0', /vp has to be negative/]] });
+	jfetCase('J111 limits, the lab kit, pairs', { jfetMode: 'rdson', vp: -6.5, rdsOn: 30, stock: 'lab', pairs: true });
+	jfetCase('a fixed V_DS, the lab resistors', { jfetMode: 'fixedvds', targetN: 0.4, stock: 'labR' });
+	jfetCase('a fixed V_DS through 5 ohm, inverting', { jfetMode: 'fixedvds', seriesR: 5, targetN: 0.3, topology: 'inverting' });
+	jfetCase('resistances read directly, a list on hand', { measurementText: '-3 280\n-2 140\n-1 90\n-0.5 70', windowLow: -3.5, targetN: 0.5, ...custom('1k 2.2k 4.7k 10k 22k 47k 100k 220k 470k 1M 47 100 150 220', '1u 2.2u 4.7u') });
+	jfetCase('divider and direct rows mixed', { measurementText: '-3 280\n-2.0  0.2  0.0034  1000\n-1 90\n-0.5  0.2  0.0026  1000', windowLow: -3.5, targetN: 0.4 });
+	jfetCase('the bench, pairs, an output stage to 2 V', { ...BENCH, pairs: true, outputStage: true, targetOutputAmplitude: 2 });
+	jfetCase('the lab kit, at most 2 pairs with the Wien bridge', { stock: 'lab', pairs: true, pairLimit: 2 });
+	jfetCase('the lab kit, at most 1 pair, a 5 V generator', { stock: 'lab', pairs: true, pairLimit: 1, carrierFrom: 'source', carrierSourceAmplitude: 5 });
+	jfetCase('large capacitors only: the Wien bridge on E24 and E6', custom(labList, '1u 2.2u 4.7u 10u'));
+	jfetCase('no divider', { carrierFrom: 'source', carrierSourceAmplitude: 0.05 });
+	jfetCase('the lab resistors, pairs', { stock: 'labR', pairs: true });
+	files.diode = diodeCase("the page's default", {}, { plot: true, default: true, guards: [['fp', '2000.0', /The carrier has to sit above/], ['target_n', '1.5', /target_n in \(0, 1\]/]] });
+	diodeCase('BAT54, E96', { diodePart: 'BAT54', stock: 'E96' });
+	diodeCase('the lab kit, pairs', { stock: 'lab', pairs: true, targetNDiode: 0.93, carrierDrive: 1.7 });
+	diodeCase('the lab kit, at most 1 pair', { stock: 'lab', pairs: true, pairLimit: 1, targetNDiode: 0.93, carrierDrive: 1.7 });
+	diodeCase('the lab resistors', { stock: 'labR' });
+	diodeCase('a list that reaches no index: E24 and E12', custom('1k 10k 100k 1M', '1n 10n 100n'));
+	diodeCase('a narrow tank', { sidebandMargin: 1.2 });
+	diodeCase('a fast carrier', { fpDiode: 455000, fmMaxDiode: 5000, inductanceMh: 0.1 });
+	diodeCase('a large coil', { inductanceMh: 100, sidebandMargin: 0.7 });
+	diodeCase('a list on hand, pairs', { ...custom(onHand, onHandCaps), pairs: true });
+	diodeCase('the lab resistors, pairs', { stock: 'labR', pairs: true });
+	files.demod = demodCase("the page's default", {}, { plot: true, default: true, guards: [['amin', '0.5', /0 < amax < amin/], ['order', '10', /more than 8 poles/], ['load', '0.0', /The load has to be over 0 ohm/]] });
+	demodCase('MFB, inverted', { envelopeTopology: 'mfb' });
+	demodCase('half-wave, Chebyshev, MFB', { rectifierType: 'half', envelopeTopology: 'mfb', response: 'chebyshev', fpCarrierDemod: 40000 }, { plot: true });
+	demodCase('half-wave, Butterworth, Sallen-Key, no load, E96', { rectifierType: 'half', outputCoupling: false, stock: 'E96' });
+	demodCase('Chebyshev, the lab resistors, pairs, no load', { response: 'chebyshev', outputCoupling: false, stock: 'labR', pairs: true });
+	demodCase('order 6, MFB, the lab kit, at most 4 pairs', { envelopeTopology: 'mfb', orderOverride: 6, aminDb: 60, stock: 'lab', pairs: true, pairLimit: 4 });
+	demodCase('order 4, the lab kit', { orderOverride: 4, stock: 'lab' });
+	demodCase('MFB on one capacitor: a stage from E24 and E6', { envelopeTopology: 'mfb', ...custom('1k 10k 100k', '10n') });
+	demodCase('Sallen-Key on two close capacitors', custom('1k 2.2k 4.7k 10k 22k 47k 100k', '10n 15n'));
+	demodCase('a 4 V carrier, MFB', { envelopeTopology: 'mfb', demodAmplitude: 4 });
+	demodCase('a list on hand, pairs', { ...custom(onHand, onHandCaps), pairs: true });
+
+	/* a sweep: random designs through every check above */
+	{
+		let seed = 20261122;
+		const rand = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+		const pick = (list) => list[Math.floor(rand() * list.length)];
+		const stocks = [{ stock: 'E24' }, { stock: 'E96' }, { stock: 'labR' }, { stock: 'lab', pairs: true }, { stock: 'lab', pairs: true, pairLimit: 2 }];
+		let built = 0;
+		for (let i = 0; i < 10; i++) {
+			const vp = -(1 + 7 * rand());
+			const mode = pick(['idss', 'rdson', 'measured']);
+			const inputs = { jfetMode: mode, vp, idssMa: 2 + 20 * rand(), rdsOn: 20 + 300 * rand(), topology: i % 3 === 1 ? 'inverting' : 'noninverting', outputStage: i % 2 === 0, targetOutputAmplitude: 0.5 + 2 * rand(), swingFraction: 0.5 + 0.45 * rand(), targetN: 0.3 + 0.3 * rand(), fp: 20000 + 60000 * rand(), vcc: 12 + 3 * rand(), carrierFrom: pick(['wien', 'source']), carrierSourceAmplitude: 0.3 + 2 * rand(), ...pick(stocks) };
+			if (jfetCase(`sweep ${i + 1}`, inputs, { sweep: true })) built++;
+		}
+		for (let i = 0; i < 5; i++) {
+			const fp = 20000 + 100000 * rand();
+			const inputs = { fpDiode: fp, fmMaxDiode: fp / (15 + 40 * rand()), sidebandMargin: 1 + 3 * rand(), inductanceMh: pick([0.3, 1, 3]), targetNDiode: 0.5 + 0.45 * rand(), carrierDrive: 1 + 2 * rand(), diodePart: pick(['1N4148', '1N4148', 'BAT54']), ...pick(stocks.slice(0, 4)) };
+			if (diodeCase(`sweep ${i + 1}`, inputs, { sweep: true })) built++;
+		}
+		for (let i = 0; i < 10; i++) {
+			const fm = 300 + 3000 * rand();
+			const inputs = { rectifierType: pick(['full', 'half']), response: pick(['butterworth', 'chebyshev']), envelopeTopology: pick(['sallenKey', 'mfb']), fmMaxDemod: fm, fpCarrierDemod: fm * (20 + 60 * rand()), amaxDb: 0.5 + rand(), aminDb: 30 + 30 * rand(), outputCoupling: i % 2 === 0, loadOhms: pick([16, 32, 10000]), fmMinDemod: fm / (5 + 10 * rand()), demodAmplitude: 0.5 + 3 * rand(), ...pick(stocks) };
+			if (demodCase(`sweep ${i + 1}`, inputs, { sweep: true })) built++;
+		}
+		check(`python: a random sweep, ${built} of 25 random designs the page builds, each through every check of its file below`, built >= 15, `${built}`);
+	}
+
+	/* the properties the JavaScript scripts' checks held, now on the .py files */
+	// (d) the scripts ran with RESISTOR_PAIRS true and printed each pair, none with it false: the files
+	// write the pairs the page builds as the stock's two parts and check them as the page has them
+	{
+		const on = jfetCase('the bench, pairs', { ...BENCH, pairs: true });
+		const off = jfetCase('the bench, single parts', BENCH);
+		const dOn = diodeCase('the lab kit, pairs, the default index', { stock: 'lab', pairs: true });
+		const eOn = demodCase('Chebyshev, the lab kit, pairs', { response: 'chebyshev', fpCarrierDemod: 40000, demoModIndex: 0.9, stock: 'lab', pairs: true });
+		const sumOf = (o) => Object.values(pairsWritten(pageBlock(o.code).block));
+		const problems = [];
+		if (!on || !off || !dOn || !eOn) problems.push('a design missing');
+		else {
+			const { block, said } = pageBlock(on.code);
+			if (!block.includes('"Rbias": 56e3 + 8.2e3')) problems.push(`written ${block.match(/"Rbias": [^,]+/)?.[0]}`);
+			if (!/Rbias\b.*\btwo\s+(# )?resistors in series/s.test(said)) problems.push('R_bias not said to be two resistors');
+			if (!(rel(on.r.page_check.bias, on.pg.design.conditioning.summer.biasActual, 1e-12) && Math.abs(on.r.page_check.bias + 3.505) < 0.001)) problems.push(`bias ${on.r.page_check.bias}`);
+			if (!rel(on.r.page_check.n, on.pg.design.modulationIndex, 1e-12)) problems.push(`n ${on.r.page_check.n}`);
+			if (!/# The page may also make a resistor of two of these in series/.test(on.code)) problems.push('the stock says nothing of pairs');
+			if (sumOf(off).length || /two of these in series/.test(off.code)) problems.push('pairs with single parts');
+			if (!sumOf(dOn).some((_, i) => ['Rp', 'Rm'].includes(Object.keys(pairsWritten(pageBlock(dOn.code).block))[i]))) problems.push('the diode: no R_p or R_m of two');
+			if (!/"R1": [\d.e+-]+ \+ [\d.e+-]+, "R2": [\d.e+-]+ \+ /.test(pageBlock(eOn.code).block)) problems.push('the demodulator: no stage of two-part R');
+		}
+		check(
+			'python: the bench JFET with pairs writes R_bias = 56 k + 8.2 k (the bias on -3.505 V, n the page\'s), the diode its R_p or R_m as two parts, the demodulator both R of a stage; with single parts, no pair',
+			problems.length === 0,
+			problems.join('; ') || `bias ${on.r.page_check.bias.toFixed(4)} V, n ${on.r.page_check.n.toFixed(4)}`
+		);
+	}
+	// (f) the script designed the output stage with OUTPUT_STAGE true and printed it with its pairs
+	{
+		const st = jfetCase('the bench, pairs, an output stage to 2 V, again', { ...BENCH, pairs: true, outputStage: true, targetOutputAmplitude: 2 });
+		const pg = st?.pg.design.postGain;
+		check(
+			'python: the output stage after the bench cell: section 6, the page\'s R_top = 2 k + 390 and the divider\'s top as pairs, its K and output the page\'s, 3 op-amps',
+			Boolean(st) && /# --- 6 The output stage/.test(st.code) && pageBlock(st.code).block.includes('"Rtop": 2e3 + 390.0') && /"Rdt": [\d.e+-]+ \+ /.test(pageBlock(st.code).block) && rel(st.r.page_check.stage.k, pg.kActual, 1e-12) && rel(st.r.page_check.stage.out, pg.outputAmplitude, 1e-10) && st.r.page_check.opamps === 3 && /3 op-amps in the modulator/.test(st.stdout),
+			st ? `K ${st.r.page_check.stage.k.toFixed(3)}, ${st.r.page_check.stage.out.toFixed(3)} V, ${st.r.page_check.opamps} op-amps` : 'no design'
+		);
+	}
+	// (g) the script ran the MFB filter and printed R1 = R3, R2, C1, C2, the pairs and the negative mean
+	{
+		const mfb = demodCase('MFB, the lab resistors', { envelopeTopology: 'mfb', stock: 'labR' });
+		const mfbPairs = demodCase('MFB, the lab resistors, pairs', { envelopeTopology: 'mfb', stock: 'labR', pairs: true });
+		const sk = files.demod;
+		const problems = [];
+		if (!mfb || !mfbPairs || !sk) problems.push('a design missing');
+		else {
+			if (!pageBlock(mfb.code).block.includes('{"R1": 10e3, "R2": 10e3, "R3": 10e3, "C1": 22e-9, "C2": 4.7e-9}')) problems.push('the parts on the lab resistors');
+			if (!(Math.abs(mfb.r.page_check.mean + 0.6366) < 1e-4 && /upside down, its level negative/.test(mfb.stdout))) problems.push(`the MFB mean ${mfb.r.page_check.mean}`);
+			if (!(Math.abs(sk.r.page_check.mean - 0.6366) < 1e-4 && !/upside down/.test(sk.stdout))) problems.push(`the Sallen-Key mean ${sk.r.page_check.mean}`);
+			const st = mfbPairs.r.page_parts.stages[0];
+			if (!(st.R1 === st.R3 && /\{"R1": [\d.e+-]+ \+ [\d.e+-]+, "R2": [^,]+, "R3": [\d.e+-]+ \+ /.test(pageBlock(mfbPairs.code).block))) problems.push('with pairs, R1 = R3 not two in series');
+		}
+		check('python: the MFB demodulator on the lab resistors writes R1 = R3 = 10 k, R2 = 10 k, C1 = 22 nF, C2 = 4.7 nF and checks a mean of -0.6366 V, upside down; with pairs R1 = R3 of two in series; the Sallen-Key one +0.6366 V', problems.length === 0, problems.join('; ') || `${mfb.r.page_check.mean.toFixed(4)} V and ${sk.r.page_check.mean.toFixed(4)} V`);
+	}
+	// (g) the script sized C_out with OUTPUT_COUPLING true, said which way round and what the load draws
+	{
+		const on = demodCase('MFB into 32 ohm', { envelopeTopology: 'mfb' });
+		const off = demodCase('MFB, no load', { envelopeTopology: 'mfb', outputCoupling: false });
+		const problems = [];
+		if (!on || !off) problems.push('a design missing');
+		else {
+			if (!(on.r.page_parts.Cout === 100e-6 && /C_out at least 97\.74 uF -> 100 uF/.test(on.stdout))) problems.push(`C_out ${on.r.page_parts.Cout}`);
+			if (!/\+ plate toward the load/.test(on.stdout)) problems.push('its + plate');
+			if (!(Math.abs(on.r.page_check.fc - 49.74) < 0.01)) problems.push(`the corner ${on.r.page_check.fc}`);
+			if (!(/tone, current at the load, at most 10 mA/.test(on.stdout) && on.r.page_check.checks.current === false && /The current: past 10 mA a TL08x distorts/.test(on.stdout))) problems.push('the current past 10 mA');
+			if (/C_out|Cout|at the load/.test(off.code)) problems.push('C_out with the output off');
+		}
+		check('python: with the output on, C_out = 100 uF, its + plate toward the load after one MFB stage, the corner 49.74 Hz, the current at the load past 10 mA and what to do; with it off, nothing of C_out or the load', problems.length === 0, problems.join('; ') || `C_out ${on.r.page_parts.Cout} F, corner ${on.r.page_check.fc.toFixed(2)} Hz, ${(1000 * on.r.page_check.current).toFixed(1)} mA`);
+	}
+	// (f) the script took the carrier asked for and printed the mean, the swing it needs and the power in the earphones
+	{
+		const four = demodCase('a 4 V carrier, MFB, again', { envelopeTopology: 'mfb', demodAmplitude: 4 });
+		const problems = [];
+		if (!four) problems.push('no design');
+		else {
+			if (!/\namplitude = 4\.0 /.test(four.code)) problems.push('amplitude in SETTINGS');
+			if (!(Math.abs(four.r.page_check.mean + 2.5465) < 1e-4)) problems.push(`the mean ${four.r.page_check.mean}`);
+			if (!(Math.abs(four.r.page_check.needed - 7.7) < 1e-9 && four.r.page_check.checks.swing)) problems.push(`the swing ${four.r.page_check.needed}`);
+			if (!(/power, at most 1 mW in earphones/.test(four.stdout) && four.r.page_check.checks.power === false && /The power: earphones play loud from 1 mW/.test(four.stdout))) problems.push('the power in the earphones');
+		}
+		check('python: a 4 V carrier: amplitude = 4.0 in SETTINGS, a mean of -2.5465 V, 7.7 V of swing for U1A within 13.5 V, the power in the earphones past 1 mW and what to do', problems.length === 0, problems.join('; ') || `${four.r.page_check.mean.toFixed(4)} V, ${four.r.page_check.needed} V, ${(1000 * four.r.page_check.power).toFixed(1)} mW`);
+	}
+	// a limit on the pairs: the scripts redid the page's choice from RESISTOR_PAIR_LIMIT (and RESISTOR_PAIRS as a
+	// whitelist, the modulator's share of the limit its Wien bridge leaves); the .py files take the page's parts
+	// as data, so that is gone: they are held to the parts the page chose under the limit, the pairs it kept,
+	// its note on what it kept and left single, and a limit past the count gives what no limit gives
+	{
+		const problems = [];
+		const shown = [];
+		const keptOf = (o) => Object.keys(pairsWritten(pageBlock(o.code).block)).sort();
+		const jfetLimited = (label, inputs, n) => {
+			const f = jfetCase(label, inputs);
+			if (!f) {
+				problems.push(`${label}: no design`);
+				return null;
+			}
+			const kept = keptOf(f);
+			const want = f.pg.section.kept.slice().sort();
+			if (JSON.stringify(kept) !== JSON.stringify(want)) problems.push(`${label}: ${kept} written against ${want} kept`);
+			if (kept.length + f.pg.section.carrierCount > n) problems.push(`${label}: ${kept.length} + ${f.pg.section.carrierCount} pairs`);
+			if (f.pg.section.limited !== Boolean(f.a.limitNote) || noteProblems(f.code, f.a.limitNote).length) problems.push(`${label}: the note`);
+			return f;
+		};
+		for (const n of [1, 2, 3]) {
+			const f = jfetLimited(`the lab kit, at most ${n} pairs with the Wien bridge`, { stock: 'lab', pairs: true, pairLimit: n }, n);
+			if (f) shown.push(`N=${n}: ${keptOf(f).join('+') || 'none'}, Wien ${f.pg.section.carrierCount}`);
+		}
+		// the sparse list at 80 kHz under 4 pairs: the oscillator holds Rf1 and Rf2, and the modulator does best
+		// with R_bias and R_b, more than its own pairs where they help (R_b alone): the scripts' whitelist
+		const sparse = jfetLimited('the sparse list at 80 kHz, at most 4 pairs', { windowLow: -7, targetN: 0.5, fp: 80000, carrierSourceAmplitude: 2, ...custom('10 22 47 100 220 470 1k 2.2k 4.7k 10k 22k 47k 100k 220k 470k 1M', kitCaps), pairs: true, pairLimit: 4 }, 4);
+		if (sparse) {
+			if (JSON.stringify(keptOf(sparse)) !== JSON.stringify(['Rb', 'Rbias']) || JSON.stringify(sparse.pg.section.scriptPairs) !== JSON.stringify(['Rbias', 'Rb']) || JSON.stringify(sparse.pg.section.carrierKept) !== JSON.stringify(['Rf1', 'Rf2'])) problems.push(`the sparse list: ${keptOf(sparse)}, the oscillator ${sparse.pg.section.carrierKept}`);
+			shown.push(`sparse N=4: ${keptOf(sparse).join('+')}, the oscillator ${sparse.pg.section.carrierKept.join('+')}`);
+		}
+		const d1 = diodeCase('the lab kit, at most 1 pair, again', { stock: 'lab', pairs: true, pairLimit: 1, targetNDiode: 0.93, carrierDrive: 1.7 });
+		if (!d1?.pg.limited?.limited || JSON.stringify(keptOf(d1)) !== JSON.stringify([...d1.pg.limited.kept].sort()) || !d1.a.limitNote || noteProblems(d1.code, d1.a.limitNote).length) problems.push('diode 1');
+		else shown.push(`diode N=1: ${keptOf(d1).join('+')}`);
+		const e4 = demodCase('order 6, MFB, at most 4 pairs, again', { envelopeTopology: 'mfb', orderOverride: 6, aminDb: 60, stock: 'lab', pairs: true, pairLimit: 4 });
+		const eKept = e4 ? e4.a.page.stages.flatMap((st, k) => Object.keys(pairsOf(st.parts, e4.a.stock)).map((name) => `${name}${k + 1}`)).sort() : [];
+		if (!e4?.pg.limited?.limited || JSON.stringify(eKept) !== JSON.stringify([...e4.pg.limited.kept].sort()) || eKept.length > 4 || !e4.a.limitNote || noteProblems(e4.code, e4.a.limitNote).length) problems.push(`demod 4: ${eKept}`);
+		else shown.push(`demod N=4: ${eKept.join('+')}`);
+		const past = jfetCase('the lab kit, at most 9 pairs', { stock: 'lab', pairs: true, pairLimit: 9 });
+		const none = jfetCase('the lab kit, pairs where they help', { stock: 'lab', pairs: true });
+		if (!past || !none || past.stdout !== none.stdout || JSON.stringify(past.r.page_parts) !== JSON.stringify(none.r.page_parts)) problems.push('a limit past the count prints something else than no limit');
+		check(`python: under a limit on the pairs the files write the parts the page chose, the pairs it kept and no more, and its note on them (the JFET modulator with its Wien bridge at 1, 2 and 3 and on a sparse list at 4, the diode at 1, the demodulator at 4), and a limit past the count prints what no limit prints`, problems.length === 0, problems.length ? problems.slice(0, 3).join('; ') : shown.join('; '));
+	}
+
+	/* edited settings: an order the page's stages no longer fit, lists in any order */
+	{
+		const problems = [];
+		const code = generateDemodPython(demodPage({}).args);
+		for (const [setting, value] of [['order', '4'], ['amin', '80.0']]) {
+			const edited = editSetting(code, setting, value);
+			const run = runFile(edited);
+			const read = readResults(edited);
+			const r = read.results ?? {};
+			if (!(run.status === 0 && run.stderr === '' && r.page_check === null && r.page_parts === null && r.own_check && r.n === 4 && /the page's parts hold the stages of its own settings, not these: left out/.test(run.stdout))) problems.push(`${setting} = ${value}: ${run.stderr.slice(-200) || `n ${r.n}, page_check ${JSON.stringify(r.page_check)?.slice(0, 40)}`}`);
+		}
+		check("python: the demodulator edited to another order (order = 4, or amin = 80) leaves the page's stages out with one line and checks its own, the order said as set", problems.length === 0 && /n >= [\d.]+ would do; the order set gives n = 4/.test(runFile(editSetting(code, 'order', '4')).stdout), problems.join('; '));
+	}
+	{
+		// each file's lists reversed in SETTINGS give the same parts and checks as the page's order
+		const problems = [];
+		const reversed = (code) => code.replace(/\nresistors, capacitors = sorted/, '\nresistors, capacitors = resistors[::-1], capacitors[::-1]\nresistors, capacitors = sorted');
+		for (const [file, code] of [[JFET, generateJfetPython(jfetPage({ stock: 'lab', pairs: true }).args)], [DIODE, generateDiodePython(diodePage({ stock: 'lab', pairs: true }).args)], [DEMOD, generateDemodPython(demodPage({ stock: 'lab', pairs: true, envelopeTopology: 'mfb' }).args)]]) {
+			const a = readResults(code);
+			const b = readResults(reversed(code));
+			if (!/resistors\[::-1\]/.test(reversed(code))) problems.push(`${file}: no sort line`);
+			else if (a.stop || b.stop || JSON.stringify(a.results.own_parts) !== JSON.stringify(b.results.own_parts) || JSON.stringify(a.results.page_check) !== JSON.stringify(b.results.page_check)) problems.push(`${file}: ${b.stop ?? 'another result'}`);
+		}
+		// the list as the review edited it: the lab kit's 680 ohm moved to the end, R_t still 1.5 kohm
+		const lab = generateDiodePython(diodePage({ stock: 'lab', pairs: true }).args);
+		const moved = lab.replace('510.0, 680.0, 1e3,', '510.0, 1e3,').replace(/(\nresistors = \[[^\]]*?),?\s*\]/, '$1, 680.0]');
+		const rt = (code) => readResults(code).results?.rt;
+		if (moved === lab || rt(moved) !== rt(lab) || rt(lab) !== 1500) problems.push(`the moved 680 ohm: R_t ${rt(moved)} against ${rt(lab)}`);
+		check('python: the stock lists may be in any order: each file sorts them where SETTINGS ends (reversed, the same parts and checks; the review\'s moved 680 ohm, R_t still 1.5 kohm)', problems.length === 0, problems.join('; '));
+	}
+
+	/* a control: a file whose page parts are not the page's is told apart */
+	{
+		const pg = jfetPage({});
+		const wrong = { ...pg.args, page: { ...pg.args.page, Rb: 180 } };
+		const r = readResults(generateJfetPython(wrong)).results;
+		const d = pg.design;
+		const told = differ([['n', r.page_check.n, d.modulationIndex], ['n_eff', r.page_check.n_eff, d.opamp.effectiveModulationIndex]], 1e-10);
+		check('python: a control: a file given an R_b of 180 ohm where the page shows 160 ohm is told apart by its check of the page\'s parts', told.length === 2, told.join('; ') || 'not told apart');
+	}
+
+	// every file and property, over the matrix, the sweep and the cases above
+	for (const [key, t] of tally) check(`${key} (${t.designs} design${t.designs === 1 ? '' : 's'})`, t.problems.length === 0, t.problems.slice(0, 3).join('; '));
+
+	/* the matrix covered */
+	{
+		const WANT = {
+			'jfet mode': ['idss', 'rdson', 'measured divider', 'measured direct', 'measured mixed', 'fixedvds'],
+			'jfet topology': ['noninverting', 'inverting'],
+			'jfet output stage': ['none', 'a stage', 'no stage needed'],
+			'jfet follower': ['with', 'without'],
+			'jfet carrier': ['Wien', 'generator', 'Wien on E24'],
+			'jfet stock': ['E24', 'E96', 'lab', 'labR', 'custom'],
+			'jfet pairs': ['pairs on lab', 'pairs on labR', 'pairs on custom', 'a pair limit on lab', 'a pair limit on custom'],
+			'jfet divider': ['none'],
+			diode: ['1N4148', 'BAT54'],
+			'diode stock': ['E24', 'E96', 'lab', 'labR', 'custom', 'E24 fallback'],
+			'diode pairs': ['pairs on lab', 'pairs on labR', 'pairs on custom', 'a pair limit on lab'],
+			'diode bias': ['R_b', 'no R_b'],
+			'demod rectifier': ['full', 'half'],
+			'demod response': ['butterworth', 'chebyshev'],
+			'demod topology': ['sallenKey', 'mfb'],
+			'demod order': ['minimum', 'set'],
+			'demod coupling': ['on', 'off'],
+			'demod stock': ['E24', 'E96', 'lab', 'labR', 'custom'],
+			'demod pairs': ['pairs on lab', 'pairs on labR', 'pairs on custom', 'a pair limit on lab'],
+			'demod fallback': ['a stage from E24 and E6', 'Sallen-Key pairs short of 4 Q^2', 'C_out from E6'],
+			'demod own': ['parts', 'none']
+		};
+		const missing = Object.entries(WANT).flatMap(([dim, values]) => values.filter((v) => !covered.get(dim)?.has(v)).map((v) => `${dim}: ${v}`));
+		check(`python: the matrix covers every option of the page (${Object.values(WANT).flat().length} values: the JFET's modes, cells, output stage, follower and carriers, the diodes, the rectifiers, responses, filter topologies, the order set, the coupling on and off, every stock, pairs and a limit, the stock fallbacks)`, missing.length === 0, missing.join(', '));
+		// (the rough target 250 to 500; the diode's holds every figure its panels show and the page's word on each of its ten checks)
+		check(`python: the default files are ${lengths.jfet}, ${lengths.diode} and ${lengths.demod} lines, within 250 to 500, the diode's to 520`, lengths.jfet >= 250 && lengths.jfet <= 500 && lengths.demod >= 250 && lengths.demod <= 500 && lengths.diode >= 250 && lengths.diode <= 520);
+	}
+	cleanup();
+	console.log(`python: ${((performance.now() - started) / 1000).toFixed(0)} s`);
 }
 
 console.log(fails === 0 ? 'am checks clean' : `${fails} failure(s)`);

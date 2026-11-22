@@ -82,8 +82,3 @@ export function implicantPattern(imp, n) {
 	}
 	return s;
 }
-
-/** "Σm(1, 3, 5)" style list. */
-export function mintermList(ms, symbol = 'm') {
-	return ms.length ? `${symbol}(${ms.join(', ')})` : `${symbol}()`;
-}

@@ -299,12 +299,12 @@ function pairLimitLess(a, b) {
  * some share up to what is left, the full one included: alone it gives the
  * full one as soon as that fits, and that one can miss by more than a
  * whitelist short of it, so a larger limit could end worse than a smaller
- * one. `budget` is the modulator's share as a downloaded script takes it:
- * with that limit and that carrier the script makes the same modulator
- * (one under the modulator's own count where a whitelist short of it beats
- * its full design). Where the best modulator holds as many names as its
- * full design or more, and is not that design, no limit gives it: budget
- * is then null and `scriptPairs` the whitelist the script designs with.
+ * one. `budget` is the modulator's share as limitJfetPairs takes it: with
+ * that limit and that carrier it makes the same modulator (one under the
+ * modulator's own count where a whitelist short of it beats its full
+ * design). Where the best modulator holds as many names as its full design
+ * or more, and is not that design, no limit gives it: budget is then null
+ * and `scriptPairs` the whitelist that does, as designJfetModulator's pairs.
  */
 export function limitJfetWithCarrier(params, limit, options, carrierOf) {
 	const fullOption = options[options.length - 1];
@@ -330,12 +330,12 @@ export function limitJfetWithCarrier(params, limit, options, carrierOf) {
 	const budgetOf = (option) => (limit === null ? null : Math.max(0, limit - option.count));
 	const full = pack(fullOption, cellOn(fullOption, null), budgetOf(fullOption), false);
 	if (limit === null || full.count <= limit) return full;
-	// the modulator on this carrier with at most `left` pairs, and what a
-	// script needs to make it, each taken only where it does clearly better
+	// the modulator on this carrier with at most `left` pairs, and the limit
+	// or whitelist that makes it, each taken only where it does clearly better
 	// than the one before: the best whitelist short of its count of pairs
 	// (a limit that low), the full design where it fits (a limit at the
 	// count or above), then any whitelist that fits, which no limit gives
-	// once the full design fits: the script then gets that whitelist itself
+	// once the full design fits: that whitelist is then returned itself
 	const bestCell = (option, left) => {
 		const whole = cellOn(option, null);
 		const count = whole.names.length;
