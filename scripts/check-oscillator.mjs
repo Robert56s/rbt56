@@ -31,6 +31,9 @@
 //    own parts against its rule written again here, its check of both sets
 //    against the library's evaluation, its guards (needs Python 3.8 or
 //    newer as `python`; about 80 s of the whole).
+// 10. What the page shows belongs to the parts it shows: a diode limiter's
+//    figures with its parts' own split, a lamp's or an AGC's frequency on
+//    target, panel 04 naming the test that fails.
 // Exits non-zero on any failure. LTspice itself is run by check-ltspice.mjs.
 
 import { readFileSync } from 'node:fs';
@@ -144,7 +147,10 @@ const WT = 2 * Math.PI * 3e6;
 					check(`design ${label}: says this op-amp cannot be trusted here (lag ${d.opamp.lagDeg.toFixed(0)} degrees)`, d.opamp.opampOk === false && d.opamp.lagDeg > 25);
 				} else {
 					check(`design ${label}: starts and regulates`, d.starts === true && d.limiter.regulates === true && d.opamp.opampOk === true, `growth ${Number.isFinite(d.growthPerCycle) ? (100 * d.growthPerCycle).toFixed(1) + ' %' : 'n/a'}`);
-					check(`design ${label}: settles within 15 % of the amplitude asked for`, d.limiter.amplitudeActual !== null && rel(d.limiter.amplitudeActual, amplitude, 0.15), `${d.limiter.amplitudeActual?.toFixed(2)} V for ${amplitude}`);
+					// (a pair the second pass picked for the first pair's split may hold less with its own,
+					// as the buffered phase shift at 55 kHz does: the page then says where it settles)
+					const flagged = Number.isFinite(d.limiter.sizedAtGain) && amplitudeRemark(d)?.kind === 'rounding';
+					check(`design ${label}: settles within 15 % of the amplitude asked for${flagged ? ', or says where its parts settle' : ''}`, d.limiter.amplitudeActual !== null && (rel(d.limiter.amplitudeActual, amplitude, 0.15) || flagged), `${d.limiter.amplitudeActual?.toFixed(2)} V for ${amplitude}`);
 					if (d.limiter.kind === 'diodes') check(`design ${label}: excess gain between 1 and 12 %`, d.loopExcess > 0.01 && d.loopExcess < 0.12, `${(100 * d.loopExcess).toFixed(1)} %`);
 				}
 				check(`design ${label}: parts in stock ranges`, d.r >= 1000 && d.r <= 1e6 && d.c >= 100e-12 && d.c <= 1e-6);
@@ -322,7 +328,9 @@ const WT = 2 * Math.PI * 3e6;
 							bad++;
 							console.log('KATEX FAIL', t.id, s, f, b.tex.slice(0, 90), e.message);
 						}
-					} else if (/undefined|NaN|\bnull\b/.test(b.text)) {
+					} else if (/undefined|NaN|\bnull\b|\b[a-z]+ - [a-z0-9]/.test(b.text)) {
+					// (a lone "-" between words is the placeholder n2() and pctText() write for a figure that
+					// is not there: "a growth of - per cycle"; a formula's minus sits between symbols)
 						bad++;
 						console.log('TEXT BAD', t.id, s, f, b.text.slice(0, 110));
 					}
@@ -331,6 +339,48 @@ const WT = 2 * Math.PI * 3e6;
 		}
 	}
 	check(`explanations: ${n} equations render under strict KaTeX, no placeholders`, bad === 0, `${bad} failures`);
+	{
+		// a figure that is not there (a diode string or a clamp that holds no amplitude, no divider
+		// at all, the gain of a loop that needs four times its textbook one) is said so, in the
+		// equations too, never printed as the "-" formatVolts or n2 write for it
+		const { componentOptions, defaultStock } = await import('../src/lib/stock.js');
+		const { opampVerdict } = await import('../src/lib/oscillator/explain.js');
+		const { oscillatorBasics } = await import('../src/lib/oscillator/basics.js');
+		const lone = /(?:\\approx|=|\(|\bat|\bfrom|\bto|\bof|\bis|\bby|\bhere|\bholds|\babout|\bnear|\bonly|\bwith) - (?![A-Za-z_]\b|R_|V_|\d)|(?<![\w}]) - \\ \\text|(?<![\w})]) -(?: %| V| Hz| kHz| degrees| percent| times)\b/;
+		const strings = (x) => (typeof x === 'string' ? [x] : Array.isArray(x) ? x.flatMap(strings) : x && typeof x === 'object' ? Object.values(x).flatMap(strings) : []);
+		const e96 = componentOptions('E96', defaultStock().resistorText, defaultStock().capacitorText, false, null);
+		const lab = componentOptions('lab', defaultStock().resistorText, defaultStock().capacitorText, false, null);
+		const cases = [
+			['a diode string that does not hold', { topology: 'bubba', frequency: 100000, amplitude: 0.3 }, (d) => d.limiter.kind === 'diodes' && !d.limiter.regulates],
+			['a lab-stock string that does not hold', { topology: 'wien', frequency: 10, amplitude: 3, gbw: 1e6, diode: 'BAT54', ...lab }, (d) => d.limiter.kind === 'diodes' && !d.limiter.regulates],
+			['a clamp with no divider', { topology: 'quadrature', frequency: 7300, amplitude: 0.3 }, (d) => d.limiter.kind === 'clamp' && !(d.limiter.rd1 > 0)],
+			['the loop found again from the balance its parts were sized at', { topology: 'phaseShift', frequency: 55000, amplitude: 0.3, ...e96 }, (d) => d.limiter.sizedAtGain > 1.5 * d.requiredGain]
+		];
+		const wrong = [];
+		let blocks = 0;
+		for (const [label, args, is] of cases) {
+			const d = designOscillator(args);
+			if (!d || !is(d)) {
+				wrong.push(`${label}: not that case`);
+				continue;
+			}
+			for (const b of [...explainBarkhausen(d), ...explainTopology(d), ...explainStabilizer(d), ...explainOpampLimit(d), opampVerdict(d), ...oscillatorBasics(d)]) {
+				blocks++;
+				if (b.type === 'eq') {
+					try {
+						katex.renderToString(b.tex, { throwOnError: true, strict: 'error' });
+					} catch (e) {
+						wrong.push(`${label}: KaTeX ${e.message}`);
+					}
+				}
+				for (const s of strings(b)) {
+					const at = s.search(lone);
+					if (at >= 0 || /undefined|NaN|\bnull\b/.test(s)) wrong.push(`${label}: ${at >= 0 ? s.slice(Math.max(0, at - 40), at + 40) : s.slice(0, 80)}`);
+				}
+			}
+		}
+		check('explanations: where a figure is not there the texts and equations say so, never "-" for it (a string or a clamp that holds nothing, the loop found again far from its sizing)', wrong.length === 0 && blocks > 40, wrong.slice(0, 2).join(' | ') || `${cases.length} designs, ${blocks} blocks`);
+	}
 	const src = readFileSync(new URL('../src/routes/(site)/tools/oscillator/formulas/+page.svelte', import.meta.url), 'utf8');
 	const found = [...src.matchAll(/tex=\{`([\s\S]*?)`\}/g)].map((m) => m[1].replace(/\\\\/g, '\\'));
 	let sheetBad = 0;
@@ -422,7 +472,8 @@ const WT = 2 * Math.PI * 3e6;
 			['E24|wien|diodes|1000|3|3000000', '16000 1e-8 10000 15400 6200 - - - - - f0 993.07 A 2.9338'],
 			['E24|wien|jfet|1000|4|3000000', '16000 1e-8 10000 - - 20000 9100 147000 - - f0 993.24 A 4.0076'],
 			['E24|phaseShift|diodes|1000|3|3000000', '4300 1.5e-8 4300 110000 18000 - - - - - f0 1005.19 A 3.0415'],
-			['E24|bubba|diodes|55000|1|3000000', '8200 3.3e-10 8200 23200 15000 - - - - - f0 55036.59 A 1.0063'],
+			// (its amplitude with its parts' own split: the 1.0063 V it showed was the first pair's split)
+			['E24|bubba|diodes|55000|1|3000000', '8200 3.3e-10 8200 23200 15000 - - - - - f0 55036.59 A 1.0091'],
 			['E24|quadrature|diodes|1000|3|3000000', '16000 1e-8 10000 - - - - 10000 510000 6800 f0 994.23 A 3.0497'],
 			['lab|wien|diodes|1000|3|3000000', '33000 4.7e-9 10000 15000 7500 - - - - - f0 1024.30 A 2.7540'],
 			['lab|wien|lamp|1000|3|3000000', '33000 4.7e-9 10000 - - 22000 - - - - f0 1024.57 A 3.0000'],
@@ -1006,12 +1057,10 @@ const WT = 2 * Math.PI * 3e6;
 // designOscillator's design exactly), its check of both sets against the
 // library's evaluation of the same parts (loop.js, limiter.js), and its
 // guards (the topology and control, the inputs above 0, the models, and a
-// run at other settings, which says they are no longer the page's). One
-// known difference: the page finds a diode limiter's balance gain in its
-// second pass at the split of its first parts; where that pass moves Rf1 or
-// Rf2, the gain, the amplitude, whether it holds and the slew differ from
-// the page's, the file says so with what the page shows (page_gain,
-// page_amplitude, page_verdict), and the count is printed.
+// run at other settings, which says they are no longer the page's). The
+// page shows a diode limiter's figures with its parts' own split, so its
+// figures and the file's check of its parts agree in every design; how
+// many were found again after the second pass is printed.
 {
 	const { capacitorCandidates, nearestResistor, pairAllowed, pairedResistor } = await import('../src/lib/filter/eseries.js');
 	const { pyPart } = await import('../src/lib/filter/python/emit.js');
@@ -1134,11 +1183,14 @@ const WT = 2 * Math.PI * 3e6;
 	/**
 	 * topologies.js designWith's flow, from the library's loop and limiter
 	 * functions, with `pick` for R and C and `pairs` for the rest: the
-	 * retune at the start gain in three rounds, the stabilizer sized as
+	 * retune in three rounds at the gain the loop runs at (a diode limiter's
+	 * start gain, a lamp's or an AGC's balance gain), the stabilizer sized as
 	 * sizeStabilizer does it (a diode limiter's Rf1 and Rf2 by the file's
 	 * rules d and e when `own`), a diode limiter's second pass with its
-	 * capacitance. Returns { rcTarget, requiredGain, first, parts } with the
-	 * file's names, or null where the flow stops.
+	 * capacitance. Returns { rcTarget, requiredGain, shownGain, first, parts }
+	 * with the file's names, or null where the flow stops: requiredGain is
+	 * the gain the parts were sized for, shownGain the one the page shows for
+	 * them, found again with their own split where the second pass changed it.
 	 */
 	const flow = (args, design, stock, pick, pairs, own = false) => {
 		const topo = TOPOLOGIES.find((t) => t.id === design.topology);
@@ -1164,14 +1216,17 @@ const WT = 2 * Math.PI * 3e6;
 		let loop = { ...base };
 		let out = null;
 		let first = null;
+		let balancedIn = loop;
+		let sizedAt = null;
+		const above = control === 'lamp' || control === 'jfet' ? 1 : 1 + excessGain;
 		for (let pass = 0; pass < 2; pass++) {
-			let gStart = topo.gain * (1 + excessGain);
+			let gRun = topo.gain * above;
 			let rt = null;
 			for (let round = 0; round < 3; round++) {
-				rt = retune(kind, { ...loop, gain: gStart }, { fTarget: frequency, k: topo.k });
+				rt = retune(kind, { ...loop, gain: gRun }, { fTarget: frequency, k: topo.k });
 				const bal = rt.converged ? solveBalance(kind, { ...loop, rc: rt.rc }, { omega0: TWO_PI * frequency, gain0: topo.gain }) : null;
 				if (!bal?.converged) return null;
-				gStart = bal.gain * (1 + excessGain);
+				gRun = bal.gain * above;
 			}
 			const p = pick(rt.rc, stock, pairs);
 			if (!p) return null;
@@ -1179,6 +1234,8 @@ const WT = 2 * Math.PI * 3e6;
 			const bal = solveBalance(kind, { ...loop, rc: p.r * p.c }, { omega0: TWO_PI * frequency, gain0: topo.gain });
 			if (!bal.converged) return null;
 			const g = bal.gain;
+			balancedIn = loop;
+			sizedAt = { omega0: bal.omega, gain0: g };
 			let sized;
 			if (control === 'diodes') {
 				const wien = kind === 'wien';
@@ -1198,10 +1255,18 @@ const WT = 2 * Math.PI * 3e6;
 				sized = { Rf: rf, Rser: agc.rSeries, Ra: agc.ra, Rb: agc.rb, Rx: agc.rx, Cdet: nearestOf(50 / frequency / (agc.ra + agc.rb), stock.capacitors) };
 			}
 			const parts = { R: p.r, C: p.c, ...(kind === 'wien' && control === 'diodes' ? { Rg: rg } : {}), ...sized };
-			out = { rcTarget: rt.rc, requiredGain: g, parts };
+			out = { rcTarget: rt.rc, requiredGain: g, shownGain: g, parts };
 			if (control !== 'diodes') break;
 			if (pass === 0) first = parts;
 			loop = { ...base, rAbs: rg, f2: sized.Rf2 / (sized.Rf1 + sized.Rf2), cd: 2 * diode.cjo };
+		}
+		// the parts of the second pass, with their own split where it moved
+		if (control === 'diodes' && (balancedIn.rAbs !== loop.rAbs || balancedIn.f2 !== loop.f2)) {
+			let split = solveBalance(kind, { ...loop, rc: out.parts.R * out.parts.C }, { omega0: TWO_PI * frequency, gain0: topo.gain });
+			// from the balance the parts were sized at where the textbook gain finds no zero-phase point
+			if (!split.converged) split = solveBalance(kind, { ...loop, rc: out.parts.R * out.parts.C }, { ...sizedAt, steps: 400 });
+			if (!split.converged) return null;
+			out.shownGain = split.gain;
 		}
 		return { ...out, first };
 	};
@@ -1346,7 +1411,7 @@ const WT = 2 * Math.PI * 3e6;
 
 	const bad = {};
 	const note = (key, text) => (bad[key] ??= []).push(text);
-	const tally = { files: 0, shortfall: 0, refused: 0, none: 0, picksPage: 0, pageFigures: 0, kept: 0, moved: 0, worstMoved: 0, guards: 0, lines: null };
+	const tally = { files: 0, shortfall: 0, refused: 0, none: 0, picksPage: 0, pageFigures: 0, diodes: 0, resplit: 0, guards: 0, lines: null };
 	const extra = ['page_gain', 'frequency', 'amplitude', 'excess', 'growth', 'gbw', 'slew_rate', 'swing', 'diode', 'jfet', 'topology', 'stabilizer', 'resistors', 'resistors_e96', 'capacitors'];
 	for (const { label, input, opts } of cases) {
 		const { args, design, refused } = pageOf(input);
@@ -1392,8 +1457,9 @@ const WT = 2 * Math.PI * 3e6;
 		}
 		// the settings and the stock, the figures derived before any part
 		const want = { frequency: args.frequency, amplitude: args.amplitude, gbw: args.gbw, slew_rate: args.slewRate, swing: args.opampSwing, topology: design.topology, stabilizer: design.stabilizer };
+		// (the input that sets the start: a lamp's or an AGC's file has neither, they start on their own)
 		if (design.limiter.kind === 'clamp') want.growth = args.quadGrowth;
-		else want.excess = args.excessGain;
+		else if (design.limiter.kind === 'diodes') want.excess = args.excessGain;
 		if (design.limiter.kind !== 'lamp') want.diode = design.diode;
 		if (design.limiter.kind === 'jfet') want.jfet = design.jfet;
 		const stock = stockOf(args, design);
@@ -1409,7 +1475,7 @@ const WT = 2 * Math.PI * 3e6;
 		// the flow with the page's pick and pairs is the page's design; with the file's rule, the file's
 		const pairs = design.pairLimit ? design.pairLimit.allowed : design.pairs;
 		const page = flow(args, design, stock, pagePick, pairs);
-		const pageOff = page ? [...partsOff(page.parts, pageParts(design), 0), ...figuresOff({ rc: page.rcTarget, g: page.requiredGain ?? null }, { rc: design.rcTarget, g: design.kind === 'quadrature' ? null : design.requiredGain })] : ['no design'];
+		const pageOff = page ? [...partsOff(page.parts, pageParts(design), 0), ...figuresOff({ rc: page.rcTarget, g: page.shownGain ?? null }, { rc: design.rcTarget, g: design.kind === 'quadrature' ? null : design.requiredGain })] : ['no design'];
 		if (pageOff.length) note('flow', `${label}: ${pageOff.slice(0, 2).join('; ')}`);
 		const own = flow(args, design, stock, ruleRc, false, true);
 		if (!own) {
@@ -1424,7 +1490,8 @@ const WT = 2 * Math.PI * 3e6;
 		// where the file's rule picks the page's parts in both passes, its figures are the page's own
 		if (page && partsOff(own.parts, page.parts, 0).length === 0 && (!own.first || partsOff(own.first, page.first, 0).length === 0)) {
 			tally.picksPage++;
-			const off = figuresOff({ rc: r.rc_target, g: r.required_gain ?? null }, { rc: design.rcTarget, g: design.kind === 'quadrature' ? null : design.requiredGain });
+			// (the gain the parts were sized for: the page's own where its second pass kept the split)
+			const off = figuresOff({ rc: r.rc_target, g: r.required_gain ?? null }, { rc: design.rcTarget, g: design.kind === 'quadrature' ? null : design.limiter.sizedAtGain ?? design.requiredGain });
 			if (off.length || !run.stdout.includes("The file's rule picks the page's parts.")) note('picks', `${label}: ${off.join('; ') || 'no sentence'}`);
 		}
 		// the page's parts as data: values, and a pair as the sum of the stock's two
@@ -1439,23 +1506,14 @@ const WT = 2 * Math.PI * 3e6;
 		if (oc.length) note('own check', `${label}: ${oc.slice(0, 2).join('; ')}`);
 		const pc = figuresOff(r.page_check, libEvaluate(args, design, r.page_parts));
 		if (pc.length) note('page check', `${label}: ${pc.slice(0, 2).join('; ')}`);
-		const figures = pageFigures(design);
-		const split = design.limiter.kind === 'diodes' ? ['gain', 'amplitude', 'holds', 'slew', 'slew_ok'] : [];
-		const moved = split.length > 0 && !same(r.page_check.gain, design.requiredGain);
-		const pf = figuresOff(r.page_check, figures, Object.keys(figures).filter((k) => !moved || !split.includes(k)));
+		// the page shows its parts' own figures (a diode limiter's with their own split), so the file's
+		// check of them is the page's figures, every one, in every design
+		const pf = figuresOff(r.page_check, pageFigures(design));
 		if (pf.length) note('page figures', `${label}: ${pf.slice(0, 2).join('; ')}`);
 		else tally.pageFigures++;
-		if (split.length) {
-			const says = run.stdout.includes("it finds them at its first parts' split");
-			if (r.page_gain !== design.requiredGain || says !== moved || (moved && !(Math.abs(r.page_check.gain / design.requiredGain - 1) > 1e-6))) note('page gain', `${label}: page_gain ${r.page_gain}, moved ${moved}, says ${says}`);
-			// what the page shows for its parts beside its gain: the amplitude held and its verdict (+page.svelte panel 04)
-			const shown = Number.isFinite(design.limiter.amplitudeActual) ? design.limiter.amplitudeActual : null;
-			const verdict = !design.starts ? 'do not start' : !(design.limiter.regulates !== false && design.opamp.swingOk) ? 'start, then clip' : !(design.opamp.opampOk && design.opamp.slewOk) ? 'start, op-amp too slow' : 'start and hold';
-			if (r.page_amplitude !== shown || r.page_verdict !== verdict) note('page gain', `${label}: page_amplitude ${r.page_amplitude} against ${shown}, page_verdict ${r.page_verdict} against ${verdict}`);
-			if (moved) {
-				tally.moved++;
-				tally.worstMoved = Math.max(tally.worstMoved, Math.abs(r.page_check.gain / design.requiredGain - 1));
-			} else tally.kept++;
+		if (design.limiter.kind === 'diodes') {
+			tally.diodes++;
+			if (Number.isFinite(design.limiter.sizedAtGain)) tally.resplit++;
 		}
 		if (opts.guards) {
 			const guards = [['topology', '"none"', /This file holds the/], ['stabilizer', '"none"', /This file holds the/], ['amplitude', '0.0', /must all be above 0/], ['gbw', '-1.0', /must all be above 0/]];
@@ -1491,11 +1549,251 @@ const WT = 2 * Math.PI * 3e6;
 	show('page parts', "the page's parts are written as the page has them, a pair as the stock's two parts");
 	show('own check', "its check of its own parts equals the library's evaluation of them, the page's op-amp tests with it (loop.js, limiter.js, 1e-9)");
 	show('page check', "its check of the page's parts equals the library's evaluation of them (1e-9)");
-	show('page figures', `its check of the page's parts gives the page's own figures and tests (${tally.pageFigures} designs; a diode limiter whose second pass moved the split, all but its gain, amplitude, hold and slew)`);
-	show('page gain', `page_gain, page_amplitude and page_verdict are the page's, and the file says why exactly where the parts' own split moves the gain (${tally.moved} of ${tally.kept + tally.moved} diode limiters, the balance gain up to ${(100 * tally.worstMoved).toFixed(1)} % apart)`);
+	show('page figures', `its check of the page's parts gives the page's own figures and tests, every one (${tally.pageFigures} designs; ${tally.resplit} of the ${tally.diodes} diode limiters found again with their parts' own split)`);
 	show('guards', `editing the topology, the control, an input to 0 or below, the diode or the JFET stops it with its message (${tally.guards} edits)`);
 	show('again', "run again at twice the frequency, it retunes R C to about half and says the settings are no longer the page's");
 	console.log(`     (the Python download: ${cases.length} cases in ${((Date.now() - started) / 1000).toFixed(0)} s)`);
+}
+
+/* ------------------- 10. what the page shows belongs to the parts it shows */
+// a. A diode limiter is designed twice, the second time with the first
+//    pair's split in the loop; where the pair that pass picks splits the
+//    string another way (or, on a ladder, comes with another R), the gain,
+//    the amplitude and whether it holds are found again with the pair's own
+//    split. On a sweep of every diode-limited topology, frequency, op-amp,
+//    diode and stock, the figures shown equal the evaluation of the parts
+//    shown, and the exact pair the amplitude remark names holds the
+//    amplitude asked at the gain shown.
+// b. A lamp or an AGC holds the loop at its balance gain, so R C is retuned
+//    there: held at balance with the retuned R C the loop runs on the target
+//    (1e-6 where the page trusts the op-amp), and the frequency predicted for
+//    the rounded parts is off the target by the rounding of R and C alone
+//    (0.15 %; the retune at 1 + excess times the balance gain left up to 1 %
+//    and 0.8 %).
+// c. Panel 04's paragraph (explain.js opampVerdict) and the basics panel's
+//    flag name the test of the single-pole model that fails, the lag or
+//    where the textbook values land, alone or together, with the figures the
+//    panel prints, and keep their words where every test passes.
+// d. A lamp's or an AGC's textbook figures (where the textbook R C lands, the
+//    20 % test on it, the 10 % point) are worked out at the gain the loop runs
+//    at, the textbook gain itself, as a diode limiter's are at its textbook
+//    start gain; the excess gain then changes nothing in a lamp or an AGC
+//    design, and the page shows the start input only where it applies
+//    (topologies.js startSetting: the growth for the quadrature loop, the
+//    excess for a diode limiter, none for a lamp or an AGC).
+{
+	const { formatHz } = await import('../src/lib/modulation/format.js');
+	const { opampVerdict } = await import('../src/lib/oscillator/explain.js');
+	const { oscillatorBasics } = await import('../src/lib/oscillator/basics.js');
+	const { componentOptions, defaultStock } = await import('../src/lib/stock.js');
+	const { TWO_PI } = await import('../src/lib/oscillator/loop.js');
+	const texts = defaultStock();
+	const stockOf = (name, pairs = false) => componentOptions(name, texts.resistorText, texts.capacitorText, pairs, null);
+
+	/** A diode design's parts worked out again from scratch: the gain with their own split, what they hold. */
+	const ownFigures = (d) => {
+		const wien = d.kind === 'wien';
+		const diode = DIODES[d.diode];
+		const loop = { wt: TWO_PI * d.opamp.gbw, n: d.topo.ladder?.sections, buffered: d.topo.ladder?.buffered, rAbs: d.rg, f2: d.parts.rf2 / (d.parts.rf1 + d.parts.rf2), cd: 2 * diode.cjo, rc: d.r * d.c };
+		let bal = solveBalance(d.kind, loop, { omega0: TWO_PI * d.frequency, gain0: d.topo.gain });
+		// a loop that needs several times its textbook gain, from its parts' own start gain
+		// instead: another start than the page's, so the same balance to 1e-7, not 1e-12
+		const retried = !bal.converged;
+		if (retried) bal = solveBalance(d.kind, loop, { omega0: TWO_PI * d.frequency, gain0: d.limiter.gainStart, steps: 400 });
+		if (!bal.converged) return null;
+		const g = bal.gain;
+		const rt = wien ? (g - 1) * d.rg : g * d.rg;
+		const fraction = wien ? (g - 1) / g : 1;
+		const held = feedbackLimiterAmplitude({ rf1: d.parts.rf1, rf2: d.parts.rf2, rt, fraction, diode });
+		const exact = d.limiter.sized ? feedbackLimiterAmplitude({ rf1: d.limiter.rf1Target, rf2: d.limiter.rf2Target, rt, fraction, diode }) : null;
+		return { g, held, exact, regulates: held !== null && d.limiter.gainStart > g, retried };
+	};
+	const off = [];
+	const exactOff = [];
+	let diodes = 0;
+	let resplit = 0;
+	const stocks = [
+		['E24', stockOf('E24')],
+		['E96', stockOf('E96')],
+		['lab', stockOf('lab')],
+		['lab pairs', stockOf('lab', true)]
+	];
+	for (const [sname, parts] of stocks) {
+		for (const t of TOPOLOGIES.filter((x) => x.id !== 'quadrature')) {
+			for (const frequency of [200, 1000, 7300, 20000, 55000, 100000]) {
+				for (const [amplitude, gbw, diode] of [[0.3, 3e6, '1N4148'], [3, 1e6, 'BAT54'], [5, 10e6, '1N4148'], [3, 3e6, '1N4148']]) {
+					const d = designOscillator({ topology: t.id, stabilizer: 'diodes', frequency, amplitude, gbw, diode, ...parts });
+					if (!d) continue;
+					diodes++;
+					if (Number.isFinite(d.limiter.sizedAtGain)) resplit++;
+					const own = ownFigures(d);
+					const tag = `${sname} ${t.id} ${frequency} Hz ${amplitude} V ${gbw / 1e6} MHz ${diode}`;
+					const heldShown = own && own.held > 0 ? own.held : amplitude;
+					const wrong = !own
+						? ['no balance with its own split']
+						: [
+								!rel(d.requiredGain, own.g, own.retried ? 1e-7 : 1e-12) && `gain ${d.requiredGain} against ${own.g}`,
+								d.limiter.amplitudeActual !== own.held && !(own.held !== null && d.limiter.amplitudeActual !== null && rel(d.limiter.amplitudeActual, own.held, 1e-12)) && `amplitude ${d.limiter.amplitudeActual} against ${own.held}`,
+								d.limiter.regulates !== own.regulates && `regulates ${d.limiter.regulates}`,
+								!rel(d.amplitudeHeld, heldShown, 1e-12) && `held ${d.amplitudeHeld}`,
+								!rel(d.opamp.slewNeeded, TWO_PI * d.f0 * heldShown, 1e-12) && 'slew',
+								d.opamp.swingOk !== heldShown <= d.opamp.opampSwing && 'swing'
+							].filter(Boolean);
+					if (wrong.length) off.push(`${tag}: ${wrong.join(', ')}`);
+					if (own && d.limiter.sized && !(own.exact > 0 && rel(own.exact, amplitude, 1e-6))) exactOff.push(`${tag}: ${own.exact}`);
+				}
+			}
+		}
+	}
+	check(`shown parts: every diode-limited design shows the gain, amplitude, hold, slew and swing of the parts it shows, their own split in the loop (1e-12)`, off.length === 0, off.length ? off.slice(0, 2).join(' | ') : `${diodes} designs, ${resplit} of them found again after the second pass`);
+	check('shown parts: the sweep holds designs whose second pass changed the split', resplit > 0, `${resplit} of ${diodes}`);
+	check('shown parts: the exact pair the amplitude remark names holds the amplitude asked at the gain shown (1e-6)', exactOff.length === 0, exactOff.slice(0, 2).join(' | '));
+	// the two cases that showed another circuit's figures
+	const ps30 = designOscillator({ topology: 'phaseShift', frequency: 30000 });
+	const own30 = ownFigures(ps30);
+	check('shown parts: the 30 kHz phase shift shows the 2.38 V its parts hold, not the 3.01 V of the first pair\'s split', rel(ps30.limiter.amplitudeActual, own30.held, 1e-12) && near(ps30.limiter.amplitudeActual, 2.377, 0.01) && near(ps30.requiredGain, 31.965, 0.001), `${ps30.limiter.amplitudeActual.toFixed(3)} V at a gain of ${ps30.requiredGain.toFixed(3)}, sized at ${ps30.limiter.sizedAtGain?.toFixed(3)}`);
+	const ps100 = designOscillator({ topology: 'phaseShift', frequency: 100000, amplitude: 0.5, gbw: 10e6 });
+	check('shown parts: the 100 kHz phase shift on a 10 MHz op-amp says its parts clip, where it showed 0.49 V held', ps100.limiter.amplitudeActual === null && ps100.limiter.regulates === false && near(ps100.requiredGain, 49.36, 0.01), `gain ${ps100.requiredGain.toFixed(2)}, start ${ps100.startGain.toFixed(2)}, regulates ${ps100.limiter.regulates}`);
+	// a loop that needs four times its textbook gain: with its own split it comes back in phase
+	// nowhere near the textbook gain, so it is found again from the balance its parts were sized at
+	const ps55 = designOscillator({ topology: 'phaseShift', frequency: 55000, amplitude: 0.3, ...stockOf('E96') });
+	const at55 = ps55 && zeroPhase('ladder', { wt: TWO_PI * 3e6, n: 3, buffered: false, rAbs: ps55.rg, f2: ps55.parts.rf2 / (ps55.parts.rf1 + ps55.parts.rf2), cd: 2 * DIODES['1N4148'].cjo, rc: ps55.r * ps55.c, gain: ps55.requiredGain }, { omega0: TWO_PI * 55000 });
+	check(
+		'shown parts: the 55 kHz phase shift at 0.3 V on E96, which needs four times its textbook gain, is found again from the balance its parts were sized at: in phase with |L| = 1 at the gain shown, and its parts say they clip',
+		!!ps55 && near(ps55.requiredGain, 122.76, 0.01) && near(ps55.limiter.sizedAtGain, 224.19, 0.01) && at55.converged && near(at55.magnitude, 1, 1e-8) && ps55.limiter.regulates === false,
+		ps55 ? `gain ${ps55.requiredGain.toFixed(3)}, sized at ${ps55.limiter.sizedAtGain.toFixed(3)}, |L| ${at55.magnitude.toFixed(10)} at ${(at55.omega / TWO_PI).toFixed(0)} Hz` : 'no design'
+	);
+	const asPage = designOscillator({ topology: 'wien' });
+	check('shown parts: the design the page opens on keeps its parts and figures (its second pass keeps the split)', asPage.limiter.sizedAtGain === undefined && asPage.parts.rf1 === 15400 && asPage.parts.rf2 === 6200 && near(asPage.limiter.amplitudeActual, 2.9338, 1e-4));
+
+	// b. the lamp and the AGC retuned at the gain they run at
+	// (where the page trusts the op-amp; past its tests the retune's three rounds leave up to 2e-4)
+	const worst = { held: 0, round: 0, untrusted: 0 };
+	let count = 0;
+	for (const parts of [stockOf('E24'), stockOf('E96')]) {
+		for (const stabilizer of ['lamp', 'jfet']) {
+			for (const frequency of [10, 200, 1000, 7300, 20000, 55000, 100000, 200000]) {
+				for (const gbw of [1e6, 3e6, 10e6]) {
+					const d = designOscillator({ topology: 'wien', stabilizer, frequency, gbw, amplitude: stabilizer === 'jfet' ? 5 : 3, ...parts });
+					if (!d) continue;
+					count++;
+					const loop = { wt: TWO_PI * gbw, rc: d.rcTarget };
+					const bal = solveBalance('wien', loop, { omega0: TWO_PI * frequency, gain0: 3 });
+					const zp = zeroPhase('wien', { ...loop, gain: bal.gain }, { omega0: TWO_PI * frequency });
+					const heldMiss = Math.abs(zp.omega / TWO_PI / frequency - 1);
+					// f0 scales as 1 / R C: what is left once the rounding of R and C is taken out
+					const roundMiss = Math.abs(((d.f0 / frequency) * (d.r * d.c)) / d.rcTarget - 1);
+					if (!d.opamp.opampOk) worst.untrusted = Math.max(worst.untrusted, heldMiss);
+					else {
+						worst.held = Math.max(worst.held, heldMiss);
+						worst.round = Math.max(worst.round, roundMiss);
+					}
+				}
+			}
+		}
+	}
+	check('lamp and AGC: held at balance with the retuned R C, the loop runs on the target (1e-6; 2e-4 where the page does not trust the op-amp)', worst.held <= 1e-6 && worst.untrusted <= 2e-4 && count > 50, `${count} designs, worst ${worst.held.toExponential(1)}, untrusted ${worst.untrusted.toExponential(1)}; at 1 + excess times the balance gain it was up to 1 %`);
+	check('lamp and AGC: the frequency predicted for the rounded parts is off the target by the rounding of R and C alone, where the page trusts the op-amp (0.15 %)', worst.round <= 1.5e-3, `worst ${(100 * worst.round).toFixed(3)} % once the rounding is taken out; it was up to 0.8 %`);
+	const lamp100 = designOscillator({ topology: 'wien', stabilizer: 'lamp', frequency: 100000 });
+	check('lamp and AGC: at 100 kHz R C is retuned at the balance gain the lamp holds, not 1.05 times it', near(lamp100.retunePercent, -0.14012, 2e-5), `${(100 * lamp100.retunePercent).toFixed(3)} % (at 1.05 times the balance gain it was -14.655 %)`);
+
+	// d. the textbook figures at the gain the loop runs at, and the start inputs
+	{
+		const { startSetting } = await import('../src/lib/oscillator/topologies.js');
+		const offRun = [];
+		let designs = 0;
+		for (const stabilizer of ['diodes', 'lamp', 'jfet']) {
+			for (const frequency of [1000, 20000, 55000, 100000, 200000]) {
+				for (const gbw of [1e6, 3e6, 10e6]) {
+					const d = designOscillator({ topology: 'wien', stabilizer, frequency, gbw, amplitude: stabilizer === 'jfet' ? 5 : 3 });
+					if (!d || !Number.isFinite(d.fUncompensated)) continue;
+					designs++;
+					const run = stabilizer === 'diodes' ? 3 * 1.05 : 3;
+					// where the textbook R C lands, at that gain
+					const zp = zeroPhase('wien', { wt: TWO_PI * gbw, rc: d.rcIdeal, gain: run }, { omega0: TWO_PI * frequency });
+					// and the 10 % point: the textbook values land 10 % low there, at that gain
+					const fm = d.opamp.fMax;
+					const atMax = Number.isFinite(fm) ? zeroPhase('wien', { wt: TWO_PI * gbw, rc: 1 / (TWO_PI * fm), gain: run }, { omega0: TWO_PI * fm }) : null;
+					const wrong = [!rel(d.fUncompensated, zp.omega / TWO_PI, 1e-12) && 'textbook frequency', atMax && !near(atMax.omega / TWO_PI / fm - 1, -0.1, 1e-6) && '10 % point'].filter(Boolean);
+					if (wrong.length) offRun.push(`${stabilizer} ${frequency} Hz ${gbw / 1e6} MHz: ${wrong.join(', ')}`);
+				}
+			}
+		}
+		check('textbook figures: where the textbook R C lands and the 10 % point are worked out at the gain the loop runs at, the textbook gain for a lamp or an AGC, 1.05 times it for diodes', offRun.length === 0 && designs > 30, offRun.length ? offRun.slice(0, 2).join(' | ') : `${designs} designs`);
+		const lamp200 = designOscillator({ topology: 'wien', stabilizer: 'lamp', frequency: 200000 });
+		check('textbook figures: the 200 kHz lamp lands its textbook R C 20.9 % low, at the balance gain it runs at (21.7 % at 1.05 times it)', near(lamp200.uncompensatedError, -0.209, 0.0006) && lamp200.opamp.opampOk === false, `${(100 * lamp200.uncompensatedError).toFixed(2)} %`);
+		// the excess changes nothing for a lamp or an AGC, the growth nothing outside the quadrature loop
+		const still = [];
+		for (const [topology, stabilizer] of [['wien', 'lamp'], ['wien', 'jfet']]) {
+			for (const frequency of [1000, 55000, 200000]) {
+				const a = { topology, stabilizer, frequency, amplitude: stabilizer === 'jfet' ? 5 : 3 };
+				if (JSON.stringify(designOscillator({ ...a, excessGain: 0.01 })) !== JSON.stringify(designOscillator({ ...a, excessGain: 0.3 }))) still.push(`${stabilizer} ${frequency} Hz, excess`);
+			}
+		}
+		for (const [topology, stabilizer] of [['wien', 'diodes'], ['wien', 'lamp'], ['phaseShift', 'diodes'], ['bubba', 'diodes']]) {
+			const a = { topology, stabilizer, frequency: 20000, amplitude: 3 };
+			if (JSON.stringify(designOscillator({ ...a, quadGrowth: 0.02 })) !== JSON.stringify(designOscillator({ ...a, quadGrowth: 0.4 }))) still.push(`${topology}/${stabilizer}, growth`);
+		}
+		check('start inputs: the excess changes nothing in a lamp or an AGC design, the growth nothing outside the quadrature loop', still.length === 0, still.join('; '));
+		const which = [['quadrature', 'diodes', 'growth'], ['wien', 'diodes', 'excess'], ['phaseShift', 'diodes', 'excess'], ['bufferedPhaseShift', 'lamp', 'excess'], ['bubba', 'diodes', 'excess'], ['wien', 'lamp', null], ['wien', 'jfet', null]];
+		const shown = which.filter(([t, s, want]) => startSetting(t, s) !== want);
+		check('start inputs: the page shows the growth for the quadrature loop, the excess for a diode limiter, neither for a lamp or an AGC', shown.length === 0, shown.map(([t, s]) => `${t}/${s}`).join(', '));
+	}
+
+	// c. panel 04's paragraph and the basics flag, each case
+	const pctPage = (x, d = 1) => `${x >= 0 ? '+' : ''}${(100 * x).toFixed(d)} %`;
+	const flagOf = (d) => oscillatorBasics(d).find((b) => b.p && /section 04 says what to change/.test(b.p))?.p ?? '';
+	const cases = [
+		['every test passes', designOscillator({ topology: 'wien' }), 'ok', (v) => /^This op-amp holds the loop: the retune absorbs its lag/.test(v.text)],
+		['the JFET cannot regulate', designOscillator({ topology: 'wien', stabilizer: 'jfet', amplitude: 3 }), 'note', (v) => /^The op-amp is not what stops this design/.test(v.text)],
+		['the loop does not start', designOscillator({ topology: 'phaseShift', frequency: 30000, amplitude: 1, gbw: 1e6 }), 'bad', (v) => /^With this op-amp the loop does not start/.test(v.text)]
+	];
+	for (const [label, d, level, ok] of cases) {
+		const v = opampVerdict(d);
+		check(`panel 04: ${label}: its paragraph as before`, v.level === level && ok(v), `${v.level}: ${v.text.slice(0, 60)}...`);
+	}
+	const lagOnly = designOscillator({ topology: 'phaseShift', frequency: 20000, gbw: 1e6 });
+	const shiftOnly = designOscillator({ topology: 'wien', frequency: 200000 });
+	const both = designOscillator({ topology: 'wien', stabilizer: 'lamp', frequency: 150000, gbw: 1e6 });
+	const lagText = (d) => `${d.opamp.lagDeg.toFixed(1)} degrees`;
+	const shiftText = (d) => `${formatHz(d.fUncompensated)}, ${pctPage(d.uncompensatedError)}`;
+	{
+		const v = opampVerdict(lagOnly);
+		const right = lagOnly.opamp.lagDeg > 25 && lagOnly.uncompensatedError > -0.2 && v.level === 'warn' && v.text.startsWith(`The amplifier lags ${lagText(lagOnly)} at this frequency, further than`) && v.text.includes('(about 25 degrees)') && !v.text.includes('% low');
+		check('panel 04: the lag alone fails: it says the lag, as the panel head prints it, is past 25 degrees', right, v.text.slice(0, 120));
+		check('basics: the lag alone fails: the flag says the lag', /Here the lag is more than the correction can be trusted with/.test(flagOf(lagOnly)), flagOf(lagOnly).slice(-140));
+	}
+	{
+		const v = opampVerdict(shiftOnly);
+		const right = shiftOnly.opamp.lagDeg <= 25 && shiftOnly.uncompensatedError <= -0.2 && v.level === 'warn' && v.text.includes(shiftText(shiftOnly)) && v.text.includes('(about 20 % low)') && v.text.includes(`only ${lagText(shiftOnly)}`) && !/lags [\d.]+ degrees at this frequency, further/.test(v.text);
+		check('panel 04: the 20 % test alone fails: it says where the textbook values land, as the table prints it, and that the lag is within bounds', right, v.text.slice(0, 160));
+		check('basics: the 20 % test alone fails: the flag says the shift, not the lag', /Here that shift is more than the correction can be trusted with, past 20 percent, though the lag itself stays under 25 degrees/.test(flagOf(shiftOnly)), flagOf(shiftOnly).slice(-160));
+	}
+	{
+		const v = opampVerdict(both);
+		const right = both.opamp.lagDeg > 25 && both.uncompensatedError <= -0.2 && v.level === 'warn' && v.text.startsWith(`The amplifier lags ${lagText(both)} at this frequency, and with it the textbook R C values would put the loop at ${shiftText(both)}, both further than`) && v.text.includes('(about 25 degrees, and 20 % low)');
+		check('panel 04: both tests fail: it names both, with their figures', right, v.text.slice(0, 200));
+		check('basics: both tests fail: the flag names both', /Here the lag, and the shift it makes with textbook values, are more than/.test(flagOf(both)), flagOf(both).slice(-150));
+	}
+	{
+		// no balance at all for the textbook values (none of the sweeps above has one): the same design with that figure gone
+		const none = { ...shiftOnly, fUncompensated: NaN, uncompensatedError: NaN, opamp: { ...shiftOnly.opamp, opampOk: false } };
+		const v = opampVerdict(none);
+		check('panel 04: the textbook values find no balance: it says so, and that the lag is within bounds', v.level === 'warn' && v.text.includes('the textbook R C values would find no balance at all') && v.text.includes(`only ${lagText(none)}`), v.text.slice(0, 140));
+		check('basics: the textbook values find no balance: the flag says so', /Here the textbook values find no balance at all with this op-amp/.test(flagOf(none)), flagOf(none).slice(-140));
+	}
+	{
+		// what to change: a faster part, and section 05's table for another topology, since the one
+		// asking for the least gain is not always the one that holds (it offered the Wien bridge to
+		// Wien designs, and to the quadrature loop at 200 kHz on 1 MHz, where no Wien design exists)
+		const quadrature = designOscillator({ topology: 'quadrature', frequency: 200000, gbw: 1e6 });
+		const advised = [['the lag alone', lagOnly], ['the 20 % test alone', shiftOnly], ['both tests', both], ['the loop does not start', cases[2][1]], ['the quadrature loop', quadrature]];
+		const wrong = advised.filter(([, d]) => {
+			const v = d ? opampVerdict(d) : null;
+			return !v || !/^(warn|bad)$/.test(v.level) || !v.text.endsWith('section 05 shows how each topology fares with this op-amp.') || /Wien bridge asks|asks for less gain/.test(v.text);
+		});
+		check('panel 04: what to change: a faster part, and section 05 for another topology, never the Wien bridge by name', wrong.length === 0, wrong.map(([label]) => label).join(', '));
+	}
 }
 
 console.log(fails === 0 ? 'oscillator checks clean' : `${fails} failure(s)`);

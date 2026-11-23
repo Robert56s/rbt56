@@ -28,12 +28,13 @@ const BARKHAUSEN = "An amplifier fed back to its input through a network oscilla
 /** The guards on the settings the file's code is written for: the topology and control, and the page's inputs above 0. */
 function guard(ctx) {
 	const words = `${TOPOLOGY_WORDS[ctx.topology].name} with ${CONTROL_WORDS[ctx.control].title}`;
-	const start = ctx.control === 'clamp' ? 'growth' : 'excess';
+	// (the input that sets the start: a lamp or an AGC starts on its own)
+	const start = { clamp: 'growth', diodes: 'excess' }[ctx.control];
 	return [
 		`if topology != ${pyStr(ctx.topology)} or stabilizer != ${pyStr(ctx.design.stabilizer)}:`,
 		pyRaise(`This file holds the ${words} only.`, '    '),
-		`if not min(frequency, amplitude, ${start}, gbw, slew_rate, swing) > 0:  # (the page's guard)`,
-		pyRaise(`The frequency, amplitude, ${start} and op-amp figures must all be above 0.`, '    ')
+		`if not min(frequency, amplitude, ${start ? `${start}, ` : ''}gbw, slew_rate, swing) > 0:  # (the page's guard)`,
+		pyRaise(start ? `The frequency, amplitude, ${start} and op-amp figures must all be above 0.` : 'The frequency, amplitude and op-amp figures must all be above 0.', '    ')
 	].join('\n');
 }
 
@@ -243,30 +244,40 @@ function searchFns(ctx) {
 				'return None'
 			]
 		),
-		pyDef(
-			`retuned(${cap.first})`,
-			'R C on target at the start gain: R C times w / w_target to within 1e-8, then the start gain found again at the new balance; three rounds, as on the page.',
-			[
-				'w_target = 2 * math.pi * frequency',
-				'start = gain_textbook * (1 + excess)',
-				'for _ in range(3):',
-				'    rc = k / w_target',
-				'    for _ in range(16):',
-				`        found = zero_phase(rc, start, k / rc${cap.call})`,
-				'        if found is None:',
-				'            break',
-				'        ratio = found[0] / w_target',
-				'        rc *= ratio',
-				'        if abs(ratio - 1) < 1e-8:',
-				'            break',
-				`    g = balance(rc${cap.call}) if found else None`,
-				'    if g is None:',
-				bodyRaise('No balance on this op-amp: a faster one or a lower frequency.', '        '),
-				'    start = g * (1 + excess)',
-				'return rc'
-			]
-		)
+		retunedFn(ctx, cap)
 	];
+}
+
+/**
+ * retuned(), R C on target at the gain the loop runs at: a diode limiter's
+ * start gain, the balance gain times 1 + excess; a lamp's or an AGC's
+ * balance gain, where they hold the loop.
+ */
+function retunedFn(ctx, cap) {
+	const held = ctx.control === 'lamp' || ctx.control === 'jfet';
+	const doc = held
+		? `R C on target at the balance gain, where the ${ctx.control === 'lamp' ? 'lamp' : 'AGC'} holds the loop: R C times w / w_target to within 1e-8, then the balance gain found again there; three rounds, as on the page.`
+		: 'R C on target at the start gain: R C times w / w_target to within 1e-8, then the start gain found again at the new balance; three rounds, as on the page.';
+	const runs = held ? '' : ' * (1 + excess)';
+	return pyDef(`retuned(${cap.first})`, doc, [
+		'w_target = 2 * math.pi * frequency',
+		`gain = gain_textbook${runs}  # the gain it runs at`,
+		'for _ in range(3):',
+		'    rc = k / w_target',
+		'    for _ in range(16):',
+		`        found = zero_phase(rc, gain, k / rc${cap.call})`,
+		'        if found is None:',
+		'            break',
+		'        ratio = found[0] / w_target',
+		'        rc *= ratio',
+		'        if abs(ratio - 1) < 1e-8:',
+		'            break',
+		`    g = balance(rc${cap.call}) if found else None`,
+		'    if g is None:',
+		bodyRaise('No balance on this op-amp: a faster one or a lower frequency.', '        '),
+		`    gain = g${runs}`,
+		'return rc'
+	]);
 }
 
 /** The quadrature loop's det_m(), pole() and retuned(). */
@@ -321,9 +332,9 @@ export function opampSection(file, ctx) {
 	const lead = 'A real op-amp is a single pole, A(s) = wt / s with wt = 2 pi gbw, so';
 	const tail = 'It runs where L(j w) is real and positive (zero_phase) and holds where L = 1 (balance); R C is retuned until it runs at the frequency asked (retuned).';
 	const later = {
-		diodes: " The diodes' capacitance joins Zf in section 5.",
-		lamp: ' R C is retuned at the balance gain times 1 + excess, as the page does, but the lamp holds the loop at balance itself, a little off that frequency.',
-		jfet: ' R C is retuned at the balance gain times 1 + excess, as the page does, but the AGC holds the loop at balance itself, a little off that frequency.'
+		diodes: " The diodes are off most of a cycle, so the loop runs at the start gain, and R C is retuned there; their capacitance joins Zf in section 5.",
+		lamp: ' The lamp holds the loop at the balance gain, so R C is retuned there.',
+		jfet: ' The AGC holds the loop at the balance gain, so R C is retuned there.'
 	}[ctx.control];
 	const trust = 'The page trusts this model while the textbook R C lands within 20 % (textbook_ok).';
 	let intro;
@@ -366,7 +377,8 @@ export function opampSection(file, ctx) {
 		file.add(
 			[
 				'rc_textbook = k / (2 * math.pi * frequency)  # s',
-				'found = zero_phase(rc_textbook, gain_textbook * (1 + excess), k / rc_textbook)',
+				// (at the textbook gain the loop runs at: times 1 + excess for a diode string, itself for a lamp or an AGC)
+				ctx.control === 'diodes' ? 'found = zero_phase(rc_textbook, gain_textbook * (1 + excess), k / rc_textbook)' : 'found = zero_phase(rc_textbook, gain_textbook, k / rc_textbook)  # at balance, as it runs',
 				'f_textbook = found[0] / (2 * math.pi) if found else None  # Hz, the textbook R C here',
 				textbook,
 				'rc_target = retuned()  # s'
@@ -381,18 +393,6 @@ export function opampSection(file, ctx) {
 		'if not textbook_ok:',
 		'    print("  more than 20 % low: the page does not trust its single-pole model this far")'
 	];
-	if (ctx.control === 'lamp' || ctx.control === 'jfet') {
-		const who = ctx.control === 'lamp' ? 'the lamp' : 'the AGC';
-		prints.push(
-			'print(f"  retuned by {100 * (rc_target / rc_textbook - 1):+.3f} % to {eng(rc_target, \'s\')}, it "',
-			'      f"runs at {eng(frequency, \'Hz\')} at {1 + excess:g} times the balance gain")',
-			'g_balance = balance(rc_target)',
-			'held_at = zero_phase(rc_target, g_balance, 2 * math.pi * frequency) if g_balance else None',
-			'if held_at:',
-			`    print(f"  held at balance, as ${who} holds it, at {eng(held_at[0] / (2 * math.pi), 'Hz')}")`
-		);
-	} else {
-		prints.push('print(f"  retuned by {100 * (rc_target / rc_textbook - 1):+.3f} % to {eng(rc_target, \'s\')}")');
-	}
+	prints.push('print(f"  retuned by {100 * (rc_target / rc_textbook - 1):+.3f} % to {eng(rc_target, \'s\')}")');
 	file.follow(prints.join('\n'));
 }

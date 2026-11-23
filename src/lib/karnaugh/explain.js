@@ -128,18 +128,63 @@ export function explainSolution({ n, names, form, result, gates }) {
 	}
 
 	// --- circuit
-	if (gates) {
-		const parts = [];
-		if (gates.inverters) parts.push(`${gates.inverters} inverter${gates.inverters > 1 ? 's' : ''} (one per variable that appears complemented, shared by every term that needs it)`);
-		if (gates.first) parts.push(`${gates.first} ${gates.firstType} gate${gates.first > 1 ? 's' : ''} (one per term with two or more literals; a single-literal term is just a wire)`);
-		if (gates.second) parts.push(`1 ${gates.secondType} gate combining the terms`);
-		blocks.push(
-			p(
-				`Reading the expression as a circuit: ${form === 'sop' ? 'each product term is an AND gate and the sum is an OR gate' : 'each sum term is an OR gate and the product is an AND gate'}, two levels of logic after the inverters. This one needs ${parts.length ? parts.join(', ') : 'no gate at all'}: ${gates.total} gate${gates.total === 1 ? '' : 's'} in total. The same two-level circuit can be built from NAND gates only (sum of products) or NOR gates only (product of sums) by adding a bubble at every gate output and every second-level input, which cancel in pairs.`
-			)
-		);
-	}
+	if (gates) blocks.push(p(circuitText(active.cover.map((imp) => literals(imp, n, names, { complement })), gates, form)));
 	return blocks;
+}
+
+/** "1 gate", "2 gates", "0 inverters": a count and its word. */
+const plural = (k, word) => `${k} ${word}${k === 1 ? '' : 's'}`;
+
+/**
+ * The circuit paragraph of the method, for every shape the form can take:
+ * two terms or more (a first-level gate for each term of two literals or
+ * more, into the second-level gate, a single-literal term wired straight to
+ * it), one term of several literals (its first-level gate is F, no second
+ * level), one single literal (F itself, or the output of its inverter).
+ * `terms` the form's terms as literals ({ name, negated }), `gates`
+ * gateCount's count of them.
+ */
+function circuitText(terms, gates, form) {
+	const [term, whole, level1, level2, only] = form === 'sop' ? ['product', 'sum', 'AND', 'OR', 'NAND'] : ['sum', 'product', 'OR', 'AND', 'NOR'];
+	const lead = 'Reading the expression as a circuit:';
+	if (terms.length === 1 && terms[0].length === 1) {
+		const l = terms[0][0];
+		return l.negated
+			? `${lead} F is the single literal ${l.name}', which needs no AND or OR gate, only the inverter that makes it from ${l.name}: 1 gate in total.`
+			: `${lead} F is the single literal ${l.name}, the input itself, which needs no gate at all: 0 gates in total.`;
+	}
+	const inverters = gates.inverters ? [`${plural(gates.inverters, 'inverter')} (one per variable that appears complemented, shared by every term that needs it)`] : [];
+	if (terms.length === 1) {
+		return `${lead} the single ${term} term is an ${level1} gate whose output is F; with one term there is no second level. This one needs ${[...inverters, `1 ${level1} gate`].join(', ')}: ${plural(gates.total, 'gate')} in total.`;
+	}
+	const singles = terms.some((t) => t.length === 1);
+	const parts = [...inverters, ...(gates.first ? [`${plural(gates.first, `${level1} gate`)} (one per term with two or more literals)`] : []), `1 ${level2} gate combining the terms`];
+	const needs = `This one needs ${parts.join(', ')}: ${plural(gates.total, 'gate')} in total.`;
+	const after = gates.inverters ? ' after the inverters' : '';
+	// (every term a single literal: no first level, the second-level gate alone is F)
+	if (!gates.first) {
+		return `${lead} every term is a single literal, a wire straight to the ${level2} gate that makes the ${whole}, whose output is F: one level of logic${after}. ${needs} The same circuit can be built from one ${only} gate fed with every literal complemented.`;
+	}
+	return `${lead} each ${term} term of two literals or more is an ${level1} gate and the ${whole} is an ${level2} gate, two levels of logic${after}${singles ? `; a single-literal term is a wire straight to the ${level2} gate` : ''}. ${needs} The same circuit can be built from ${only} gates only by adding a bubble at every first-level output and every second-level input, which cancel in pairs${singles ? '; a single-literal term, having no first-level gate, then goes to the second level complemented' : ''}.`;
+}
+
+/**
+ * The note under the circuit (panel 04), for every shape the form can take
+ * (as circuitText): `gates` gateCount's count, `terms` the form's terms as
+ * literals ({ name, negated }, [] for a constant), `constant` F's value when
+ * the form is a constant, else null.
+ */
+export function circuitNote({ gates, terms, constant }) {
+	if (constant !== null) return `A constant output needs no gate: tie F to ${constant === 1 ? 'the supply' : 'ground'}.`;
+	const dots = 'A dot is a connection; wires that merely cross are not connected.';
+	if (terms.length === 1 && terms[0].length === 1) {
+		const l = terms[0][0];
+		return `${l.negated ? `1 inverter and no other gate: F is ${l.name}', the inverter's output.` : `No gate: F is the input ${l.name} itself.`} ${dots}`;
+	}
+	const inverters = plural(gates.inverters, 'inverter');
+	if (terms.length === 1) return `${inverters}, 1 ${gates.firstType} gate, whose output is F. ${dots}`;
+	const singles = terms.some((t) => t.length === 1) ? ` Single-literal terms go straight to the ${gates.secondType} gate.` : '';
+	return `${inverters}, ${plural(gates.first, `${gates.firstType} gate`)}, 1 ${gates.secondType} gate. ${dots}${singles}`;
 }
 
 /** "0110 = A'BCD'" style reading of a minterm number. */

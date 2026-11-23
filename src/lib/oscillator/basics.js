@@ -26,8 +26,11 @@ const deg = (x) => (180 / Math.PI) * x;
 // the loop figure's slider starts between these two excesses
 const LOOP_LOW = 0.02;
 const LOOP_HIGH = 0.15;
-// past this lag of one stage the page stops trusting the retune
+// past this lag of one stage, or where the textbook values would land this
+// far low, the page stops trusting the retune (topologies.js LAG_TRUSTED,
+// SHIFT_TRUSTED)
 const LAG_LIMIT = 25;
+const SHIFT_LIMIT = 0.2;
 // the AM tool's carrier, quoted beside the lag figure
 const AM_CARRIER = 55000;
 // the stage of the plain phase-shift ladder runs at N = 1 + 29 or so
@@ -208,7 +211,14 @@ function howl(d) {
 				target
 					? `With the limiter on, every gain above 1 heads for the same ${formatVolts(target)}, so the limiter, not the gain, sets the final size.`
 					: 'With the limiter on, every gain above 1 heads for the same size, so the limiter, not the gain, sets the final size.',
-				quad ? 'That is why the Specification asks for a start-up growth instead of a loop set exactly at 1.' : 'That is why the Specification asks for an excess gain instead of exactly 1.'
+				// (a lamp or an AGC starts on its own: the Specification asks for neither there)
+				quad
+					? 'That is why the Specification asks for a start-up growth instead of a loop set exactly at 1.'
+					: L.kind === 'lamp'
+						? 'That is why the lamp starts cold, at a third of its hot resistance and a loop gain well above 1, and settles hot where the gain is exactly 1.'
+						: L.kind === 'jfet'
+							? "That is why the JFET starts with its channel wide open, a loop gain above 1, and the control closes it until the gain is exactly 1."
+							: 'That is why the Specification asks for an excess gain instead of exactly 1.'
 			)
 		)
 	];
@@ -635,8 +645,20 @@ function opampLate(d) {
 	const retune = num(d.retunePercent)
 		? `The tool solves the loop with the lag inside it and ${d.retunePercent < 0 ? 'lowers' : 'raises'} the product R C by ${pct(Math.abs(d.retunePercent), 2)} percent to cancel ${textbook ? 'that' : 'the lag'}.`
 		: `The tool solves the loop with the lag inside it and adjusts the product R C to cancel ${textbook ? 'that' : 'the lag'}.`;
-	// the retune is trusted while the lag stays modest, as the page rules it
-	const lagTooMuch = (lag !== null && lag > LAG_LIMIT) || (num(un) && un <= -0.2);
+	// the retune is trusted while the lag stays modest and the textbook values
+	// land near enough, the page's two tests
+	const lagFails = lag !== null && lag > LAG_LIMIT;
+	const shiftFails = !(num(un) && un > -SHIFT_LIMIT);
+	const lagTooMuch = lagFails || shiftFails;
+	// what failed, as section 04 says it
+	const untrusted =
+		lagFails && shiftFails
+			? 'Here the lag, and the shift it makes with textbook values, are more than the correction can be trusted with; section 04 says what to change.'
+			: lagFails
+				? 'Here the lag is more than the correction can be trusted with; section 04 says what to change.'
+				: num(un)
+					? `Here that shift is more than the correction can be trusted with, past ${pct(SHIFT_LIMIT, 0)} percent, though the lag itself stays under ${LAG_LIMIT} degrees; section 04 says what to change.`
+					: `Here the textbook values find no balance at all with this op-amp, more than the correction can be trusted with, though the lag itself stays under ${LAG_LIMIT} degrees; section 04 says what to change.`;
 	let landing = '';
 	if (pos(d.f0, d.frequency)) {
 		// the f0 of the equations above is that of R and C alone; say how
@@ -651,9 +673,9 @@ function opampLate(d) {
 	// a JFET that cannot regulate is not the op-amp's doing: section 7 covers it
 	const jfetFails = L.kind === 'jfet' && !(num(L.gainStart) && pos(L.amplitudeActual));
 	let flag = '';
-	if (jfetFails) flag = lagTooMuch ? 'Here the lag is more than the correction can be trusted with; section 04 says what to change.' : '';
+	if (jfetFails) flag = lagTooMuch ? untrusted : '';
 	else if (d.starts === false) flag = 'With this op-amp the loop does not start at this frequency; section 04 says what to change.';
-	else if (o.opampOk === false) flag = 'Here the lag is more than the correction can be trusted with; section 04 says what to change.';
+	else if (o.opampOk === false) flag = untrusted;
 	const second = say(textbook, retune, landing, `The figure draws the lag against frequency; past ${LAG_LIMIT} degrees the page stops trusting the correction.`, flag);
 
 	const symbolic = '\\varphi = \\arctan\\dfrac{f\\,N}{\\text{GBW}}';

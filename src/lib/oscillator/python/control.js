@@ -186,7 +186,7 @@ export function capacitanceSection(file, ctx) {
 		[
 			section(`${ctx.numbers.capacitance} The diodes' capacitance in the loop`),
 			comment(
-				"Their junction capacitance, 2 Cjo across Rf2, lags the loop a little more even while the diodes are off, so the design is made again with it in the loop, as on the page."
+				"Their junction capacitance, 2 Cjo across Rf2, lags the loop a little more even while the diodes are off, so the design is made again with it in the loop, as on the page, the string split as the first pair has it; the check (section 6) works each set out with its own split."
 			),
 			`first_parts = ${diodeParts(ctx)}`,
 			'diode_cap = (rg, rf2 / (rf1 + rf2), 2 * CJO)',

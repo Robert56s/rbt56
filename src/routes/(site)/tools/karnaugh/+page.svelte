@@ -4,7 +4,7 @@
 	import KarnaughMap from '$lib/components/KarnaughMap.svelte';
 	import MathPanel from '$lib/components/MathPanel.svelte';
 	import { buildTwoLevelDiagram, gateCount } from '$lib/karnaugh/circuit';
-	import { explainSolution } from '$lib/karnaugh/explain';
+	import { circuitNote, explainSolution } from '$lib/karnaugh/explain';
 	import { literals, posTex, posText, productText, sopTex, sopText, sumText } from '$lib/karnaugh/expression';
 	import { implicantPieces, layout } from '$lib/karnaugh/kmap';
 	import { literalCount, minimizeBoth } from '$lib/karnaugh/minimize';
@@ -237,17 +237,8 @@
 			<h2>Simplified circuit</h2>
 			<span class="hint">{gates.total} gate{gates.total === 1 ? '' : 's'}</span>
 		</div>
-		<DiagramView {diagram} label="two-level gate circuit" />
-		<p class="note">
-			{#if constant !== null}
-				A constant output needs no gate: tie F to {constant === 1 ? 'the supply' : 'ground'}.
-			{:else}
-				{gates.inverters} inverter{gates.inverters === 1 ? '' : 's'}, {gates.first} {gates.firstType}
-				gate{gates.first === 1 ? '' : 's'}{gates.second ? `, 1 ${gates.secondType} gate` : ''}. A dot is a
-				connection; wires that merely cross are not connected. Single-literal terms go straight to
-				the {gates.secondType} gate.
-			{/if}
-		</p>
+		<DiagramView {diagram} label="gate circuit" />
+		<p class="note">{circuitNote({ gates, terms, constant })}</p>
 	</section>
 
 	<section class="panel">

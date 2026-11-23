@@ -450,14 +450,19 @@
 				its node voltages, every conductance in units of 1/R so that p = sRC, with the op-amp as its
 				single-pole model, and opens it where the amplifier output feeds the network, the amplifier's
 				own feedback left intact. The limiter diodes' junction capacitance, 8 pF across R_f2, is in
-				it too; across a 50 k R_f2 that is 8 degrees at 55 kHz.
+				it too; across a 50 k R_f2 that is 8 degrees at 55 kHz. Since it depends on R_f2, a
+				diode-limited design is made twice, the second time with the first pair's split in the loop;
+				where the pair it then picks splits the string another way, the loop is solved once more with
+				that pair's own split, and the gain needed and the amplitude held that the page shows are
+				those of the parts it shows.
 			</p>
 			<Equation tex={`\\text{op-amp row: } \\dfrac{s}{\\omega_t}\\,v_{out} - v_+ + v_- = 0, \\qquad L(s) = \\dfrac{v_{out}}{v_{in}}\\Big|_{\\text{loop opened at the network input}}`} />
 			<Equation tex={`\\text{zero-phase frequency: } \\Im\\{L(j\\omega_z)\\} = 0, \\quad \\text{balance gain: } |L(j\\omega_z)| = 1, \\quad \\text{pole: } \\det M(s) = 0, \\ s = \\sigma + j\\omega, \\ \\text{growth per cycle} = e^{2\\pi\\sigma/\\omega} - 1`} />
 			<p class="note">
 				<strong>How to use:</strong> the zero-phase frequency at the start gain is where a
-				diode-limited loop runs (the diodes are off for most of every cycle); the balance gain is what
-				the parts are sized to; the pole's real part says whether it starts. This solve reproduces
+				diode-limited loop runs (the diodes are off for most of every cycle); a lamp or an AGC holds
+				the loop at the balance gain itself, so it runs at the zero-phase frequency of that gain; the
+				balance gain is what the parts are sized to; the pole's real part says whether it starts. This solve reproduces
 				LTspice's own AC analysis of the open loop to four figures on every topology, which is the
 				check script's job to keep true.
 			</p>
@@ -466,17 +471,20 @@
 		<div class="formula">
 			<h3>Retune, and where the model stops</h3>
 			<p class="note">
-				The R C product is scaled until the zero-phase frequency lands on the target (a fixed-point
-				iteration, since the frequency scales almost exactly as 1/RC), the parts are rounded, and the
-				loop is solved once more with them. The tool trusts the result while the amplifier's lag stays
-				under about 25 degrees; past that the single-pole picture drifts from what LTspice and a real
-				part do, and it says so.
+				The R C product is scaled until the zero-phase frequency, at the gain the loop runs at (the
+				start gain of a diode limiter, the balance gain of a lamp or an AGC), lands on the target (a
+				fixed-point iteration, since the frequency scales almost exactly as 1/RC), the parts are
+				rounded, and the loop is solved once more with them. The tool trusts the result while the
+				amplifier's lag stays under about 25 degrees and the textbook values, at the same gain, would
+				land no more than 20 percent low; past either, the single-pole picture drifts from what
+				LTspice and a real part do, and it says which.
 			</p>
-			<Equation tex={`RC \\leftarrow RC \\cdot \\dfrac{\\omega_z}{\\omega_{target}} \\ \\text{ until } \\omega_z = \\omega_{target}, \\qquad \\text{trusted while } \\phi \\le 25^\\circ`} />
+			<Equation tex={`RC \\leftarrow RC \\cdot \\dfrac{\\omega_z}{\\omega_{target}} \\ \\text{ until } \\omega_z = \\omega_{target}, \\qquad \\text{trusted while } \\phi \\le 25^\\circ \\text{ and } \\dfrac{f_{textbook}}{f_{target}} - 1 > -20\\,\\%`} />
 			<p class="note">
 				<strong>How to use:</strong> the "10 percent point" in the comparison is the frequency at
-				which the textbook values would land 10 percent low with this op-amp, a fair measure of how
-				hard the retune is working. Slew rate is the other ceiling, and the one that bites at large
+				which the textbook values would land 10 percent low with this op-amp, at the gain the loop
+				runs at, a fair measure of how hard the retune is working. A lamp or an AGC starts on its own
+				and runs at balance, so it takes no excess gain. Slew rate is the other ceiling, and the one that bites at large
 				amplitudes rather than small ones:
 			</p>
 			<Equation tex={`\\left.\\dfrac{dV}{dt}\\right|_{max} = 2\\pi f_0 V_{pk} \\ \\le \\ \\dfrac{SR}{2}, \\qquad V_{pk} \\le V_{swing}`} />

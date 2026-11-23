@@ -53,13 +53,20 @@
 // 6. The page: the "Download karnaugh-solver.py" button under the paragraph
 //    presenting the file, the file of the function on the map, no trace of
 //    the JavaScript script on the page or its method sheet, codegen.js gone.
+// 7. The gate texts (panel 04's note, the method's circuit paragraph, the
+//    method sheet, the .py's comment) hold for every shape of form: two
+//    terms or more, one term of several literals, one literal, the
+//    constants; pinned for each on 2, 3 and 4 variables, both forms, and
+//    checked against the drawing on every function of 2 and 3 variables.
 // Then the matrix covered. Exits non-zero on any failure.
 
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { gateCount } from '../src/lib/karnaugh/circuit.js';
+import katex from 'katex';
+import { buildTwoLevelDiagram, gateCount } from '../src/lib/karnaugh/circuit.js';
+import { circuitNote, explainSolution } from '../src/lib/karnaugh/explain.js';
 import { implicantPattern, literals, posText, productText, sopText, sumText } from '../src/lib/karnaugh/expression.js';
 import { cellMinterm, codeBits, implicantPieces, layout } from '../src/lib/karnaugh/kmap.js';
 import { covers, implicantMinterms, literalCount, minimize, minimizeBoth, popcount, primeImplicants } from '../src/lib/karnaugh/minimize.js';
@@ -821,6 +828,234 @@ const SWEEP = 500;
 	check('the page: a "Download karnaugh-solver.py" button under the paragraph presenting the file, saving the file of the function on the map; no trace of the JavaScript script on the page or its method sheet, codegen.js gone', problems.length === 0, problems.join('; '));
 }
 
+/** The shapes of a form the gate texts tell apart (part 7). */
+const GATE_SHAPES = ['two terms or more', 'two terms or more, some single literals', 'two terms or more, all single literals', 'one term of several literals', 'one literal', 'one literal, complemented', 'F = 0', 'F = 1'];
+
+/* ------------------------------------------------------ 7. the gate texts */
+// Panel 04's note (explain.js circuitNote), the method's circuit paragraph (the last paragraph of
+// explainSolution) and the method sheet's section 4 hold for every shape a form takes: two terms or more
+// (a first-level gate for each term of two literals or more, into the second-level gate, single-literal
+// terms wired straight to it; every term a single literal, the second-level gate alone), one term of
+// several literals (its first-level gate is F, no second level), one single literal (F is the input
+// itself, or the output of its inverter), and the constants (no gate).
+//   (a) the two texts pinned for each shape, on 2, 3 and 4 variables and both forms (on 2 variables no
+//       form mixes a single literal with a longer term)
+//   (b) every function of 2 and 3 variables (each cell 1, 0 or X) and random ones of 4, both forms: the
+//       drawing's gates (its symbols) are gateCount's, what the note and the paragraph say of the
+//       circuit is what the drawing holds, and the NAND-only (NOR-only) circuit the paragraph describes
+//       gives F on every cell
+//   (c) the method sheet's section 4: its sentences and its equation, and every equation of the sheet
+//       rendered by KaTeX
+//   (d) the page's note is circuitNote's, its diagram's label claims no number of levels, and the .py's
+//       section 6 comment says what the page says
+{
+	/** The page's state for a function and a form (+page.svelte): its terms, gates, drawing and the two texts. */
+	const gateState = (n, ones, dcs, form) => {
+		const names = NAMES.slice(0, n);
+		const result = minimizeBoth(n, ones, dcs);
+		const constant = form === 'sop' ? result.sop.constant : result.pos.constant === null ? null : 1 - result.pos.constant;
+		const terms = constant !== null ? [] : result[form].cover.map((imp) => literals(imp, n, names, { complement: form === 'pos' }));
+		const gates = gateCount(terms, names, form);
+		const diagram = buildTwoLevelDiagram({ names, terms, form, constant });
+		const blocks = explainSolution({ n, names, form, result, gates });
+		const symbols = (re) => (diagram.svg.match(re) ?? []).length;
+		const and = symbols(/data-symbol="and\d+"/g);
+		const or = symbols(/data-symbol="or\d+"/g);
+		const drawn = { inverters: symbols(/data-symbol="not"/g), first: form === 'sop' ? and : or, second: form === 'sop' ? or : and };
+		return { n, names, form, constant, terms, gates, drawn, note: circuitNote({ gates, terms, constant }), paragraph: blocks.filter((b) => b.type === 'p').pop().text };
+	};
+	/** The shape of a form, as the texts tell the shapes apart. */
+	const shapeOf = (s) => {
+		if (s.constant !== null) return `F = ${s.constant}`;
+		if (s.terms.length === 1) return s.terms[0].length > 1 ? 'one term of several literals' : s.terms[0][0].negated ? 'one literal, complemented' : 'one literal';
+		const singles = s.terms.filter((t) => t.length === 1).length;
+		return singles === 0 ? 'two terms or more' : singles === s.terms.length ? 'two terms or more, all single literals' : 'two terms or more, some single literals';
+	};
+
+	// (a) [variables, form, shape, ones, don't cares, the note under the circuit, the method's circuit paragraph]
+	const PINNED = [
+		[2, 'pos', "two terms or more", [1, 2], [], "2 inverters, 2 OR gates, 1 AND gate. A dot is a connection; wires that merely cross are not connected.", "Reading the expression as a circuit: each sum term of two literals or more is an OR gate and the product is an AND gate, two levels of logic after the inverters. This one needs 2 inverters (one per variable that appears complemented, shared by every term that needs it), 2 OR gates (one per term with two or more literals), 1 AND gate combining the terms: 5 gates in total. The same circuit can be built from NOR gates only by adding a bubble at every first-level output and every second-level input, which cancel in pairs."],
+		[2, 'pos', "two terms or more, all single literals", [3], [], "0 inverters, 0 OR gates, 1 AND gate. A dot is a connection; wires that merely cross are not connected. Single-literal terms go straight to the AND gate.", "Reading the expression as a circuit: every term is a single literal, a wire straight to the AND gate that makes the product, whose output is F: one level of logic. This one needs 1 AND gate combining the terms: 1 gate in total. The same circuit can be built from one NOR gate fed with every literal complemented."],
+		[2, 'pos', "one term of several literals", [1, 2, 3], [], "0 inverters, 1 OR gate, whose output is F. A dot is a connection; wires that merely cross are not connected.", "Reading the expression as a circuit: the single sum term is an OR gate whose output is F; with one term there is no second level. This one needs 1 OR gate: 1 gate in total."],
+		[2, 'pos', "one literal", [2, 3], [], "No gate: F is the input A itself. A dot is a connection; wires that merely cross are not connected.", "Reading the expression as a circuit: F is the single literal A, the input itself, which needs no gate at all: 0 gates in total."],
+		[2, 'pos', "one literal, complemented", [0, 1], [], "1 inverter and no other gate: F is A', the inverter's output. A dot is a connection; wires that merely cross are not connected.", "Reading the expression as a circuit: F is the single literal A', which needs no AND or OR gate, only the inverter that makes it from A: 1 gate in total."],
+		[2, 'pos', "F = 0", [], [], "A constant output needs no gate: tie F to ground.", "No cell of the map is a one, so there is nothing to group: the function is the constant 0 and needs no gate at all."],
+		[2, 'pos', "F = 1", [0, 1, 2, 3], [], "A constant output needs no gate: tie F to the supply.", "Every cell of the map is a one or a don't-care, so the whole map is a single group with no variable kept: the function is the constant 1 and needs no gate at all."],
+		[2, 'pos', "F = 1", [], [0, 1, 2, 3], "A constant output needs no gate: tie F to the supply.", "Every cell of the map is a one or a don't-care, so the whole map is a single group with no variable kept: the function is the constant 1 and needs no gate at all."],
+		[2, 'sop', "two terms or more", [1, 2], [], "2 inverters, 2 AND gates, 1 OR gate. A dot is a connection; wires that merely cross are not connected.", "Reading the expression as a circuit: each product term of two literals or more is an AND gate and the sum is an OR gate, two levels of logic after the inverters. This one needs 2 inverters (one per variable that appears complemented, shared by every term that needs it), 2 AND gates (one per term with two or more literals), 1 OR gate combining the terms: 5 gates in total. The same circuit can be built from NAND gates only by adding a bubble at every first-level output and every second-level input, which cancel in pairs."],
+		[2, 'sop', "two terms or more, all single literals", [1, 2, 3], [], "0 inverters, 0 AND gates, 1 OR gate. A dot is a connection; wires that merely cross are not connected. Single-literal terms go straight to the OR gate.", "Reading the expression as a circuit: every term is a single literal, a wire straight to the OR gate that makes the sum, whose output is F: one level of logic. This one needs 1 OR gate combining the terms: 1 gate in total. The same circuit can be built from one NAND gate fed with every literal complemented."],
+		[2, 'sop', "one term of several literals", [3], [], "0 inverters, 1 AND gate, whose output is F. A dot is a connection; wires that merely cross are not connected.", "Reading the expression as a circuit: the single product term is an AND gate whose output is F; with one term there is no second level. This one needs 1 AND gate: 1 gate in total."],
+		[2, 'sop', "one literal", [2, 3], [], "No gate: F is the input A itself. A dot is a connection; wires that merely cross are not connected.", "Reading the expression as a circuit: F is the single literal A, the input itself, which needs no gate at all: 0 gates in total."],
+		[2, 'sop', "one literal, complemented", [0, 1], [], "1 inverter and no other gate: F is A', the inverter's output. A dot is a connection; wires that merely cross are not connected.", "Reading the expression as a circuit: F is the single literal A', which needs no AND or OR gate, only the inverter that makes it from A: 1 gate in total."],
+		[2, 'sop', "F = 0", [], [], "A constant output needs no gate: tie F to ground.", "No cell of the map is a one, so there is nothing to group: the function is the constant 0 and needs no gate at all."],
+		[2, 'sop', "F = 1", [0, 1, 2, 3], [], "A constant output needs no gate: tie F to the supply.", "Every cell of the map is a one or a don't-care, so the whole map is a single group with no variable kept: the function is the constant 1 and needs no gate at all."],
+		[2, 'sop', "F = 0", [], [0, 1, 2, 3], "A constant output needs no gate: tie F to ground.", "No cell of the map is a one, so there is nothing to group: the function is the constant 0 and needs no gate at all."],
+		[3, 'pos', "two terms or more", [0, 1, 2, 5, 6, 7], [], "3 inverters, 2 OR gates, 1 AND gate. A dot is a connection; wires that merely cross are not connected.", "Reading the expression as a circuit: each sum term of two literals or more is an OR gate and the product is an AND gate, two levels of logic after the inverters. This one needs 3 inverters (one per variable that appears complemented, shared by every term that needs it), 2 OR gates (one per term with two or more literals), 1 AND gate combining the terms: 6 gates in total. The same circuit can be built from NOR gates only by adding a bubble at every first-level output and every second-level input, which cancel in pairs."],
+		[3, 'pos', "two terms or more, some single literals", [3, 5, 7], [], "0 inverters, 1 OR gate, 1 AND gate. A dot is a connection; wires that merely cross are not connected. Single-literal terms go straight to the AND gate.", "Reading the expression as a circuit: each sum term of two literals or more is an OR gate and the product is an AND gate, two levels of logic; a single-literal term is a wire straight to the AND gate. This one needs 1 OR gate (one per term with two or more literals), 1 AND gate combining the terms: 2 gates in total. The same circuit can be built from NOR gates only by adding a bubble at every first-level output and every second-level input, which cancel in pairs; a single-literal term, having no first-level gate, then goes to the second level complemented."],
+		[3, 'pos', "one term of several literals", [0, 1, 3, 4, 5, 6, 7], [], "1 inverter, 1 OR gate, whose output is F. A dot is a connection; wires that merely cross are not connected.", "Reading the expression as a circuit: the single sum term is an OR gate whose output is F; with one term there is no second level. This one needs 1 inverter (one per variable that appears complemented, shared by every term that needs it), 1 OR gate: 2 gates in total."],
+		[3, 'pos', "one literal", [1, 3, 5, 7], [], "No gate: F is the input C itself. A dot is a connection; wires that merely cross are not connected.", "Reading the expression as a circuit: F is the single literal C, the input itself, which needs no gate at all: 0 gates in total."],
+		[3, 'pos', "one literal, complemented", [0, 2, 4, 6], [], "1 inverter and no other gate: F is C', the inverter's output. A dot is a connection; wires that merely cross are not connected.", "Reading the expression as a circuit: F is the single literal C', which needs no AND or OR gate, only the inverter that makes it from C: 1 gate in total."],
+		[3, 'pos', "F = 0", [], [1, 2], "A constant output needs no gate: tie F to ground.", "No cell of the map is a one, so there is nothing to group: the function is the constant 0 and needs no gate at all."],
+		[3, 'pos', "F = 1", [0, 1, 2, 3], [4, 5, 6, 7], "A constant output needs no gate: tie F to the supply.", "Every cell of the map is a one or a don't-care, so the whole map is a single group with no variable kept: the function is the constant 1 and needs no gate at all."],
+		[3, 'pos', "two terms or more, all single literals", [6, 7], [], "0 inverters, 0 OR gates, 1 AND gate. A dot is a connection; wires that merely cross are not connected. Single-literal terms go straight to the AND gate.", "Reading the expression as a circuit: every term is a single literal, a wire straight to the AND gate that makes the product, whose output is F: one level of logic. This one needs 1 AND gate combining the terms: 1 gate in total. The same circuit can be built from one NOR gate fed with every literal complemented."],
+		[3, 'sop', "two terms or more", [0, 1, 2, 5, 6, 7], [], "3 inverters, 3 AND gates, 1 OR gate. A dot is a connection; wires that merely cross are not connected.", "Reading the expression as a circuit: each product term of two literals or more is an AND gate and the sum is an OR gate, two levels of logic after the inverters. This one needs 3 inverters (one per variable that appears complemented, shared by every term that needs it), 3 AND gates (one per term with two or more literals), 1 OR gate combining the terms: 7 gates in total. The same circuit can be built from NAND gates only by adding a bubble at every first-level output and every second-level input, which cancel in pairs."],
+		[3, 'sop', "two terms or more, some single literals", [1, 3, 5, 6, 7], [], "0 inverters, 1 AND gate, 1 OR gate. A dot is a connection; wires that merely cross are not connected. Single-literal terms go straight to the OR gate.", "Reading the expression as a circuit: each product term of two literals or more is an AND gate and the sum is an OR gate, two levels of logic; a single-literal term is a wire straight to the OR gate. This one needs 1 AND gate (one per term with two or more literals), 1 OR gate combining the terms: 2 gates in total. The same circuit can be built from NAND gates only by adding a bubble at every first-level output and every second-level input, which cancel in pairs; a single-literal term, having no first-level gate, then goes to the second level complemented."],
+		[3, 'sop', "one term of several literals", [5], [], "1 inverter, 1 AND gate, whose output is F. A dot is a connection; wires that merely cross are not connected.", "Reading the expression as a circuit: the single product term is an AND gate whose output is F; with one term there is no second level. This one needs 1 inverter (one per variable that appears complemented, shared by every term that needs it), 1 AND gate: 2 gates in total."],
+		[3, 'sop', "one literal", [1, 3, 5, 7], [], "No gate: F is the input C itself. A dot is a connection; wires that merely cross are not connected.", "Reading the expression as a circuit: F is the single literal C, the input itself, which needs no gate at all: 0 gates in total."],
+		[3, 'sop', "one literal, complemented", [0, 2, 4, 6], [], "1 inverter and no other gate: F is C', the inverter's output. A dot is a connection; wires that merely cross are not connected.", "Reading the expression as a circuit: F is the single literal C', which needs no AND or OR gate, only the inverter that makes it from C: 1 gate in total."],
+		[3, 'sop', "F = 0", [], [1, 2], "A constant output needs no gate: tie F to ground.", "No cell of the map is a one, so there is nothing to group: the function is the constant 0 and needs no gate at all."],
+		[3, 'sop', "F = 1", [0, 1, 2, 3], [4, 5, 6, 7], "A constant output needs no gate: tie F to the supply.", "Every cell of the map is a one or a don't-care, so the whole map is a single group with no variable kept: the function is the constant 1 and needs no gate at all."],
+		[3, 'sop', "two terms or more, all single literals", [2, 3, 4, 5, 6, 7], [], "0 inverters, 0 AND gates, 1 OR gate. A dot is a connection; wires that merely cross are not connected. Single-literal terms go straight to the OR gate.", "Reading the expression as a circuit: every term is a single literal, a wire straight to the OR gate that makes the sum, whose output is F: one level of logic. This one needs 1 OR gate combining the terms: 1 gate in total. The same circuit can be built from one NAND gate fed with every literal complemented."],
+		[4, 'pos', "two terms or more", [0, 2, 5, 7, 8, 10, 13, 15], [], "2 inverters, 2 OR gates, 1 AND gate. A dot is a connection; wires that merely cross are not connected.", "Reading the expression as a circuit: each sum term of two literals or more is an OR gate and the product is an AND gate, two levels of logic after the inverters. This one needs 2 inverters (one per variable that appears complemented, shared by every term that needs it), 2 OR gates (one per term with two or more literals), 1 AND gate combining the terms: 5 gates in total. The same circuit can be built from NOR gates only by adding a bubble at every first-level output and every second-level input, which cancel in pairs."],
+		[4, 'pos', "two terms or more, some single literals", [1, 3, 7, 11, 15], [0, 2, 5], "1 inverter, 1 OR gate, 1 AND gate. A dot is a connection; wires that merely cross are not connected. Single-literal terms go straight to the AND gate.", "Reading the expression as a circuit: each sum term of two literals or more is an OR gate and the product is an AND gate, two levels of logic after the inverters; a single-literal term is a wire straight to the AND gate. This one needs 1 inverter (one per variable that appears complemented, shared by every term that needs it), 1 OR gate (one per term with two or more literals), 1 AND gate combining the terms: 3 gates in total. The same circuit can be built from NOR gates only by adding a bubble at every first-level output and every second-level input, which cancel in pairs; a single-literal term, having no first-level gate, then goes to the second level complemented."],
+		[4, 'pos', "one term of several literals", [0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], [], "2 inverters, 1 OR gate, whose output is F. A dot is a connection; wires that merely cross are not connected.", "Reading the expression as a circuit: the single sum term is an OR gate whose output is F; with one term there is no second level. This one needs 2 inverters (one per variable that appears complemented, shared by every term that needs it), 1 OR gate: 3 gates in total."],
+		[4, 'pos', "one literal", [8, 9, 10, 11, 12, 13, 14, 15], [], "No gate: F is the input A itself. A dot is a connection; wires that merely cross are not connected.", "Reading the expression as a circuit: F is the single literal A, the input itself, which needs no gate at all: 0 gates in total."],
+		[4, 'pos', "one literal, complemented", [0, 1, 2, 3, 4, 5, 6, 7], [], "1 inverter and no other gate: F is A', the inverter's output. A dot is a connection; wires that merely cross are not connected.", "Reading the expression as a circuit: F is the single literal A', which needs no AND or OR gate, only the inverter that makes it from A: 1 gate in total."],
+		[4, 'pos', "F = 0", [], [], "A constant output needs no gate: tie F to ground.", "No cell of the map is a one, so there is nothing to group: the function is the constant 0 and needs no gate at all."],
+		[4, 'pos', "F = 1", [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], [], "A constant output needs no gate: tie F to the supply.", "Every cell of the map is a one or a don't-care, so the whole map is a single group with no variable kept: the function is the constant 1 and needs no gate at all."],
+		[4, 'pos', "two terms or more, all single literals", [12, 13, 14, 15], [], "0 inverters, 0 OR gates, 1 AND gate. A dot is a connection; wires that merely cross are not connected. Single-literal terms go straight to the AND gate.", "Reading the expression as a circuit: every term is a single literal, a wire straight to the AND gate that makes the product, whose output is F: one level of logic. This one needs 1 AND gate combining the terms: 1 gate in total. The same circuit can be built from one NOR gate fed with every literal complemented."],
+		[4, 'sop', "two terms or more", [0, 2, 5, 7, 8, 10, 13, 15], [], "2 inverters, 2 AND gates, 1 OR gate. A dot is a connection; wires that merely cross are not connected.", "Reading the expression as a circuit: each product term of two literals or more is an AND gate and the sum is an OR gate, two levels of logic after the inverters. This one needs 2 inverters (one per variable that appears complemented, shared by every term that needs it), 2 AND gates (one per term with two or more literals), 1 OR gate combining the terms: 5 gates in total. The same circuit can be built from NAND gates only by adding a bubble at every first-level output and every second-level input, which cancel in pairs."],
+		[4, 'sop', "two terms or more, some single literals", [0, 2, 3, 5, 6, 7, 8, 9], [10, 11, 12, 13, 14, 15], "2 inverters, 2 AND gates, 1 OR gate. A dot is a connection; wires that merely cross are not connected. Single-literal terms go straight to the OR gate.", "Reading the expression as a circuit: each product term of two literals or more is an AND gate and the sum is an OR gate, two levels of logic after the inverters; a single-literal term is a wire straight to the OR gate. This one needs 2 inverters (one per variable that appears complemented, shared by every term that needs it), 2 AND gates (one per term with two or more literals), 1 OR gate combining the terms: 5 gates in total. The same circuit can be built from NAND gates only by adding a bubble at every first-level output and every second-level input, which cancel in pairs; a single-literal term, having no first-level gate, then goes to the second level complemented."],
+		[4, 'sop', "one term of several literals", [5], [], "2 inverters, 1 AND gate, whose output is F. A dot is a connection; wires that merely cross are not connected.", "Reading the expression as a circuit: the single product term is an AND gate whose output is F; with one term there is no second level. This one needs 2 inverters (one per variable that appears complemented, shared by every term that needs it), 1 AND gate: 3 gates in total."],
+		[4, 'sop', "one literal", [8, 9, 10, 11, 12, 13, 14, 15], [], "No gate: F is the input A itself. A dot is a connection; wires that merely cross are not connected.", "Reading the expression as a circuit: F is the single literal A, the input itself, which needs no gate at all: 0 gates in total."],
+		[4, 'sop', "one literal, complemented", [0, 1, 2, 3, 4, 5, 6, 7], [], "1 inverter and no other gate: F is A', the inverter's output. A dot is a connection; wires that merely cross are not connected.", "Reading the expression as a circuit: F is the single literal A', which needs no AND or OR gate, only the inverter that makes it from A: 1 gate in total."],
+		[4, 'sop', "F = 0", [], [], "A constant output needs no gate: tie F to ground.", "No cell of the map is a one, so there is nothing to group: the function is the constant 0 and needs no gate at all."],
+		[4, 'sop', "F = 1", [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], [], "A constant output needs no gate: tie F to the supply.", "Every cell of the map is a one or a don't-care, so the whole map is a single group with no variable kept: the function is the constant 1 and needs no gate at all."],
+		[4, 'sop', "two terms or more, all single literals", [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], [], "0 inverters, 0 AND gates, 1 OR gate. A dot is a connection; wires that merely cross are not connected. Single-literal terms go straight to the OR gate.", "Reading the expression as a circuit: every term is a single literal, a wire straight to the OR gate that makes the sum, whose output is F: one level of logic. This one needs 1 OR gate combining the terms: 1 gate in total. The same circuit can be built from one NAND gate fed with every literal complemented."],
+	];
+	for (const [n, form, shape, ones, dcs, note, paragraph] of PINNED) {
+		const s = gateState(n, ones, dcs, form);
+		const what = `gate texts, ${n} variables, ${form === 'sop' ? 'sum of products' : 'product of sums'}, ${shape} (ones ${ones.join(' ') || 'none'}${dcs.length ? `, don't cares ${dcs.join(' ')}` : ''})`;
+		check(`${what}: the shape`, shapeOf(s) === shape, shapeOf(s));
+		check(`${what}: the note under the circuit`, s.note === note, s.note);
+		check(`${what}: the method's circuit paragraph`, s.paragraph === paragraph, s.paragraph);
+		cover('gate texts', `${n} variables, ${form}: ${shape}`);
+	}
+
+	// (b) the sweep: what the texts say against the drawing
+	const states = [];
+	for (const n of [2, 3]) {
+		for (let code = 0; code < 3 ** (1 << n); code++) {
+			const ones = [];
+			const dcs = [];
+			for (let m = 0, c = code; m < 1 << n; m++, c = Math.floor(c / 3)) {
+				if (c % 3 === 1) ones.push(m);
+				else if (c % 3 === 2) dcs.push(m);
+			}
+			for (const form of ['sop', 'pos']) states.push(gateState(n, ones, dcs, form));
+		}
+	}
+	for (let k = 0; k < 3000; k++) {
+		const ones = [];
+		const dcs = [];
+		const pDc = rnd() < 0.4 ? 0 : rnd() * 0.4;
+		const pOne = rnd();
+		for (let m = 0; m < 16; m++) {
+			const x = rnd();
+			if (x < pDc) dcs.push(m);
+			else if (x < pDc + (1 - pDc) * pOne) ones.push(m);
+		}
+		for (const form of ['sop', 'pos']) states.push(gateState(4, ones, dcs, form));
+	}
+	// (and the single literals of 4 variables, which random functions hardly ever give: each variable, plain
+	// and complemented)
+	for (let i = 0; i < 4; i++) {
+		for (const bit of [0, 1]) {
+			const ones = Array.from({ length: 16 }, (_, m) => m).filter((m) => ((m >> (3 - i)) & 1) === bit);
+			for (const form of ['sop', 'pos']) states.push(gateState(4, ones, [], form));
+		}
+	}
+	/** Where a state's texts say other than its drawing, [] when they agree. */
+	const claimsProblems = (s) => {
+		const out = [];
+		const { drawn, gates, terms } = s;
+		const [type1, type2, only] = s.form === 'sop' ? ['AND', 'OR', 'NAND'] : ['OR', 'AND', 'NOR'];
+		const total = drawn.inverters + drawn.first + drawn.second;
+		if (drawn.inverters !== gates.inverters || drawn.first !== gates.first || drawn.second !== gates.second) out.push(`drawn ${JSON.stringify(drawn)} against gateCount's ${JSON.stringify(gates)}`);
+		const singles = terms.some((t) => t.length === 1);
+		const plural = (k, word) => `${k} ${word}${k === 1 ? '' : 's'}`;
+		const note = s.note;
+		const dots = 'A dot is a connection; wires that merely cross are not connected.';
+		let said;
+		if (s.constant !== null) said = total === 0 && note === `A constant output needs no gate: tie F to ${s.constant === 1 ? 'the supply' : 'ground'}.`;
+		else if (/^No gate: /.test(note)) said = total === 0 && terms.length === 1 && note === `No gate: F is the input ${terms[0][0].name} itself. ${dots}` && !terms[0][0].negated;
+		else if (/^1 inverter and no other gate: /.test(note)) said = drawn.inverters === 1 && drawn.first + drawn.second === 0 && note === `1 inverter and no other gate: F is ${terms[0][0].name}', the inverter's output. ${dots}`;
+		else if (/, whose output is F\. /.test(note)) said = drawn.first === 1 && drawn.second === 0 && note === `${plural(drawn.inverters, 'inverter')}, 1 ${type1} gate, whose output is F. ${dots}`;
+		else said = drawn.second === 1 && note === `${plural(drawn.inverters, 'inverter')}, ${plural(drawn.first, `${type1} gate`)}, 1 ${type2} gate. ${dots}${singles ? ` Single-literal terms go straight to the ${type2} gate.` : ''}`;
+		if (!said) out.push(`the note "${note}" for the drawing ${JSON.stringify(drawn)}`);
+		const p = s.paragraph;
+		const claims = [
+			[`${plural(total, 'gate')} in total|needs no gate at all`, s.constant !== null ? /needs no gate at all/.test(p) : new RegExp(`: ${plural(total, 'gate')} in total\\.`).test(p)],
+			['two levels of logic', /two levels of logic/.test(p) === (drawn.first > 0 && drawn.second === 1)],
+			['one level of logic', /one level of logic/.test(p) === (drawn.first === 0 && drawn.second === 1)],
+			['no second level', /with one term there is no second level/.test(p) === (drawn.first === 1 && drawn.second === 0)],
+			['only the inverter', /only the inverter that makes it/.test(p) === (s.constant === null && drawn.inverters === 1 && drawn.first + drawn.second === 0)],
+			['single-literal terms wired to the second level', /a single-literal term is a wire straight to/.test(p) === (drawn.first > 0 && drawn.second === 1 && singles)],
+			['inverters named only where drawn', /after the inverters/.test(p) === (drawn.second === 1 && drawn.inverters > 0)],
+			[`${only} only where there is a second level`, new RegExp(`${only} gate`).test(p) === (drawn.second === 1) && !/NAND|NOR/.test(p.replace(new RegExp(only, 'g'), ''))]
+		];
+		for (const [what, ok] of claims) if (!ok) out.push(`${what}: "${p}" for the drawing ${JSON.stringify(drawn)}`);
+		// the NAND-only (NOR-only) circuit the paragraph describes: each term of two literals or more through
+		// a NAND (NOR), each single-literal term complemented, all into one NAND (NOR); F on every cell
+		if (drawn.second === 1) {
+			const n = s.n;
+			const lit = (l, m) => (((m >> (n - 1 - l.index)) & 1) === 1) !== l.negated;
+			const value = (m) => (s.form === 'sop' ? terms.some((t) => t.every((l) => lit(l, m))) : terms.every((t) => t.some((l) => lit(l, m))));
+			const gate = s.form === 'sop' ? (xs) => !xs.every(Boolean) : (xs) => !xs.some(Boolean);
+			const built = (m) => gate(terms.map((t) => (t.length === 1 ? !lit(t[0], m) : gate(t.map((l) => lit(l, m))))));
+			const off = [];
+			for (let m = 0; m < 1 << n; m++) if (built(m) !== value(m)) off.push(m);
+			if (off.length) out.push(`the ${only}-only circuit differs from F on ${off.join(', ')}`);
+		}
+		return out;
+	};
+	let wrong = [];
+	for (const s of states) {
+		const problems = claimsProblems(s);
+		if (problems.length) wrong.push(`${s.n} variables, ${s.form}, ${JSON.stringify(s.terms.map((t) => t.map((l) => l.name + (l.negated ? "'" : ''))))}: ${problems[0]}`);
+		cover('gate shapes swept', `${s.n} variables, ${s.form}: ${shapeOf(s)}`);
+	}
+	check(`gate texts: ${states.length} forms (every function of 2 and 3 variables, 3000 of 4 and its 8 single literals, both forms): the drawing's gates are gateCount's, the note and the paragraph say what the drawing holds, the ${'NAND'}-only (NOR-only) circuit they describe is F`, wrong.length === 0, `${wrong.length}: ${wrong[0]}`);
+
+	// (c) the method sheet's section 4, and every equation of the sheet through KaTeX
+	const sheet = readFileSync(new URL('../src/routes/(site)/tools/karnaugh/method/+page.svelte', import.meta.url), 'utf8');
+	const section4 = sheet.slice(sheet.indexOf('<h2>From expression to gates</h2>')).replace(/\s+/g, ' ');
+	const SENTENCES = [
+		'Sum of products: one AND gate per product term of two literals or more, one OR gate for the sum when there are two terms or more, and one inverter per variable that appears complemented, shared by every term that uses it.',
+		'A single-literal term needs no AND gate: it is a wire straight to the OR gate.',
+		'With one term there is no OR gate: its AND gate is F, or F is the literal itself.',
+		'A constant needs no gate at all.',
+		'Product of sums is the same with AND and OR swapped.',
+		'With two terms or more, putting a bubble on every first-level output and every second-level input changes nothing (they cancel in pairs) and turns AND-OR into NAND-NAND, OR-AND into NOR-NOR; a single-literal term, having no first-level gate, then goes to the second level complemented.'
+	];
+	const missing = SENTENCES.filter((t) => !section4.includes(t));
+	const equation = '\\\\text{gates} = \\\\text{inverters} + \\\\text{first level} + \\\\begin{cases} 1 & \\\\text{two terms or more} \\\\\\\\ 0 & \\\\text{otherwise} \\\\end{cases}';
+	if (!section4.includes(`<Equation tex={\`${equation}\`} />`)) missing.push('the equation with its two cases');
+	if (/first level\} \+ 1`/.test(sheet) || /one OR gate for the sum,/.test(section4)) missing.push('an old sentence still there');
+	check("gate texts: the method sheet's section 4 counts the second-level gate only for two terms or more, says what one term and one literal make, and turns only two terms or more into NAND-NAND", missing.length === 0, missing.join('; '));
+	const unrendered = [];
+	for (const m of sheet.matchAll(/tex=\{`([^`]*)`\}/g)) {
+		const tex = m[1].replace(/\\\\/g, '\\');
+		try {
+			katex.renderToString(tex, { displayMode: true, throwOnError: true });
+		} catch (e) {
+			unrendered.push(`${tex}: ${e.message}`);
+		}
+	}
+	check(`gate texts: every equation of the method sheet renders with KaTeX`, unrendered.length === 0, unrendered[0]);
+
+	// (d) the page's note and label, the .py's comment
+	const markup = PAGE.slice(PAGE.lastIndexOf('</script>'));
+	const pageProblems = [];
+	if (!markup.includes('<p class="note">{circuitNote({ gates, terms, constant })}</p>')) pageProblems.push("the note is not circuitNote's");
+	if (/Single-literal terms go straight|straight to\s+the \{gates\.secondType\}/.test(markup)) pageProblems.push('the old note is still in the markup');
+	if (!markup.includes('<DiagramView {diagram} label="gate circuit" />')) pageProblems.push('the diagram label');
+	check("gate texts: panel 04's note is circuitNote's, the diagram's label claims no number of levels", pageProblems.length === 0, pageProblems.join('; '));
+	const py = generateKarnaughPython({ names: NAMES, ones: [], dcs: [], result: minimizeBoth(4, [], []) });
+	const comment6 = py.slice(py.indexOf('print("6 The two-level circuits")'), py.indexOf('print(" " * 19')).replace(/\n# /g, ' ');
+	check("gate texts: the .py's section 6 comment says what the page says (one literal a wire to the second level; one term, no second level)", comment6.includes('a term of one literal needs no first-level gate and is a wire straight to the second level. With one term there is no second level: its gate is F, or F is the literal itself. A constant needs no gate'), comment6);
+}
+
 /* ------------------------------------------------------- the matrix covered */
 {
 	const want = {
@@ -831,7 +1066,10 @@ const SWEEP = 500;
 		primes: ["a prime that holds don't cares only", 'no essential prime'],
 		label: ['the page on opening', 'every example of the page', "the page's text order of options"],
 		guards: ['names', 'a cell off the map', "names the page's forms no longer use", "names renamed with the page's forms"],
-		outcome: ['same', 'wrong', 'not minimal', 'as cheap']
+		outcome: ['same', 'wrong', 'not minimal', 'as cheap'],
+		// (on 2 variables no form mixes a single literal with a longer term)
+		'gate texts': [2, 3, 4].flatMap((n) => ['sop', 'pos'].flatMap((form) => GATE_SHAPES.filter((x) => n > 2 || x !== 'two terms or more, some single literals').map((x) => `${n} variables, ${form}: ${x}`))),
+		'gate shapes swept': [2, 3, 4].flatMap((n) => ['sop', 'pos'].flatMap((form) => GATE_SHAPES.filter((x) => n > 2 || x !== 'two terms or more, some single literals').map((x) => `${n} variables, ${form}: ${x}`)))
 	};
 	const counts = [];
 	for (const [dimension, values] of Object.entries(want)) {

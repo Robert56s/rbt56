@@ -307,9 +307,10 @@ const MINIMAL = `for form in forms:
     say(f"F = {text(form, form['terms'])}")`;
 
 const CIRCUITS = `# A sum of products is AND gates into an OR gate, a product of sums OR gates into an AND gate,
-# after an inverter for each variable that appears complemented; a term of one literal is a
-# wire into the second level or, alone, straight to F. A constant needs no gate: F is tied to
-# the supply (1) or to ground (0).
+# after an inverter for each variable that appears complemented; a term of one literal needs no
+# first-level gate and is a wire straight to the second level. With one term there is no second
+# level: its gate is F, or F is the literal itself. A constant needs no gate: F is tied to the
+# supply (1) or to ground (0).
 print(" " * 19 + "inverters  first level  second level  gates")
 for form, gate1, gate2 in [(sop, "AND", "OR"), (pos, "OR", "AND")]:
     c = cost(form["terms"])

@@ -119,15 +119,20 @@
 		<div class="formula">
 			<h3>Two-level logic</h3>
 			<p class="note">
-				Sum of products: one AND gate per product term (a single-literal term needs none), one OR
-				gate for the sum, and one inverter per variable that appears complemented, shared by every
-				term that uses it. Product of sums is the same with AND and OR swapped.
+				Sum of products: one AND gate per product term of two literals or more, one OR gate for the
+				sum when there are two terms or more, and one inverter per variable that appears
+				complemented, shared by every term that uses it. A single-literal term needs no AND gate:
+				it is a wire straight to the OR gate. With one term there is no OR gate: its AND gate is
+				F, or F is the literal itself. A constant needs no gate at all. Product of sums is the same
+				with AND and OR swapped.
 			</p>
-			<Equation tex={`\\text{gates} = \\text{inverters} + \\text{first level} + 1`} />
+			<Equation tex={`\\text{gates} = \\text{inverters} + \\text{first level} + \\begin{cases} 1 & \\text{two terms or more} \\\\ 0 & \\text{otherwise} \\end{cases}`} />
 			<p class="note">
 				<strong>How to use:</strong> in the tool's drawing a dot is a connection and a plain crossing
-				is not. Putting a bubble on every first-level output and every second-level input changes
-				nothing (they cancel in pairs) and turns AND-OR into NAND-NAND, OR-AND into NOR-NOR.
+				is not. With two terms or more, putting a bubble on every first-level output and every
+				second-level input changes nothing (they cancel in pairs) and turns AND-OR into NAND-NAND,
+				OR-AND into NOR-NOR; a single-literal term, having no first-level gate, then goes to the
+				second level complemented.
 			</p>
 		</div>
 	</section>

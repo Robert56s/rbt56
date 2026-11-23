@@ -50,14 +50,15 @@ const FIGURE_TEXT = { f0: 24, fz: 24, q: 19, gain: 25, dc_gain: 28, s_term: 18 }
 
 /**
  * Whether the printout of this file needs say(), the helper that wraps a
- * list over lines: a circuit whose figures, after their head ("after
- * rounding:" in 5, "against the target:" in 6, the MFB band-pass built for an
- * op-amp's longer ones), or the page's parts of a stage (flags and all),
- * would run past SAY_WIDTH on one line. `extra` the longest line the caller
- * adds (check.js: the page's parts).
+ * list over lines: a circuit whose figures, after their longest head ("after
+ * rounding:" in 5, "against the target:" in 6; for the MFB band-pass built
+ * for an op-amp, "after rounding, the circuit alone, against its own
+ * targets:" in 5), or the page's parts of a stage (flags and all), would run
+ * past SAY_WIDTH on one line. `extra` the longest line the caller adds
+ * (check.js: the page's parts).
  */
 export function needsSay(ctx, extra = 0) {
-	const head = ctx.opamp ? '      the circuit alone, against its own targets:'.length : '      against the target:'.length;
+	const head = ctx.opamp ? '    after rounding, the circuit alone, against its own targets:'.length : '      against the target:'.length;
 	const widths = ctx.circuits.map((c) => (ctx.registry.familyOf(c).figures?.[c] ?? []).reduce((sum, k) => sum + (FIGURE_TEXT[k] ?? 24), -2));
 	return head + Math.max(0, ...widths) > SAY_WIDTH || extra > SAY_WIDTH;
 }
@@ -264,11 +265,12 @@ export function parts(file, ctx, opts = {}) {
 	else loop.push('        print(f"    {name} = {was}{value(name, v)}")');
 	// (the MFB band-pass built for an op-amp: its figures are the circuit's alone, against its own targets)
 	const mixed = ctx.opamp && !names.one;
-	const head = ctx.opamp ? (names.one ? '"    after rounding, the circuit alone:"' : 'f"    after rounding{alone}:"') : '"    after rounding:"';
+	// (the circuit alone's targets are not the stage's: say so, or its percentages read as off the stage's f0)
+	const head = ctx.opamp ? (names.one ? '"    after rounding, the circuit alone, against its own targets:"' : 'f"    after rounding{alone}:"') : '"    after rounding:"';
 	const gotWant = `    got, want = ${names.figures}(parts, source), ${names.figures}(exact, source)`;
 	loop.push(
 		gotWant.length <= PY_WIDTH ? gotWant : `    got = ${names.figures}(parts, source)\n    want = ${names.figures}(exact, source)`,
-		...(mixed ? ['    alone = ", the circuit alone" if st["circuit"] == "mfb_bandpass" else ""'] : []),
+		...(mixed ? ['    alone = ""', '    if st["circuit"] == "mfb_bandpass":', '        alone = ", the circuit alone, against its own targets"'] : []),
 		printList(file, head, 'figures_list(got, want)', '    '),
 		'    if not kept:',
 		'        print("    none of them keeps the limits: the closest of all is taken, flagged above")'

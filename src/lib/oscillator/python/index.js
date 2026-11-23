@@ -57,11 +57,9 @@ import { docstring, settings, stockOf } from './settings';
  *                           (written as data with the settings they were
  *                           made for), side by side with a verdict each,
  *                           and why they differ, or that the settings are
- *                           no longer the page's; a diode limiter's file
- *                           also carries what the page shows for its parts
- *                           (page_gain, page_amplitude, page_verdict),
- *                           which the page finds at its first pass's split,
- *                           and says so where the parts' own split moves it
+ *                           no longer the page's (the page shows its parts'
+ *                           own figures, a diode limiter's with their own
+ *                           split, so the check of its parts is the page's)
  * The Python: as the filter's file (src/lib/filter/python/index.js says it
  * in full): 3.8 or newer, the math module only, ASCII, lines up to 100
  * characters (emit.js PyFile throws past them), English, plain comments,

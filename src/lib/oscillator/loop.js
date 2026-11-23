@@ -285,12 +285,15 @@ export function zeroPhase(kind, params, { omega0 }) {
 /**
  * The gain at which the loop just sustains itself: iterate the gain by
  * the magnitude the loop returns at its zero-phase frequency until it
- * returns exactly 1. Returns { omega, gain, converged }.
+ * returns exactly 1. Returns { omega, gain, converged }. Forty steps
+ * settle a loop whose magnitude grows about as fast as its gain; one
+ * that needs several times its textbook gain from a slow op-amp creeps
+ * towards its balance far slower and can be given more.
  */
-export function solveBalance(kind, params, { omega0, gain0 }) {
+export function solveBalance(kind, params, { omega0, gain0, steps = 40 }) {
 	let g = gain0;
 	let last = null;
-	for (let i = 0; i < 40; i++) {
+	for (let i = 0; i < steps; i++) {
 		last = zeroPhase(kind, { ...params, gain: g }, { omega0: last ? last.omega : omega0 });
 		if (!last.converged || !(last.magnitude > 0)) return { omega: last.omega, gain: g, converged: false };
 		const next = g / last.magnitude;

@@ -6,7 +6,8 @@ import { comment, header, noted, PY_WIDTH, pyEng, pyList, pyNum, pyPart, pyStr }
  * holds what the page designed from, as data a reader may change and run
  * again: the topology and its amplitude control (guarded: the file's code
  * is written for them alone), the frequency and amplitude asked, the excess
- * gain (or the quadrature loop's growth per cycle), the op-amp, the diode
+ * gain of a diode limiter (or the quadrature loop's growth per cycle; a lamp
+ * or an AGC starts on its own and needs neither), the op-amp, the diode
  * and the JFET where the design has them, and the stock. settingNames()
  * gives the scalar ones in order, which the check writes as the page's
  * (page_settings) to tell a run at the page's settings from another.
@@ -154,7 +155,7 @@ export function settingNames(ctx) {
 	const names = [
 		['frequency', pyNum(design.frequency)],
 		['amplitude', pyNum(design.amplitude)],
-		control === 'clamp' ? ['growth', pyNum(args.quadGrowth ?? 0.1)] : ['excess', pyNum(args.excessGain ?? 0.05)],
+		...(control === 'clamp' ? [['growth', pyNum(args.quadGrowth ?? 0.1)]] : control === 'diodes' ? [['excess', pyNum(args.excessGain ?? 0.05)]] : []),
 		['gbw', pyEng(design.opamp.gbw)],
 		['slew_rate', pyEng(design.opamp.slewRate)],
 		['swing', pyNum(design.opamp.opampSwing)]
@@ -171,18 +172,14 @@ function resultNames(ctx) {
 	names.push('rc_textbook', 'f_textbook', 'textbook_ok', 'rc_target');
 	if (ctx.control !== 'clamp') names.push('required_gain');
 	if (ctx.control === 'diodes') names.push('first_parts');
-	names.push('own_parts', 'own_check', 'page_parts');
-	if (ctx.control === 'diodes') names.push('page_gain', 'page_amplitude', 'page_verdict');
-	names.push('page_check', 'as_page');
+	names.push('own_parts', 'own_check', 'page_parts', 'page_check', 'as_page');
 	return names;
 }
 
-/** What `excess` does in this file: where a diode string sets the start, and where a lamp or an AGC does. */
+/** What `excess` does in a diode limiter's file: how far above balance its string starts the loop. */
 function excessNote(ctx) {
 	const x = ctx.args.excessGain ?? 0.05;
-	const pct = Number((100 * x).toPrecision(6));
-	if (ctx.control === 'diodes') return `how far above the balance gain the amplifier starts: ${pyNum(x)} is ${pct} %`;
-	return `the page retunes R C at 1 + excess times the balance gain; the ${ctx.control === 'lamp' ? 'cold lamp' : 'open JFET'} starts it`;
+	return `how far above the balance gain the amplifier starts: ${pyNum(x)} is ${Number((100 * x).toPrecision(6))} %`;
 }
 
 /** The SETTINGS block. */
@@ -197,7 +194,7 @@ export function settings(ctx) {
 		noted(`amplitude = ${value.amplitude}`, 'V peak, wanted at the output')
 	];
 	if (control === 'clamp') lines.push(noted(`growth = ${value.growth}`, `the start-up growth per cycle that Rn designs in: ${value.growth} is ${Number((100 * (args.quadGrowth ?? 0.1)).toPrecision(6))} %`));
-	else lines.push(noted(`excess = ${value.excess}`, excessNote(ctx)));
+	else if (control === 'diodes') lines.push(noted(`excess = ${value.excess}`, excessNote(ctx)));
 	lines.push(
 		noted(`gbw = ${value.gbw}`, "Hz, the op-amp's gain-bandwidth"),
 		noted(`slew_rate = ${value.slew_rate}`, `V/s, the op-amp's slew rate (${Number((design.opamp.slewRate / 1e6).toPrecision(6))} V/us)`),

@@ -161,20 +161,9 @@ function pairAmplitudeFor(G, d) {
  * `pairs` may also be a whitelist of the names that may ('Rf1', 'Rf2').
  */
 export function sizeFeedbackLimiter({ rt, rs, amplitude, fraction, diode, resistorSeries = 'E24', pairs = false }) {
-	const delta = rs - rt;
-	if (!(delta > 0)) return null;
-	const h = (x) => pairConductance((amplitude * fraction * x) / rt, diode) - (1 / x - 1 / (x + delta));
-	let lo = 1e-3 * rt;
-	let hi = rt * 0.999;
-	if (h(hi) < 0) return null; // even Rf1 = 0 cannot get the diodes to conduct enough
-	for (let k = 0; k < 100; k++) {
-		const mid = 0.5 * (lo + hi);
-		if (h(mid) < 0) lo = mid;
-		else hi = mid;
-	}
-	const x = 0.5 * (lo + hi);
-	const rf2Target = x + delta;
-	const rf1Target = rt - x;
+	const exact = feedbackLimiterTargets({ rt, rs, amplitude, fraction, diode });
+	if (!exact) return null;
+	const { rf1Target, rf2Target } = exact;
 	// The amplitude hangs on Rt - Rf1, a small difference of two large
 	// numbers, so an E24 step in Rf1 can move it by a factor of two; Rf1
 	// is therefore a 1 % (E96) value while Rf2 stays in the series asked
@@ -215,6 +204,28 @@ export function sizeFeedbackLimiter({ rt, rs, amplitude, fraction, diode, resist
 	}
 	if (!best) return { rf1: pairedResistor(rf1Target, rf1Series, pairsRf1), rf2: pairedResistor(rf2Target, resistorSeries, pairsRf2), rf1Target, rf2Target };
 	return { rf1: best.rf1, rf2: best.rf2, rf1Target, rf2Target };
+}
+
+/**
+ * The exact Rf1 and Rf2 of sizeFeedbackLimiter, before any rounding: x by
+ * bisection, then Rf2 = x + (Rs - Rt) and Rf1 = Rt - x. Returns { rf1Target,
+ * rf2Target }, or null where the string has no excess (Rs at or below Rt) or
+ * where even Rf1 = 0 cannot get the diodes to conduct enough.
+ */
+export function feedbackLimiterTargets({ rt, rs, amplitude, fraction, diode }) {
+	const delta = rs - rt;
+	if (!(delta > 0)) return null;
+	const h = (x) => pairConductance((amplitude * fraction * x) / rt, diode) - (1 / x - 1 / (x + delta));
+	let lo = 1e-3 * rt;
+	let hi = rt * 0.999;
+	if (h(hi) < 0) return null; // even Rf1 = 0 cannot get the diodes to conduct enough
+	for (let k = 0; k < 100; k++) {
+		const mid = 0.5 * (lo + hi);
+		if (h(mid) < 0) lo = mid;
+		else hi = mid;
+	}
+	const x = 0.5 * (lo + hi);
+	return { rf1Target: rt - x, rf2Target: x + delta };
 }
 
 /**

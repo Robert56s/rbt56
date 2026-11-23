@@ -1,4 +1,4 @@
-import { comment, listWords, pyDict, pyList, pyNum, pyPrints, pyStr, section } from '../../filter/python/emit';
+import { comment, listWords, pyDict, pyList, pyPrints, pyStr, section } from '../../filter/python/emit';
 import { growthHelper } from './control';
 import { pageValue, settingNames } from './settings';
 import { bodyRaise, pyDef } from './write';
@@ -18,12 +18,9 @@ import { bodyRaise, pyDef } from './write';
  * designWith after its parts are chosen): a diode limiter's loop carries
  * the diodes' capacitance as its parts split the string, runs where it is
  * in phase at the start gain, grows by its pole; a lamp or an AGC holds the
- * loop at balance; the quadrature loop runs at its pole with Rn. One
- * difference: the page finds a diode limiter's balance gain and amplitude
- * in its second pass with the split of its first parts, where evaluate()
- * takes each set's own split; the file writes what the page shows
- * (page_gain, page_amplitude, page_verdict) and, where the two differ,
- * says so in one sentence (the check script counts it).
+ * loop at balance; the quadrature loop runs at its pole with Rn. The page
+ * shows the figures of its parts with their own split, so evaluate() of the
+ * page's parts gives the page's figures (the check script holds it to that).
  */
 
 /** The page's parts of the design, [name, value] in the file's order (the page's names). */
@@ -34,14 +31,6 @@ export function pagePartsOf(ctx) {
 	if (ctx.control === 'lamp') return [['R', design.r], ['C', design.c], ['Rf', p.rf]];
 	if (ctx.control === 'jfet') return [['R', design.r], ['C', design.c], ['Rf', p.rf], ['Rser', p.rSeries], ['Ra', p.ra], ['Rb', p.rb], ['Rx', p.rx], ['Cdet', p.cDet]];
 	return [['R', design.r], ['C', design.c], ['Ra', p.ra], ['Rb', p.rb], ['Rn', p.rn], ['Rd1', p.rd1], ['Rd2', p.rd2]];
-}
-
-/** The page's own verdict on its design, in the words of the file's verdict(). */
-export function pageVerdictOf(design) {
-	if (!design.starts) return 'do not start';
-	if (!(design.limiter.regulates !== false && design.opamp.swingOk)) return 'start, then clip';
-	if (!(design.opamp.opampOk && design.opamp.slewOk)) return 'start, op-amp too slow';
-	return 'start and hold';
 }
 
 /** The own parts' dict of the file, as the sections before left their names. */
@@ -237,14 +226,9 @@ export function checkSections(file, ctx) {
 		])
 	);
 	const settingsNow = settingNames(ctx);
-	const shows = diodes ? ', its gain, amplitude and verdict for them,' : ' and';
-	const note = [comment(`The page's parts${shows} its settings (in as_page's order):`)];
+	const note = [comment("The page's parts and its settings (in as_page's order):")];
 	if (pairs.length) note.push(comment(`${listWords(pairs)} ${pairs.length === 1 ? 'is' : 'are each'} two resistors in series, the page's option${pairs.includes('R') ? ` (R ${rPlaces(ctx)})` : ''}.`));
 	note.push(pyDict('page_parts', items));
-	if (diodes) {
-		const shown = ctx.design.limiter.amplitudeActual;
-		note.push(`page_gain = ${pyNum(ctx.design.requiredGain)}`, `page_amplitude = ${Number.isFinite(shown) ? `${pyNum(shown)}  # V peak` : 'None'}`, `page_verdict = ${pyStr(pageVerdictOf(ctx.design))}`);
-	}
 	note.push(`page_settings = (${settingsNow.map(([, text]) => text).join(', ')})`, `as_page = (${settingsNow.map(([name]) => name).join(', ')}) == page_settings`);
 	file.add(note.join('\n'));
 	const labels = rows.map(([label]) => label);
@@ -279,14 +263,5 @@ export function checkSections(file, ctx) {
 		);
 	}
 	if (pairs.length) lines.push(pyPrints(`The page makes ${listWords(pairs)} of two resistors in series, which the file's rule leaves out.`, '    '));
-	if (diodes) {
-		lines.push(
-			'if as_page and not math.isclose(page_check["gain"] or 0.0, page_gain, rel_tol=1e-6):',
-			'    held_text = eng(page_amplitude, "V") if page_amplitude else "no amplitude"',
-			'    print(f"  The page shows a gain of {page_gain:.4f} and {held_text} for its parts "',
-			'          f"({page_verdict}):")',
-			pyPrints("it finds them at its first parts' split, where this check takes each set's own.", '    ')
-		);
-	}
 	file.add(lines.join('\n'));
 }

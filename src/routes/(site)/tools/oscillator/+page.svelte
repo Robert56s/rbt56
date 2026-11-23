@@ -13,12 +13,12 @@
 	import { formatFarads, formatHz, formatOhms, formatVolts } from '$lib/modulation/format';
 	import { oscillatorBasics } from '$lib/oscillator/basics';
 	import { buildAgcDiagram, buildClampDiagram, buildLimiterDiagram, buildOscillatorDiagram, hasLimiterDiagram } from '$lib/oscillator/circuits';
-	import { amplitudeRemark, explainBarkhausen, explainOpampLimit, explainStabilizer, explainTopology, pairLimitNote } from '$lib/oscillator/explain';
+	import { amplitudeRemark, explainBarkhausen, explainOpampLimit, explainStabilizer, explainTopology, opampVerdict, pairLimitNote } from '$lib/oscillator/explain';
 	import { DIODES, JFETS } from '$lib/oscillator/limiter';
 	import { generateOscillatorPython } from '$lib/oscillator/python/index';
 	import { generateNetlist, generateSchematic } from '$lib/oscillator/spice';
 	import { DEFAULT_OPAMP, OPAMP_MODELS } from '$lib/spice/opamps';
-	import { compareOscillators, designOscillator, oscillatorIsMemoized, STABILIZERS, TOPOLOGIES } from '$lib/oscillator/topologies';
+	import { compareOscillators, designOscillator, oscillatorIsMemoized, STABILIZERS, startSetting, TOPOLOGIES } from '$lib/oscillator/topologies';
 	import { componentOptions, defaultStock, isRestricted, loadStock, saveStock } from '$lib/stock';
 
 	let topology = $state('wien');
@@ -68,6 +68,11 @@
 	});
 
 	const valid = $derived(frequency > 0 && amplitude > 0 && gbwMhz > 0 && slewRateVus > 0 && opampSwing > 0 && excessPercent > 0 && quadGrowthPercent > 0);
+	// which input sets how the selected loop starts: the growth (quadrature), the excess (a diode
+	// limiter), or none (a lamp or an AGC, which start on their own and run at balance). Only that one
+	// is shown; the other keeps its value for when it applies again, and stays shown while that value
+	// cannot be used, since the comparison designs every topology with both
+	const startInput = $derived(startSetting(topology, stabilizer));
 	const params = $derived({
 		frequency,
 		amplitude,
@@ -129,6 +134,8 @@
 	);
 	// what to say when the limiter holds another amplitude than the one asked for
 	const remark = $derived(design ? amplitudeRemark(design) : null);
+	// panel 04's paragraph: whether this op-amp holds the loop, or which of its tests fails
+	const verdict = $derived(design ? opampVerdict(design) : null);
 	const wienRow = $derived(rows.find((r) => r.id === 'wien'));
 	const currentRow = $derived(rows.find((r) => r.id === at.topology));
 	const stabLabel = $derived(
@@ -242,12 +249,14 @@
 					</select>
 				</div>
 			{/if}
-			{#if topology === 'quadrature'}
+			<!-- the input that sets the start, where one does (startInput) -->
+			{#if startInput === 'growth' || !(quadGrowthPercent > 0)}
 				<div class="field">
 					<label for="growth">Start-up growth (% per cycle)</label>
 					<input id="growth" type="number" min="1" max="50" step="1" bind:value={quadGrowthPercent} />
 				</div>
-			{:else}
+			{/if}
+			{#if startInput === 'excess' || !(excessPercent > 0)}
 				<div class="field">
 					<label for="excess">Excess gain to start (%)</label>
 					<input id="excess" type="number" min="1" max="50" step="1" bind:value={excessPercent} />
@@ -457,30 +466,7 @@
 					<tr><td>Output swing needed / available</td><td>{formatVolts(design.amplitudeHeld)} / {formatVolts(design.opamp.opampSwing)}</td></tr>
 				</tbody>
 			</table>
-			{#if design.opamp.opampOk}
-				<p class="flag ok">
-					This op-amp holds the loop: the retune absorbs its lag and the amplifier still has {design.kind === 'quadrature' ? `${pct(design.growthPerCycle)} per cycle of designed growth` : `${pct(design.loopExcess)} of excess gain`} to start with.
-				</p>
-			{:else if design.limiter.kind === 'jfet' && !design.limiter.regulates}
-				<p class="note">
-					The op-amp is not what stops this design: the JFET cannot be controlled at {formatVolts(at.amplitude)} peak (see the amplitude
-					control above), so there is no start-up gain for the op-amp to hold yet. The lag and slew figures above are what this op-amp
-					would see once the amplitude is at least {formatVolts(design.limiter.minAmplitude)}.
-				</p>
-			{:else if !design.starts}
-				<p class="flag bad">
-					With this op-amp the loop does not start: at {formatHz(design.f0)} the amplifier's lag (and the limiter diodes' capacitance across
-					Rf2) costs more loop gain than the excess provides{Number.isFinite(design.loopExcess) ? ` (${pct(design.loopExcess)} at start)` : ''}. Raise the excess
-					gain, use a faster part, or pick a topology that asks for less gain; the Wien bridge asks for the least.
-				</p>
-			{:else}
-				<p class="flag warn">
-					The amplifier lags {design.opamp.lagDeg.toFixed(0)} degrees at this frequency, further than the single-pole model and the retune
-					built on it can be trusted (about 25 degrees): the loop may well run, but expect it a few percent off in frequency and
-					amplitude, and the part's gain-bandwidth spread to matter. A faster op-amp, or a topology that asks for less gain, brings
-					it back inside; the Wien bridge asks for the least.
-				</p>
-			{/if}
+			<p class={verdict.level === 'note' ? 'note' : `flag ${verdict.level}`}>{verdict.text}</p>
 			{#if !design.opamp.slewOk}
 				<p class="flag bad">Slew rate: the output needs more than half of what this op-amp can do. Lower the amplitude or the frequency.</p>
 			{/if}

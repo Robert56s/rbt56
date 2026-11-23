@@ -1,6 +1,6 @@
 import { anyPairAllowed, capacitorCandidates, nearestResistor, pairAllowed, pairedResistor, pairSubsets, seriesPair } from '../filter/eseries';
 import { ladderTransfer, retune, retuneQuadrature, solveBalance, solvePole, stageLagDeg, TWO_PI, zeroPhase } from './loop';
-import { agcAmplitude, DIODES, dividerClampAmplitude, feedbackLimiterAmplitude, JFETS, lampModel, sizeAgc, sizeDividerClamp, sizeFeedbackLimiter } from './limiter';
+import { agcAmplitude, DIODES, dividerClampAmplitude, feedbackLimiterAmplitude, feedbackLimiterTargets, JFETS, lampModel, sizeAgc, sizeDividerClamp, sizeFeedbackLimiter } from './limiter';
 
 /**
  * Sine-wave oscillator design. Every topology here is a loop with exactly
@@ -199,6 +199,32 @@ function pickCapacitor(target, capacitors) {
 const THD_PER_EXCESS = { wien: 0.62, phaseShift: 0.1, bufferedPhaseShift: 0.1, bubba: 0.1 };
 
 /**
+ * Which of the Specification's inputs sets how the loop starts: 'growth',
+ * the start-up growth per cycle Rn designs into the quadrature loop;
+ * 'excess', how far above balance a diode limiter's string sets the
+ * amplifier; null for a lamp or an AGC, which start from the cold lamp or
+ * the open channel and hold the loop at balance, so neither input has
+ * anything to do for them.
+ */
+export function startSetting(topology, stabilizer) {
+	if (topology === 'quadrature') return 'growth';
+	if (topology === 'wien' && (STABILIZER_BY_ID[stabilizer] ?? STABILIZER_BY_ID.diodes).id !== 'diodes') return null;
+	return 'excess';
+}
+
+/**
+ * The page's two tests of its single-pole op-amp model: it trusts the model,
+ * and the retune built on it, while the gain stage lags LAG_TRUSTED degrees
+ * or less and the textbook R C values would land no more than SHIFT_TRUSTED
+ * low with this op-amp. Past either, they drift from what LTspice and a real
+ * part do (a single phase shift at 55 kHz on a 3 MHz op-amp lands 4.5 %
+ * high and 40 % large in LTspice); design.opamp.opampOk holds both, and the
+ * loop's start.
+ */
+export const LAG_TRUSTED = 25;
+export const SHIFT_TRUSTED = 0.2;
+
+/**
  * The frequency at which the textbook RC values, with this op-amp, would
  * land 10 % low: the point past which the retune is doing real work and
  * a slower part than expected would show up at once. Bisection on log f.
@@ -228,6 +254,45 @@ function frequencyCeiling(kind, base, { k, gain, rho, fStart }) {
 }
 
 /**
+ * What a diode limiter's string has to do at a gain g the loop needs: Rt,
+ * what it presents at balance, Rs, what it presents with the diodes off (the
+ * start gain, g times 1 + excess), and the share of the output across it,
+ * (g - 1) / g for the non-inverting Wien stage, all of it for an inverting
+ * stage whose input is a virtual ground (every ladder).
+ */
+function diodeString({ ladder, requiredGain, excessGain, rg }) {
+	const gStartTarget = requiredGain * (1 + excessGain);
+	if (ladder) return { rt: requiredGain * rg, rs: gStartTarget * rg, fraction: 1 };
+	return { rt: (requiredGain - 1) * rg, rs: (gStartTarget - 1) * rg, fraction: (requiredGain - 1) / requiredGain };
+}
+
+/**
+ * A diode limiter's figures for its Rf1 and Rf2 at the gain the loop needs:
+ * the gain with the diodes off and fully on, the amplitude the pair holds,
+ * whether the gain straddles what is needed, and `exact`, the pair that
+ * would hold the amplitude asked at that gain (feedbackLimiterTargets; null
+ * where there is none, and then sized is false).
+ */
+function diodeLimiter({ ladder, rf1, rf2, rg, requiredGain, rt, fraction, exact, diode }) {
+	const gainStart = ladder ? (rf1 + rf2) / rg : 1 + (rf1 + rf2) / rg;
+	const gainLimited = ladder ? rf1 / rg : 1 + rf1 / rg;
+	const amplitudeActual = feedbackLimiterAmplitude({ rf1, rf2, rt, fraction, diode });
+	return {
+		kind: 'diodes',
+		...(ladder ? { rf: rf1 + rf2 } : {}),
+		rf1,
+		rf2,
+		rf1Target: exact?.rf1Target ?? null,
+		rf2Target: exact?.rf2Target ?? null,
+		gainStart,
+		gainLimited,
+		amplitudeActual,
+		sized: !!exact,
+		regulates: amplitudeActual !== null && gainStart > requiredGain
+	};
+}
+
+/**
  * The parts that set the loop gain and hold the amplitude, for a Wien
  * bridge with any of its three stabilizers or for a ladder with its
  * inverting stage and diode limiter. Returns { parts, limiter }.
@@ -238,34 +303,18 @@ function frequencyCeiling(kind, base, { k, gain, rho, fStart }) {
  * or an AGC's Rf only scales the rest of the leg, so it stays one part.
  */
 function sizeStabilizer({ topology, stabilizer, requiredGain, excessGain, r, c, rg, amplitude, frequency, diode, jfet, resistorSeries, capacitors, pairs = false }) {
-	const gStartTarget = requiredGain * (1 + excessGain);
 	let parts = { r, c, rg };
 	let limiter;
 	if (topology === 'wien') {
 		const stab = STABILIZER_BY_ID[stabilizer] ?? STABILIZER_BY_ID.diodes;
 		const rfBalance = (requiredGain - 1) * rg;
 		if (stab.id === 'diodes') {
-			const fraction = (requiredGain - 1) / requiredGain;
-			const rs = (gStartTarget - 1) * rg;
-			const sz = sizeFeedbackLimiter({ rt: rfBalance, rs, amplitude, fraction, diode, resistorSeries, pairs });
+			const { rt, rs, fraction } = diodeString({ ladder: false, requiredGain, excessGain, rg });
+			const sz = sizeFeedbackLimiter({ rt, rs, amplitude, fraction, diode, resistorSeries, pairs });
 			const rf1 = sz ? sz.rf1 : pairedResistor(0.1 * rs, resistorSeries, pairAllowed(pairs, 'Rf1'));
 			const rf2 = sz ? sz.rf2 : pairedResistor(0.9 * rs, resistorSeries, pairAllowed(pairs, 'Rf2'));
-			const gainStart = 1 + (rf1 + rf2) / rg;
-			const gainLimited = 1 + rf1 / rg;
-			const amplitudeActual = feedbackLimiterAmplitude({ rf1, rf2, rt: rfBalance, fraction, diode });
 			parts = { ...parts, rf1, rf2 };
-			limiter = {
-				kind: 'diodes',
-				rf1,
-				rf2,
-				rf1Target: sz?.rf1Target ?? null,
-				rf2Target: sz?.rf2Target ?? null,
-				gainStart,
-				gainLimited,
-				amplitudeActual,
-				sized: !!sz,
-				regulates: amplitudeActual !== null && gainStart > requiredGain
-			};
+			limiter = diodeLimiter({ ladder: false, rf1, rf2, rg, requiredGain, rt, fraction, exact: sz, diode });
 		} else if (stab.id === 'lamp') {
 			const rf = nearestResistor(rfBalance, resistorSeries);
 			const rHot = rf / (requiredGain - 1);
@@ -312,29 +361,12 @@ function sizeStabilizer({ topology, stabilizer, requiredGain, excessGain, r, c, 
 		// every ladder sets its loop gain with one inverting stage whose
 		// input is a virtual ground, so the whole output sits across the
 		// feedback string
-		const rt = requiredGain * rg;
-		const rs = gStartTarget * rg;
-		const sz = sizeFeedbackLimiter({ rt, rs, amplitude, fraction: 1, diode, resistorSeries, pairs });
+		const { rt, rs, fraction } = diodeString({ ladder: true, requiredGain, excessGain, rg });
+		const sz = sizeFeedbackLimiter({ rt, rs, amplitude, fraction, diode, resistorSeries, pairs });
 		const rf1 = sz ? sz.rf1 : pairedResistor(0.1 * rs, resistorSeries, pairAllowed(pairs, 'Rf1'));
 		const rf2 = sz ? sz.rf2 : pairedResistor(0.9 * rs, resistorSeries, pairAllowed(pairs, 'Rf2'));
-		const rf = rf1 + rf2;
-		const gainStart = rf / rg;
-		const gainLimited = rf1 / rg;
-		const amplitudeActual = feedbackLimiterAmplitude({ rf1, rf2, rt, fraction: 1, diode });
-		parts = { ...parts, rf, rf1, rf2 };
-		limiter = {
-			kind: 'diodes',
-			rf,
-			rf1,
-			rf2,
-			rf1Target: sz?.rf1Target ?? null,
-			rf2Target: sz?.rf2Target ?? null,
-			gainStart,
-			gainLimited,
-			amplitudeActual,
-			sized: !!sz,
-			regulates: amplitudeActual !== null && gainStart > requiredGain
-		};
+		parts = { ...parts, rf: rf1 + rf2, rf1, rf2 };
+		limiter = diodeLimiter({ ladder: true, rf1, rf2, rg, requiredGain, rt, fraction, exact: sz, diode });
 	}
 	return { parts, limiter };
 }
@@ -648,7 +680,15 @@ function designWith({
 	const base = { wt, n: topo.ladder?.sections, buffered: topo.ladder?.buffered };
 	const k = topo.k;
 	const rcIdeal = k / (TWO_PI * frequency);
-	const idealStart = topo.gain * (1 + excessGain);
+	// The gain the loop runs at, which sets where it oscillates: a diode
+	// limiter is off for most of every cycle, so its loop runs at the start
+	// gain, the balance gain times 1 + excess; a lamp or an AGC is linear and
+	// holds the loop at the balance gain itself. R C is retuned there, and the
+	// textbook values are worked out there too: the textbook gain times 1 +
+	// excess for a diode limiter, the textbook gain itself for a lamp or an AGC.
+	const holdsAtBalance = startSetting(topology, stabilizer) === null;
+	const runsAbove = holdsAtBalance ? 1 : 1 + excessGain;
+	const idealRun = topo.gain * runsAbove;
 
 	/* ---- where the textbook values would land with this op-amp, and the
 	   R C product that lands on target instead. The limiter diodes' junction
@@ -715,18 +755,22 @@ function designWith({
 			regulates: amplitudeActual !== null && starts
 		};
 	} else {
-		const un = zeroPhase(kind, { ...base, rc: rcIdeal, gain: idealStart }, { omega0: k / rcIdeal });
+		const un = zeroPhase(kind, { ...base, rc: rcIdeal, gain: idealRun }, { omega0: k / rcIdeal });
 		fUncompensated = un.converged ? un.omega / TWO_PI : NaN;
+		// the loop the last balance gain was found in: a diode limiter's second
+		// pass finds it with the split of the first pass's parts
+		let balancedIn = loopParams;
+		let balanceOmega;
 		for (let pass = 0; pass < 2; pass++) {
 			// retune, carrying the balance gain found on the way
-			let gStart = idealStart;
+			let gRun = topo.gain * runsAbove;
 			let rt = null;
 			for (let round = 0; round < 3; round++) {
-				rt = retune(kind, { ...loopParams, gain: gStart }, { fTarget: frequency, k });
+				rt = retune(kind, { ...loopParams, gain: gRun }, { fTarget: frequency, k });
 				if (!rt.converged) return null;
 				const bal = solveBalance(kind, { ...loopParams, rc: rt.rc }, { omega0: TWO_PI * frequency, gain0: topo.gain });
 				if (!bal.converged) return null;
-				gStart = bal.gain * (1 + excessGain);
+				gRun = bal.gain * runsAbove;
 			}
 			rcTarget = rt.rc;
 			pick = pickRC(rcTarget, capacitors, resistorSeries, pairs);
@@ -737,6 +781,8 @@ function designWith({
 			const bal = solveBalance(kind, { ...loopParams, rc: pick.r * pick.c }, { omega0: TWO_PI * frequency, gain0: topo.gain });
 			if (!bal.converged) return null;
 			requiredGain = bal.gain;
+			balanceOmega = bal.omega;
+			balancedIn = loopParams;
 			({ parts, limiter } = sizeStabilizer({
 				topology,
 				stabilizer,
@@ -757,7 +803,27 @@ function designWith({
 			loopParams = { ...base, rAbs: rg, f2: parts.rf2 / (parts.rf1 + parts.rf2), cd: 2 * diode.cjo };
 		}
 		const rc = pick.r * pick.c;
-		if (limiter.kind === 'diodes' && diode.cjo > 0) loopParams = { ...loopParams, f2: parts.rf2 / (parts.rf1 + parts.rf2) };
+		// The second pass picked its parts for the gain the loop needs with
+		// the first parts' split. Where its own parts split the string another
+		// way (or, on a ladder, come with another R), the gain the loop needs
+		// and what the limiter holds are found again with their own split, so
+		// every figure shown belongs to the parts shown. (Passes until the
+		// parts stop changing were tried instead: the parts often never do,
+		// going round two or three sets, R and C included.)
+		if (limiter.kind === 'diodes' && (balancedIn.rAbs !== loopParams.rAbs || balancedIn.f2 !== loopParams.f2)) {
+			let own = solveBalance(kind, { ...loopParams, rc }, { omega0: TWO_PI * frequency, gain0: topo.gain });
+			// a loop that needs several times its textbook gain may come back
+			// in phase nowhere near it: it starts again from the balance its
+			// parts were sized at, and creeps from there, given more steps
+			if (!own.converged) own = solveBalance(kind, { ...loopParams, rc }, { omega0: balanceOmega, gain0: requiredGain, steps: 400 });
+			if (!own.converged) return null;
+			const sizedAtGain = requiredGain;
+			requiredGain = own.gain;
+			const ladder = !!topo.ladder;
+			const { rt, rs, fraction } = diodeString({ ladder, requiredGain, excessGain, rg });
+			const exact = feedbackLimiterTargets({ rt, rs, amplitude, fraction, diode });
+			limiter = { ...diodeLimiter({ ladder, rf1: parts.rf1, rf2: parts.rf2, rg, requiredGain, rt, fraction, exact, diode }), sizedAtGain };
+		}
 		startGain = limiter.gainStart;
 		// where it oscillates: a diode limiter is off for most of every
 		// cycle, so the loop's phase is that of the start gain; a lamp or
@@ -808,12 +874,9 @@ function designWith({
 	const gbwRatio = (f0 * noiseGain) / gbw;
 	const lagDeg = stageLagDeg(f0, noiseGain, gbw);
 	const uncompensatedError = Number.isFinite(fUncompensated) ? fUncompensated / frequency - 1 : NaN;
-	const fMax = frequencyCeiling(kind, base, { k, gain: idealStart, rho: rho0, fStart: frequency });
-	// trusted while the lag stays modest: past about 25 degrees the
-	// single-pole model, and the retune built on it, drift from what LTspice
-	// and a real part do (a single phase shift at 55 kHz on a 3 MHz op-amp
-	// lands 4.5 % high and 40 % large in LTspice)
-	const opampOk = Number.isFinite(uncompensatedError) && uncompensatedError > -0.2 && starts && lagDeg <= 25;
+	const fMax = frequencyCeiling(kind, base, { k, gain: idealRun, rho: rho0, fStart: frequency });
+	// trusted while the lag stays modest (LAG_TRUSTED, SHIFT_TRUSTED)
+	const opampOk = Number.isFinite(uncompensatedError) && uncompensatedError > -SHIFT_TRUSTED && starts && lagDeg <= LAG_TRUSTED;
 	const slewNeeded = TWO_PI * f0 * amplitudeHeld;
 	const slewOk = slewNeeded <= slewRate / 2;
 	const swingOk = amplitudeHeld <= opampSwing;

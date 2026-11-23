@@ -351,7 +351,7 @@ function stagePrint(ctx, indent, stageWord) {
 			: [`${pad}    print(f"    {name} = {was}{value(name, v)}")`]),
 		...(sk ? [`${pad}print(f"    Rf / Rg = {parts['Rf'] / parts['Rg']:.4f}, the pair nearest A - 1, solved last")`] : []),
 		`${pad}got, want = ${ctx.name}_figures(parts), ${ctx.name}_figures(exact)`,
-		`${pad}say(${ctx.gbw ? '"    after rounding, the circuit alone:"' : '"    after rounding:"'}, figures_list(got, want))`,
+		`${pad}say(${ctx.gbw ? '"    after rounding, the circuit alone, against its own targets:"' : '"    after rounding:"'}, figures_list(got, want))`,
 		`${pad}if not kept:`,
 		`${pad}    print("    none of them keeps the limits: the closest of all is taken, flagged above")`
 	];

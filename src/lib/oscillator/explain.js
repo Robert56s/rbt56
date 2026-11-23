@@ -1,5 +1,6 @@
 import { formatFarads, formatHz, formatOhms, formatVolts } from '../modulation/format';
 import { DIODES, JFETS } from './limiter';
+import { LAG_TRUSTED, SHIFT_TRUSTED } from './topologies';
 
 /**
  * "Show the math" content for the sine-wave oscillators, same p()/eq()
@@ -45,7 +46,7 @@ export function explainBarkhausen(design) {
 	blocks.push(
 		eq(`\\text{here } \\beta(f_0) = \\dfrac{1}{${n2(requiredGain)}} \\ \\text{ at } f_0 = ${formatHz(f0)} \\ \\Rightarrow\\ A = ${n2(requiredGain)}${Math.abs(requiredGain - idealGain) > 0.005 ? ` \\quad (\\text{textbook } ${n2(idealGain)}\\text{: the op-amp's lag moves the balance point, section 04})` : ''}`),
 		p(
-			`A gain of exactly ${n2(requiredGain)} is a knife edge: a hair under and any oscillation dies away, a hair over and it grows until something stops it. Nothing in a real circuit sits on a knife edge, so the amplifier is deliberately set a little high, here ${n2(startGain)} with the parts chosen, and a nonlinearity is added to pull the gain back down once the amplitude is where it should be. That nonlinearity is what sets the distortion, and it is the real design problem in an oscillator.`
+			`A gain of exactly ${n2(requiredGain)} is a knife edge: a hair under and any oscillation dies away, a hair over and it grows until something stops it. Nothing in a real circuit sits on a knife edge, so the amplifier is deliberately set a little high, ${Number.isFinite(startGain) ? `here ${n2(startGain)} with the parts chosen` : 'though here the JFET control cannot yet be sized to set it'}, and a nonlinearity is added to pull the gain back down once the amplitude is where it should be. That nonlinearity is what sets the distortion, and it is the real design problem in an oscillator.`
 		)
 	);
 	return blocks;
@@ -154,7 +155,12 @@ export function explainStabilizer(design) {
 				'What stops it is a positive conductance in the same place that only appears above a threshold: a divider from the cosine output brings the signal down, and anti-parallel diodes from the divider tap into the integrator input conduct once the tap reaches a diode drop. Averaged over a cycle, the current they draw is a conductance G that rises steeply with amplitude, and the amplitude parks where it cancels Rn together with the small extra growth the op-amps\' lag contributes:'
 			),
 			eq(`G_{clamp}(A) = \\dfrac{1}{R_n} + 2\\,\\sigma_{lag}\\,C = ${gTarget.toExponential(2)}\\ \\text{S}`),
-			eq(`R_{d1} = ${formatOhms(rd1)}, \\quad R_{d2} = ${formatOhms(rd2)} \\ \\Rightarrow\\ \\text{threshold near } ${n2(0.4 * (rd1 + rd2) / rd2)}\\ \\text{V, parks at about } ${formatVolts(amplitudeActual ?? NaN)}\\ \\text{peak (wanted } ${formatVolts(amplitude)})`),
+			// no divider, or one that holds no amplitude, is said so rather than printed as "-"
+			eq(
+				rd1 > 0 && rd2 > 0
+					? `R_{d1} = ${formatOhms(rd1)}, \\quad R_{d2} = ${formatOhms(rd2)} \\ \\Rightarrow\\ \\text{threshold near } ${n2(0.4 * (rd1 + rd2) / rd2)}\\ \\text{V, ${amplitudeActual > 0 ? `parks at about } ${formatVolts(amplitudeActual)}\\ \\text{peak` : 'holds no amplitude'} (wanted } ${formatVolts(amplitude)})`
+					: `\\text{no divider brings } G_{clamp} \\text{ to that at } ${formatVolts(amplitude)}\\ \\text{peak}`
+			),
 			p(
 				`The conductance is a describing function: the fundamental component of the clamp current for a sinusoid of amplitude A, divided by A, computed with the diode's real exponential curve (${diode.label}). Because the clamp's threshold is a resistor ratio and a diode drop, the amplitude does not hang on the exact value of Rn or on part tolerances, which a plain series resistor would make it do. And because the clamp current is integrated before it reaches either output, its harmonics arrive divided by their order: about ${(100 * thd).toFixed(2)} percent of distortion at the sine output, less at the cosine.`
 			)
@@ -164,7 +170,7 @@ export function explainStabilizer(design) {
 
 	blocks.push(
 		p(
-			`Left alone, an amplifier set above the gain the loop needs makes the amplitude grow until the op-amp runs into its supply rails. It then clips, which is a gain of less than 1 for the peaks, so the circuit does settle: it settles into a rounded square wave. TI measured 2.8 percent distortion on a Wien bridge doing exactly that. Something gentler has to take the gain down from ${n2(startGain)} to ${n2(requiredGain)} before the rails do.`
+			`Left alone, an amplifier set above the gain the loop needs makes the amplitude grow until the op-amp runs into its supply rails. It then clips, which is a gain of less than 1 for the peaks, so the circuit does settle: it settles into a rounded square wave. TI measured 2.8 percent distortion on a Wien bridge doing exactly that. Something gentler has to take the gain down${Number.isFinite(startGain) ? ` from ${n2(startGain)}` : ''} to ${n2(requiredGain)} before the rails do.`
 		)
 	);
 
@@ -234,16 +240,24 @@ export function explainStabilizer(design) {
 		eq(`i(v) = I_s\\left(e^{v/nV_T} - e^{-v/nV_T}\\right), \\qquad G(V) = \\dfrac{1}{\\pi V}\\int_0^{2\\pi} i(V\\sin\\theta)\\,\\sin\\theta\\,d\\theta`),
 		eq(`\\dfrac{1}{R_{f2}} + G(V_2) = \\dfrac{1}{R_t - R_{f1}}, \\qquad R_t = ${formatOhms(rt)} \\text{ (the feedback string at balance)}, \\quad V_2 = ${n3(fraction)}\\,V_{out}\\,\\dfrac{R_t - R_{f1}}{R_t}`),
 		eq(
-			`R_{f1} = ${formatOhms(limiter.rf1)}, \\ R_{f2} = ${formatOhms(limiter.rf2)} \\ \\Rightarrow\\ V_{out} \\approx ${formatVolts(limiter.amplitudeActual ?? NaN)} \\ \\text{peak} \\quad (\\text{wanted } ${formatVolts(amplitude)}; \\ I_s = ${diode.Is.toExponential(2)}\\ \\text{A}, \\ n = ${n2(diode.N)})`
+			`R_{f1} = ${formatOhms(limiter.rf1)}, \\ R_{f2} = ${formatOhms(limiter.rf2)} \\ \\Rightarrow\\ ${limiter.amplitudeActual > 0 ? `V_{out} \\approx ${formatVolts(limiter.amplitudeActual)} \\ \\text{peak}` : '\\text{no amplitude holds}'} \\quad (\\text{wanted } ${formatVolts(amplitude)}; \\ I_s = ${diode.Is.toExponential(2)}\\ \\text{A}, \\ n = ${n2(diode.N)})`
 		),
 		p(
 			`The pair of values is picked among the stock neighbours of the exact solution so that the amplitude lands closest while the start gain stays above balance, since rounding both resistors independently can move the amplitude by twenty percent. The gain has to straddle ${n2(requiredGain)}: ${n2(limiter.gainStart)} before the diodes conduct, ${n2(limiter.gainLimited)} with them fully on${limiter.regulates ? ', and it does' : ', and it does NOT, so the output would clip on the rails'}.`
 		),
+		// the second pass picked them for the gain of the first parts' split (topologies.js designWith)
+		...(Number.isFinite(limiter.sizedAtGain)
+			? [
+					p(
+						`They were picked for a gain of ${n3(limiter.sizedAtGain)}, what the loop needs with the diodes' capacitance across the first pair's Rf2. Across their own Rf2 it needs ${n3(requiredGain)}, so that is the gain the figures here are worked out for, the amplitude included.`
+					)
+				]
+			: []),
 		p(
 			`The diodes do not switch cleanly, they bend: the gain starts dropping before the peak and keeps dropping through it, which rounds the tips of the sine slightly. The harder they have to work, the more they bend it, so the distortion follows the excess loop gain they must absorb: about ${pctText(design.loopExcess)} here, worth around ${(100 * thd).toFixed(2)} percent of third harmonic in LTspice runs of this circuit. Two diodes and one resistor buy that; a lamp or a JFET does better only because its control sits outside the signal path.`
 		),
 		p(
-			`One thing to expect when simulating: the frequency is read off the settled waveform, and a diode-limited loop settles a hair below the zero-phase frequency of its start gain, because the diodes' conduction near the peaks adds a little lag of its own. The export starts the run at the design amplitude so the limiter only has to hold it, and its log reports the realized frequency next to the .four distortion.`
+			`One thing to expect when simulating: the frequency is read off the settled waveform, and in LTspice runs of these exports a diode-limited loop settles a little above the zero-phase frequency of its start gain, from a hair at 20 kHz to under one percent at 100 kHz: near the peaks the diodes take the gain down towards balance, and the amplifier's lag shrinks with it. The export starts the run at the design amplitude so the limiter only has to hold it, and its log reports the realized frequency next to the .four distortion.`
 		)
 	);
 	return blocks;
@@ -251,12 +265,17 @@ export function explainStabilizer(design) {
 
 /** What the op-amp's own lag does to the loop, and how the design absorbs it. */
 export function explainOpampLimit(design) {
-	const { opamp, f0, startGain, topo, amplitude, kind, requiredGain, idealGain, uncompensatedError, retunePercent, fUncompensated, growthPerCycle, loopExcess } = design;
+	const { opamp, f0, startGain, topo, amplitude, kind, requiredGain, idealGain, uncompensatedError, retunePercent, fUncompensated, growthPerCycle, loopExcess, limiter } = design;
 	const wt = 2 * Math.PI * opamp.gbw;
 	const lagRad = (opamp.lagDeg * Math.PI) / 180;
+	// the gain the stage runs at, the one its lag is worked out for: a lamp or an AGC holds the
+	// balance gain (its start, the cold lamp or the open channel, is far above it); a diode string
+	// runs at its start gain
+	const held = limiter.kind === 'lamp' || limiter.kind === 'jfet';
+	const runGain = held ? requiredGain : startGain;
 	const blocks = [
 		p(
-			`A real op-amp is a single pole: its open-loop gain is A(s) = 2 pi GBW / s, so a stage built on it with noise gain N has a closed-loop pole at GBW / N and lags by atan(f N / GBW) at frequency f. Ask for gain ${n2(startGain)} at ${formatHz(f0)} from a part with a gain-bandwidth of ${formatHz(opamp.gbw)} and what comes back is a little late.`
+			`A real op-amp is a single pole: its open-loop gain is A(s) = 2 pi GBW / s, so a stage built on it with noise gain N has a closed-loop pole at GBW / N and lags by atan(f N / GBW) at frequency f. Ask for gain ${n2(runGain)} at ${formatHz(f0)} from a part with a gain-bandwidth of ${formatHz(opamp.gbw)} and what comes back is a little late.`
 		),
 		eq(`f_{-3dB} = \\dfrac{GBW}{N} = \\dfrac{${formatHz(opamp.gbw)}}{${n2(opamp.noiseGain)}} = ${formatHz(opamp.closedLoopBw)}, \\qquad \\phi = \\arctan\\dfrac{f_0 N}{GBW} = ${n1(opamp.lagDeg)}^\\circ`),
 		p(
@@ -276,10 +295,21 @@ export function explainOpampLimit(design) {
 		),
 		eq(`f_{0,textbook\\ RC} = ${formatHz(fUncompensated)} \\ (${pct(uncompensatedError)}) \\quad\\rightarrow\\quad RC \\times ${(1 + retunePercent).toFixed(4)} \\quad\\rightarrow\\quad f_0 = ${formatHz(f0)} \\ (${pct(design.f0Error, 2)})`)
 	);
-	if (kind !== 'quadrature') {
+	if (kind !== 'quadrature' && held) {
+		// a lamp or an AGC: no pole to speak of at switch-on (the gain is far above balance), only how far above it starts
+		const control = limiter.kind === 'lamp' ? 'lamp' : 'AGC';
+		const start = !Number.isFinite(loopExcess)
+			? `, where the ${control} would hold it once it can be sized at this amplitude (see the amplitude control).`
+			: `, where the ${control} holds it. At switch-on, ${limiter.kind === 'lamp' ? 'with the lamp cold' : "with the JFET's channel wide open"}, the amplifier's gain is ${n2(startGain)} and the loop returns ${n2(1 + loopExcess)} times the signal per cycle, so it starts at once; the ${limiter.kind === 'lamp' ? 'lamp then warms' : 'detector then closes the channel'} until the gain is back at balance.`;
+		blocks.push(p(`The same solve gives the gain the loop needs at that point, ${n2(requiredGain)} against the textbook ${n2(idealGain)}${start}`));
+	} else if (kind !== 'quadrature') {
+		// (the pole solve may not settle where the lag is extreme: then there is no growth to quote)
+		const growth = Number.isFinite(growthPerCycle)
+			? ` and a growth of ${pctText(growthPerCycle)} per cycle from a real pole solve. That growth is what a start-up transient looks like in LTspice.`
+			: '; the pole solve does not settle here, so there is no growth per cycle to quote.';
 		blocks.push(
 			p(
-				`The same solve gives the gain the loop needs at that point, ${n2(requiredGain)} against the textbook ${n2(idealGain)}, and, with the amplifier at its start gain, how much the loop returns per cycle: ${n2(1 + loopExcess)} times the signal, which is ${pctText(loopExcess)} of excess and a growth of ${pctText(growthPerCycle)} per cycle from a real pole solve. That growth is what a start-up transient looks like in LTspice.`
+				`The same solve gives the gain the loop needs at that point, ${n2(requiredGain)} against the textbook ${n2(idealGain)}, and, with the amplifier at its start gain, how much the loop returns per cycle: ${n2(1 + loopExcess)} times the signal, which is ${pctText(loopExcess)} of excess${growth}`
 			)
 		);
 	} else {
@@ -307,6 +337,67 @@ export function explainOpampLimit(design) {
 	void wt;
 	void lagRad;
 	return blocks;
+}
+
+/* ------------------------------------------------- panel 04's verdict */
+
+/** A ratio as the page's tables print it: "+0.7 %". */
+const pctFlag = (x, d = 1) => `${x >= 0 ? '+' : ''}${(100 * x).toFixed(d)} %`;
+
+/**
+ * The paragraph under panel 04's table, { level: 'ok' | 'note' | 'bad' |
+ * 'warn', text }. A JFET control that cannot regulate is not the op-amp's
+ * doing; a loop that does not start says so; past that, the page's two tests
+ * of its single-pole model (topologies.js LAG_TRUSTED, SHIFT_TRUSTED): the
+ * stage's lag, and where the textbook R C values would land with this
+ * op-amp, each named as it fails, alone or together, with the figures the
+ * table and the panel's head print. The slew rate and the output swing have
+ * lines of their own under it.
+ */
+export function opampVerdict(design) {
+	const { opamp, limiter } = design;
+	if (opamp.opampOk) {
+		const margin = design.kind === 'quadrature' ? `${pctFlag(design.growthPerCycle)} per cycle of designed growth` : `${pctFlag(design.loopExcess)} of excess gain`;
+		return { level: 'ok', text: `This op-amp holds the loop: the retune absorbs its lag and the amplifier still has ${margin} to start with.` };
+	}
+	if (limiter.kind === 'jfet' && !limiter.regulates) {
+		return {
+			level: 'note',
+			text: `The op-amp is not what stops this design: the JFET cannot be controlled at ${formatVolts(design.amplitude)} peak (see the amplitude control above), so there is no start-up gain for the op-amp to hold yet. The lag and slew figures above are what this op-amp would see once the amplitude is at least ${formatVolts(limiter.minAmplitude)}.`
+		};
+	}
+	// Another topology is left to section 05's table, which designs each one with this op-amp: the
+	// one that asks for the least gain is not always the one that holds (at 100 kHz on a 1 MHz part
+	// the quadrature loop holds where the Wien bridge does not).
+	const others = 'section 05 shows how each topology fares with this op-amp';
+	if (!design.starts) {
+		if (design.kind === 'quadrature') {
+			return { level: 'bad', text: `With this op-amp the loop does not start at ${formatHz(design.f0)}. Raise the start-up growth or use a faster part; ${others}.` };
+		}
+		const atStart = Number.isFinite(design.loopExcess) ? ` (${pctFlag(design.loopExcess)} at start)` : '';
+		return {
+			level: 'bad',
+			text: `With this op-amp the loop does not start: at ${formatHz(design.f0)} the amplifier's lag (and the limiter diodes' capacitance across Rf2) costs more loop gain than the excess provides${atStart}. Raise the excess gain or use a faster part; ${others}.`
+		};
+	}
+	const lag = `${opamp.lagDeg.toFixed(1)} degrees`;
+	const lagFails = !(opamp.lagDeg <= LAG_TRUSTED);
+	const shiftFound = Number.isFinite(design.uncompensatedError);
+	// where the textbook values would land: the table's first row
+	const shift = shiftFound ? `the textbook R C values would put the loop at ${formatHz(design.fUncompensated)}, ${pctFlag(design.uncompensatedError)}` : 'the textbook R C values would find no balance at all';
+	const limits = 'the single-pole model and the retune built on it can be trusted';
+	let lead;
+	if (lagFails && !(design.uncompensatedError > -SHIFT_TRUSTED)) {
+		lead = shiftFound
+			? `The amplifier lags ${lag} at this frequency, and with it ${shift}, both further than ${limits} (about ${LAG_TRUSTED} degrees, and ${100 * SHIFT_TRUSTED} % low)`
+			: `The amplifier lags ${lag} at this frequency, further than ${limits} (about ${LAG_TRUSTED} degrees), and with it ${shift}`;
+	} else if (lagFails) lead = `The amplifier lags ${lag} at this frequency, further than ${limits} (about ${LAG_TRUSTED} degrees)`;
+	else if (shiftFound) lead = `With this op-amp ${shift}, further than ${limits} (about ${100 * SHIFT_TRUSTED} % low), though its lag at this frequency is only ${lag}`;
+	else lead = `With this op-amp ${shift}, so ${limits.replace('can be trusted', 'cannot be trusted here')}, though its lag at this frequency is only ${lag}`;
+	return {
+		level: 'warn',
+		text: `${lead}: the loop may well run, but expect it a few percent off in frequency and amplitude, and the part's gain-bandwidth spread to matter. A faster op-amp brings it back inside; ${others}.`
+	};
 }
 
 /* ------------------------------------------------- the amplitude that comes out */
@@ -356,10 +447,13 @@ export function amplitudeRemark(design) {
 		return { kind: 'floor', level: 'warn', text: `${lead}: the limiter's diodes barely conduct at ${formatVolts(amplitude)} peak, so it cannot hold the amplitude there.` };
 	}
 	if (Math.abs(actual / amplitude - 1) <= AMPLITUDE_TOLERANCE) return null;
+	// (a pair the second pass picked for the gain the first pair's capacitance gave: topologies.js designWith)
 	const why =
 		limiter.kind === 'clamp'
 			? 'Rd1 sets the level the clamp starts to conduct at, and its rounded value leaves it there.'
-			: 'it hangs on the small difference between Rf1 and what the loop needs, so rounding Rf1 and Rf2 moves it this far.';
+			: Number.isFinite(limiter.sizedAtGain)
+				? `it hangs on the small difference between Rf1 and what the loop needs, and Rf1 and Rf2 were picked for a gain of ${limiter.sizedAtGain.toFixed(2)}, the first pair's capacitance in the loop, where across their own Rf2 the loop needs ${design.requiredGain.toFixed(2)}.`
+				: 'it hangs on the small difference between Rf1 and what the loop needs, so rounding Rf1 and Rf2 moves it this far.';
 	// more asked than the op-amp swings: said here, since the parts as rounded stay inside it
 	const beyond = amplitude > opamp.opampSwing ? ` The ${formatVolts(amplitude)} asked is itself past the ${formatVolts(opamp.opampSwing)} the op-amp can swing.` : '';
 	return { kind: 'rounding', level: 'warn', text: `${lead}: ${why}${exact}${beyond}` };
