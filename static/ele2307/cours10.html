@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Cours 10 - La jonction PN | ELE2307</title>
+<title>Cours 10A - La jonction PN | ELE2307</title>
 <link rel="stylesheet" href="assets/katex/katex.min.css">
 <link rel="stylesheet" href="assets/style.css?v=13">
 </head>
@@ -21,7 +21,8 @@
     <a href="cours7.html">Cours 7</a>
     <a href="cours8.html">Cours 8</a>
     <a href="cours9.html">Cours 9</a>
-    <a href="cours10.html">Cours 10</a>
+    <a href="cours10.html">Cours 10A</a>
+    <a href="cours10b.html">Cours 10B</a>
     <a href="formulaire.html">Formulaire</a>
     <a href="intra.html">Intra</a>
     <a href="errata.html">Errata</a>
@@ -35,7 +36,7 @@
 <svg class="fig-defs" width="0" height="0" aria-hidden="true" focusable="false"><defs><marker id="ah" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="11" markerHeight="11" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><path d="M0,0.8 L9,5 L0,9.2 z" style="fill:var(--text)"/></marker><marker id="ahe" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="11" markerHeight="11" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><path d="M0,0.8 L9,5 L0,9.2 z" style="fill:var(--accent)"/></marker><marker id="ahh" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="11" markerHeight="11" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><path d="M0,0.8 L9,5 L0,9.2 z" style="fill:var(--bad)"/></marker><marker id="ahd" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="11" markerHeight="11" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><path d="M0,0.8 L9,5 L0,9.2 z" style="fill:var(--accent-2)"/></marker><marker id="ahw" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="11" markerHeight="11" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><path d="M0,0.8 L9,5 L0,9.2 z" style="fill:var(--warn)"/></marker></defs></svg>
 
 <div class="course-hero">
-  <div class="kicker">Cours 10 - Chapitre 10 du cours</div>
+  <div class="kicker">Cours 10A - Chapitre 10 du cours, parties 1 à 6</div>
   <h1>La jonction PN</h1>
   <p class="meta">Notes de cours « La jonction PN » (PDF de 15 pages, le « complément du mardi » de la liste d'exercices) | Diapos « Cours 10A » (22 pages) | Stowe, chapitre 23, section D (p. 494 à 498) | Exercices : les 5 numéros à la fin des notes</p>
   <p><span class="pill accent">Zone désertée</span><span class="pill accent">Équation de Poisson</span><span class="pill accent">Potentiel de barrière</span><span class="pill accent">Capacité de jonction</span><span class="pill accent">Polarisation avant et inverse</span><span class="pill accent">Équation de la diode</span><span class="pill accent">Modèle dynamique</span></p>
@@ -155,7 +156,7 @@
 <div class="formula"><div class="title">Capacité variable avec la tension</div>
 \[C_d(V_D) = \frac{C_d(0)}{\sqrt{1 - V_D/V_B}}\]
 \[\text{avec une tension inverse } V_R = -V_D : \qquad C_d = \frac{C_d(0)}{\sqrt{1 + V_R/V_B}}\]
-<div class="cond">Une tension externe s'ajoute à la barrière (polarisation inverse, + du côté N) ou s'en soustrait (polarisation avant) : il suffit de remplacer \(V_B\) par \(V_B - V_D\) dans \(W\) et dans \(C_d\). La capacité est divisée par 2 pour \(V_R = 3V_B\). C'est le principe de la diode à capacité variable (varicap).</div>
+<div class="cond">Une tension externe s'ajoute à la barrière (polarisation inverse, + du côté N) ou s'en soustrait (polarisation avant) : il suffit de remplacer \(V_B\) par \(V_B - V_D\) dans \(W\) et dans \(C_d\). La capacité est divisée par 2 pour \(V_R = 3V_B\). C'est le principe de la diode à capacité variable (varicap), reprise au <a href="cours10b.html">cours 10B</a>.</div>
 </div>
 <div class="widget" data-widget="junction-capacitance"></div>
 
@@ -281,9 +282,10 @@
   <li>Polarisation inverse : barrière relevée, minoritaires vidés aux frontières, \(I_D \to -I_S\).</li>
   <li>\(I_D = I_S(e^{qV_D/nkT} - 1)\), \(I_S \propto n_i^2\) ; modèle dynamique : diode idéale, \(C_D = C_d + C_s\) en parallèle, \(r_S\) en série.</li>
 </ul>
+<p class="small">Suite du chapitre : <a href="cours10b.html">cours 10B, applications de la jonction PN</a> (diode varicap, photodiode, cellule solaire, LED).</p>
 
 <section class="quiz" data-quiz-id="c10" id="quiz-c10">
-<h2>Quiz rapide - Cours 10</h2>
+<h2>Quiz rapide - Cours 10A</h2>
 <p class="small">Une seule bonne réponse par question. Cliquez pour vérifier immédiatement.</p>
 
 <div class="q" data-answer="2">

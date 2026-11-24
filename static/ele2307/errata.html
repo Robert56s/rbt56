@@ -21,7 +21,8 @@
     <a href="cours7.html">Cours 7</a>
     <a href="cours8.html">Cours 8</a>
     <a href="cours9.html">Cours 9</a>
-    <a href="cours10.html">Cours 10</a>
+    <a href="cours10.html">Cours 10A</a>
+    <a href="cours10b.html">Cours 10B</a>
     <a href="formulaire.html">Formulaire</a>
     <a href="intra.html">Intra</a>
     <a href="errata.html">Errata</a>
@@ -36,7 +37,7 @@
 <div class="course-hero">
   <div class="kicker">Errata - documents des cours 1 à 10</div>
   <h1>Erreurs et points à vérifier dans les documents du cours</h1>
-  <p class="meta">Diapos, notes et corrigés du professeur (texte et manuscrits), liste d'exercices suggérés, formulaire, manuel de Stowe | État au 17 novembre 2026</p>
+  <p class="meta">Diapos, notes et corrigés du professeur (texte et manuscrits), liste d'exercices suggérés, formulaire, manuel de Stowe | État au 24 novembre 2026</p>
   <p>Chaque entrée indique ce qui est écrit dans le document, ce que le calcul donne, l'impact sur le résultat final et un niveau de confiance. Tout a été recalculé à partir des énoncés du manuel et des formules du cours ; les valeurs sont reprises dans les corrigés du site.</p>
   <p><span class="tag conf-certain">Certain</span> recalculé sans ambiguïté &nbsp; <span class="tag conf-probable">Probable</span> très vraisemblable, mais l'intention du corrigé peut différer &nbsp; <span class="tag conf-verif">À vérifier</span> lecture du manuscrit incertaine ou désaccord mineur &nbsp; <span class="tag theme">Remarque</span> pas une erreur, mais un point à connaître</p>
   <p class="small">Conseil : avant l'intra, faites confirmer les entrées « Certain » et « Probable » au professeur ou au chargé de TD, surtout celles qui touchent la méthode (ex. 6 du chap. 5, ex. 38 du chap. 12, ex. 10 du chap. 5).</p>
@@ -56,6 +57,7 @@
   <tr><td>Corrigés cours 8 (chap. 20 et 21)</td><td class="num">3</td><td>Chap. 21 ex. 10 (énergie des protons, conclusion inversée)</td></tr>
   <tr><td>Corrigés cours 9 (chap. 23)</td><td class="num">4</td><td>Ex. 26 (a) : bande interdite de 1,0 eV et non 0,41 eV ; ex. 22 (b) et (c)</td></tr>
   <tr><td>Notes et corrigé du cours 10 (jonction PN)</td><td class="num">7</td><td>Notes : l'isolant du condensateur est la zone désertée (p. 2), sens du courant de dérive (p. 6), numéros d'équation décalés</td></tr>
+  <tr><td>Diapos du cours 10B (applications)</td><td class="num">6</td><td>Couche N d'une cellule solaire : 0,2 µm et non 0,2 mm (diapo 11) ; « efficacité quantique » et rendement de conversion (diapo 14)</td></tr>
   <tr><td>Liste d'exercices suggérés</td><td class="num">1</td><td>Exercice 13 du chap. 5 listé deux fois</td></tr>
   <tr><td>Manuel (Stowe)</td><td class="num">11</td><td>Formule de la gaussienne et dérivation de σ (corrigées par le prof)</td></tr>
   <tr><td>Sujet d'intra 2021 (pratique)</td><td class="num">1</td><td>QCM 9 : deux réponses défendables</td></tr>
@@ -403,7 +405,42 @@
   <p>Les relations « (23.6) » et « (23.12) » citées dans les notes sont celles du manuel de Stowe : \(n_e = N_ce^{-\beta(\varepsilon_c - \mu)}\) et \(n_en_h = n_i^2\) (cours 9). Les renvois au « chapitre 1 » (p. 8) et à l'« équation 1.6 » (p. 10) viennent d'une ancienne numérotation : il faut lire le chapitre 9 du cours et l'expression de \(n_i\), équation (23.13) du manuel.</p>
 </article>
 
-<h2>12. Liste d'exercices suggérés</h2>
+<h2>12. Diapos du cours 10B (applications de la jonction PN)</h2>
+<p class="small">Le cours 10B n'a ni notes ni corrigé propre : seulement 29 diapos. Peu de calculs, donc peu d'erreurs possibles ; les entrées ci-dessous sont surtout des précisions de lecture.</p>
+
+<article class="err">
+  <header><span class="tag">Cours 10B, diapo 11</span><span class="tag conf-probable">Probable</span><h4>Épaisseur de la couche N d'une cellule solaire</h4></header>
+  <p><strong>Écrit :</strong> « Région n fortement dopé et très mince (côté illuminé) &lt; 0.2 mm ».</p>
+  <p><strong>À lire :</strong> moins de 0,2 µm. À 0,2 mm, la couche de surface serait aussi épaisse qu'une plaquette entière et des dizaines à des centaines de fois plus épaisse que la profondeur d'absorption de la lumière visible dans le silicium (0,4 µm pour le bleu, quelques micromètres pour le rouge) : presque tous les porteurs seraient créés loin de la jonction et perdus. Tout l'intérêt d'une couche « très mince » est de laisser la lumière atteindre la zone désertée.</p>
+  <p><strong>Impact :</strong> un facteur 1000 sur une épaisseur, si la valeur est demandée.</p>
+</article>
+
+<article class="err">
+  <header><span class="tag">Cours 10B, diapo 14</span><span class="tag theme">Remarque</span><h4>Efficacité quantique ou rendement de conversion</h4></header>
+  <p>Sous le titre « Efficacité quantique », la diapo définit \(\eta_Q(\lambda) = N_{charge}/N_{photon}\), puis donne « Si-polycristallin : ≤ 18 % » et « Si-cristallin : ≤ 24 % ». Ces deux chiffres sont des <strong>rendements de conversion</strong> (puissance électrique fournie sur puissance lumineuse reçue), les mêmes que la colonne \(\eta\) du tableau de la diapo 15. L'efficacité quantique est un rapport de nombres, pas de puissances, et elle dépasse largement ces valeurs au milieu du spectre visible. Ne pas confondre les deux dans une question de cours.</p>
+</article>
+
+<article class="err">
+  <header><span class="tag">Cours 10B, diapo 5</span><span class="tag theme">Remarque</span><h4>Le courant optique ne compte que la zone désertée</h4></header>
+  <p>La formule encadrée, \(I_{op} = qAWg_{op}\), ne compte que les paires créées dans la zone désertée de largeur \(W\). Les porteurs créés à moins d'une longueur de diffusion de la jonction, de chaque côté, sont collectés eux aussi (la figure de la même diapo fait d'ailleurs apparaître \(L_p\)) ; l'expression complète est \(I_{op} = qAg_{op}(L_p + L_n + W)\). Pour l'examen, utiliser la formule de la diapo, sauf si l'énoncé donne les longueurs de diffusion.</p>
+</article>
+
+<article class="err">
+  <header><span class="tag">Cours 10B, diapo 4</span><span class="tag theme">Remarque</span><h4>Notation du produit des concentrations sous illumination</h4></header>
+  <p>La diapo écrit « à l'équilibre thermique : \(n_ep_e = n_i^2\) ; sous illumination : \(n_ep_e \ne n_i^2\) », puis définit \(n = n_e + \Delta n\) et \(p = p_e + \Delta p\), où \(n_e\) et \(p_e\) sont les valeurs d'équilibre. Le produit qui s'écarte de \(n_i^2\) sous illumination est donc \(np\) (et il lui est supérieur) ; \(n_ep_e\) reste égal à \(n_i^2\) par définition.</p>
+</article>
+
+<article class="err">
+  <header><span class="tag">Cours 10B, diapo 17</span><span class="tag theme">Remarque</span><h4>Térawatts et puissance moyenne du Sahara</h4></header>
+  <p>« 750 Terra Watt » : l'unité est le térawatt (TW), \(10^{12}\) W, comme l'indique la note de la diapo. Le chiffre de 83 MW/km² est une moyenne dans le temps : en plein soleil, 1000 W/m² à 20 % de rendement donnent 200 W/m², soit 200 MW/km². Avec 83 MW/km² sur 9 millions de km² on retrouve bien 750 TW.</p>
+</article>
+
+<article class="err">
+  <header><span class="tag">Fichier « Exercices Cours 10 B »</span><span class="tag theme">Remarque</span><h4>Le même corrigé que pour le cours 10A</h4></header>
+  <p>Le fichier « Exercices Cours 10 B.pdf » est identique, octet pour octet, à « Exercices Cours 10.pdf » : c'est le corrigé manuscrit des cinq exercices des notes sur la jonction PN. Il n'existe donc pas d'exercices officiels propres aux applications ; ceux de la page du cours 10B sont des exercices d'entraînement construits à partir des diapos.</p>
+</article>
+
+<h2>13. Liste d'exercices suggérés</h2>
 
 <article class="err">
   <header><span class="tag">Liste d'exercices suggérés, cours 2, chapitre 5</span><span class="tag conf-probable">Probable</span><h4>Exercice 13 listé deux fois</h4></header>
@@ -411,7 +448,7 @@
   <p><strong>À lire :</strong> le second est vraisemblablement l'exercice 16 (combustion du carbone, p. 94-95), seul exercice de la section C qui traite d'une réaction. C'est celui qui est corrigé dans le cours 2 du site.</p>
 </article>
 
-<h2>13. Manuel de Stowe : erreurs signalées par le professeur ou constatées</h2>
+<h2>14. Manuel de Stowe : erreurs signalées par le professeur ou constatées</h2>
 
 <article class="err">
   <header><span class="tag">Manuel, p. 42 (chap. 3)</span><span class="tag conf-certain">Certain, corrigé par le prof</span><h4>Dérivation de l'écart type du critère unique</h4></header>
@@ -472,7 +509,7 @@
   <p>La question demande les densités de porteurs du côté P « à 320 K ». La réponse du manuel (\(2{,}0\times10^{22}\) et \(1{,}9\times10^{11}\) m⁻³) suppose que le niveau de Fermi reste à 0,2 eV du bord de la bande de valence. Dans un matériau dont le nombre de dopants est fixe, ce sont les majoritaires qui resteraient à \(8{,}0\times10^{21}\) m⁻³ et le niveau de Fermi qui se déplacerait ; les minoritaires vaudraient alors \(n_i^2/n_h = 4{,}5\times10^{11}\) m⁻³. Les deux lectures sont données dans le corrigé du cours 10 (D11).</p>
 </article>
 
-<h2>14. Remarques diverses</h2>
+<h2>15. Remarques diverses</h2>
 
 <article class="err">
   <header><span class="tag">TD1, énoncé PDF</span><span class="tag theme">Remarque</span><h4>Phrase cachée destinée aux outils d'IA</h4></header>

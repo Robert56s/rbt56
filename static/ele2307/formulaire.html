@@ -21,7 +21,8 @@
     <a href="cours7.html">Cours 7</a>
     <a href="cours8.html">Cours 8</a>
     <a href="cours9.html">Cours 9</a>
-    <a href="cours10.html">Cours 10</a>
+    <a href="cours10.html">Cours 10A</a>
+    <a href="cours10b.html">Cours 10B</a>
     <a href="formulaire.html">Formulaire</a>
     <a href="intra.html">Intra</a>
     <a href="errata.html">Errata</a>
@@ -450,6 +451,46 @@
   <tr><th class="notion">Jonction selon le manuel (complément)</th>
     <td class="f">\(j_{net} = j_{diffusion} - j_{dérive} = j_0\left(e^{\beta eU} - 1\right)\) ; \(\displaystyle \frac{n_{e,p}}{n_{e,n}} = e^{-\beta\Delta\varepsilon_c}\)</td>
     <td class="rem">Stowe 23.20 : \(j_0\) courant de dérive (constant), \(U\) tension appliquée ; \(\Delta\varepsilon_c = qV_B\) : décalage des bandes</td></tr>
+</table>
+</section>
+
+<section class="form-section">
+<h2>Cours 10B - Applications de la jonction PN</h2>
+<p class="small">Rien de cette partie ne figure sur le formulaire officiel : les formules ci-dessous viennent des diapos du cours 10B et sont à connaître.</p>
+<table class="formulaire">
+  <tr><th class="notion">Diode varicap et circuit accordé</th>
+    <td class="f"><p>\(\displaystyle C = \frac{\epsilon A}{W}\) ; \(\displaystyle C_d(V_R) = \frac{C_d(0)}{\sqrt{1 + V_R/V_B}}\)</p><p>\(\displaystyle \omega = \frac{1}{\sqrt{LC}}\) ; \(\displaystyle f = \frac{1}{2\pi\sqrt{LC}}\)</p></td>
+    <td class="rem">jonction polarisée en inverse ; \(V_R\) augmente : \(W\) augmente, \(C\) diminue, \(f\) augmente comme \((1 + V_R/V_B)^{1/4}\)</td></tr>
+  <tr><th class="notion">Énergie d'un photon et seuil d'absorption</th>
+    <td class="f"><p>\(\displaystyle E = h\nu = \frac{hc}{\lambda}\) ; \(\displaystyle E\,(\text{eV}) = \frac{1240}{\lambda\,(\text{nm})}\)</p><p>absorption si \(h\nu \gt \varepsilon_{gap}\) ; \(\displaystyle \lambda_{max} = \frac{hc}{\varepsilon_{gap}}\)</p></td>
+    <td class="rem">sinon le matériau est transparent ; Si (1,12 eV) : 1107 nm ; Ge (0,67 eV) : 1850 nm ; GaAs (1,42 eV) : 873 nm</td></tr>
+  <tr><th class="notion">Porteurs sous illumination</th>
+    <td class="f">\(n = n_e + \Delta n\) ; \(p = p_e + \Delta p\) ; \(\Delta p = \Delta n\) ; \(n\,p \gt n_i^2\)</td>
+    <td class="rem">\(n_e\), \(p_e\) : valeurs à l'équilibre, où \(n_ep_e = n_i^2\) ; type N en régime permanent : \(\delta p_{op} = g_{op}\tau_p\)</td></tr>
+  <tr><th class="notion">Photodiode : courant optique</th>
+    <td class="f">\(I_{op} = q\,A\,W\,g_{op}\) ; \(I = I_{th}\left(e^{\beta qV} - 1\right) - I_{op}\)</td>
+    <td class="rem">\(g_{op}\) : paires créées par cm³ et par seconde ; \(I_{th} = I_S\) ; utilisée en polarisation inverse : \(I \approx -I_{op}\), proportionnel à la lumière</td></tr>
+  <tr><th class="notion">Absorption optique</th>
+    <td class="f">\(\displaystyle \frac{dI(x)}{dx} = -\alpha\,I(x)\) ; \(I(x) = I_0\,e^{-\alpha x}\)</td>
+    <td class="rem">\(\alpha\) : coefficient d'absorption, dépend de \(\lambda\) ; à \(x = 1/\alpha\) il reste 37 % ; fraction absorbée sur \(d\) : \(1 - e^{-\alpha d}\)</td></tr>
+  <tr><th class="notion">Photodiode PIN</th>
+    <td class="f">\(\displaystyle C = \frac{\epsilon A}{W}\), \(W\) : épaisseur de la couche intrinsèque</td>
+    <td class="rem">capacité faible et indépendante de la tension : détection à haute fréquence ; couche i de 5 à 50 µm, sensible aux grandes longueurs d'onde</td></tr>
+  <tr><th class="notion">Cellule photovoltaïque</th>
+    <td class="f"><p>\(\displaystyle V_{oc} \cong \frac{kT}{q}\ln\frac{g_{op}}{g_{th}}\) pour \(g_{op} \gg g_{th}\)</p><p>\(I_{sc} = -I_{ph}\) ; \(P_{max} = V_mI_m = FF \times V_{oc}I_{sc}\) ; \(\displaystyle \eta = \frac{P_{max}}{P_{lumière}}\)</p></td>
+    <td class="rem">4<sup>e</sup> quadrant (\(V \gt 0\), \(I \lt 0\)) ; lumière doublée : \(I_{sc}\) double, \(V_{oc}\) + 18 mV ; \(FF\) de 0,7 à 0,85 ; soleil : 1000 W/m²</td></tr>
+  <tr><th class="notion">Efficacité quantique</th>
+    <td class="f">\(\displaystyle \eta_Q(\lambda) = \frac{N_{charge}}{N_{photon}}\)</td>
+    <td class="rem">charges collectées par photon reçu ; pertes : photons sous le gap non absorbés, courtes longueurs d'onde absorbées en surface</td></tr>
+  <tr><th class="notion">LED : couleur et rendement</th>
+    <td class="f"><p>\(h\nu \approx \varepsilon_{gap}\) ; \(\displaystyle \lambda\,(\text{nm}) \approx \frac{1240}{\varepsilon_{gap}\,(\text{eV})}\)</p><p>\(\displaystyle \eta_{externe} = \frac{P_{sortie}\,(\text{optique})}{I\,V}\times100\ \%\)</p></td>
+    <td class="rem">polarisation avant, semiconducteur à gap direct (\(k_{cb} = k_{vb}\)) ; Si et Ge : gap indirect, recombinaison non radiative</td></tr>
+  <tr><th class="notion">LED : largeur de raie</th>
+    <td class="f">\(h\nu_{max} \approx \varepsilon_{gap} + kT\) ; \(\Delta(h\nu) \approx 2\) à \(3\,kT\) ; \(\displaystyle \Delta\lambda = \frac{\lambda^2}{hc}\Delta(h\nu)\)</td>
+    <td class="rem">largeur à mi-hauteur ; porteurs les plus nombreux à \(\tfrac12kT\) du bord de bande ; 655 nm à 300 K : 24 nm</td></tr>
+  <tr><th class="notion">Photométrie</th>
+    <td class="f"><p>éclairement (lux) = flux lumineux (lm) / surface (m²)</p><p>efficacité lumineuse (lm/W) = flux lumineux (lm) / puissance électrique (W)</p></td>
+    <td class="rem">lumen : flux pondéré par la sensibilité de l'œil (maximum à 555 nm) ; incandescence 15 lm/W, LED 80 à 100 lm/W</td></tr>
 </table>
 </section>
 
